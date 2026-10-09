@@ -30,7 +30,8 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | One-off material policy (D3-064, D3-072) | Memory-only storage, bounded expiry, hash-only packet guards and legacy export readers are implemented locally. | Complete no-persistence/30-minute enforcement across provider, browser, ATS and all copies; legacy saved-content paths must remain inactive or be replaced. |
 | Restricted packets (D3-077) | Separate-key packet protection and legacy receipt migration are implemented; managed archival of seven receipts passed. | Managed original-request replay, saved-answer reuse and broader candidate/privacy acceptance. |
 | Native material session (D3-079) | Native HTTPS/image, route/disposal bindings, preparation/cleanup resources and a bounded backend test driver are implemented; managed resources are deployed disabled. | Controlled sign-in, source/owner activation, live preview/PDF/DOCX, expiry/retirement, browser/CORS and client/ATS acceptance. |
-| Connected browser safety (D3-080) | Exact material/hash/deadline guards, explicit generated-material review, boolean sensitive answers, packet-change resets, retry-stable commands, async preparation/scalar-location BFF routes and immediate confirmed-history refresh are locally verified. | Native browser identity/material transport, cover-letter preparation/preview UI and saved-answer selection remain unfinished; local simulated journey is not live acceptance. |
+| Connected browser safety (D3-080) | Exact material/hash/deadline guards, explicit generated-material review, boolean sensitive answers, packet-change resets, retry-stable commands, async preparation/scalar-location BFF routes and immediate confirmed-history refresh are locally verified. | Native browser identity/material transport, cover-letter preview/download UI and saved-answer selection remain unfinished; local simulated journey is not live acceptance. |
+| Cover-letter request/status UI (D3-081) | Default-off versioned disclosure opt-in, explicit asynchronous requests, retry-stable admission, bounded status polling, current-packet checks and latest-revision cancellation are locally verified, including the full repository verifier and synthetic Chromium checks. Preview availability binds every material-reference scalar, including later versions of the same generation. | Direct native previews/downloads and live generation/cleanup acceptance remain open. |
 
 ## Decisions and scope changes
 
@@ -62,3 +63,7 @@ Historical checkpoints are retained in Git history and the linked evidence; this
 2026-10-09: Implemented and verified D3-080 browser safety batch. Full D3 remains in progress;
 native identity transport needs an owner decision and live/provider/accountable gates remain open.
 Independent D1 acceptance, including hosted admin acceptance, remains deferred.
+
+2026-10-09: Added D3-081 preparation/status UI without activating providers or sending generated
+content through the BFF. Synthetic browser checks cover the opt-in and queued/running/succeeded
+path; missing exact cover-letter previews continue to block approval.

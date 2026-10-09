@@ -75,6 +75,7 @@ afterEach(() => {
   act(() => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 async function click(label: RegExp | string) {
@@ -89,19 +90,283 @@ async function click(label: RegExp | string) {
   });
 }
 
-async function mount(fetchImplementation: typeof globalThis.fetch, applyUrl?: string) {
+async function mount(
+  fetchImplementation: typeof globalThis.fetch,
+  applyUrl?: string,
+  coverLetterPreparationEnabled = false,
+) {
   await act(async () => {
     root.render(
       <ApplicationsWorkspace
         jobId={JOB}
         applyUrl={applyUrl}
         fetchImplementation={fetchImplementation}
+        coverLetterPreparationEnabled={coverLetterPreparationEnabled}
       />,
     );
   });
 }
 
 describe("ApplicationsWorkspace", () => {
+  it("does not request or expose cover-letter generation by default", async () => {
+    const send = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith("/search")
+        ? respond({ items: [] })
+        : String(input).endsWith("/packets")
+          ? respond(reviewable(), 201)
+          : respond(application(), 201),
+    );
+    await mount(send);
+    expect(container.textContent).not.toContain("Optional cover letter");
+    await click("Prepare application");
+    const packet = send.mock.calls.find(([url]) => String(url).endsWith("/packets"));
+    expect(
+      JSON.parse(String((packet as unknown as [string, RequestInit])[1].body)),
+    ).not.toHaveProperty("coverLetter");
+  });
+  it("requires explicit disclosure, polls the accepted operation and blocks unavailable material approval", async () => {
+    const ready = reviewable(4);
+    const OP = "00000000-0000-7000-8000-000000000020";
+    if (!ready.currentPacket) throw new Error("Missing packet");
+    ready.currentPacket.artifactHashes.coverLetter = HASH;
+    ready.currentPacket.temporaryMaterials = [
+      {
+        schemaVersion: 1,
+        kind: "cover_letter",
+        generationId: OP,
+        version: 1,
+        contentSha256: HASH,
+        completedAtMs: Date.now(),
+        expiresAtMs: Date.now() + 1_800_000,
+      },
+    ];
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const send = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      const url = String(input);
+      calls.push({ url, init });
+      if (url.endsWith("/search")) return respond({ items: [] });
+      if (url.endsWith("/packets"))
+        return respond(
+          { id: OP, applicationId: APP, state: "queued", createdAt: AT, updatedAt: AT },
+          202,
+        );
+      if (url.includes("/preparations/"))
+        return respond({
+          id: OP,
+          applicationId: APP,
+          state: "succeeded",
+          result: { packetId: ready.currentPacket?.id, revision: 4 },
+          createdAt: AT,
+          updatedAt: AT,
+        });
+      if (url === `/api/platform/applications/${APP}`) return respond(ready);
+      if (url.endsWith("/resume")) return respond({ status: "no_resume", matchesPacket: false });
+      return respond(application(), 201);
+    });
+    await mount(send, undefined, true);
+    expect(container.textContent).toContain(
+      "Provider abuse-monitoring logs may retain content for up to 30 days",
+    );
+    await act(async () => {
+      container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
+    });
+    await click("Prepare resume and cover letter");
+    const command = calls.find(({ url }) => url.endsWith("/packets"));
+    expect(JSON.parse(String(command?.init.body))).toEqual({
+      expectedRevision: 1,
+      coverLetter: { disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true } },
+    });
+    expect(calls.filter(({ url }) => url.endsWith("/packets"))).toHaveLength(1);
+    expect(container.textContent).toContain("Preparation finished");
+    expect(container.textContent).toContain("Its exact preview is unavailable");
+    expect(container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(
+      false,
+    );
+    expect(
+      Array.from(container.querySelectorAll("button")).find(
+        (button) => button.textContent === "Approve this packet",
+      )?.disabled,
+    ).toBe(true);
+  });
+  it("replays a lost admission response with the original disclosure/body/key and requires a new choice after failure", async () => {
+    const commands: RequestInit[] = [];
+    const OP = "00000000-0000-7000-8000-000000000020";
+    const send = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      const url = String(input);
+      if (url.endsWith("/search")) return respond({ items: [] });
+      if (url.endsWith("/packets")) {
+        commands.push(init);
+        return commands.length === 1
+          ? respond({ code: "applications_unavailable" }, 503)
+          : respond(
+              {
+                id: OP,
+                applicationId: APP,
+                state: "failed",
+                errorCode: "generation_unavailable",
+                createdAt: AT,
+                updatedAt: AT,
+              },
+              202,
+            );
+      }
+      if (url === `/api/platform/applications/${APP}`) return respond(reviewable());
+      return respond(application(), 201);
+    });
+    await mount(send, undefined, true);
+    await act(async () => {
+      container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
+    });
+    await click("Prepare resume and cover letter");
+    await click("Prepare resume and cover letter");
+    expect(commands).toHaveLength(2);
+    expect(commands[0]?.body).toBe(commands[1]?.body);
+    expect(commands[0]?.headers).toEqual(commands[1]?.headers);
+    expect(container.textContent).toContain("Cover-letter generation is unavailable");
+    expect(container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(
+      false,
+    );
+  });
+  it("bounds status reads and checks the same operation without redispatching generation", async () => {
+    vi.useFakeTimers();
+    const OP = "00000000-0000-7000-8000-000000000020";
+    const operation = { id: OP, applicationId: APP, state: "queued", createdAt: AT, updatedAt: AT };
+    const calls: string[] = [];
+    const send = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.endsWith("/search")) return respond({ items: [] });
+      if (url.endsWith("/packets")) return respond(operation, 202);
+      if (url.includes("/preparations/")) return respond(operation);
+      return respond(application(), 201);
+    });
+    await mount(send, undefined, true);
+    await act(async () => {
+      container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
+    });
+    await click("Prepare resume and cover letter");
+    expect(container.textContent).not.toContain("Approve this packet");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(240_001);
+    });
+    expect(calls.filter((url) => url.includes("/preparations/"))).toHaveLength(120);
+    await click("Check preparation status");
+    expect(calls.filter((url) => url.includes("/preparations/"))).toHaveLength(121);
+    expect(calls.filter((url) => url.endsWith("/packets"))).toHaveLength(1);
+  });
+  it("cancels pending preparation at the latest revision and stops polling", async () => {
+    vi.useFakeTimers();
+    const OP = "00000000-0000-7000-8000-000000000020";
+    const operation = {
+      id: OP,
+      applicationId: APP,
+      state: "running",
+      createdAt: AT,
+      updatedAt: AT,
+    };
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const send = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      const url = String(input);
+      calls.push({ url, init });
+      if (url.endsWith("/search")) return respond({ items: [] });
+      if (url.endsWith("/packets")) return respond(operation, 202);
+      if (url.includes("/preparations/")) return respond(operation);
+      if (url.endsWith("/cancel"))
+        return respond(application({ status: "cancelled", revision: 3, currentAction: "none" }));
+      if (url === `/api/platform/applications/${APP}`) return respond(reviewable(2));
+      return respond(application(), 201);
+    });
+    await mount(send, undefined, true);
+    await act(async () => {
+      container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
+    });
+    await click("Prepare resume and cover letter");
+    await click("Cancel application");
+    expect(container.textContent).toContain("This application was cancelled");
+    const cancel = calls.find(({ url }) => url.endsWith("/cancel"));
+    expect(JSON.parse(String(cancel?.init.body))).toEqual({ expectedRevision: 2 });
+    const count = calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(calls).toHaveLength(count);
+  });
+  it("refuses a succeeded operation whose exact packet does not match the current application", async () => {
+    const OP = "00000000-0000-7000-8000-000000000020";
+    const send = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/search")) return respond({ items: [] });
+      if (url.endsWith("/packets"))
+        return respond(
+          {
+            id: OP,
+            applicationId: APP,
+            state: "succeeded",
+            result: { packetId: OP, revision: 2 },
+            createdAt: AT,
+            updatedAt: AT,
+          },
+          202,
+        );
+      if (url === `/api/platform/applications/${APP}`) return respond(reviewable(2));
+      return respond(application(), 201);
+    });
+    await mount(send, undefined, true);
+    await act(async () => {
+      container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
+    });
+    await click("Prepare resume and cover letter");
+    expect(container.textContent).toContain("prepared packet could not be verified");
+    expect(container.textContent).not.toContain("Approve this packet");
+  });
+  it("does not restore a completed packet from a late status read after cancellation", async () => {
+    const OP = "00000000-0000-7000-8000-000000000020";
+    const ready = reviewable(3);
+    let finish: ((response: Response) => void) | undefined;
+    let reads = 0;
+    let heldSignal: AbortSignal | undefined;
+    const send = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      const url = String(input);
+      if (url.endsWith("/search")) return respond({ items: [] });
+      if (url.endsWith("/packets"))
+        return respond(
+          {
+            id: OP,
+            applicationId: APP,
+            state: "succeeded",
+            result: { packetId: ready.currentPacket?.id, revision: 3 },
+            createdAt: AT,
+            updatedAt: AT,
+          },
+          202,
+        );
+      if (url.endsWith("/cancel"))
+        return respond(application({ status: "cancelled", revision: 4, currentAction: "none" }));
+      if (url === `/api/platform/applications/${APP}`) {
+        reads += 1;
+        if (reads === 1) {
+          heldSignal = init.signal ?? undefined;
+          return new Promise<Response>((resolve) => {
+            finish = resolve;
+          });
+        }
+        return respond(ready);
+      }
+      return respond(application(), 201);
+    });
+    await mount(send, undefined, true);
+    await act(async () => {
+      container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
+    });
+    await click("Prepare resume and cover letter");
+    await click("Cancel application");
+    expect(heldSignal?.aborted).toBe(true);
+    await act(async () => {
+      finish?.(respond(ready));
+    });
+    expect(container.textContent).toContain("This application was cancelled");
+    expect(container.textContent).not.toContain("Approve this packet");
+  });
   it("keeps retries stable and gives changed answers a different preparation key", async () => {
     const value = reviewable();
     if (!value.currentPacket) throw new Error("Missing fixture packet");

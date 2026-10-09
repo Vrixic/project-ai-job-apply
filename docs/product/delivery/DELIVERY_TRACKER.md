@@ -26,7 +26,8 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 
 Grounded preparation, packets/review, safe manual Apply, submission-safety controls and native runtime/test tooling are implemented.
 The 2026-10-09 browser safety batch passes a simulated connected search-to-confirmed-history journey;
-native browser transport, cover-letter UI and saved-answer selection remain unfinished source work.
+cover-letter opt-in/status/cancellation UI is locally tested behind a separate default-off flag.
+Native browser transport, cover-letter preview/download UI and saved-answer selection remain unfinished source work.
 Connected native/provider acceptance, ATS adapters/fixtures, all-copy expiry, rights/restore and accountable reviews remain.
 [Implemented and remaining capabilities](phase-3-application-preparation.md).
 
