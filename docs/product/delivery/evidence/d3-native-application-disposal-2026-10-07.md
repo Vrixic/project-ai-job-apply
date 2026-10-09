@@ -1370,3 +1370,47 @@ Database opt-ins in the broad run remain skipped; the separate eight-case Postgr
 is the actual persistence evidence. Private logs are `.tmp/legacy-diagnostics-full-verification.log`,
 `.tmp/legacy-diagnostics-entrypoint-recheck.log`, `.tmp/legacy-diagnostics-verification-remainder.log`
 and `.tmp/legacy-diagnostics-final-sql.log`. New Markdown links/anchors and whitespace checks pass.
+
+## Restored access and development shutdown at state 450
+
+On 2026-10-08 (local date), restored development SSO access permits the interrupted session's
+required cleanup. Live readback finds the original database available and protected, with no
+active migration task. Source `a1b4ef2f9c5a181e58e1388f82c295b85bad6c8e` has a verified migration
+image publication and an applied image-only task update to revision 63 at state 446. The image
+scan is complete with zero High/Critical findings. No revision-63 SQL execution or aggregate
+legacy inventory is claimed; that work remains outstanding. The earlier failed execution receipt
+and legacy evidence are preserved.
+
+The latest complete inputs are reconciled with the actual task image and database metadata.
+A fresh encrypted safety snapshot physically restores to an available private database using
+the original KMS key. The temporary copy's automatic backup retention settles at zero before
+restore verification. The reviewed preparation plan changes only database shutdown settings;
+the reviewed dormant plan deletes only the original database, retaining a new final snapshot
+and original automated backups. After the final snapshot is available, the exact temporary
+restore-check instance is removed. This proves physical recovery, not SQL or privacy replay.
+
+The final complete-input plan has zero drift at **state 450**, with all **289 other managed
+resource identities preserved**. At **2026-10-09T02:17:21.349601+00:00**, live development readback
+confirms zero database instances, API routes, enabled rules/mappings, NAT gateways, interface
+endpoints and non-stopped ECS tasks. All **10 encrypted manual recovery snapshots** are available.
+Separate project/environment-tagged EC2 reads return zero allocated Elastic IPs, instances and
+EBS volumes. Lifecycle drain checks also verify empty queues and no running durable executions.
+
+Canonical recovery inputs, restore proof and manifest are refreshed in the versioned state bucket
+with explicit KMS encryption and ETag preconditions; exact-version byte/KMS readback passes.
+Private evidence is `.tmp/sqlruna1-*`, including the recovery manifest and shutdown observation.
+Use the new dormant inputs for future restoration; state-442 and older inputs are historical.
+
+| Artifact | SHA-256 |
+|---|---|
+| Applied preparation plan | `246044e8324813213f736db03a664bbb69a32ab013fa35ceae2e675326358828` |
+| Applied dormant plan | `0d98284b91d9e4e69dd191b351dc27e8275cf42b8233d751cff54035b30381d4` |
+| Final no-change plan | `b83a820869433cda2e032afe14d0d60886fcdb3cb1fbcfea0ccbf8ab8a5ebc42` |
+| Archived dormant inputs | `c9e837ffe7970f90b23982c237f5462f5a49491b90141ee19706d5dbed059ee9` |
+
+Retained snapshots/backups, S3/ECR/log storage, KMS, Secrets Manager and DNS can still incur
+charges; this is not zero cost. Separate staging verification remains incomplete: its profile
+reports `Token for ai-job-apply-staging does not exist`. Restored development access does not
+establish staging state. Docker Desktop and WSL are stopped, and the PC remains on. D1/D3 remain
+In progress, with managed legacy inventory, compatible transition and native acceptance open;
+hosted CI/CD remains deferred.
