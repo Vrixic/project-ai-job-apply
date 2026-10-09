@@ -1251,3 +1251,16 @@ readback, zero drift and versioned recovery archive pass. Platform remains dorma
 [Managed bootstrap evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-bootstrap-verification).
 Fresh shutdown observation at 12:41:30Z confirms runtimes off; retained recovery/storage/security/DNS
 costs remain. Docker/WSL stopped, PC on. D1/D3 remain In progress behind connected acceptance.
+
+
+2026-10-09 the dedicated resume network group is verified at dormant state 474 with inbound
+access closed, zero drift and archived recovery inputs. The configured resume image passes its
+synthetic runtime check but is withheld after 26 High/8 Critical OS findings. A pinned Alpine
+runtime correction is undergoing native conformance; no live candidate acceptance is claimed.
+[Image security and network evidence](evidence/d3-native-application-disposal-2026-10-07.md#native-image-security-and-network-checkpoint-2026-10-09).
+D1/D3 remain In progress; development AWS runtimes remain off and PC stays on.
+
+The runtime correction now passes both actual-image checks (24 resume assertions and five
+cover-letter scenarios) plus all 42 musl kernel/session regressions without deadline changes.
+[Local verification](evidence/d3-native-application-disposal-2026-10-07.md#patched-runtime-local-verification).
+Patched publication/scan and managed candidate acceptance remain open.

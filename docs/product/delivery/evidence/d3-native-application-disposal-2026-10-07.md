@@ -1800,3 +1800,54 @@ active ECS tasks, API routes, enabled rules/mappings, NAT gateways and interface
 fifteen available encrypted recovery snapshots. Docker backend and running WSL distributions are
 absent. The PC stays on. Retained snapshots, object/image/log storage, keys, secrets and DNS may
 incur costs. D1/D3 remain In progress; connected candidate acceptance is still pending.
+
+
+## Native image security and network checkpoint (2026-10-09)
+
+A reviewed IAM/network-only follow-up provisions the dedicated resume task security group with
+**no inbound rules**, retaining TLS egress. Platform state **474** preserves all 294 prior managed
+identities and adds only that group. AWS readback and a complete-input no-drift plan pass. Canonical
+versioned dormant inputs and recovery metadata have exact customer-KMS readback verification.
+Applied plan SHA-256: `b98b1fa74f88b6d7d4e916606b2b6f643446009e137372d7d94bbd171417756a`.
+Dormant input SHA-256: `e7a7d1206f076b874ab4388c35de8ce271c90e7db5fa0762dadbe3fdfd9b82cd`.
+No database, public route, scheduler, task or paid endpoint was started by this change.
+
+The configured native resume image at source `f8cc7de8` passes its hardened synthetic image check:
+24 runtime assertions, actual PDF/DOCX files, authenticated HTTPS and kernel SIGKILL with no OOM.
+The first verifier attempt reached Docker cleanup failure; the exact container was confirmed
+absent and an unchanged-image retry passed in 6,855 ms. Its configured RPC version 3 remains a
+proposal; current source-access RPCs are disabled version 2, and no task revision exists.
+
+Exact ECR manifest/config/rootfs readback passed, but the completed OS scan reports **26 High and
+8 Critical** findings. The image is retained as rejected evidence and must not activate. The scan
+CLI initially failed encoding a non-ASCII advisory; UTF-8 readback recovered the actual completed
+findings without republishing. This is an image security blocker, not an AWS credential failure.
+The vulnerable source packages include glibc, OpenSSL, Perl, SQLite, PCRE, util-linux and zlib.
+Debian records fixes for [glibc](https://security-tracker.debian.org/tracker/CVE-2026-5450) and
+[OpenSSL](https://security-tracker.debian.org/tracker/CVE-2026-63073), while its
+[zlib advisory](https://security-tracker.debian.org/tracker/CVE-2026-85091) remains unresolved.
+
+Both native image Dockerfiles now use digest-pinned Node **24.21.0 / Alpine 3.23** and the existing
+migration runtime's checksum-verified OpenSSL **3.5.9-r0** and zlib **1.3.2-r1** packages. Runtime
+package-manager tools are removed while the accurate signed-package inventory and CA bundle remain.
+The builders select the locked canvas binary matching the build libc; Alpine uses musl. Kernel,
+application logic, authentication, lifetime, immutable bindings and permissions are unchanged.
+Native image conformance and musl deadline regression are required before merging this packaging
+change; a fresh exact-image registry scan is required before release activation.
+
+
+### Patched runtime local verification
+
+Source `d9136248` passes the actual-image resume check (24 assertions, real PDF/DOCX files and
+kernel SIGKILL with no OOM) and all **five** cover-letter image scenarios: original and version-two
+rendering, sealed reads, secret-version refusal and TLS-host refusal. AWS/provider/OIDC ports remain
+synthetic and networking is disabled. Both images report Node 24.21.0, musl canvas, the exact pinned
+OpenSSL/zlib package versions, absent npm/apk tools and the retained package database.
+
+The first source-level musl regression ran concurrently with both native builds and exceeded
+several unchanged child deadlines and its 180-second overall budget. An unchanged focused case
+passed, then the complete maintained rerun passed **42/42** cases in **144.6 seconds** after the
+native builds finished. No kernel, child deadline, assertion or test budget was relaxed.
+JavaScript syntax/format checks and the infrastructure validator pass. These checks establish local
+image behavior; patched-image publication and its completed zero-High/Critical registry scan remain
+required. The rejected Debian image is still withheld, and no connected AWS candidate flow is claimed.
