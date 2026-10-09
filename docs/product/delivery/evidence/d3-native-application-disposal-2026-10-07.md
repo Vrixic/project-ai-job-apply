@@ -1775,3 +1775,28 @@ available encrypted manual recovery snapshots remain. Recovery storage, images/l
 and DNS can still incur charges. Docker/WSL remain stopped and the PC stays on. AWS access is
 restored; the secure development OpenAI credential location remains requested. D1/D3 remain
 In progress, with connected managed acceptance and other phase gates still open. CI/CD is deferred.
+
+
+### Managed bootstrap verification
+
+After [PR #592](https://github.com/Vrixic/project-ai-job-apply/pull/592) merged at `f588cb98`,
+a fresh plan matched the reviewed changes exactly and was applied with clean-source, account,
+backend, state-lineage/serial and plan/input hash guards. Applied plan SHA-256:
+`c29139cede67f80012b1c3b4092e4211244d7acb8214e7ad91c39a6b9e1d2447`.
+Bootstrap state **23** preserves all twelve prior managed identities and adds six original native
+boundary policies. Direct AWS readback verifies all eight managed policies, deployment inline
+policy, unchanged OIDC role trust/boundary and customer-KMS state encryption. A complete-input
+refresh-backed plan reports **no changes**. This supersedes the unapplied bootstrap checkpoint above.
+
+Complete bootstrap input SHA-256:
+`bbf007125ae870a3bfe9547fb4ff856fc4dbf0fc2dd9bb121d57ad5f5c8386c6`.
+Inputs, verification and reviewed-plan metadata are archived in versioned customer-KMS storage
+under `lifecycle/development/bootstrap/native-connected-f588cb984413/`, with exact-version hash
+readback. Platform state remains **473**; no database or application runtime was started.
+These future release ceilings do not verify yet-unpublished function/task numeric bindings.
+
+Final read-only development observation at **2026-10-09T12:41:30Z** confirms zero databases,
+active ECS tasks, API routes, enabled rules/mappings, NAT gateways and interface endpoints, with
+fifteen available encrypted recovery snapshots. Docker backend and running WSL distributions are
+absent. The PC stays on. Retained snapshots, object/image/log storage, keys, secrets and DNS may
+incur costs. D1/D3 remain In progress; connected candidate acceptance is still pending.

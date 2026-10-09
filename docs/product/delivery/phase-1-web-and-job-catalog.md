@@ -1243,3 +1243,11 @@ The next bootstrap plan exposed an IAM size limit; permission-preserving consoli
 [Foundation and policy-sizing evidence](evidence/d3-native-application-disposal-2026-10-07.md#dormant-foundation-and-bootstrap-policy-sizing-2026-10-09).
 D1/D3 remain In progress. AWS access works; development runtimes are off with fifteen encrypted
 recovery snapshots, Docker/WSL stopped, PC on and CI/CD deferred.
+
+
+2026-10-09 the reviewed native bootstrap update is applied and independently verified at state 23,
+preserving twelve original identities and adding six scoped native boundaries. Exact IAM/trust
+readback, zero drift and versioned recovery archive pass. Platform remains dormant at state 473.
+[Managed bootstrap evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-bootstrap-verification).
+Fresh shutdown observation at 12:41:30Z confirms runtimes off; retained recovery/storage/security/DNS
+costs remain. Docker/WSL stopped, PC on. D1/D3 remain In progress behind connected acceptance.
