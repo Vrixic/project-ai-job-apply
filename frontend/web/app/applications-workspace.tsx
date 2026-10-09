@@ -1,8 +1,9 @@
 "use client";
 
 import type { Application } from "@ai-job-apply/api-contracts";
-import { useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
+  APPLICATIONS_CHANGED_EVENT,
   type ApplicationsCallResult,
   applicationsCall,
   commandKey,
@@ -33,6 +34,21 @@ export function ApplicationsWorkspace({
   applyUrl?: string | undefined;
   fetchImplementation?: typeof globalThis.fetch;
 }) {
+  return (
+    <JobApplicationWorkspace
+      key={jobId}
+      jobId={jobId}
+      applyUrl={applyUrl}
+      {...(fetchImplementation ? { fetchImplementation } : {})}
+    />
+  );
+}
+
+function JobApplicationWorkspace({
+  jobId,
+  applyUrl,
+  fetchImplementation,
+}: Parameters<typeof ApplicationsWorkspace>[0]) {
   const headingId = useId();
   const [createKey] = useState(() => `web-create-${crypto.randomUUID()}`);
   const [application, setApplication] = useState<Application>();
@@ -40,7 +56,31 @@ export function ApplicationsWorkspace({
   const [notice, setNotice] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(true);
-  const options = fetchImplementation ? { fetch: fetchImplementation } : {};
+  const [availableMaterialGenerations, setAvailableMaterialGenerations] = useState<
+    readonly string[]
+  >([]);
+  const materialReady = useCallback(
+    (generationId: string) =>
+      setAvailableMaterialGenerations((current) =>
+        current.includes(generationId) ? current : [...current, generationId],
+      ),
+    [],
+  );
+  const prepareIntent = useRef<{ signature: string; key: string } | undefined>(undefined);
+  const reconciliationIntent = useRef<{ signature: string; body: unknown } | undefined>(undefined);
+  const lifetime = useRef(new AbortController());
+  const starting = useRef(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    lifetime.current = controller;
+    return () => controller.abort();
+  }, []);
+  const options = {
+    get signal() {
+      return lifetime.current.signal;
+    },
+    ...(fetchImplementation ? { fetch: fetchImplementation } : {}),
+  };
 
   // Open the candidate's existing live application for this job, if there is one.
   // biome-ignore lint/correctness/useExhaustiveDependencies: run once per job; `options` is derived from a stable prop.
@@ -62,8 +102,11 @@ export function ApplicationsWorkspace({
 
   /** Applies a result to state; a failure sets the fixed copy and throws so the panel shows it too. */
   async function settle(result: ApplicationsCallResult, id?: string): Promise<Application> {
+    if (lifetime.current.signal.aborted) throw new Error("Workspace closed");
     if (result.ok) {
       setApplication(result.application);
+      if (result.application.status === "applied")
+        window.dispatchEvent(new Event(APPLICATIONS_CHANGED_EVENT));
       setNotice(undefined);
       return result.application;
     }
@@ -73,6 +116,8 @@ export function ApplicationsWorkspace({
   }
 
   async function start() {
+    if (starting.current) return;
+    starting.current = true;
     setBusy(true);
     setNotice(undefined);
     try {
@@ -95,6 +140,7 @@ export function ApplicationsWorkspace({
     } catch {
       // The notice already carries the fixed copy for this failure.
     } finally {
+      starting.current = false;
       setBusy(false);
     }
   }
@@ -113,7 +159,13 @@ export function ApplicationsWorkspace({
   }
 
   async function prepare(current: Application, answers: Entries) {
-    const userEntries = Object.entries(answers).map(([fieldKey, value]) => ({ fieldKey, value }));
+    const userEntries = Object.entries(answers)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([fieldKey, value]) => ({ fieldKey, value }));
+    const signature = JSON.stringify([current.id, current.revision, userEntries]);
+    if (prepareIntent.current?.signature !== signature)
+      prepareIntent.current = { signature, key: `web-prepare-${crypto.randomUUID()}` };
+    const idempotencyKey = prepareIntent.current.key;
     await settle(
       await applicationsCall("POST", `/api/platform/applications/${current.id}/packets`, {
         ...options,
@@ -121,7 +173,7 @@ export function ApplicationsWorkspace({
           expectedRevision: current.revision,
           ...(userEntries.length ? { userEntries } : {}),
         },
-        idempotencyKey: commandKey(`prepare-${userEntries.length}`, current.id, current.revision),
+        idempotencyKey,
       }),
       current.id,
     );
@@ -170,21 +222,25 @@ export function ApplicationsWorkspace({
         },
         async onReconcile(input) {
           const path = `/api/platform/applications/${application.id}/attempts/${input.attemptId}/reconciliation`;
-          const observedAt = new Date().toISOString();
-          const body =
-            input.kind === "submitted"
-              ? {
-                  kind: "user_attested_submitted",
-                  observedAt,
-                  fingerprintSha256: await sha256Hex(
-                    `user-attested:${input.attemptId}:${observedAt}`,
-                  ),
-                }
-              : { kind: "user_attested_not_submitted", acknowledgesDuplicateRisk: true };
+          const signature = `${input.attemptId}:${input.kind}`;
+          if (reconciliationIntent.current?.signature !== signature) {
+            const observedAt = new Date().toISOString();
+            const body =
+              input.kind === "submitted"
+                ? {
+                    kind: "user_attested_submitted",
+                    observedAt,
+                    fingerprintSha256: await sha256Hex(
+                      `user-attested:${input.attemptId}:${observedAt}`,
+                    ),
+                  }
+                : { kind: "user_attested_not_submitted", acknowledgesDuplicateRisk: true };
+            reconciliationIntent.current = { signature, body };
+          }
           await settle(
             await applicationsCall("POST", path, {
               ...options,
-              body,
+              body: reconciliationIntent.current.body,
               idempotencyKey: commandKey(
                 `reconcile-${input.kind}`,
                 application.id,
@@ -202,10 +258,17 @@ export function ApplicationsWorkspace({
       <h2 id={headingId}>Apply with review</h2>
       {application && actions ? (
         <>
-          {application.currentPacket ? (
+          {application.currentPacket &&
+          application.status !== "applied" &&
+          application.status !== "cancelled" ? (
             <ResumePreviewSection
               applicationId={application.id}
               revision={application.revision}
+              expectedHash={application.currentPacket.artifactHashes.resume}
+              temporaryMaterial={application.currentPacket.temporaryMaterials?.find(
+                (material) => material.kind === "tailored_resume",
+              )}
+              onMaterialReady={materialReady}
               {...(fetchImplementation ? { fetchImplementation } : {})}
               onRefreshPacket={async () => {
                 try {
@@ -225,7 +288,11 @@ export function ApplicationsWorkspace({
               {busy ? "Preparing..." : "Prepare application"}
             </button>
           ) : null}
-          <ApplicationReviewPanel application={application} actions={actions} />
+          <ApplicationReviewPanel
+            application={application}
+            actions={actions}
+            availableMaterialGenerations={availableMaterialGenerations}
+          />
           {application.currentAction === "ready_to_submit" ? (
             <ApplyPanel
               application={application}

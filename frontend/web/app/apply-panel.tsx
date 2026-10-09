@@ -1,8 +1,14 @@
 "use client";
 
 import type { Application, ApplicationResumeFile } from "@ai-job-apply/api-contracts";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import {
+  materialDeadline,
+  materialsExpired,
+  sameMaterial,
+} from "../lib/application-material-lifetime";
 import { fetchResumeFile, sha256OfBytes } from "../lib/applications-client";
+import { useMaterialExpiry } from "./use-material-expiry";
 
 /** Only a plain https link with no credentials is ever offered as the place to apply. */
 export function safeApplyUrl(value: string | undefined): string | undefined {
@@ -51,12 +57,26 @@ export function ApplyPanel({
   const [message, setMessage] = useState<string>();
   const [busyFormat, setBusyFormat] = useState<"pdf" | "docx">();
   const [recording, setRecording] = useState(false);
+  const pending = useRef<AbortController | undefined>(undefined);
+  const packet = application.currentPacket;
+  const deadlines = packet?.temporaryMaterials?.map(materialDeadline) ?? [];
+  const expired = useMaterialExpiry(deadlines.length ? Math.min(...deadlines) : undefined);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: changed approval bindings invalidate any held file read.
+  useEffect(() => () => pending.current?.abort(), [application.id, application.revision]);
+  useEffect(() => {
+    if (expired) pending.current?.abort();
+  }, [expired]);
   const href = safeApplyUrl(applyUrl);
   const fields = (application.currentPacket?.fields ?? []).filter(
-    (field) => field.value !== undefined && String(field.value) !== "",
+    (field) =>
+      field.value !== null &&
+      field.value !== undefined &&
+      String(field.value) !== "" &&
+      !field.fieldKey.startsWith("document."),
   );
 
   async function copy(fieldKey: string, value: string) {
+    if (materialsExpired(packet?.temporaryMaterials)) return;
     try {
       await navigator.clipboard.writeText(value);
       setMessage(`${labelFor(fieldKey)} copied.`);
@@ -66,10 +86,15 @@ export function ApplyPanel({
   }
 
   async function download(format: "pdf" | "docx") {
+    if (pending.current || materialsExpired(packet?.temporaryMaterials)) return;
+    const controller = new AbortController();
+    let heldBytes: Uint8Array | undefined;
+    pending.current = controller;
     setBusyFormat(format);
     setMessage(undefined);
     try {
       const result = await fetchResumeFile(application.id, format, {
+        signal: controller.signal,
         ...(fetchImplementation ? { fetch: fetchImplementation } : {}),
       });
       if (!result.ok) {
@@ -77,9 +102,31 @@ export function ApplyPanel({
         return;
       }
       const file: ApplicationResumeFile = result.file;
+      const expectedMaterial = packet?.temporaryMaterials?.find(
+        (material) => material.kind === "tailored_resume",
+      );
+      if (
+        controller.signal.aborted ||
+        file.format !== format ||
+        file.contentSha256 !== packet?.artifactHashes.resume ||
+        Boolean(expectedMaterial) !== Boolean(file.temporaryMaterial) ||
+        (expectedMaterial && !sameMaterial(file.temporaryMaterial, expectedMaterial)) ||
+        materialsExpired(file.temporaryMaterial ? [file.temporaryMaterial] : undefined)
+      ) {
+        setMessage("The resume changed or expired. Prepare and review it again.");
+        return;
+      }
       const bytes = fileFrom(file.contentBase64);
+      heldBytes = bytes;
+      file.contentBase64 = "";
       // The file must be exactly the bytes the platform said it verified.
-      if (bytes.byteLength !== file.sizeBytes || (await sha256OfBytes(bytes)) !== file.sha256) {
+      if (
+        bytes.byteLength !== file.sizeBytes ||
+        (await sha256OfBytes(bytes)) !== file.sha256 ||
+        controller.signal.aborted ||
+        materialsExpired(packet?.temporaryMaterials) ||
+        materialsExpired(file.temporaryMaterial ? [file.temporaryMaterial] : undefined)
+      ) {
         setMessage("The resume file did not pass its check, so it was not downloaded.");
         return;
       }
@@ -90,12 +137,19 @@ export function ApplyPanel({
       anchor.href = url;
       anchor.download = file.fileName;
       anchor.rel = "noopener";
-      document.body.append(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
+      try {
+        document.body.append(anchor);
+        anchor.click();
+      } finally {
+        anchor.remove();
+        URL.revokeObjectURL(url);
+      }
       setMessage(`${file.fileName} downloaded.`);
+    } catch {
+      if (!controller.signal.aborted) setMessage("The resume could not be downloaded. Try again.");
     } finally {
+      heldBytes?.fill(0);
+      if (pending.current === controller) pending.current = undefined;
       setBusyFormat(undefined);
     }
   }
@@ -120,7 +174,13 @@ export function ApplyPanel({
         the browser extension is not available for this site. Open the application page, then use
         your approved answers and resume below.
       </p>
-      {href ? (
+      {expired ? (
+        <p role="alert">
+          Generated materials expired. Prepare and review a new packet before applying. Files you
+          already downloaded or sent are outside platform cleanup.
+        </p>
+      ) : null}
+      {href && !expired ? (
         <p>
           <a href={href} target="_blank" rel="noopener noreferrer">
             Open the application page (opens in a new tab)
@@ -132,7 +192,7 @@ export function ApplyPanel({
         </p>
       )}
 
-      {application.currentPacket?.artifactHashes.resume ? (
+      {!expired && application.currentPacket?.artifactHashes.resume ? (
         <div>
           <h4>Your tailored resume</h4>
           <p>Exactly the version you reviewed. Upload it on the application page.</p>
@@ -149,7 +209,7 @@ export function ApplyPanel({
         </div>
       ) : null}
 
-      {fields.length > 0 ? (
+      {!expired && fields.length > 0 ? (
         <div>
           <h4>Your approved answers</h4>
           <ul>

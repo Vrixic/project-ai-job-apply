@@ -35,6 +35,7 @@ export type ApplicationTemporaryMaterialAuthorization =
   components["schemas"]["ApplicationTemporaryMaterialAuthorization"];
 export type ApplicationTemporaryMaterialLocation =
   components["schemas"]["ApplicationTemporaryMaterialLocation"];
+export type ApplicationTemporaryMaterial = components["schemas"]["ApplicationTemporaryMaterial"];
 export type CurrentUser = components["schemas"]["CurrentUser"];
 export type ProfileFact = components["schemas"]["ProfileFact"];
 export type ProfileFactCollection = components["schemas"]["ProfileFactCollection"];

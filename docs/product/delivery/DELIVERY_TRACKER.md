@@ -25,6 +25,8 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 ## D3 — High-quality application preparation
 
 Grounded preparation, packets/review, safe manual Apply, submission-safety controls and native runtime/test tooling are implemented.
+The 2026-10-09 browser safety batch passes a simulated connected search-to-confirmed-history journey;
+native browser transport, cover-letter UI and saved-answer selection remain unfinished source work.
 Connected native/provider acceptance, ATS adapters/fixtures, all-copy expiry, rights/restore and accountable reviews remain.
 [Implemented and remaining capabilities](phase-3-application-preparation.md).
 
@@ -58,10 +60,10 @@ Connected native/provider acceptance, ATS adapters/fixtures, all-copy expiry, ri
 
 ## Current operating state
 
-Backend implementation remains paused at the owner's stopping point; D1/D3 are not complete.
+Work resumed for D3 on 2026-10-09; D1/D3 are not complete. Independent D1 acceptance remains deferred.
 Development AWS runtimes, Docker and WSL were verified off on 2026-10-09; retained recovery/storage/security resources incur charges.
 Staging was not freshly verified because separate SSO access was unavailable; the PC remains on.
-[Shutdown and stopping evidence](evidence/d3-native-application-disposal-2026-10-07.md#owner-requested-stopping-point--2026-10-09).
+[Current browser batch and shutdown evidence](evidence/d3-connected-candidate-journey-2026-10-09.md).
 
 ## Cross-delivery decisions and changes
 

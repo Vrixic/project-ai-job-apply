@@ -509,6 +509,7 @@ export function JobSearchForm({
   const results = (
     <>
       {message && <output aria-live="polite">{message}</output>}
+      {visibleItems.length > 0 ? <h2>Search results</h2> : null}
       {visibleItems.length > 0 && (
         <ol className="job-results" aria-label="Job search results">
           {visibleItems.map((job) => (

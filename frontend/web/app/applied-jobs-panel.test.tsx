@@ -4,6 +4,7 @@ import type { Application, CanonicalJobDetail } from "@ai-job-apply/api-contract
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { APPLICATIONS_CHANGED_EVENT } from "../lib/applications-client";
 import { AppliedJobsPanel } from "./applied-jobs-panel";
 
 const APP_1 = "00000000-0000-7000-8000-000000000001";
@@ -83,6 +84,35 @@ async function flush() {
 }
 
 describe("AppliedJobsPanel", () => {
+  it("refreshes confirmed history after submission without reloading the page", async () => {
+    let confirmed = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) =>
+        String(input).endsWith("/search")
+          ? respond({ items: confirmed ? [application()] : [] })
+          : respond(jobDetail()),
+      ),
+    );
+    act(() => root.render(<AppliedJobsPanel authenticated />));
+    await flush();
+    expect(container.textContent).toContain("No applications confirmed yet");
+    confirmed = true;
+    act(() => window.dispatchEvent(new Event(APPLICATIONS_CHANGED_EVENT)));
+    await flush();
+    expect(container.textContent).toContain("Fullstack Engineer");
+    expect(container.textContent).toContain("Submission confirmed by you");
+  });
+  it("reports incomplete history when the upstream cursor loops", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => respond({ items: [application()], nextCursor: "same-page" })),
+    );
+    act(() => root.render(<AppliedJobsPanel authenticated />));
+    await flush();
+    expect(container.textContent).toContain("Applied jobs are temporarily unavailable");
+    expect(container.textContent).not.toContain("No applications confirmed yet");
+  });
   it("renders nothing when unauthenticated", () => {
     act(() => root.render(<AppliedJobsPanel authenticated={false} />));
     expect(container.textContent).toBe("");

@@ -1,4 +1,5 @@
 import { compileComponentValidator } from "@ai-job-apply/api-contracts";
+import { materialDeadline } from "./application-material-lifetime";
 import { getLazyAuth0Session } from "./auth0";
 import { forwardPlatformRequest } from "./platform-api";
 
@@ -24,6 +25,9 @@ export type ApplicationsOperation =
   | "resumePreview"
   | "resumeFile"
   | "preparePacket"
+  | "preparation"
+  | "resumeLocation"
+  | "coverLetterLocation"
   | "approve"
   | "reopen"
   | "cancel"
@@ -45,10 +49,13 @@ interface OperationSpec {
   historyQuery?: boolean;
   /** The single allowed `format` query parameter (`docx` or `pdf`). */
   formatQuery?: boolean;
+  generationQuery?: boolean;
+  materialKind?: "tailored_resume" | "cover_letter";
   /** Application-typed responses must be the application that was addressed. */
   echoesApplicationId?: boolean;
   /** Submission-start responses must contain the application that was addressed. */
   echoesNestedApplicationId?: boolean;
+  echoesPreparationApplicationId?: boolean;
 }
 
 const OPERATIONS: Readonly<Record<ApplicationsOperation, OperationSpec>> = {
@@ -121,6 +128,38 @@ const OPERATIONS: Readonly<Record<ApplicationsOperation, OperationSpec>> = {
     needsApplication: true,
     needsAttempt: false,
     echoesApplicationId: true,
+  },
+  preparation: {
+    method: "GET",
+    path: (id, preparationId) => `/v1/applications/${id}/preparations/${preparationId}`,
+    response: "ApplicationPacketPreparation",
+    success: 200,
+    idempotent: false,
+    needsApplication: true,
+    needsAttempt: true,
+    echoesPreparationApplicationId: true,
+  },
+  resumeLocation: {
+    method: "GET",
+    path: (id) => `/v1/applications/${id}/resume/location`,
+    response: "ApplicationTemporaryMaterialLocation",
+    success: 200,
+    idempotent: false,
+    needsApplication: true,
+    needsAttempt: false,
+    generationQuery: true,
+    materialKind: "tailored_resume",
+  },
+  coverLetterLocation: {
+    method: "GET",
+    path: (id) => `/v1/applications/${id}/cover-letter/location`,
+    response: "ApplicationTemporaryMaterialLocation",
+    success: 200,
+    idempotent: false,
+    needsApplication: true,
+    needsAttempt: false,
+    generationQuery: true,
+    materialKind: "cover_letter",
   },
   approve: {
     method: "POST",
@@ -321,7 +360,7 @@ export async function applicationsRoute(
 ): Promise<Response> {
   const spec = OPERATIONS[operation];
   const applicationId = params.applicationId ?? "";
-  const attemptId = params.attemptId ?? "";
+  const attemptId = (operation === "preparation" ? params.preparationId : params.attemptId) ?? "";
   if (
     (spec.needsApplication && !UUID_V7.test(applicationId)) ||
     (spec.needsAttempt && !UUID_V7.test(attemptId))
@@ -339,6 +378,12 @@ export async function applicationsRoute(
     const projected = formatSearch(search);
     if (projected === undefined) return invalid();
     query = projected;
+  } else if (spec.generationQuery) {
+    const entries = [...new URLSearchParams(search)];
+    const entry = entries[0];
+    if (entries.length !== 1 || entry?.[0] !== "generationId" || !UUID_V7.test(entry[1]))
+      return invalid();
+    query = `?generationId=${entry[1]}`;
   } else if (search.length > 0) {
     return invalid();
   }
@@ -412,18 +457,35 @@ export async function applicationsRoute(
   );
   // Declared problems were already projected to fixed, value-free bodies.
   if (!response.ok) return response;
-  return validateSuccess(response, spec, applicationId);
+  const asynchronous = operation === "preparePacket" && response.status === 202;
+  if (asynchronous && !JSON.parse(body ?? "{}").coverLetter) {
+    void response.body?.cancel().catch(() => undefined);
+    return unavailable();
+  }
+  return validateSuccess(
+    response,
+    spec,
+    applicationId,
+    asynchronous,
+    operation === "preparation" ? attemptId : undefined,
+    spec.generationQuery
+      ? (new URLSearchParams(query).get("generationId") ?? undefined)
+      : undefined,
+  );
 }
 
 async function validateSuccess(
   response: Response,
   spec: OperationSpec,
   applicationId: string,
+  asynchronous = false,
+  preparationId?: string,
+  generationId?: string,
 ): Promise<Response> {
   const cancel = () => void response.body?.cancel().catch(() => undefined);
   const declaredLength = response.headers.get("content-length");
   if (
-    response.status !== spec.success ||
+    response.status !== (asynchronous ? 202 : spec.success) ||
     !JSON_CONTENT_TYPE.test(response.headers.get("content-type") ?? "") ||
     (declaredLength !== null &&
       (!/^\d+$/.test(declaredLength) || Number(declaredLength) > MAXIMUM_RESPONSE_BYTES))
@@ -434,9 +496,34 @@ async function validateSuccess(
   try {
     const bytes = await readBounded(response.body, MAXIMUM_RESPONSE_BYTES, undefined, 10_000);
     const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-    if (!validator(spec.response)(value)) throw new Error("The response is invalid");
-    if (spec.echoesApplicationId && (value as { id?: unknown }).id !== applicationId) {
+    if (!validator(asynchronous ? "ApplicationPacketPreparation" : spec.response)(value))
+      throw new Error("The response is invalid");
+    if (
+      !asynchronous &&
+      spec.echoesApplicationId &&
+      (value as { id?: unknown }).id !== applicationId
+    ) {
       throw new Error("The response is for another application");
+    }
+    if (
+      (asynchronous || spec.echoesPreparationApplicationId) &&
+      (value as { applicationId?: unknown }).applicationId !== applicationId
+    )
+      throw new Error("The preparation is for another application");
+    if (preparationId && (value as { id?: unknown }).id !== preparationId)
+      throw new Error("The preparation is for another operation");
+    if (
+      generationId &&
+      (value as { temporaryMaterial?: { generationId?: unknown } }).temporaryMaterial
+        ?.generationId !== generationId
+    )
+      throw new Error("The location is for another generation");
+    if (spec.materialKind) {
+      const material = (
+        value as import("@ai-job-apply/api-contracts").ApplicationTemporaryMaterialLocation
+      ).temporaryMaterial;
+      if (material.kind !== spec.materialKind || Date.now() >= materialDeadline(material))
+        throw new Error("The material location is stale");
     }
     if (
       spec.echoesNestedApplicationId &&

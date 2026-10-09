@@ -1,8 +1,13 @@
 "use client";
 
-import type { ApplicationResumePreview } from "@ai-job-apply/api-contracts";
+import type {
+  ApplicationResumePreview,
+  ApplicationTemporaryMaterial,
+} from "@ai-job-apply/api-contracts";
 import { useEffect, useId, useState } from "react";
+import { materialDeadline, sameMaterial } from "../lib/application-material-lifetime";
 import { fetchResumePreview } from "../lib/applications-client";
+import { useMaterialExpiry } from "./use-material-expiry";
 
 const CHANGE_LABEL = {
   kept: "Kept",
@@ -35,6 +40,7 @@ function keyed<T>(
 type State =
   | { phase: "loading" }
   | { phase: "error" }
+  | { phase: "expired" }
   | { phase: "ready"; preview: ApplicationResumePreview };
 
 /**
@@ -47,16 +53,28 @@ export function ResumePreviewSection({
   revision,
   fetchImplementation,
   onRefreshPacket,
+  expectedHash,
+  temporaryMaterial,
+  onMaterialReady,
 }: {
   applicationId: string;
   revision: number;
   fetchImplementation?: typeof globalThis.fetch;
   /** Prepares the packet again so it carries the current tailored resume. */
   onRefreshPacket?: () => Promise<void>;
+  expectedHash?: string | undefined;
+  temporaryMaterial?: ApplicationTemporaryMaterial | undefined;
+  onMaterialReady?: (generationId: string) => void;
 }) {
   const headingId = useId();
   const [state, setState] = useState<State>({ phase: "loading" });
   const [refreshing, setRefreshing] = useState(false);
+  const material =
+    temporaryMaterial ?? (state.phase === "ready" ? state.preview.temporaryMaterial : undefined);
+  const expired = useMaterialExpiry(material ? materialDeadline(material) : undefined);
+  useEffect(() => {
+    if (expired) setState({ phase: "expired" });
+  }, [expired]);
   // `revision` re-checks the resume whenever the application changes, so a stale packet is noticed.
   // biome-ignore lint/correctness/useExhaustiveDependencies: revision is an intentional trigger
   useEffect(() => {
@@ -67,10 +85,35 @@ export function ResumePreviewSection({
       ...(fetchImplementation ? { fetch: fetchImplementation } : {}),
     }).then((result) => {
       if (controller.signal.aborted) return;
-      setState(result ? { phase: "ready", preview: result } : { phase: "error" });
+      const reference = temporaryMaterial ?? result?.temporaryMaterial;
+      if (reference && Date.now() >= materialDeadline(reference)) {
+        setState({ phase: "expired" });
+        return;
+      }
+      const matches =
+        result &&
+        (result.status !== "ready" || !expectedHash || result.contentSha256 === expectedHash);
+      const bound =
+        !temporaryMaterial || sameMaterial(result?.temporaryMaterial, temporaryMaterial);
+      if (
+        matches &&
+        bound &&
+        result?.status === "ready" &&
+        result.matchesPacket &&
+        result.temporaryMaterial
+      )
+        onMaterialReady?.(result.temporaryMaterial.generationId);
+      setState(matches && bound ? { phase: "ready", preview: result } : { phase: "error" });
     });
     return () => controller.abort();
-  }, [applicationId, revision, fetchImplementation]);
+  }, [
+    applicationId,
+    revision,
+    fetchImplementation,
+    expectedHash,
+    temporaryMaterial,
+    onMaterialReady,
+  ]);
 
   return (
     <section aria-labelledby={headingId} className="resume-preview">
@@ -80,7 +123,10 @@ export function ResumePreviewSection({
         {state.phase === "error" ? (
           <p role="alert">We could not check your resume right now. Try again shortly.</p>
         ) : null}
-        {state.phase === "ready" ? renderPreview(state.preview) : null}
+        {expired || state.phase === "expired" ? (
+          <p role="alert">Your generated resume expired. Prepare again to review a new version.</p>
+        ) : null}
+        {!expired && state.phase === "ready" ? renderPreview(state.preview) : null}
       </div>
     </section>
   );

@@ -1,0 +1,94 @@
+# D3 connected browser safety — 2026-10-09
+
+Status: locally verified implementation batch; D3 remains in progress. No deployment or live
+candidate/employer acceptance is claimed. Independent D1 acceptance, including hosted admin,
+is deferred.
+
+## Implemented
+
+- Review resets when the packet changes; actions lock while pending. Sensitive boolean fields
+  require an explicit choice and preserve false. Temporary materials require an available exact
+  preview and explicit review before approval.
+- Resume preview/download checks bind content hashes and all temporary-material scalars to the
+  approved packet. The original completion-plus-30-minute deadline is validated, never extended.
+  Idle/focus expiry hides previews and disables material use; late downloads and navigation are
+  aborted, decoded bytes cleared and Blob URLs revoked. Logical browser cleanup does not prove
+  physical erasure of all copies or delete files intentionally downloaded by the candidate.
+- Preparation retries keep an opaque action key for identical inputs; changed answers get a new
+  key. Confirmation retries retain their original timestamp/fingerprint. Job changes reset the
+  workspace and confirmed history refreshes from its owner-scoped API.
+- BFF routes validate asynchronous preparation responses and owner/application binding, plus
+  scalar-only native material locations and their kind/generation/deadline. They do not proxy
+  generated content through serverless. Direct browser native reads are still unfinished.
+- Search heading order and filter-label contrast were the only independent D1 source changes,
+  required by actual connected-browser accessibility failures.
+- The verifier and CI build before tests: native-resume control tests import the actual emitted
+  workflow handler, which was absent on this checkout. No test assertions or timeouts were relaxed.
+
+## Executed checks
+
+Sources: [workspace](../../../../frontend/web/app/applications-workspace.tsx),
+[review](../../../../frontend/web/app/application-review-panel.tsx),
+[material lifetime](../../../../frontend/web/lib/application-material-lifetime.ts),
+[BFF](../../../../frontend/web/lib/applications-bff.ts),
+[connected browser test](../../../../scripts/tests/d3-browser-assurance/run.mjs).
+
+- Web tests: 63 files, 800 tests passed. Web typecheck and API contracts build passed.
+- Actual Chromium harness mounts the production search, workspace, review, Apply, history and
+  preview components. Search → Prepare → review → approve → manual Apply → candidate-attested
+  confirmation → Applied history passed with synthetic BFF/native-preview responses. Keyboard,
+  axe checks and idle-preview expiry passed; local/session storage stayed empty. This does not
+  test live generation, actual employer form submission or provider confirmation.
+- Regressions cover packet acknowledgement resets, action locks, exact material/hash/deadline,
+  stale downloads/navigation, explicit false, response-loss retries, changed-answer keys,
+  history cursor loops and asynchronous/location response substitution.
+- No PostgreSQL integration, live provider/model, managed OIDC or actual employer submission was
+  run. Standard suites retain their documented integration skips; no persistence code changed.
+- Every repository-verifier stage passed across the full and resumed runs: 39 test/build tasks
+  in the test graph, 23 production builds, formatting/lint/typechecking, dependency security,
+  operator/contract guards, bundle isolation and Compose validation. The full command was run;
+  after local prerequisite repairs its literal remaining stages were resumed from temporary
+  scripts without weakening checks. Its first run found missing
+  workspace dependency links; frozen-lockfile installation restored them without a lockfile change.
+  A later run found CRLF in the working-tree profile foundation migration; restoring its documented
+  LF form reproduces the existing manifest checksum with no migration-content change.
+  Installed braces lacked the committed security patch; a forced frozen-lockfile reinstall
+  restored it. All 56 braces regressions and the complete dependency-security suite then passed.
+  Dependency-dependent verifier stages were resumed from formatting. Missing emitted workflow
+  artifacts were repaired by building first; all 1,937 Documents tests then passed. A focused
+  handler run during concurrent builds timed out; after builds finished all eight cases passed
+  unchanged. The final resumed run exited zero with the verifier success marker.
+
+## Remaining work and genuine gates
+
+GitHub Actions cannot start jobs: its check annotation reports failed recent account payments
+or an insufficient spending limit. Remote CI is unavailable; billing settings were not changed.
+
+Native material identity transport is unresolved: existing web tokens are server-held, while
+ADR-038 requires direct browser-to-native content reads. Owner choice is pending between a
+separate in-memory browser sign-in and extension-mediated material access. No token-returning
+BFF or serverless generated-content proxy was added. Cover-letter preparation/poll/preview UI,
+saved-answer selection bound to an inspected provider form, and Greenhouse adapter integration
+remain unfinished source work; they are not all external blockers.
+
+Live validation additionally needs disposable controlled sign-in/MFA, approved provider/model
+configuration, authorized provider-derived fixtures, original-work cleanup/recovery evidence,
+candidate rights/restore and accountable legal/security/privacy/product review. Existing
+development-only manual Apply acceptance is preserved; this batch adds no live acceptance.
+
+## Shutdown
+
+No AWS runtime was started by this batch. Development account 362544434697, us-east-2, readback:
+zero RDS instances, ECS running/pending tasks, live NAT gateways, interface endpoints, active
+Lambda event-source mappings and API routes on Gateway lemwm7dvi4. No application schedules
+were enabled; the GuardDuty service-managed protection rule is retained. Fifteen encrypted
+manual RDS snapshots remain available. Durable recovery/storage/security/monitoring resources
+remain and can incur charges; this is not a zero-cost claim.
+
+Staging verification is blocked: profile ai-job-apply-staging-admin cannot load its separate
+SSO token. Staging billable runtime state is therefore not freshly verified; required shutdown
+verification remains incomplete for that environment. Docker Desktop status reports it is not
+running and no Docker process exists; WSL shutdown completed and its running-distribution list
+is empty. Additional development readback found no ECS services, enabled Scheduler schedules
+or non-terminated EC2 instances.
+The PC remains on.

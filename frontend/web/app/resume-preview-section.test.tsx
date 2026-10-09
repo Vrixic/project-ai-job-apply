@@ -82,6 +82,34 @@ const stub = (body: unknown, status = 200) =>
   vi.fn(async () => respond(body, status)) as unknown as typeof globalThis.fetch;
 
 describe("ResumePreviewSection", () => {
+  it("actively removes idle preview content at its original deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const now = Date.now();
+      await mount(
+        stub({
+          ...ready,
+          temporaryMaterial: {
+            schemaVersion: 1,
+            kind: "tailored_resume",
+            generationId: APP,
+            version: 1,
+            contentSha256: "a".repeat(64),
+            completedAtMs: now - 1_799_990,
+            expiresAtMs: now + 10,
+          },
+        }),
+      );
+      expect(container.textContent).toContain("Built a payments API");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(11);
+      });
+      expect(container.textContent).not.toContain("Built a payments API");
+      expect(container.textContent).toContain("generated resume expired");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("shows what changed for the candidate's own bullets with fixed labels", async () => {
     const fetchImplementation = stub(ready);
     await mount(fetchImplementation);

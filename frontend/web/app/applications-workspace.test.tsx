@@ -102,6 +102,83 @@ async function mount(fetchImplementation: typeof globalThis.fetch, applyUrl?: st
 }
 
 describe("ApplicationsWorkspace", () => {
+  it("keeps retries stable and gives changed answers a different preparation key", async () => {
+    const value = reviewable();
+    if (!value.currentPacket) throw new Error("Missing fixture packet");
+    value.currentPacket.fields = [
+      { ...value.currentPacket.fields[0], origin: "user_entered" },
+    ] as typeof value.currentPacket.fields;
+    const calls: RequestInit[] = [];
+    const fetchImplementation = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      if (String(input).endsWith("/search")) return respond({ items: [value] });
+      if (String(input).endsWith("/packets")) {
+        calls.push(init);
+        return respond({ code: "applications_unavailable" }, 503);
+      }
+      return respond({}, 404);
+    }) as typeof fetch;
+    await mount(fetchImplementation);
+    for (const answer of ["first@example.test", "first@example.test", "second@example.test"]) {
+      await act(async () => {
+        const input = container.querySelector('input:not([type="checkbox"])');
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(input, answer);
+        input?.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await click("Save answer");
+    }
+    expect(calls).toHaveLength(3);
+    expect(calls[0]?.headers).toEqual(calls[1]?.headers);
+    expect(calls[1]?.headers).not.toEqual(calls[2]?.headers);
+    expect(JSON.stringify(calls.map((call) => call.headers))).not.toContain("example.test");
+  });
+  it("retries an uncertain candidate confirmation with its original payload and key", async () => {
+    const takeover = application({
+      status: "takeover",
+      revision: 4,
+      currentAction: "complete_manually",
+      attempts: [
+        {
+          id: APP,
+          sequence: 1,
+          status: "taken_over",
+          adapterId: "manual",
+          adapterVersion: "none",
+          startedAt: AT,
+        },
+      ],
+    });
+    const calls: RequestInit[] = [];
+    const fetchImplementation = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      if (String(input).endsWith("/search")) return respond({ items: [takeover] });
+      calls.push(init);
+      if (calls.length === 1) throw new Error("Lost response");
+      return respond({ ...takeover, revision: 5, status: "applied", currentAction: "none" });
+    }) as typeof fetch;
+    await mount(fetchImplementation);
+    await click("I submitted it");
+    await vi.waitFor(() => expect(container.textContent).toContain("That did not go through"));
+    await click("I submitted it");
+    await vi.waitFor(() => expect(container.textContent).toContain("Submitted and confirmed"));
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.body).toBe(calls[0]?.body);
+    expect(calls[1]?.headers).toEqual(calls[0]?.headers);
+  });
+
+  it("discards the previous job workspace when the selected job changes", async () => {
+    const fetchImplementation = vi.fn(async () =>
+      respond({ items: [reviewable()] }),
+    ) as typeof fetch;
+    await mount(fetchImplementation);
+    expect(container.textContent).toContain("Application review");
+    const otherJob = "00000000-0000-7000-8000-000000000099";
+    const emptyFetch = vi.fn(async () => respond({ items: [] })) as typeof fetch;
+    await act(async () =>
+      root.render(<ApplicationsWorkspace jobId={otherJob} fetchImplementation={emptyFetch} />),
+    );
+    expect(container.textContent).not.toContain("Application review");
+    expect(container.textContent).toContain("Prepare application");
+  });
   it("creates then prepares an application and shows the review panel", async () => {
     const calls: Array<[string, RequestInit]> = [];
     const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {

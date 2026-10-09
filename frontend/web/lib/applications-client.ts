@@ -15,6 +15,8 @@ export type ApplicationsCallResult =
   | { ok: true; application: Application }
   | { ok: false; status: number; code: string; message: string };
 
+export const APPLICATIONS_CHANGED_EVENT = "applications-changed";
+
 const COPY: Readonly<Record<string, string>> = {
   authentication_required: "Sign in again to continue.",
   session_expired: "Your session expired. Sign in again to continue.",
@@ -62,7 +64,13 @@ export async function applicationsCall(
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     });
     const value: unknown = await response.json().catch(() => undefined);
-    if (response.ok && value && typeof value === "object" && "id" in value) {
+    if (
+      response.ok &&
+      response.status !== 202 &&
+      value &&
+      typeof value === "object" &&
+      "id" in value
+    ) {
       return { ok: true, application: value as Application };
     }
     const code =
@@ -193,6 +201,7 @@ export async function listAppliedApplications(
 ): Promise<{ ok: true; applications: Application[] } | { ok: false }> {
   const send = options.fetch ?? fetch;
   const applications: Application[] = [];
+  const seenCursors = new Set<string>();
   let cursor: string | undefined;
   for (let page = 0; page < appliedApplicationsMaxPages; page += 1) {
     let value: unknown;
@@ -222,6 +231,9 @@ export async function listAppliedApplications(
     }
     const nextCursor = (value as { nextCursor?: unknown } | undefined)?.nextCursor;
     if (typeof nextCursor !== "string" || nextCursor.length === 0) break;
+    if (seenCursors.has(nextCursor) || page === appliedApplicationsMaxPages - 1)
+      return { ok: false };
+    seenCursors.add(nextCursor);
     cursor = nextCursor;
   }
   return { ok: true, applications };
