@@ -100,6 +100,16 @@ explicit. Logs are ignored local files `.tmp/d3-form-plan-verify.log` and
 `.tmp/d3-form-plan-browser.log`. An earlier verifier invocation was stopped when source inspection
 expanded this batch to enforce the adopted restricted-field threshold; the final run passed whole.
 
+## D3-012 review packet refresh
+
+The [engineering approval packet](../../../security/d3-application-approval-packet.md) now
+distinguishes implemented vault/protected-packet/preparation workflow/browser controls from
+unfinished native identity, observed-form answer selection, provider adapters and live acceptance.
+The existing October 2 OpenAI development selection is acknowledged; it is not ADR-038
+all-copy retention approval. The original accountable disposition is unchanged. Source/evidence
+and local Markdown-link inspection validate this documentation-only update; no additional
+runtime test or acceptance is claimed.
+
 ## Remaining work and genuine gates
 
 GitHub Actions cannot start jobs: its check annotation reports failed recent account payments

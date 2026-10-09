@@ -19,7 +19,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Assisted/manual Apply (D3-009, D3-018) | Canonical job opening, approved-answer copying and safe manual fallback are implemented; the deployed manual flow passed human review. | Direct native downloads and extension handoff acceptance. |
 | Metrics (D3-010, D3-036) | Versioned correction/outcome metrics and strict detached telemetry envelopes are locally verified. | Production sinks/dashboards/alarms are deferred from the candidate-journey critical path. |
 | Verification (D3-011, D3-019) | Local adversarial, owner-isolation, duplicate-start and crash/replay checks pass; basic manual Apply is accepted. | Full generated-material journey, installed-extension checks and final security/privacy/accessibility/product acceptance. |
-| Capability approval (D3-012) | The ATS/AI/sensitive-field approval packet is prepared. | Accountable legal and security/privacy dispositions; product approval alone does not close these gates. |
+| Capability approval (D3-012) | Engineering approval packet refreshed on October 9 against current source/evidence; existing limited development owner dispositions are linked without amendment. | Provider retention under ADR-038, exact release/source review and accountable legal/security/privacy gates remain; development direction alone does not close them. |
 | Candidate rights (D3-014, D3-028, D3-029, D3-030, D3-031, D3-073) | Applications export/delete/restore support, restricted-answer export and document-prefix cleanup are implemented with local and partial managed evidence. | Current deployed document-inclusive deletion/export/restore acceptance and backup-aging/accountable review. |
 | Migration/release tooling (D3-015, D3-020, D3-032, D3-033, D3-034, D3-040, D3-041) | Release convergence, provenance guards, dependency corrections and checksum-bound migration/restore tooling are implemented and verified. | Fresh compatible publication and exact managed release/restore checks for the next activation. |
 | Resume limits/deletion (D3-025, D3-026, D3-027) | Plan-driven limits, in-progress upload exclusion, deletion and version/prefix byte purge are implemented and accepted in development. | Document-inclusive account-deletion acceptance remains under candidate rights. |
@@ -68,3 +68,8 @@ Independent D1 acceptance, including hosted admin acceptance, remains deferred.
 2026-10-09: Added D3-081 preparation/status UI without activating providers or sending generated
 content through the BFF. Synthetic browser checks cover the opt-in and queued/running/succeeded
 path; missing exact cover-letter previews continue to block approval.
+
+2026-10-09: Refreshed the [D3-012 engineering approval packet](../../security/d3-application-approval-packet.md)
+to remove obsolete missing-vault/workflow claims and link current protection, native lifecycle,
+browser and managed evidence. The named development provider choice remains distinct from
+ADR-038 retention approval; no reviewer disposition or release gate was changed.
