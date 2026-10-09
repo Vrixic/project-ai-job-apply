@@ -236,3 +236,38 @@ The AWS access blocker has moved environments, not been waived.
 
 Final local runtime inspection found no Docker process or running WSL distribution. WSL shutdown
 completed; Docker Desktop status could not find a running service. The PC remains on.
+
+## D3-085 staging shutdown status prerequisite
+
+The owner restored staging SSO. The maintained status operator then failed because Lambda's
+event-source-mapping list succeeds with no mappings even when its requested function does not
+exist. The operator now resolves the exact optional processor from the paginated Lambda function
+inventory. Failed inventory/mapping/rule reads refuse status; deployed document processing still
+requires its own mappings and rules. No cloud resource, permission, artifact, contract or product
+activation changed. This fixes the mandatory shutdown dependency without reopening D1 acceptance.
+
+Nine generated regression cases pass: absent processor with empty mappings, deployed dark
+processor, active base/document triggers and six failed-read paths. The cases are wired into the
+full repository verifier. The corrected read-only lifecycle operator verifies `Mode=dormant`, no
+database, zero managed interface endpoints/routes/enabled mappings/rules and zero queue depth.
+Additional staging readback at 2026-10-09T18:54Z confirms no ECS running/pending tasks/services,
+EC2 instances, NAT gateways, EIPs or EBS volumes. All three project queues/DLQs have zero visible,
+invisible and delayed messages; all six functions have zero provisioned concurrency, and the
+durable function has zero running executions. No runtime was started. Retained storage/recovery/
+security resources can still incur charges.
+
+The development session worked before the staging sign-in, but its named local SSO cache is now
+absent. Earlier development shutdown evidence remains historical; fresh development verification
+requires renewed sign-in. No token cache was copied or repaired, and no profile/assignment was
+changed. The owner clarified that development and staging cannot be accessed together. Access and
+shutdown verification will therefore be sequential: staging is verified before switching to
+development; simultaneous sessions are not a requirement. The development browser authorization
+attempt expired; the next live session needs fresh development sign-in after switching. Docker remains stopped, WSL shutdown completed with no running
+distributions, and the PC remains on.
+
+The complete `scripts/verify-phase0.ps1` run exits zero, including the new nine-case regression,
+38 typecheck tasks, 23 builds, 39 test-graph tasks, security/operator checks and bundle/Compose/
+scope guards. The actual Chromium connected journey passes again with synthetic authentication,
+BFF and native responses; no live generation or employer submission is claimed. Logs remain
+ignored locally at `.tmp/d3-staging-status-verify.log` and `.tmp/d3-staging-status-browser.log`.
+All 37 local delivery/runbook link targets and `git diff --check` pass.

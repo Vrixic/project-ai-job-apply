@@ -65,7 +65,7 @@ The D3-012 engineering review packet now links current evidence; existing develo
 ## Current operating state
 
 Work resumed for D3 on 2026-10-09; D1/D3 are not complete. Independent D1 acceptance remains deferred.
-Development SSO access is restored and current shutdown readback confirms dormant runtime capacity on 2026-10-09. Staging was verified off earlier that day, but its separate SSO session is now unavailable; fresh staging shutdown verification remains incomplete. No cloud runtime was started by these browser/form batches. Retained recovery/storage/security resources incur charges.
+AWS access is sequential per the owner. The corrected lifecycle status command verifies dormant staging on 2026-10-09; staging does not need to remain signed in during development testing. Development's earlier dormant readback remains historical evidence; its next live session requires development sign-in. D3-085 fixes the optional-processor inventory check required by shutdown; it adds no independent D1 acceptance. No cloud runtime was started by these batches. Retained recovery/storage/security resources incur charges.
 Docker/WSL shutdown is recorded in the linked evidence; the PC remains on.
 [Current browser batch and shutdown evidence](evidence/d3-connected-candidate-journey-2026-10-09.md).
 

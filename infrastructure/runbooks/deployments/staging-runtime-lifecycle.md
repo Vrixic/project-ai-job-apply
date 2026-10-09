@@ -25,6 +25,10 @@ Staging permits synthetic data only. Shutdown intentionally retains no database 
 
 Inspect without mutation:
 
+Status resolves the optional document processor from the exact Lambda function inventory. An
+empty event-source-mapping list alone does not establish whether the function is deployed.
+Inventory failures refuse status; a deployed processor still requires its mappings and rules.
+
 ```powershell
 .\scripts\operate-staging-runtime-lifecycle.ps1 -Action Status `
   -ExpectedAccountId "STAGING_ACCOUNT_ID" `
