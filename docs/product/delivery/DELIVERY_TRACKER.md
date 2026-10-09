@@ -1,5 +1,14 @@
 # Delivery Tracker
 
+2026-10-09 the published and independently verified `444c9346` image passes live legacy receipt
+maintenance: seven receipts archived with real KMS and twelve Applications migrations applied,
+through 0015. Gateway replay remains off and unaccepted. Mandatory snapshot-backed shutdown is
+complete at state 471: both databases absent, fifteen encrypted snapshots, 290 other identities
+preserved, zero drift and versioned recovery archive readback passed.
+[Managed transition and shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-legacy-transition-and-shutdown-at-state-471-2026-10-09).
+D1/D3 remain In progress; retained costs and staging SSO gap remain. Docker/WSL stopped, PC on,
+CI/CD deferred and no repeat of accepted manual checks.
+
 2026-10-08 D3-077 implements the atomic historical receipt transition and canonical migration 0015.
 Eight real PostgreSQL historical-transition cases and eleven archive/replay cases pass with
 simulated KMS. Local dump/restore matches all 96 relation row sets across 79 migrations, including

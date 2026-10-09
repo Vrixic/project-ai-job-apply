@@ -1605,3 +1605,56 @@ Next: restore AWS access, verify shutdown, publish and scan the immutable image,
 the exact managed maintenance key/task and perform live transition/replay acceptance with the
 mandatory snapshot-backed shutdown afterward. D1/D3 remain In progress; accepted human checks
 and the hosted CI/CD deferral are unchanged.
+
+## Managed legacy transition and shutdown at state 471 (2026-10-09)
+
+Merged source `444c9346d72e8a55b53f087b64058fa064573b6d` was immutably published after two
+uncached Linux/AMD64 builds matched and the hardened migration inventory smoke passed. Independent
+publication verification confirmed the exact remote image and a COMPLETE ECR scan with zero High
+and zero Critical findings. Platform digest:
+`sha256:03ca68ca7daa3903f958774053ec26b90c714a507513a88304ea1f389bf74d88`.
+Publication receipt SHA-256:
+`308a241e4ecc85b184f47616cf7815368804821500e5b16b2224e319b102b145`.
+
+Development was restored from its latest retained final snapshot with traffic and background work
+off. The dedicated receipt key, private endpoints and exact image were provisioned through reviewed
+plans. An available encrypted same-instance manual snapshot and PITR preceded execution. The
+separate maintenance task/role was then deployed with a thirty-minute configuration and no Gateway
+replay activation. Its first configuration plan refused because Terraform `timeadd` truncates
+fractional seconds: an exact thirty-minute fractional expiry exceeded the computed limit. No task
+was deployed or launched from that failed plan. Canonical whole-second `.000Z` issue/expiry values
+passed the unchanged limit; the snapshot retained its actual millisecond timestamp.
+
+The managed operator's PlanExecution and repeated Execute preflight both passed against current
+state, image, task, key/role, snapshot and drained work. Reviewed execution descriptor SHA-256:
+`60f327a1044621846a701cbc742b2fc74c4d89e808832b54f49b7b6b93fa1f6e`.
+Exactly one original task was submitted. Recover verified its STOPPED status, exit zero, exact
+image/configuration and sole sanitized success aggregate: **seven archived receipts and twelve
+applied Applications migrations**, advancing the original three-entry ledger through version 0015.
+This is live SQL/KMS transition evidence, including the implementation's atomic preservation and
+cryptographic round-trip checks. Gateway replay remains disabled; this does not prove hosted
+original-request replay, the complete candidate journey, or full-platform privacy/restore acceptance.
+
+Shutdown completed through reviewed removal of only the dedicated maintenance task/role/policy and
+eight temporary interface endpoints. The receipt key was retained. A fresh post-transition safety
+snapshot physically restored as a private encrypted instance with the original database key. The
+source was deleted with a new encrypted final snapshot and its automated backups preserved; the
+exact temporary restore instance was then removed after final-snapshot availability was confirmed.
+
+- Final Terraform state: **471**, preserving all **290** non-database managed identities across
+  database dormancy, including the newly retained receipt key.
+- Exact dormant-input plan: zero drift, SHA-256
+  `072d0042bf53a835ab5433e219e7155e8535aea1af045e33854c1f52c0695fe0`.
+- Fresh observation at **2026-10-09T11:39:54Z**: both databases absent; zero API routes, enabled
+  rules/mappings, non-stopped ECS tasks, NAT gateways and interface endpoints; **fifteen** encrypted
+  manual recovery snapshots available.
+- Complete recovery inputs and restore proof were archived with explicit customer-KMS encryption,
+  versioning and exact-version checksum readback. Current input SHA-256:
+  `41fd9b6eded55c3e4a65b9a5bffae2e7f00681edcd920a03f7f639218842aca9`.
+  Private `.tmp/legacy77-*` evidence and recovery manifest supersede the state-456 inputs.
+
+Snapshot/backup, object/image/log storage, retained KMS keys, secrets and DNS resources can still
+incur charges. Docker and WSL are stopped; the PC stays on. Staging verification remains unavailable
+without its separate SSO token. D1/D3 remain In progress: managed Gateway replay, full migration/
+privacy reconciliation and native/client/ATS/accountable acceptance are not closed by this result.
+Accepted manual checks are not reopened; hosted CI/CD remains deferred until launch.
