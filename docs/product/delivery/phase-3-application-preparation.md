@@ -4,7 +4,7 @@
 - Start: 2026-09-18
 - Completion: Not completed
 - Owners: Unassigned
-- Last updated: 2026-10-07
+- Last updated: 2026-10-09
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d3--high-quality-application-preparation)
 
 ## Objective
@@ -2914,3 +2914,11 @@ implemented with 172 synthetic preflight/recovery checks and added to the verifi
 once from a permanent claim and recovers only the original task. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-legacy-receipt-operator-checkpoint-2026-10-09).
 Full operator verification, immutable publication and live acceptance remain. Fresh shutdown
 inspection awaits renewed SSO; no cloud changes, Docker/WSL stopped and PC on. D1/D3 In progress.
+
+
+2026-10-09 final operator-inclusive verifier passes at `c03079d2`: 38 typechecks, 39 test tasks,
+23 builds, 172 maintenance checks, all maintained guards/isolation/Compose and unchanged lint.
+[Final evidence](evidence/d3-native-application-disposal-2026-10-07.md#final-operator-verification),
+[PR #587](https://github.com/Vrixic/project-ai-job-apply/pull/587). Immutable publication and managed
+acceptance remain behind renewed AWS SSO. No cloud mutation; Docker/WSL stopped, PC on, D1/D3
+In progress. Existing manual acceptance and the CI/CD deferral remain unchanged.

@@ -1555,3 +1555,19 @@ A new terminal sign-in request is pending. Last successful development observati
 2026-10-09T03:52:08Z: zero databases/active runtime and twelve encrypted recovery snapshots.
 No cloud mutation occurred during either local checkpoint. Docker/WSL remain stopped, PC on,
 retained costs acknowledged, CI/CD deferred and D1/D3 In progress.
+
+
+### Final operator verification
+
+The complete maintained verifier passes in one successful run at **`c03079d2`**: 38 typecheck
+tasks, 39 test tasks, 23 builds, all maintained operational/security/isolation checks and Compose.
+The newly integrated maintenance suite reports all 172 checks passing. Lint remains zero errors,
+15 warnings and 58 informational notes. Private log:
+`.tmp/legacy-maintenance-operator-full-verification.log`. The source worktree is clean after the run.
+[PR #587](https://github.com/Vrixic/project-ai-job-apply/pull/587) contains the connected batch.
+
+The remaining release gates are immutable image publication/readback, exact managed key/task
+provisioning, live transition/replay acceptance and mandatory data-preserving shutdown. An actual
+AWS CLI recheck still reports expired SSO credentials; no cloud mutation occurred. Local Docker
+and WSL are confirmed stopped. Earlier cloud evidence remains historical, not a fresh shutdown
+claim; retained recovery/security/storage/DNS costs remain. D1/D3 stay In progress.

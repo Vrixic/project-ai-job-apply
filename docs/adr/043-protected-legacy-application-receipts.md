@@ -126,4 +126,5 @@ preflight, drift and active-native refusal, a lost launch acknowledgement, an ob
 pending work, wrong image/original identity, unexpected overrides, failed task, mismatched aggregate,
 substituted plan hash and recovery after configuration expiry. No AWS mutation or live transition
 has occurred. The original source checkpoint passed the full maintained verifier at `298d29da`;
-full verification of the added operator is pending. [Runbook](../../scripts/README.md#legacy-application-receipt-maintenance-development-only).
+the complete operator-inclusive verifier now passes at `c03079d2` (38 typechecks, 39 test tasks,
+23 builds, all operational/security/isolation/Compose checks and unchanged lint). [Runbook](../../scripts/README.md#legacy-application-receipt-maintenance-development-only).
