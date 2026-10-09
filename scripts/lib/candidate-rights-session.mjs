@@ -9,6 +9,25 @@ export const CANDIDATE_RIGHTS_SESSION_SCOPES =
 export const D2_WORKLOAD_SESSION_SCOPES =
   "openid profile email jobs:read jobs:contribute profile:write";
 export const D2_WORKLOAD_SESSION_PROFILE = "d2_disposable_contribution_workload_v1";
+export const NATIVE_RESUME_SESSION_SCOPES =
+  "openid profile email documents:read documents:write jobs:read profile:read profile:write applications:read applications:write";
+export const NATIVE_RESUME_SESSION_PROFILE = "native_resume_disposable_workload_v1";
+const NATIVE_PROFILE = Object.freeze({
+  scopes: NATIVE_RESUME_SESSION_SCOPES,
+  requiredScopes: [
+    "documents:read",
+    "documents:write",
+    "jobs:read",
+    "profile:read",
+    "profile:write",
+    "applications:read",
+    "applications:write",
+  ],
+  minimumLifetimeSeconds: 25 * 60,
+  refreshRequired: false,
+  purpose: "native_resume_workload",
+  id: NATIVE_RESUME_SESSION_PROFILE,
+});
 const RIGHTS_PROFILE = Object.freeze({
   scopes: CANDIDATE_RIGHTS_SESSION_SCOPES,
   minimumLifetimeSeconds: 120,
@@ -16,6 +35,9 @@ const RIGHTS_PROFILE = Object.freeze({
 });
 const WORKLOAD_PROFILE = Object.freeze({
   scopes: D2_WORKLOAD_SESSION_SCOPES,
+  requiredScopes: ["jobs:read", "jobs:contribute", "profile:write"],
+  purpose: "d2_workload",
+  id: D2_WORKLOAD_SESSION_PROFILE,
   minimumLifetimeSeconds: 25 * 60,
   refreshRequired: false,
 });
@@ -247,8 +269,8 @@ function validateVerifiedTokens(tokens, verified, expected, profile) {
   ) {
     reject();
   }
-  if (profile === WORKLOAD_PROFILE) {
-    const required = ["jobs:read", "jobs:contribute", "profile:write"];
+  if (!profile.refreshRequired) {
+    const required = profile.requiredScopes;
     const scopes = access.scope.split(" ");
     if (
       required.some(
@@ -269,8 +291,8 @@ function validateVerifiedTokens(tokens, verified, expected, profile) {
     ...(profile.refreshRequired
       ? { refreshToken: tokens.refresh_token }
       : {
-          purpose: "d2_workload",
-          profile: D2_WORKLOAD_SESSION_PROFILE,
+          purpose: profile.purpose,
+          profile: profile.id,
         }),
     subject,
     issuer: expected.issuer,
@@ -325,7 +347,7 @@ function tokenResponse(bytes, profile) {
     Array.isArray(value) ||
     Object.keys(value).some((key) => !allowed.includes(key)) ||
     value.token_type !== "Bearer" ||
-    (profile === WORKLOAD_PROFILE && Object.hasOwn(value, "refresh_token")) ||
+    (!profile.refreshRequired && Object.hasOwn(value, "refresh_token")) ||
     !(
       profile.refreshRequired
         ? ["access_token", "id_token", "refresh_token"]
@@ -415,16 +437,38 @@ export async function startD2WorkloadSession(options) {
   return startSession(options, WORKLOAD_PROFILE);
 }
 
+/** Fixed development resume test identity; no refresh, account deletion or ATS submission. */
+export async function startNativeResumeSession(options) {
+  if (
+    !options ||
+    ["profile", "purpose", "scopes", "scope", "callback", "redirectUri"].some((key) =>
+      Object.hasOwn(options, key),
+    )
+  )
+    reject();
+  return startSession(options, NATIVE_PROFILE);
+}
+
+function nativeResumeConfirmation(pending, secrets) {
+  return `<p>Verified account: <strong>${escapeHtml(pending.label)}</strong></p><p>Exact account ID: ${escapeHtml(pending.subject)}</p><p>Use a disposable development account containing generated synthetic data only. This session supports resume preparation, download and withdrawal checks. It cannot authorize account deletion or submission to an employer.</p><form method="post" action="/confirm"><input type="hidden" name="csrf" value="${secrets.csrf}"><label>Your name as the test owner <input name="authorizedOwner" required maxlength="100" autocomplete="off"></label><p><label><input type="checkbox" name="disposable" value="yes" required> This is my disposable synthetic test account, not a real candidate or main account.</label></p><button type="submit">Use this test account</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel</button></form>`;
+}
+
 async function startSession(options, profile) {
   const page = (body) =>
     renderPage(
       body,
-      profile === WORKLOAD_PROFILE ? "D2 disposable contribution workload" : undefined,
+      profile === NATIVE_PROFILE
+        ? "Native resume development test"
+        : profile === WORKLOAD_PROFILE
+          ? "D2 disposable contribution workload"
+          : undefined,
     );
   const errorMessage =
-    profile === WORKLOAD_PROFILE
-      ? "D2 workload sign-in could not be completed. Start a fresh session."
-      : ERROR_MESSAGE;
+    profile === NATIVE_PROFILE
+      ? "Native resume test sign-in could not be completed. Start a fresh session."
+      : profile === WORKLOAD_PROFILE
+        ? "D2 workload sign-in could not be completed. Start a fresh session."
+        : ERROR_MESSAGE;
   if (!options || typeof options !== "object") reject();
   validateConfiguration(options);
   const { issuer, audience, clientId, onConfirmed, onClosed, onDiagnostic } = options;
@@ -640,9 +684,11 @@ async function startSession(options, profile) {
             response,
             200,
             page(
-              profile === WORKLOAD_PROFILE
-                ? `<p>Verified account: <strong>${escapeHtml(pending.label)}</strong></p><p>Exact account ID: ${escapeHtml(pending.subject)}</p><p>One Mintlify workload: Backend Engineer, https://jobs.ashbyhq.com/Mintlify/4da2f7a2-3d5a-4652-bf01-aed59f4cb72b. The operator creates one contribution, withdraws it and revokes both contribution authorization grants used for its normal and conflicting-idempotency checks. No publication or account deletion is authorized. Never use your main or appeal/reviewer account.</p><form method="post" action="/confirm"><input type="hidden" name="csrf" value="${secrets.csrf}"><label>Your name as the authorized test owner <input name="authorizedOwner" required maxlength="100" autocomplete="off"></label><p><label><input type="checkbox" name="disposable" value="yes" required> I authorize this disposable account for this single Mintlify contribution workload, withdrawal and revocation of both test grants only, not account deletion or publication.</label></p><button type="submit">Use this disposable account</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel without running tests</button></form>`
-                : `<p>Verified account: <strong>${escapeHtml(pending.label)}</strong></p><p>Exact account ID: ${escapeHtml(pending.subject)}</p><p>This test permanently deletes this account and its candidate data. Never use your main account, a real candidate, or the appeal/reviewer account.</p><form method="post" action="/confirm"><input type="hidden" name="csrf" value="${secrets.csrf}"><label>Your name as the authorized test owner <input name="authorizedOwner" required maxlength="100" autocomplete="off"></label><p><label><input type="checkbox" name="disposable" value="yes" required> I authorize only this disposable account, containing generated synthetic data only, for the rights test and permanent deletion. It is not my main or appeal/reviewer account.</label></p><button type="submit">Use this disposable account</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel without running tests</button></form>`,
+              profile === NATIVE_PROFILE
+                ? nativeResumeConfirmation(pending, secrets)
+                : profile === WORKLOAD_PROFILE
+                  ? `<p>Verified account: <strong>${escapeHtml(pending.label)}</strong></p><p>Exact account ID: ${escapeHtml(pending.subject)}</p><p>One Mintlify workload: Backend Engineer, https://jobs.ashbyhq.com/Mintlify/4da2f7a2-3d5a-4652-bf01-aed59f4cb72b. The operator creates one contribution, withdraws it and revokes both contribution authorization grants used for its normal and conflicting-idempotency checks. No publication or account deletion is authorized. Never use your main or appeal/reviewer account.</p><form method="post" action="/confirm"><input type="hidden" name="csrf" value="${secrets.csrf}"><label>Your name as the authorized test owner <input name="authorizedOwner" required maxlength="100" autocomplete="off"></label><p><label><input type="checkbox" name="disposable" value="yes" required> I authorize this disposable account for this single Mintlify contribution workload, withdrawal and revocation of both test grants only, not account deletion or publication.</label></p><button type="submit">Use this disposable account</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel without running tests</button></form>`
+                  : `<p>Verified account: <strong>${escapeHtml(pending.label)}</strong></p><p>Exact account ID: ${escapeHtml(pending.subject)}</p><p>This test permanently deletes this account and its candidate data. Never use your main account, a real candidate, or the appeal/reviewer account.</p><form method="post" action="/confirm"><input type="hidden" name="csrf" value="${secrets.csrf}"><label>Your name as the authorized test owner <input name="authorizedOwner" required maxlength="100" autocomplete="off"></label><p><label><input type="checkbox" name="disposable" value="yes" required> I authorize only this disposable account, containing generated synthetic data only, for the rights test and permanent deletion. It is not my main or appeal/reviewer account.</label></p><button type="submit">Use this disposable account</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel without running tests</button></form>`,
             ),
             { "Referrer-Policy": "same-origin" },
           );
@@ -666,9 +712,11 @@ async function startSession(options, profile) {
         response,
         200,
         page(
-          profile === WORKLOAD_PROFILE
-            ? `<p>Sign in yourself using the approved disposable candidate account for one Mintlify contribution workload, withdrawal and revocation of both test grants. No account deletion or publication is authorized. No test starts until you explicitly confirm the verified account.</p><form method="post" action="/authorize"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Sign in with fresh MFA</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel</button></form>`
-            : `<p>Sign in yourself using a disposable candidate account. No test data is created and nothing is deleted until you explicitly confirm the verified account.</p><form method="post" action="/authorize"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Sign in with fresh MFA</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel</button></form>`,
+          profile === NATIVE_PROFILE
+            ? `<p>Sign in with a disposable development account for generated-synthetic resume checks. No account deletion or employer submission is part of this session.</p><form method="post" action="/authorize"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Sign in with fresh MFA</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel</button></form>`
+            : profile === WORKLOAD_PROFILE
+              ? `<p>Sign in yourself using the approved disposable candidate account for one Mintlify contribution workload, withdrawal and revocation of both test grants. No account deletion or publication is authorized. No test starts until you explicitly confirm the verified account.</p><form method="post" action="/authorize"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Sign in with fresh MFA</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel</button></form>`
+              : `<p>Sign in yourself using a disposable candidate account. No test data is created and nothing is deleted until you explicitly confirm the verified account.</p><form method="post" action="/authorize"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Sign in with fresh MFA</button></form><form method="post" action="/cancel"><input type="hidden" name="csrf" value="${secrets.csrf}"><button type="submit">Cancel</button></form>`,
         ),
         {
           "Set-Cookie": transactionCookie(secrets.cookie),

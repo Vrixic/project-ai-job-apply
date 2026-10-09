@@ -3010,3 +3010,12 @@ runtime flags stay off. Zero drift and exact recovery archive pass.
 AWS runtimes remain off with fifteen encrypted recovery snapshots; retained charges remain.
 Docker/WSL stopped, PC on. Controlled sign-in and connected native acceptance remain; D1/D3
 are In progress.
+
+2026-10-09 D3-079 adds a bounded disposable-native PKCE/MFA test session and backend driver for
+one application's preparation, direct native preview/PDF/DOCX transfer and material withdrawal.
+120 focused synthetic checks pass; the actual development AWS/issuer/API preflight succeeds
+without starting sign-in or mutating the cloud. Full repository verification passes (38
+typechecks, 39 test tasks, 23 builds and operational/security/isolation checks; unchanged lint).
+[Native session evidence](evidence/d3-native-application-disposal-2026-10-07.md#bounded-native-resume-test-session--2026-10-09).
+Live runtime, browser and remaining acceptance gates stay open. D1/D3 remain In progress;
+development remains dormant and the PC stays on.

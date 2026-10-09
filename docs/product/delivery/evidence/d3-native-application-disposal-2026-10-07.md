@@ -1995,3 +1995,41 @@ client settings but does not enable Applications scopes; the earlier deployed-we
 Applications acceptance remains valid historical evidence. Prepare the controlled sign-in/test
 session before restoring paid runtime resources. No token, cookie or secret value was recorded,
 and no existing accepted manual checks were reopened. D1/D3 remain In progress.
+
+### Bounded native resume test session — 2026-10-09
+
+D3-079 now has a maintained backend test driver for the connected resume release. The existing
+loopback PKCE/fresh-MFA helper adds a separate disposable-native identity purpose and fixed
+Applications scopes, without changing candidate-rights or contribution scope profiles. Tokens
+remain in memory; native sign-in rejects refresh credentials and caller-selected scope/redirect
+overrides. The human designates the exact generated-synthetic account on the existing local
+confirmation surface. No production identity, browser cookie extraction or auth bypass is used.
+
+The [operator runbook](../../../../infrastructure/runbooks/deployments/development-native-resume-session.md)
+documents fixed development account/issuer/API verification, one-application preparation,
+original idempotency-key retries, native-generation readiness, direct native preview and PDF/DOCX
+transfer, and owner-scoped material withdrawal. Gateway only supplies packet/location metadata;
+generated content is read from the authenticated original HTTPS process. A strict development
+hostname/port allowlist and exact packet/generation/expiry comparison precede credential forwarding.
+Response schemas, no-store, byte bounds, file digests and original material bindings are checked.
+Generated content is not logged or saved. There is no submission or account-deletion command.
+
+The 120 focused tests pass: 17 native sign-in cases, 29 native operator cases, and 74 unchanged
+candidate-rights/D2 sign-in cases. These use generated fixtures and simulated provider/API
+transports; the tiny file fixtures test transport integrity, not PDF/DOCX rendering quality.
+Actual read-only `--check` against development AWS succeeds with sign-in and cloud mutation both
+false. The full maintained `scripts/verify-phase0.ps1` passes: 38 typecheck tasks, 39 test tasks,
+23 builds, formatting, operational/security guards, emitted isolation and Compose validation.
+The final operator changes also pass their 29 focused cases. Lint remains at zero errors,
+15 warnings and 58 informational notes. No live database or provider behavior is claimed.
+
+No cloud runtime was activated. Live generation/download, document rendering, retirement/expiry,
+browser/CORS behavior, cover-letter provider configuration and remaining client/ATS/accountable
+acceptance still remain. D1/D3 stay In progress. This prepares connected testing rather than
+claiming connected acceptance. CI/CD remains deferred; prior accepted manual checks are unchanged.
+
+Shutdown readback at **2026-10-09T13:58:01Z** confirms zero development database instances,
+enabled rules/mappings, public API routes, live NAT/interface endpoints and non-stopped ECS tasks.
+All fifteen recovery snapshots are available and encrypted. Retained snapshots, object/image/log
+storage, monitoring, keys, secrets and DNS still incur charges. Docker and WSL are stopped;
+the PC remains on. Browser automation is unavailable, and no live sign-in session was started.
