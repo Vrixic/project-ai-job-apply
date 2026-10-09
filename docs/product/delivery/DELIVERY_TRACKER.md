@@ -1,5 +1,14 @@
 # Delivery Tracker
 
+2026-10-08 executes the current 25a56127 migration image on development: six owners succeed;
+Applications 0009 intentionally refuses legacy packet/receipt evidence. Aggregate inventory and
+an explicit compatible transition are required before retry. Mandatory snapshot-backed shutdown
+completes at state 442: both databases absent, eight encrypted snapshots available, 289 other
+managed identities preserved, zero drift and updated recovery archive verified.
+[Evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-sql-legacy-transition-gate-2026-10-08).
+D1/D3 remain In progress; full migration/privacy replay and native acceptance remain open.
+Docker/WSL stopped, PC on; hosted CI/CD remains deferred.
+
 2026-10-08 20:34 UTC: Development returned to verified dormancy after a later test-session restore
 and access interruption. A new snapshot physically restored successfully, both database instances
 are now absent, state 427 preserves all 289 other managed identities, and the final plan has no

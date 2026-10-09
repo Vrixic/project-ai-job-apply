@@ -1253,3 +1253,72 @@ Canonical versioned recovery inputs/proof/manifest are refreshed with explicit K
 ETag conditions and exact-version byte readback; local manifest is
 `.tmp/sqlattempt-recovery-manifest.json`. These supersede state-427/423/421 inputs.
 Docker/WSL are stopped and the PC stays on. D1/D3 remain In progress; CI/CD remains owner-deferred.
+
+## Managed SQL legacy transition gate 2026-10-08
+
+Merged `25a561270a5ba786991b24cc6b1c608d800b3a98` passes the dependency audit,
+eleven cached prerequisite test tasks, two identical clean builds, hardened migration-runtime
+inventory smoke, immutable publication and independent readback. ECR scan is COMPLETE with
+zero High/Critical findings. Platform digest:
+`sha256:22429d4c0acd6a4c8832273651df98cd94c2777ab5348fcf2c13cee05f2c11be`.
+This is the current 78-migration image; it supersedes the earlier planning-only candidate.
+
+Development restores from the verified state-434 recovery archive with traffic and background
+work off. The protected private database has 35-day backups; restore advances state 434 -> 436.
+An independently reviewed metadata-only reconciliation advances to 437. Supported schema-7
+baseline capture succeeds without meaningful changes. The corrected optional-values reader then
+accepts the exact image-only task plan, SHA-256
+`d914db9bd83cd225aa8bf57874e76ec4b8fa1833c7dcaa90ead6abc866ea998d`.
+Applying it advances state 437 -> 438 and deploys migration task revision **62**.
+
+The supported execution operator submits exactly one task with the reviewed definition, image
+and digest. It reaches STOPPED with exit **1**. Its aggregate logs report successful migration
+and verification for six owners: Profile through `0011_active_candidate_lease`, Jobs through
+`0027_candidate_report_export_status`, Documents through `0016_native_application_disposal`,
+Matching through `0003_private_saved_page_captures`, Billing through `0002_candidate_rights`,
+and Trust through `0005_development_test_removal`.
+
+Applications stops at the intentional `0009_restricted_packet_values.sql` guard, SQLSTATE
+`55000`: `restricted packet migration requires an explicit legacy evidence transition`.
+The guard checks incompatible packet fields and historical create-packet/preparation receipts;
+the log alone cannot distinguish which category exists. The six preceding owners commit
+independently. The Applications driver wraps its pending migrations in one transaction, but an
+independent live ledger read has not established its remaining exact version. No complete
+78-migration, application, privacy replay or candidate-journey acceptance is claimed.
+
+The execution receipt remains **submitted**, with its immutable claim preserved; it is not
+relabeled verified. Private receipt: `.terraform/development-document-migration/receipt-25a561270a5b-20261008-202529.json`
+under the development Terraform directory. Sanitized classification and raw private evidence
+remain under `.tmp/migration-25a56127-*`; raw logs and candidate data are not committed.
+
+[ADR-041](../../../adr/041-restricted-packet-values-and-keyed-replay.md) requires an explicit
+compatible transition that preserves original approvals, ambiguous attempts and replay evidence.
+Next work is an aggregate-only inventory of the actual legacy boundary and a reviewed compatible
+transition. Do not retry this execution, alter immutable migration checksums, purge candidate
+records, rehash old approvals or disable the guard to obtain a successful migration. Existing
+local legacy fixtures prove refusal/rollback and ordinary compatible transition, not disposition
+of this database. D1/D3 and D3-014/D3-077 remain In progress; native activation stays off.
+
+
+Mandatory shutdown completes after this failed SQL test. A fresh encrypted safety snapshot is
+physically restored and verified private, available and bound to the original KMS key. The
+temporary instance's automatic backup setting is verified zero after its asynchronous change
+settles. Reviewed preparation/dormancy plans remove only the original database, retaining a
+new final snapshot and original automated backups; the verified temporary copy is then removed.
+Final state **442** preserves all **289 other managed identities** and the complete-input
+refresh-backed plan has no changes. This proves physical recovery, not SQL/privacy replay.
+
+At **2026-10-09T00:49:15.176579+00:00**, live development readback confirms zero database instances,
+API routes, enabled rules/mappings, NAT gateways, interface endpoints and non-stopped ECS tasks.
+All **8 encrypted manual recovery snapshots** are available. A separate EC2 read finds zero
+project/environment-tagged Elastic IPs. Retained snapshots/backups, S3/ECR/log storage, KMS,
+Secrets Manager and DNS may still incur charges; this is not a zero-cost claim. Staging has not
+been reverified with restored development access.
+
+Latest complete inputs: `.tmp/sqlrun25-dormant.tfvars.json`, SHA-256
+`5bf3d08db6a0f7746df795cee4ef181587797392519bede5a16d634d6fa40c7b`. Canonical recovery inputs/proof/manifest are updated in the versioned
+state bucket using explicit KMS encryption and ETag preconditions; exact-version byte/KMS
+readback passes. Local manifest: `.tmp/sqlrun25-recovery-manifest.json`. These supersede
+state-434 and older recovery inputs and retain the six successfully migrated owners.
+Docker Desktop and WSL are stopped; the PC remains on. D1/D3 remain In progress and hosted CI/CD
+remains owner-deferred. Next work is the legacy inventory/compatible transition above.
