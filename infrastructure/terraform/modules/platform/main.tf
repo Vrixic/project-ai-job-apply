@@ -2047,6 +2047,7 @@ resource "aws_lambda_function" "gateway" {
         OIDC_AUDIENCE      = var.oidc_audience
       },
       local.gateway_native_material_environment,
+      local.legacy_receipt_gateway_environment,
       var.privileged_moderation_audit_enabled ? {
         PRIVILEGED_MODERATION_AUDIT_ENABLED = "true"
       } : {},

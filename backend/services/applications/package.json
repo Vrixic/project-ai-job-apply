@@ -16,6 +16,10 @@
       "types": "./dist/src/native-material-runtime.d.ts",
       "default": "./dist/src/native-material-runtime.js"
     },
+    "./legacy-receipt-runtime": {
+      "types": "./dist/src/legacy-receipt-runtime.d.ts",
+      "default": "./dist/src/legacy-receipt-runtime.js"
+    },
     "./restricted-packet-runtime": {
       "types": "./dist/src/restricted-packet-runtime.d.ts",
       "default": "./dist/src/restricted-packet-runtime.js"

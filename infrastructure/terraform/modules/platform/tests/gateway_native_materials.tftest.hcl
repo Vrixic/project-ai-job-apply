@@ -212,3 +212,37 @@ run "owner_withdrawal_requires_scheduled_cleanup" {
   }
   expect_failures = [var.gateway_native_materials]
 }
+
+run "legacy_replay_is_decrypt_only" {
+  command = plan
+  override_resource {
+    target          = aws_kms_key.legacy_receipt_encryption[0]
+    override_during = plan
+    values          = { arn = "arn:aws:kms:us-east-2:111122223333:key/42345678-1234-4234-8234-123456789012" }
+  }
+  variables {
+    legacy_receipt_key_provisioned = true
+    legacy_receipt_replay_enabled  = true
+    gateway_native_materials       = { packet_protection_enabled = true }
+  }
+  assert {
+    condition     = jsondecode(aws_iam_role_policy.legacy_receipt_replay[0].policy).Statement[0].Action == ["kms:Decrypt"] && jsondecode(aws_iam_role_policy.legacy_receipt_replay[0].policy).Statement[0].Resource == aws_kms_key.legacy_receipt_encryption[0].arn && jsondecode(aws_iam_role_policy.legacy_receipt_replay[0].policy).Statement[0].Condition.StringEquals["kms:EncryptionContext:purpose"] == "restricted-legacy-application-receipt.v1"
+    error_message = "Replay must only decrypt the exact legacy key for its receipt purpose."
+  }
+  assert {
+    condition     = length(aws_ecs_task_definition.legacy_receipt_transition) == 0 && aws_lambda_function.gateway[0].environment[0].variables.LEGACY_RECEIPT_REPLAY_ENABLED == "true" && aws_lambda_function.gateway[0].environment[0].variables.LEGACY_RECEIPT_ENCRYPTION_KEY_ARN == aws_kms_key.legacy_receipt_encryption[0].arn
+    error_message = "Gateway replay must compose the key without creating a maintenance task."
+  }
+  assert {
+    condition     = length(jsondecode(aws_vpc_endpoint.native_preparation_kms[0].policy).Statement) == 3 && alltrue([for statement in local.legacy_receipt_endpoint_statements : statement.Action == ["kms:Decrypt"] && statement.Condition.ArnEquals["aws:PrincipalArn"] == "arn:aws:iam::111122223333:role/ai-job-apply-development-gateway-lambda"])
+    error_message = "Private KMS reachability must preserve both packet grants and bind receipt decryption to the Gateway."
+  }
+}
+run "legacy_replay_requires_packet_protection" {
+  command = plan
+  variables {
+    legacy_receipt_key_provisioned = true
+    legacy_receipt_replay_enabled  = true
+  }
+  expect_failures = [var.legacy_receipt_replay_enabled]
+}

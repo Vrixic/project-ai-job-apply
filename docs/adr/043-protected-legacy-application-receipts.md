@@ -92,9 +92,13 @@ rollback and rollback on an unexpected dependent view. KMS transport is simulate
 dump/restore matches all 96 relation row sets exactly, including eight archived receipts.
 
 A managed maintenance operator with verified drain/backup authority, immutable release packaging,
-explicit KMS IAM/key composition, complete queue-preparation store acceptance and actual managed
-acceptance remain. The capability has no CLI/environment activation or public package export;
-calling it is not proof that its managed prerequisites hold. D1/D3 remain In progress.
+live KMS IAM/key verification and actual managed acceptance remain.
+Local queue-preparation store acceptance now verifies original replay twice and conflicting-request
+refusal without new packets, preparations or events. A separate default-off maintenance CLI and Gateway replay environment composition now exist.
+The CLI binds exact database identity, TLS, source/image, snapshot, counts and a maximum thirty-minute
+lifetime. Terraform separates its retained key and encrypt/decrypt task role from Gateway decrypt-only
+replay. These resources have not been deployed. Calling the CLI is not proof that managed drain,
+snapshot or image prerequisites hold; the verified managed operator remains required. D1/D3 remain In progress.
 No live data transition or saved-answer reuse activation is authorized by this proposal.
 
 ## Alternatives

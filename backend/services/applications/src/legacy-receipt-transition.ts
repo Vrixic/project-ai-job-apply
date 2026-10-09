@@ -60,11 +60,15 @@ export async function transitionLegacyReceipts(
   options: {
     enabled(): boolean;
     cipher: Pick<ReturnType<typeof createLegacyReceiptKmsCipher>, "encrypt" | "matches">;
+    expectedAppliedMigrations?: number;
+    expectedLegacyReceipts?: number;
   },
 ) {
   const enabled = options.enabled;
   const encrypt = options.cipher.encrypt.bind(options.cipher);
   const matches = options.cipher.matches.bind(options.cipher);
+  const expectedMigrations = options.expectedAppliedMigrations;
+  const expectedReceipts = options.expectedLegacyReceipts;
   const admitted = () => {
     if (!enabled()) throw refused();
   };
@@ -159,6 +163,11 @@ export async function transitionLegacyReceipts(
         FROM applications.command_receipts WHERE operation IN ('create_packet','queue_preparation')
         ORDER BY owner_user_id,idempotency_key LIMIT 1001`;
       if (receipts.length === 0 || receipts.length > 1000) throw refused();
+      if (
+        (expectedMigrations !== undefined && ledger.length !== expectedMigrations) ||
+        (expectedReceipts !== undefined && receipts.length !== expectedReceipts)
+      )
+        throw refused();
       for (const owner of [...new Set(receipts.map((row) => row.owner_user_id))].toSorted())
         await tx`SELECT identity.require_active_candidate(${owner}::uuid)`;
       return {

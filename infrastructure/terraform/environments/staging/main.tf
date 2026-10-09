@@ -82,6 +82,9 @@ module "platform" {
 
   native_material_observation_releases = { for id, r in var.native_material_control_releases : id => { kms_key_arn = r.release.platform_kms_key_arn } }
   restricted_packet_keys_provisioned   = var.restricted_packet_keys_provisioned
+  legacy_receipt_key_provisioned       = var.legacy_receipt_key_provisioned
+  legacy_receipt_replay_enabled        = var.legacy_receipt_replay_enabled
+  legacy_receipt_transition            = var.legacy_receipt_transition
   native_preparation_releases = { for id, item in var.native_preparation_releases : id => {
     queue_arn                  = item.release.queue_arn
     dead_letter_arn            = item.release.dead_letter_arn

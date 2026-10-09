@@ -1,3 +1,4 @@
+import { legacyReceiptReplayFromEnvironment } from "@ai-job-apply/applications-service/legacy-receipt-runtime";
 import { nativeMaterialAvailabilityFromEnvironment } from "./native-material-availability.js";
 import { nativeMaterialDisposalFromEnvironment } from "./native-material-disposal-runtime.js";
 import "reflect-metadata";
@@ -188,6 +189,10 @@ const privilegedModerationAudit =
       )
     : undefined;
 const packetProtection = restrictedPacketWriterFromEnvironment(process.env);
+const legacyReceipts = legacyReceiptReplayFromEnvironment(
+  process.env,
+  () => packetProtection?.enabled() === true,
+);
 const nativeMaterialLocations = nativeMaterialLocationsFromEnvironment(
   config.DATABASE_URL,
   process.env,
@@ -208,6 +213,7 @@ const applications =
         client: createApplicationsDatabase(config.DATABASE_URL, { maxConnections: 2 }),
         profile: store,
         ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
+        ...(legacyReceipts ? { legacyReceipts } : {}),
         ...(nativeMaterialLocations ? { nativeMaterialLocations } : {}),
         ...(nativeResumeLocations ? { nativeResumeLocations } : {}),
         temporaryMaterials: nativeMaterialAvailabilityFromEnvironment(
