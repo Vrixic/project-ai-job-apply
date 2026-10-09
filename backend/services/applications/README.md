@@ -7,6 +7,14 @@ terminal, and no recruiter, interview, offer, or rejection result is stored or m
 
 ## Current D3 slice (source and local verification only)
 
+The private `legacy-receipt-cipher.ts` component protects an original legacy request digest under
+a separate KMS purpose and returns only match/no-match for replay. It is default-off, supports
+explicit original encryption keys, and keeps replay-only composition unable to encrypt. It has
+no SQL/migration authority or production wiring. The atomic archive transition, cross-table key
+collision prevention and original replay/deletion/restore integration remain required; see
+[proposed ADR-043](../../../docs/adr/043-protected-legacy-application-receipts.md). Original packets,
+approvals and immutable migration bytes remain unchanged.
+
 When migration `0009` refuses legacy evidence, the driver rolls back before opening a separate
 repeatable-read, read-only diagnostic transaction. One aggregate log reports migration/packet
 counts, packets with restricted values or protected markers, invalid containers, create-packet/
