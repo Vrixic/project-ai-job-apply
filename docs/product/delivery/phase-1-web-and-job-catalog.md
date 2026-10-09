@@ -4,7 +4,7 @@
 - Start: 2026-08-11
 - Completion: Not completed
 - Owners: Platform engineering; product owner
-- Last updated: 2026-10-07
+- Last updated: 2026-10-09
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d1--useful-web-product-and-canonical-job-catalog)
 
 ## Objective
@@ -165,7 +165,7 @@ shared artifacts advance.
 | D1-010B | Execute and accept the exact end-to-end D1 delivery assurance matrix. | Blocked | Platform/security/QA engineering; product/accessibility reviewers | D1-001–D1-009; D1-010A; stable exact release candidate | Blocked until every tested D1 surface exists and is frozen. Requires deployed synthetic browser/API/workflow/load/alert/restore/reconciliation evidence plus human accessibility and capability security/privacy dispositions. D0 workload/restore/tracing evidence is inherited foundation evidence, not current D1 acceptance. |
 | D1-011 | Record source-specific activation and real-candidate-onboarding privacy/security approval before production activation. | In progress | Product/source engineering; security/privacy reviewers | Concrete D1 sources/data flows and capability-specific review deltas | ADR-025 removes separate counsel approval as a Phase 1 gate for the bounded Greenhouse, Lever, and Ashby public GET adapters; LR-D1-01 through LR-D1-03 are `Removed`, not `Approved`, and exact company/product/source-engineering activation evidence remains required. LR-D1-04, ADR-023 acceptance, real-candidate privacy/security/rights controls, and any real-resume trigger authorization remain open. Human acceptance is deliberately deferred to the final stable Phase 1 candidate. The deferred D6 launch-wide accountable reviews remain separate and mandatory before public launch. |
 | D1-012 | Enforce accepted reporting/moderation retention across Jobs, privileged audit and alert metadata. | In progress | Platform engineering; security/privacy reviewers | D1-007; accepted d1-governance-v1 D1P-06 | Candidate-report lifecycle and aggregate-only expiry pass full verification at f553da22. Closed-case/operator expiry and preserved minimal blocks/pauses pass 117 real PostgreSQL tests, historical 25 → 26 replay and local logical restore (68 migrations/92 relations). Source 694e65a7 passes full verification: 38 typechecks, 39 test tasks, 23 builds. Retained-report export status also passes 119 Jobs SQL tests, historical 26 → 27 replay and 69-migration/92-relation logical restore; source 07cf51b9 passes full verification (38 typechecks, 39 test tasks, 23 builds). Default-off privileged audit capture/365-day expiry passes six real SQL cases and full clean verification at 18632bdc (38/39/23 tasks). Hosted release, managed audit/alert retention verification and accountable rights review stay open. [Audit evidence](evidence/d1-privileged-moderation-audit-2026-10-06.md). [Export evidence](evidence/d1-report-export-status-2026-10-06.md). [Report evidence](evidence/d1-job-report-retention-2026-10-06.md), [Case evidence](evidence/d1-moderation-case-retention-2026-10-06.md). |
-| D1-013 | Keep the executable migration-image package boundary aligned with accepted schema changes before release. | In progress | Platform engineering | D1-012; D3-040/D3-041 | Current source/package boundary is 75 migrations/93 relations, including Applications 0012. Frozen `437794fc` cold image passes hardened package smoke, actual fresh/replayed seven-owner migrations and packaged schema verification. The maintained logical recovery harness now checks 75/93 and passes real dump/restore, exact row equality and restored behavior. Existing package/operator and workspace checks pass; full verifier remains limited by the running port-3000 development server. Reproducible publication, scan/disposition and managed release remain pending. [Current evidence](evidence/d1-migration-image-boundary-2026-10-06.md#current-75-migration-image-and-logical-recovery). |
+| D1-013 | Keep the executable migration-image package boundary aligned with accepted schema changes before release. | In progress | Platform engineering | D1-012; D3-040/D3-041 | Current checkpoint 2026-10-09: the 79-migration/96-relation image at `444c9346` is published and independently verified after reproducible builds, hardened runtime smoke and a zero-High/zero-Critical ECR scan. Live maintenance archived seven legacy receipts and advanced Applications from three migrations through 0015. Mandatory physical-restore/final-snapshot shutdown completed at state 471. Full-platform managed schema/privacy/replay acceptance remains; this physical restore is not SQL reconciliation. [Current evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-legacy-transition-and-shutdown-at-state-471-2026-10-09). |
 
 Current task-row addendum: the managed-OIDC read, saved-job lifecycle, and match-assessment profiles
 now pass at both application and exact-window AWS boundaries, superseding the older open execution
@@ -1212,3 +1212,12 @@ populated archives. [Evidence](evidence/d3-legacy-receipt-transition-2026-10-08.
 Original packets/approval/receipt metadata and old migration checksums remain intact; failures roll
 back the table replacement and all migrations. Managed operator, key/release wiring and live
 acceptance remain. D1/D3 stay In progress; AWS is dormant, Docker/WSL stopped and PC on.
+
+2026-10-09 the published and independently verified `444c9346` image passes live legacy receipt
+maintenance: seven receipts archived with real KMS and twelve Applications migrations applied,
+through 0015. Gateway replay remains off and unaccepted. Mandatory snapshot-backed shutdown is
+complete at state 471: both databases absent, fifteen encrypted snapshots, 290 other identities
+preserved, zero drift and versioned recovery archive readback passed.
+[Managed transition and shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-legacy-transition-and-shutdown-at-state-471-2026-10-09).
+D1/D3 remain In progress; retained costs and staging SSO gap remain. Docker/WSL stopped, PC on,
+CI/CD deferred and no repeat of accepted manual checks.
