@@ -5676,3 +5676,12 @@ typechecks, 39 test tasks, 23 builds and operational/security/isolation checks; 
 [Native session evidence](evidence/d3-native-application-disposal-2026-10-07.md#bounded-native-resume-test-session--2026-10-09).
 Live runtime, browser and remaining acceptance gates stay open. D1/D3 remain In progress;
 development remains dormant and the PC stays on.
+
+
+2026-10-09 the owner requested a stopping point. Tested implementation is merged in PR #599;
+unpublished image building and unapplied connected-test plans were cancelled/discarded.
+All 71 worktrees were audited; the only uncommitted deletions were discarded. Six unvalidated
+Dependabot proposals were closed. [Stopping evidence](evidence/d3-native-application-disposal-2026-10-07.md#owner-requested-stopping-point--2026-10-09).
+Development AWS runtimes are verified off; fifteen encrypted snapshots remain. Retained resources
+still incur charges, staging access remains unavailable, Docker/WSL are stopped and the PC stays on.
+D1/D3 remain In progress; execution is paused at the owner's request.
