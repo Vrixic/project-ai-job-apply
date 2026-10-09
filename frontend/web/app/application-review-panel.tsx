@@ -73,10 +73,16 @@ function FieldRow({
           <li key={reason}>{REASON_COPY[reason]}</li>
         ))}
       </ul>
-      {field.sourceFactIds.length > 0 ? (
+      {field.origin === "answer_vault" && field.vaultReference ? (
+        <p>
+          Saved answer version {field.vaultReference.version}. Context:{" "}
+          {field.vaultReference.context || "none specified"}. Check this answer against the
+          employer's exact question before approving.
+        </p>
+      ) : field.origin === "confirmed_fact" && field.sourceFactIds.length > 0 ? (
         <p>Based on {field.sourceFactIds.length} confirmed fact(s) in your profile.</p>
       ) : null}
-      {editable && (empty || field.origin === "user_entered") ? (
+      {editable && (empty || field.origin === "user_entered" || field.origin === "answer_vault") ? (
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -158,7 +164,18 @@ function PacketReview({
   const groups = reviewGroups(application);
   const packet = application.currentPacket;
   const deadlines = packet?.temporaryMaterials?.map(materialDeadline) ?? [];
-  const expired = useMaterialExpiry(deadlines.length ? Math.min(...deadlines) : undefined);
+  const materialExpired = useMaterialExpiry(deadlines.length ? Math.min(...deadlines) : undefined);
+  const vaultDeadlines =
+    packet?.fields.flatMap((field) =>
+      field.vaultReference?.validUntilEpochMs === null ||
+      field.vaultReference?.validUntilEpochMs === undefined
+        ? []
+        : [field.vaultReference.validUntilEpochMs],
+    ) ?? [];
+  const vaultExpired = useMaterialExpiry(
+    vaultDeadlines.length ? Math.min(...vaultDeadlines) : undefined,
+  );
+  const expired = materialExpired || vaultExpired;
   const blockers = approvalBlockers(groups, acknowledged);
   const approvable = canApprove(groups, acknowledged);
   const materialsReviewed = (packet?.temporaryMaterials ?? []).every(
@@ -313,7 +330,8 @@ function PacketReview({
               onClick={() =>
                 run(
                   () =>
-                    materialsExpired(packet.temporaryMaterials)
+                    materialsExpired(packet.temporaryMaterials) ||
+                    vaultDeadlines.some((deadline) => Date.now() >= deadline)
                       ? Promise.reject(new Error("Material expired"))
                       : actions.onApprove({
                           packetHash: packet.packetHash,
@@ -332,8 +350,9 @@ function PacketReview({
 
         {expired && application.status !== "applied" ? (
           <p role="alert">
-            Generated materials expired. Prepare again and review the new packet before approving or
-            applying.
+            {vaultExpired
+              ? "Saved answers expired. Prepare again and review current answers before approving or applying."
+              : "Generated materials expired. Prepare again and review the new packet before approving or applying."}
           </p>
         ) : null}
 

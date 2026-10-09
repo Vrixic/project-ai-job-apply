@@ -130,3 +130,11 @@ v1 schemas. Import `@ai-job-apply/api-contracts/browser-validators` in the MV3 e
 closed shapes without runtime schema compilation or eval. Do not hand-edit generated files.
 The `job-revision-canonical` export shares the exact existing active-job digest input with the
 gateway; parity tests protect existing packet hashes. No wire or persistence schema changes.
+
+
+`StartManualApplicationSubmissionRequest` v1 adds optional closed `observedForm` with the exact
+form binding, original capture epoch milliseconds and `confirmed: true`. Legacy requests remain
+valid; absent observation still invalidates a form-bound approval. Fresh observations are candidate
+attestations, checked under application/vault locks with a 60-second lease, not provider evidence.
+Deploy compatible Gateway/Applications readers before enabling client use; older strict readers
+reject the addition. No migration, provider activation, answer or raw question payload is added.

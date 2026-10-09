@@ -9,6 +9,7 @@ import {
 } from "../lib/application-material-lifetime";
 import { fetchResumeFile, sha256OfBytes } from "../lib/applications-client";
 import { ExtensionApplicationHandoff } from "./extension-application-handoff";
+import { ManualFormConfirmation, type ManualFormObservation } from "./manual-form-confirmation";
 import { useMaterialExpiry } from "./use-material-expiry";
 
 /** Only a plain https link with no credentials is ever offered as the place to apply. */
@@ -26,6 +27,10 @@ export function safeApplyUrl(value: string | undefined): string | undefined {
 function labelFor(fieldKey: string): string {
   const words = fieldKey.replace(/[._]+/g, " ").trim();
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function answerText(value: unknown): string {
+  return typeof value === "boolean" ? (value ? "Yes" : "No") : String(value);
 }
 
 function fileFrom(base64: string): Uint8Array {
@@ -53,13 +58,14 @@ export function ApplyPanel({
   application: Application;
   applyUrl?: string | undefined;
   fetchImplementation?: typeof globalThis.fetch;
-  onRecordManualSubmission(): Promise<void> | void;
+  onRecordManualSubmission(observation?: ManualFormObservation): Promise<void> | void;
   nativeMaterialDownloads?: boolean;
 }) {
   const headingId = useId();
   const [message, setMessage] = useState<string>();
   const [busyFormat, setBusyFormat] = useState<"pdf" | "docx">();
   const [recording, setRecording] = useState(false);
+  const [observation, setObservation] = useState<ManualFormObservation>();
   const pending = useRef<AbortController | undefined>(undefined);
   const packet = application.currentPacket;
   const deadlines = packet?.temporaryMaterials?.map(materialDeadline) ?? [];
@@ -158,10 +164,15 @@ export function ApplyPanel({
   }
 
   async function recordManualSubmission() {
+    if (
+      expired ||
+      (packet?.form && (!observation || Date.now() >= observation.capturedAtEpochMs + 60_000))
+    )
+      return;
     setRecording(true);
     setMessage(undefined);
     try {
-      await onRecordManualSubmission();
+      await onRecordManualSubmission(observation);
     } catch {
       setMessage("That did not go through. Check the application state and try again.");
     } finally {
@@ -219,11 +230,11 @@ export function ApplyPanel({
           <ul>
             {fields.map((field) => (
               <li key={field.fieldKey}>
-                <strong>{labelFor(field.fieldKey)}:</strong> <span>{String(field.value)}</span>{" "}
+                <strong>{labelFor(field.fieldKey)}:</strong> <span>{answerText(field.value)}</span>{" "}
                 <button
                   type="button"
                   aria-label={`Copy ${labelFor(field.fieldKey)}`}
-                  onClick={() => void copy(field.fieldKey, String(field.value))}
+                  onClick={() => void copy(field.fieldKey, answerText(field.value))}
                 >
                   Copy
                 </button>
@@ -235,12 +246,26 @@ export function ApplyPanel({
       <div>
         <h4>Record what happened</h4>
         <p>
-          After you finish or stop on the employer's site, continue here. We will ask you to confirm
-          whether the application was submitted.
+          {packet?.form
+            ? "Confirm the current form and continue here before submitting on the employer site. Then complete the employer application yourself and report what happened."
+            : "After you finish or stop on the employer’s site, continue here. We will ask you to confirm whether the application was submitted."}
         </p>
+        {!expired && packet?.form ? (
+          <ManualFormConfirmation
+            key={`${application.id}:${application.revision}`}
+            application={application}
+            {...(fetchImplementation ? { fetchImplementation } : {})}
+            onChange={setObservation}
+          />
+        ) : null}
         <button
           type="button"
-          disabled={recording || busyFormat !== undefined}
+          disabled={
+            recording ||
+            busyFormat !== undefined ||
+            expired ||
+            Boolean(packet?.form && !observation)
+          }
           onClick={() => void recordManualSubmission()}
         >
           {recording ? "Opening confirmation..." : "Record submission status"}

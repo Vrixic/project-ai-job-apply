@@ -1,4 +1,6 @@
 export function safeActionErrorMessage(error: unknown, action: string): string {
+  if (action === "application_form_capture")
+    return "Open the exact active employer page and current application review link, then capture again. Challenges and unsupported forms must be completed manually.";
   if (action.startsWith("application_handoff_"))
     return "Open the matching employer page and reload an approved, unexpired application review link. Sign in again if needed.";
   const message = error instanceof Error ? error.message : "";

@@ -47,7 +47,7 @@ export function approvalBlockers(
 
 /** Fixed, value-free explanations for why a field is shown for review. */
 export const REASON_COPY: Record<PacketField["reasons"][number], string> = {
-  restricted_answer: "Sensitive answer. It is shown every time and only used because you saved it.",
+  restricted_answer: "Sensitive answer. It is shown every time. Review it for this application.",
   explicit_each_time: "This answer is confirmed for each application.",
   never_infer: "We never fill this from anything but your own answer.",
   unsupported_value: "We could not support this value from your confirmed profile.",
@@ -60,6 +60,7 @@ export const REASON_COPY: Record<PacketField["reasons"][number], string> = {
 
 export function formatFieldValue(value: PacketField["value"]): string {
   if (value === null) return "";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
   if (Array.isArray(value)) return value.join(", ");
   return String(value);
 }

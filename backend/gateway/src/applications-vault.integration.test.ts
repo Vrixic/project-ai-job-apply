@@ -367,6 +367,175 @@ suite("Applications selected vault owner composition", () => {
     return { approved, started };
   }
 
+  it("starts a freshly confirmed manual form once and records candidate-confirmed submission/history", async () => {
+    const f = await fixture();
+    const approved = await approve(f);
+    const request = {
+      expectedRevision: approved.revision,
+      observedForm: { form, capturedAtEpochMs: state.at.getTime(), confirmed: true as const },
+    };
+    const receiptKey = key();
+    const started = await f.api.startManualSubmission(f.owner, f.app.id, request, receiptKey);
+    expect(started).toMatchObject({
+      outcome: "started",
+      application: {
+        status: "takeover",
+        attempts: [{ status: "taken_over", adapterId: "manual" }],
+      },
+    });
+    expect(started.application.attempts[0]?.dispatchedAt).toBeUndefined();
+    state.at = new Date(state.at.getTime() + 60_001);
+    const replay = await f.api.startManualSubmission(f.owner, f.app.id, request, receiptKey);
+    expect(replay.attemptId).toBe(started.attemptId);
+    expect(replay.application.attempts).toHaveLength(1);
+    const applied = await f.api.reconcile(
+      f.owner,
+      f.app.id,
+      started.attemptId ?? "",
+      {
+        kind: "user_attested_submitted",
+        observedAt: state.at.toISOString(),
+        fingerprintSha256: "e".repeat(64),
+      },
+      key(),
+    );
+    expect(applied.status).toBe("applied");
+    expect((await f.api.history(f.owner, f.app.id, {})).entries.at(-1)).toMatchObject({
+      kind: "submission_confirmed",
+      toStatus: "applied",
+    });
+  });
+  it.each(["absent", "changed"] as const)(
+    "retains committed form invalidation for %s observations",
+    async (kind) => {
+      const f = await fixture();
+      const approved = await approve(f);
+      const started = await f.api.startManualSubmission(
+        f.owner,
+        f.app.id,
+        {
+          expectedRevision: approved.revision,
+          ...(kind === "changed"
+            ? {
+                observedForm: {
+                  form: { ...form, formHash: "f".repeat(64) },
+                  capturedAtEpochMs: state.at.getTime(),
+                  confirmed: true as const,
+                },
+              }
+            : {}),
+        },
+        key(),
+      );
+      expect(started).toMatchObject({
+        outcome: "approval_invalidated",
+        application: { status: "review_required", attempts: [] },
+      });
+      expect(started.invalidationReasons).toContain("form_changed");
+    },
+  );
+  it.each(["expired", "future", "adapter", "variant", "unconfirmed"] as const)(
+    "refuses %s manual proof without starting an attempt",
+    async (kind) => {
+      const f = await fixture();
+      const approved = await approve(f);
+      const observedForm = {
+        form: {
+          ...form,
+          ...(kind === "adapter" ? { adapterId: "other" } : {}),
+          ...(kind === "variant" ? { variantId: "other" } : {}),
+        },
+        capturedAtEpochMs:
+          state.at.getTime() + (kind === "expired" ? -60_000 : kind === "future" ? 1 : 0),
+        confirmed: (kind !== "unconfirmed") as true,
+      };
+      await expect(
+        f.api.startManualSubmission(
+          f.owner,
+          f.app.id,
+          { expectedRevision: approved.revision, observedForm },
+          key(),
+        ),
+      ).rejects.toThrow();
+      const view = await f.api.get(f.owner, f.app.id);
+      expect(view.status).toBe("approved");
+      expect(view.attempts).toHaveLength(0);
+    },
+  );
+  it("checks observation expiry after waiting for the application transaction lock", async () => {
+    const f = await fixture();
+    const approved = await approve(f);
+    let release!: () => void;
+    let locked!: () => void;
+    const held = new Promise<void>((resolve) => {
+      locked = resolve;
+    });
+    const unlock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const blocker = appDb.begin(async (tx) => {
+      await tx`SELECT id FROM applications.applications WHERE id = ${f.app.id}::uuid FOR UPDATE`;
+      locked();
+      await unlock;
+    });
+    await held;
+    const request = {
+      expectedRevision: approved.revision,
+      observedForm: { form, capturedAtEpochMs: state.at.getTime(), confirmed: true as const },
+    };
+    const result = f.api.startManualSubmission(f.owner, f.app.id, request, key()).then(
+      () => true,
+      () => false,
+    );
+    try {
+      let waiting = false;
+      for (let probe = 0; probe < 100; probe++) {
+        const [row] = await appDb<
+          Array<{ waiting: boolean }>
+        >`SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()) AS waiting`;
+        if (row?.waiting) {
+          waiting = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(waiting).toBe(true);
+      state.at = new Date(state.at.getTime() + 60_000);
+    } finally {
+      release();
+      await blocker;
+    }
+    expect(await result).toBe(false);
+    expect((await f.api.get(f.owner, f.app.id)).attempts).toHaveLength(0);
+  });
+  it.each(["corrected", "deleted", "expired"] as const)(
+    "does not let fresh form confirmation revive a %s saved answer",
+    async (kind) => {
+      const f = await fixture(kind === "expired" ? new Date(Date.now() + 60_000) : undefined);
+      const approved = await approve(f);
+      if (kind === "corrected")
+        await vault.save({ ...f.command, expectedVersion: 1, idempotencyKey: key() });
+      if (kind === "deleted")
+        await vault.remove({
+          userId: f.owner,
+          id: f.selection.id,
+          expectedVersion: 1,
+          traceId: key(),
+        });
+      if (kind === "expired") state.at = new Date(state.at.getTime() + 60_001);
+      const request = {
+        expectedRevision: approved.revision,
+        observedForm: { form, capturedAtEpochMs: state.at.getTime(), confirmed: true as const },
+      };
+      await expect(
+        f.api.startManualSubmission(f.owner, f.app.id, request, key()),
+      ).rejects.toThrow();
+      const view = await refusedCandidateMetadata(f);
+      expect(view.status).toBe("review_required");
+      expect(view.attempts).toHaveLength(0);
+    },
+  );
+
   it("prepares the exact selected value, returns contract-valid metadata and requires review before dispatch", async () => {
     const f = await fixture();
     const field = f.app.currentPacket?.fields.find((entry) => entry.fieldKey === fieldKey);

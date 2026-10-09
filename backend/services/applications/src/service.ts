@@ -14,6 +14,7 @@ import type {
   ApplicationTemporaryMaterialAuthorization,
   ApplicationTemporaryMaterialLocation,
   ReconcileApplicationAttemptRequest,
+  StartManualApplicationSubmissionRequest,
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator } from "@ai-job-apply/api-contracts";
 import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
@@ -274,14 +275,14 @@ export interface ApplicationsApi {
     idempotencyKey: string,
   ): Promise<ApplicationSubmissionStart>;
   /**
-   * D3-018: the candidate never used an adapter at all (no extension, no observed form) and is
-   * recording a submission they completed by hand. The attempt starts already taken over; the
+   * D3-018/087: the candidate records a manual submission. Form-bound packets additionally need
+   * fresh candidate-confirmed observed structure. The attempt starts already taken over; the
    * candidate then reconciles it exactly like an automated attempt's ambiguous result.
    */
   startManualSubmission(
     ownerUserId: string,
     applicationId: string,
-    request: { expectedRevision: number },
+    request: StartManualApplicationSubmissionRequest,
     idempotencyKey: string,
   ): Promise<ApplicationSubmissionStart>;
   dispatchAttempt(
@@ -918,17 +919,16 @@ export class ApplicationsService implements ApplicationsApi {
   async startManualSubmission(
     ownerUserId: string,
     applicationId: string,
-    request: { expectedRevision: number },
+    request: StartManualApplicationSubmissionRequest,
     idempotencyKey: string,
   ): Promise<ApplicationSubmissionStart> {
     const current = await this.dependencies.store.getApplication(ownerUserId, applicationId);
-    // No adapter observed anything, so there is no form to compare; a packet bound to an observed
-    // form (the candidate did use the extension to prepare it) correctly invalidates approval here,
-    // the same as any other changed binding.
+    // Missing observation retains the original fail-closed form mismatch. Fresh observations are
+    // candidate attestations; the transaction rechecks their lease, binding and vault references.
     const live = await this.dependencies.bindings.resolve({
       ownerUserId,
       application: current.application,
-      formHash: null,
+      formHash: request.observedForm?.form.formHash ?? null,
     });
     const result: StartAttemptResult = await this.dependencies.store.startAttempt({
       ownerUserId,
@@ -939,6 +939,7 @@ export class ApplicationsService implements ApplicationsApi {
       adapterId: "manual",
       adapterVersion: "none",
       manual: true,
+      ...(request.observedForm ? { manualObservation: request.observedForm } : {}),
     });
     if (!result.replayed) {
       this.funnel(

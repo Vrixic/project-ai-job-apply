@@ -1,5 +1,13 @@
 # Web Application
 
+Default-off saved-answer selection requires `NEXT_PUBLIC_APPLICATION_SAVED_ANSWER_SELECTION_UI=enabled`
+and the separately configured unpacked extension. Explicitly capture employer question structure,
+paste it into the matching application within 60 seconds, select exact saved metadata/context and
+confirm meaning before preparing. Protected values appear only in the new packet's mandatory
+final review. Backend `RESTRICTED_ANSWER_REUSE_ENABLED` remains separately gated. No raw question
+text is sent to Applications or stored; no answer is inferred or automatically filled.
+See [ADR-046](../../docs/adr/046-observed-form-saved-answer-selection.md).
+
 The primary candidate experience: onboarding, profile management, job discovery, application review, technical history through confirmed submission, outreach, billing, settings, and crawlable public job pages.
 
 ## Planned subfolders
@@ -313,3 +321,10 @@ An exact `/jobs?application=UUID&job=UUID` link reopens that owner-scoped applic
 mismatched lookup shows retry rather than selecting another packet. The existing manual Apply
 and explicit outcome confirmation record history. Local synthetic tests do not establish installed
 extension or live-provider acceptance. See [ADR-045](../../docs/adr/045-manual-approved-application-handoff.md).
+
+
+For a saved-answer form-bound packet, Apply requires copying the current employer question
+structure again, checking it against the approved packet/current destination, then explicitly
+confirming before starting the manual path. Complete the employer form yourself and report the
+result through existing submission confirmation. The original capture expires after 60 seconds;
+changed questions require a new packet/review. Deploy compatible manual-command readers first.

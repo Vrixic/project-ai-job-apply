@@ -1,5 +1,13 @@
 # Data Flow and Classification
 
+2026-10-09 default-off observed questions: explicit trusted extension action -> protected owner/job
+reads -> bounded top-frame structure without values -> candidate-controlled clipboard -> exact web
+application -> metadata-only saved-version selection -> existing protected Applications packet read
+and review. Raw question metadata remains browser memory/clipboard and is never included in the
+preparation request; only canonical hashes and exact selection references cross that boundary.
+No new service, host grant, persistent queue or external provider action is added.
+See [ADR-046](../adr/046-observed-form-saved-answer-selection.md).
+
 2026-10-06 native direct reads: authenticated original task admission -> current packet proof from
 the scalar Gateway route -> original task admission again; HTTPS repeats this proof around
 rendering. Sealed admission cannot serve a file while a stale packet reference remains. Gateway
@@ -935,3 +943,12 @@ rollout and remaining installed-extension/live/accountable review gates.
 Only explicitly enabled unpacked handoff builds request write-only `clipboardWrite`, allowing
 candidate-triggered writes after asynchronous owner checks. No clipboard read or employer host
 permission is added. A browser refusal discards the preview; it never bypasses focus restrictions.
+
+
+D3-087 manual continuation delta: form-bound starts require a fresh matching imported structure
+and explicit candidate confirmation. Only the scalar binding, original capture time and confirmation
+cross the existing Applications command; SQL admission checks the 60-second lease after locks and
+preserves saved-version/material/approval invalidation. This remains untrusted candidate attestation,
+not provider proof. Identical accepted commands replay; changed proofs cannot silently replace the
+original idempotent action. Compatible readers precede default-off client activation. No accountable
+review or live acceptance is inferred from local tests; see proposed ADR-046.

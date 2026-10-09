@@ -191,6 +191,7 @@ describe("candidate web Turbo build inputs", () => {
     expect(task.resolvedTaskDefinition.outputs).toEqual([...root.tasks.build.outputs].sort());
     expect(task.dependencies).toEqual([
       "@ai-job-apply/api-contracts#build",
+      "@ai-job-apply/ats-sdk#build",
       "@ai-job-apply/config#build",
     ]);
   });

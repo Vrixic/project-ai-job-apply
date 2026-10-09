@@ -1,9 +1,17 @@
+import {
+  validateApplication,
+  validateCanonicalJobDetail,
+} from "@ai-job-apply/api-contracts/browser-validators";
+import { extractGenericForm } from "@ai-job-apply/ats-sdk/extract";
+import { parseObservedApplicationForm } from "@ai-job-apply/ats-sdk/observed-form";
 import { safeActionErrorMessage } from "../lib/action-error";
 import {
   type ApprovedHandoff,
   HANDOFF_FAILURE,
   parseHandoffLink,
+  plainHttpsUrl,
   readApprovedHandoff,
+  readJson,
 } from "../lib/application-handoff";
 import {
   capabilityForPage,
@@ -85,6 +93,97 @@ function clearHandoff() {
   handoffPending = undefined;
   clearTimeout(handoffTimer);
   handoffContext = undefined;
+}
+
+async function captureApplicationForm(reviewLink: string, generation: number) {
+  const origin = extensionConfiguration.applicationHandoffWebOrigin;
+  const apiOrigin = extensionConfiguration.apiOrigin;
+  const link = origin && parseHandoffLink(reviewLink, origin);
+  if (!link || !apiOrigin || handoffPending) throw new Error(HANDOFF_FAILURE);
+  clearHandoff();
+  const fence = handoffGeneration;
+  const controller = new AbortController();
+  handoffPending = controller;
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  try {
+    assertIdentityGeneration(generation);
+    const tab = await activeBrowserTab();
+    const destination = tab?.url && plainHttpsUrl(tab.url);
+    if (tab?.id === undefined || !destination) throw new Error(HANDOFF_FAILURE);
+    const session = await authenticatedApiSession();
+    const readApplication = () =>
+      readJson(
+        new URL(`/v1/applications/${link.applicationId}`, apiOrigin),
+        session.accessToken,
+        controller.signal,
+      );
+    const application = await readApplication();
+    if (
+      !validateApplication(application) ||
+      application.id !== link.applicationId ||
+      application.canonicalJobId !== link.jobId ||
+      !["preparing", "review_required", "approved"].includes(application.status) ||
+      application.attempts.some((attempt) =>
+        ["started", "dispatched", "ambiguous"].includes(attempt.status),
+      )
+    )
+      throw new Error(HANDOFF_FAILURE);
+    const job = await readJson(
+      new URL(`/v1/jobs/${link.jobId}`, apiOrigin),
+      session.accessToken,
+      controller.signal,
+    );
+    if (
+      !validateCanonicalJobDetail(job) ||
+      job.id !== link.jobId ||
+      Date.parse(job.expiresAt) <= Date.now() ||
+      (job.validThrough && Date.parse(job.validThrough) <= Date.now()) ||
+      !job.sources.some((source) => plainHttpsUrl(source.canonicalUrl) === destination)
+    )
+      throw new Error(HANDOFF_FAILURE);
+    const capturedAt = Date.now();
+    const executions = await Promise.race([
+      chrome.scripting.executeScript({ func: extractGenericForm, target: { tabId: tab.id } }),
+      new Promise<never>((_, reject) => {
+        controller.signal.addEventListener("abort", () => reject(new Error(HANDOFF_FAILURE)), {
+          once: true,
+        });
+        if (controller.signal.aborted) reject(new Error(HANDOFF_FAILURE));
+      }),
+    ]);
+    if (executions.length !== 1 || !executions[0]?.result) throw new Error(HANDOFF_FAILURE);
+    const current = await readApplication();
+    const currentTab = await activeBrowserTab();
+    const identity = await authenticatedApiSession({ refreshIfNeeded: false });
+    assertIdentityGeneration(generation);
+    if (
+      controller.signal.aborted ||
+      fence !== handoffGeneration ||
+      !validateApplication(current) ||
+      current.id !== application.id ||
+      current.canonicalJobId !== application.canonicalJobId ||
+      current.revision !== application.revision ||
+      currentTab?.id !== tab.id ||
+      currentTab.url !== tab.url ||
+      identity.identityFence !== session.identityFence
+    )
+      throw new Error(HANDOFF_FAILURE);
+    const text = JSON.stringify({
+      schema: "application-observed-form.v1",
+      applicationId: application.id,
+      jobId: job.id,
+      destination,
+      capturedAt,
+      form: executions[0].result,
+    });
+    if (!parseObservedApplicationForm(text, Date.now())) throw new Error(HANDOFF_FAILURE);
+    return { ok: true, observedForm: text };
+  } catch {
+    throw new Error(HANDOFF_FAILURE);
+  } finally {
+    clearTimeout(timeout);
+    if (fence === handoffGeneration) clearHandoff();
+  }
 }
 
 async function applicationHandoff(
@@ -904,6 +1003,8 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
     let historyResult: SharedJobsState | undefined;
     try {
       await storageBoundaryStartup;
+      if (message.action === "application_form_capture")
+        return await captureApplicationForm(message.reviewLink, generation);
       if (message.action === "application_handoff_clear") return { ok: true };
       if (
         message.action === "application_handoff_read" ||

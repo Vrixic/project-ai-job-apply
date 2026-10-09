@@ -92,6 +92,7 @@ const review = {
 let current: Application | undefined;
 let coverLetterScenario = false;
 let nativeScenario = false;
+let savedAnswerScenario = false;
 let preparationReads = 0;
 const PREPARATION = "00000000-0000-7000-8000-000000000020";
 
@@ -220,6 +221,21 @@ const syntheticFetch = (async (input: RequestInfo | URL, init: RequestInit = {})
     );
   }
   if (url.endsWith("/jobs/search")) return respond({ items: [job] });
+  if (url === "/api/platform/restricted-answers")
+    return respond({
+      answers: [
+        {
+          id: "00000000-0000-7000-8000-000000000022",
+          fieldKey: "authorization.us_authorized",
+          valueType: "boolean",
+          sensitivity: "restricted",
+          state: "active",
+          context: "us.explicit",
+          version: 7,
+          confirmedAt: AT,
+        },
+      ],
+    });
   if (url === `/api/platform/jobs/${JOB}`) return respond(job);
   if (url.endsWith("/applications/search")) return respond({ items: current ? [current] : [] });
   if (url === "/api/platform/applications") {
@@ -227,6 +243,38 @@ const syntheticFetch = (async (input: RequestInfo | URL, init: RequestInit = {})
     return respond(current, 201);
   }
   if (url.endsWith("/packets")) {
+    if (savedAnswerScenario) {
+      const request = JSON.parse(String(init.body));
+      const selection = request.vaultSelections?.[0];
+      if (!selection || !current?.currentPacket) return respond({}, 400);
+      const { fieldKey, ...reference } = selection;
+      current = {
+        ...current,
+        revision: current.revision + 1,
+        currentPacket: {
+          ...current.currentPacket,
+          id: "00000000-0000-7000-8000-000000000033",
+          version: 2,
+          packetHash: "b".repeat(64),
+          form: request.form,
+          fields: [
+            ...current.currentPacket.fields,
+            {
+              fieldKey,
+              value: false,
+              origin: "answer_vault",
+              sourceFactIds: [selection.id],
+              confidence: 1,
+              disposition: "review",
+              requiresReview: true,
+              reasons: ["restricted_answer"],
+              vaultReference: { ...reference, validUntilEpochMs: null },
+            },
+          ],
+        },
+      } as Application;
+      return respond(current, 201);
+    }
     if (coverLetterScenario || nativeScenario) {
       const completedAtMs = Date.now();
       current = {
@@ -281,16 +329,63 @@ const syntheticFetch = (async (input: RequestInfo | URL, init: RequestInit = {})
   }
   if (url === `/api/platform/applications/${APP}`) return respond(current);
   if (url.endsWith("/approval")) {
+    if (savedAnswerScenario && current?.currentPacket && approved.approval) {
+      const request = JSON.parse(String(init.body));
+      current = {
+        ...current,
+        status: "approved",
+        revision: current.revision + 1,
+        currentAction: "ready_to_submit",
+        approval: {
+          ...approved.approval,
+          packetHash: current.currentPacket.packetHash,
+          acknowledgedFieldKeys: request.acknowledgedFieldKeys,
+        },
+      };
+      return respond(current);
+    }
     current = nativeScenario
       ? ({ ...approved, currentPacket: current?.currentPacket } as Application)
       : approved;
     return respond(current);
   }
   if (url.endsWith("/manual-submissions")) {
+    if (savedAnswerScenario && current) {
+      const observation = (
+        JSON.parse(String(init.body)) as {
+          observedForm?: {
+            confirmed?: boolean;
+            form?: { formHash?: string };
+            capturedAtEpochMs?: number;
+          };
+        }
+      ).observedForm;
+      if (
+        !observation?.confirmed ||
+        observation.form?.formHash !== current.currentPacket?.form?.formHash ||
+        !observation.capturedAtEpochMs ||
+        Date.now() >= observation.capturedAtEpochMs + 60_000
+      )
+        throw new Error("Synthetic manual form confirmation missing");
+      current = {
+        ...takenOver,
+        currentPacket: current.currentPacket,
+        revision: current.revision + 1,
+      } as Application;
+      return respond({ outcome: "started", attemptId: ATTEMPT, application: current });
+    }
     current = takenOver;
     return respond({ outcome: "started", attemptId: ATTEMPT, application: takenOver });
   }
   if (url.endsWith("/reconciliation")) {
+    if (savedAnswerScenario && current) {
+      current = {
+        ...applied,
+        currentPacket: current.currentPacket,
+        revision: current.revision + 1,
+      } as Application;
+      return respond(current);
+    }
     current = applied;
     return respond(applied);
   }
@@ -307,6 +402,7 @@ declare global {
     showD3CoverLetterPreparation(): void;
     showD3NativeJourney(): void;
     showD3SignedOut(): void;
+    showD3SavedAnswerJourney(): void;
   }
 }
 
@@ -316,6 +412,28 @@ window.fetch = syntheticFetch;
 const container = document.querySelector<HTMLDivElement>("#root");
 if (!container) throw new Error("The browser-assurance root is missing");
 const root = createRoot(container);
+window.showD3SavedAnswerJourney = () => {
+  current = review;
+  savedAnswerScenario = true;
+  coverLetterScenario = false;
+  nativeScenario = false;
+  const source = job.sources[0];
+  if (!source) throw new Error("Missing synthetic source");
+  source.canonicalUrl = "https://employer.example/jobs/synthetic";
+  calls.length = 0;
+  root.render(
+    <div>
+      <h1>Synthetic saved-answer journey</h1>
+      <ApplicationsWorkspace
+        key="saved-answer-journey"
+        jobId={JOB}
+        savedAnswerSelectionEnabled
+        fetchImplementation={syntheticFetch}
+      />
+      <AppliedJobsPanel authenticated />
+    </div>,
+  );
+};
 window.showD3SignedOut = () => root.render(<MaterialSignOutSignal />);
 window.showD3CoverLetterPreparation = () => {
   current = undefined;

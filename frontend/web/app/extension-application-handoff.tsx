@@ -22,9 +22,9 @@ export function ExtensionApplicationHandoff({ application }: { application: Appl
     <section aria-label="Continue with the extension">
       <h3>Continue with the extension</h3>
       <p>
-        Copy this review link, open the employer page, then paste it into ApplyDash’s “Complete an
-        approved application” panel. Review each answer before copying it. You submit the employer
-        form yourself.
+        Copy this review link, open the employer page, then paste it into ApplyDash’s “Application
+        review handoff” panel. Review each answer before copying it. You submit the employer form
+        yourself.
       </p>
       <label>
         Application review link

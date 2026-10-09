@@ -2,6 +2,7 @@ import { CAPTURE_FIELDS, type CaptureField } from "./job-capture";
 import type { JobIntentKind } from "./pending-queue";
 
 export type ExtensionMessage =
+  | { action: "application_form_capture"; reviewLink: string }
   | { action: "application_handoff_read"; reviewLink: string }
   | { action: "application_handoff_copy"; snapshotId: string; fieldKey: string; confirmed: true }
   | { action: "application_handoff_clear" }
@@ -33,11 +34,14 @@ export function parseExtensionMessage(value: unknown): ExtensionMessage | undefi
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
   if (typeof record.action !== "string") return undefined;
-  if (record.action === "application_handoff_read") {
+  if (
+    record.action === "application_handoff_read" ||
+    record.action === "application_form_capture"
+  ) {
     return Object.keys(record).length === 2 &&
       typeof record.reviewLink === "string" &&
       record.reviewLink.length <= 1024
-      ? { action: "application_handoff_read", reviewLink: record.reviewLink }
+      ? { action: record.action, reviewLink: record.reviewLink }
       : undefined;
   }
   if (record.action === "application_handoff_copy") {

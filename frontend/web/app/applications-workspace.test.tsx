@@ -110,6 +110,117 @@ async function mount(
 }
 
 describe("ApplicationsWorkspace", () => {
+  it.each(["another field", "selected field"])(
+    "preserves prior entries/form and replaces only an explicitly edited %s",
+    async (kind) => {
+      const current = reviewable();
+      if (!current.currentPacket) throw new Error();
+      const form = { adapterId: "generic-assisted-v1", variantId: "generic", formHash: HASH };
+      current.currentPacket.form = form;
+      current.currentPacket.fields = [
+        {
+          fieldKey: "contact.phone",
+          value: "original phone",
+          origin: "user_entered",
+          sourceFactIds: [],
+          confidence: 1,
+          disposition: "review",
+          reasons: ["explicit_each_time"],
+          requiresReview: true,
+        },
+        {
+          fieldKey: "contact.address.city",
+          value: "Synthetic City",
+          origin: "user_entered",
+          sourceFactIds: [],
+          confidence: 1,
+          disposition: "review",
+          reasons: ["explicit_each_time"],
+          requiresReview: true,
+        },
+        {
+          fieldKey: "authorization.us_authorized",
+          value: false,
+          origin: "answer_vault",
+          sourceFactIds: [JOB],
+          confidence: 1,
+          disposition: "review",
+          reasons: ["restricted_answer"],
+          requiresReview: true,
+          vaultReference: {
+            id: JOB,
+            version: 7,
+            context: "us.explicit",
+            questionHash: HASH,
+            meaningConfirmed: true,
+            validUntilEpochMs: null,
+          },
+        },
+      ];
+      const requests: Record<string, unknown>[] = [];
+      const send = vi.fn<typeof fetch>(async (url, options) => {
+        if (String(url).endsWith("/packets")) {
+          requests.push(JSON.parse(String(options?.body)));
+          return respond(reviewable(3), 201);
+        }
+        if (String(url).endsWith("/search")) return respond({ items: [current] });
+        if (String(url).endsWith("/resume"))
+          return respond({ status: "no_resume", matchesPacket: false });
+        return respond(current);
+      });
+      await mount(send);
+      const control =
+        kind === "selected field"
+          ? container.querySelector("select")
+          : container.querySelector('input[id$="-input"]');
+      if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement))
+        throw new Error("Missing edit control");
+      const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(control), "value")?.set;
+      await act(async () => {
+        setter?.call(control, kind === "selected field" ? "false" : "new phone");
+        control.dispatchEvent(
+          new Event(kind === "selected field" ? "change" : "input", { bubbles: true }),
+        );
+      });
+      await act(async () =>
+        control
+          .closest("form")
+          ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+      );
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.form).toEqual(form);
+      expect(requests[0]?.userEntries).toContainEqual({
+        fieldKey: "contact.address.city",
+        value: "Synthetic City",
+      });
+      if (kind === "selected field") {
+        expect(requests[0]?.vaultSelections).toBeUndefined();
+        expect(requests[0]?.userEntries).toContainEqual({
+          fieldKey: "authorization.us_authorized",
+          value: false,
+        });
+        expect(requests[0]?.userEntries).toContainEqual({
+          fieldKey: "contact.phone",
+          value: "original phone",
+        });
+      } else {
+        expect(requests[0]?.vaultSelections).toEqual([
+          {
+            id: JOB,
+            version: 7,
+            fieldKey: "authorization.us_authorized",
+            context: "us.explicit",
+            questionHash: HASH,
+            meaningConfirmed: true,
+          },
+        ]);
+        expect(requests[0]?.userEntries).toContainEqual({
+          fieldKey: "contact.phone",
+          value: "new phone",
+        });
+      }
+    },
+  );
   it("opens the exact handoff application without searching for another packet", async () => {
     const send = vi.fn<typeof fetch>(async () => respond(application()));
     await mount(send, undefined, false, APP);

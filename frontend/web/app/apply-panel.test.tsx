@@ -331,3 +331,40 @@ describe("ApplyPanel", () => {
     expect(results.violations.map((v) => v.id)).toEqual([]);
   });
 });
+
+it("requires a fresh explicit form match before recording a form-bound approved packet", async () => {
+  const application = approved();
+  if (!application.currentPacket) throw new Error("Missing fixture packet");
+  application.currentPacket.form = {
+    adapterId: "generic-assisted-v1",
+    variantId: "generic",
+    formHash: HASH,
+  };
+  const record = vi.fn();
+  await mount({ application, onRecordManualSubmission: record });
+  expect(button("Record submission status").disabled).toBe(true);
+  await act(async () => button("Record submission status").click());
+  expect(record).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("Before submitting on the employer site");
+});
+
+it("displays and copies an approved false answer as No during manual Apply", async () => {
+  const application = approved(false);
+  if (!application.currentPacket) throw new Error("Missing fixture packet");
+  application.currentPacket.fields.push({
+    fieldKey: "authorization.us_authorized",
+    value: false,
+    origin: "user_entered",
+    sourceFactIds: [],
+    confidence: 1,
+    disposition: "review",
+    reasons: [],
+    requiresReview: true,
+  });
+  const writeText = vi.fn(async () => undefined);
+  vi.stubGlobal("navigator", { clipboard: { writeText } });
+  await mount({ application });
+  expect(container.textContent).toContain("Authorization us authorized: No");
+  await act(async () => button("Copy Authorization us authorized").click());
+  expect(writeText).toHaveBeenCalledWith("No");
+});

@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import axe from "axe-core";
 import { build } from "esbuild";
 import { chromium } from "playwright-core";
+import { startD3BrowserAssuranceServer } from "./server.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const fixtureBundle = await build({
@@ -56,6 +58,7 @@ for (const candidate of candidates) {
 }
 assert(executablePath, "A local Chrome binary is required");
 const browser = await chromium.launch({ executablePath, headless: true });
+let webServer;
 try {
   const context = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"] });
   const fixture = handoffFixture();
@@ -162,10 +165,107 @@ try {
     )
     .waitFor();
   assert.equal(await copy.count(), 0);
+  await page.evaluate(() =>
+    window.handoffSyntheticBoundary.navigate("https://employer.example/jobs/synthetic"),
+  );
+  await page.getByLabel("Application review link").fill(LINK);
+  await page.getByRole("button", { name: "Copy employer question structure", exact: true }).click();
+  await page.getByText(/Question structure copied without entered answers/u).waitFor();
+  const observedText = await page.evaluate(() => navigator.clipboard.readText());
+  const observed = JSON.parse(observedText);
+  assert.equal(observed.schema, "application-observed-form.v1");
+  assert(!observedText.includes("PRIVATE"));
+  assert(!observedText.includes("private-y"));
+  webServer = await startD3BrowserAssuranceServer();
+  const web = await context.newPage();
+  web.on("pageerror", (error) => violations.push(error.message));
+  await web.goto(webServer.origin);
+  await web.evaluate(() => window.showD3SavedAnswerJourney());
+  await web.getByLabel("Employer question structure", { exact: true }).fill(observedText);
+  await web.getByRole("button", { name: "Review captured questions", exact: true }).click();
+  await web.waitForFunction(
+    () =>
+      document.querySelector('section[aria-label="Select saved application answers"] select') ||
+      document
+        .querySelector('section[aria-label="Select saved application answers"] [role="status"]')
+        ?.textContent?.includes("unavailable"),
+  );
+  await web
+    .getByLabel("Saved answer for Are you legally authorized to work in the United States?", {
+      exact: true,
+    })
+    .selectOption("00000000-0000-7000-8000-000000000022:7");
+  const prepareSaved = web.getByRole("button", {
+    name: "Prepare with selected saved answers",
+    exact: true,
+  });
+  assert.equal(await prepareSaved.isEnabled(), false);
+  await web
+    .getByRole("checkbox", {
+      name: "I checked this employer question means exactly the same thing in the selected saved context.",
+      exact: true,
+    })
+    .check();
+  await web.addScriptTag({ content: axe.source });
+  assert.deepEqual(
+    (await web.evaluate(async () => (await window.axe.run(document)).violations)).map(
+      (violation) => violation.id,
+    ),
+    [],
+  );
+  await prepareSaved.click();
+  await web.getByText(/Saved answer version 7. Context: us.explicit./u).waitFor();
+  const approveSaved = web.getByRole("button", { name: "Approve this packet", exact: true });
+  assert.equal(await approveSaved.isEnabled(), false);
+  await web.getByRole("checkbox", { name: "I reviewed contact.email", exact: true }).check();
+  await web
+    .getByRole("checkbox", { name: "I reviewed authorization.us_authorized", exact: true })
+    .check();
+  await approveSaved.click();
+  assert.equal(
+    await web.getByRole("button", { name: "Record submission status", exact: true }).isEnabled(),
+    false,
+  );
+  await page.bringToFront();
+  await page.getByLabel("Application review link").fill(LINK);
+  await page.getByRole("button", { name: "Copy employer question structure", exact: true }).click();
+  await page.getByText(/Question structure copied without entered answers/u).waitFor();
+  const freshText = await page.evaluate(() => navigator.clipboard.readText());
+  await web.bringToFront();
+  await web.getByLabel("Current employer question structure", { exact: true }).fill(freshText);
+  await web.getByRole("button", { name: "Check current form", exact: true }).click();
+  await web
+    .getByRole("checkbox", {
+      name: "I confirm these are the current employer questions and I will use the answers and materials I approved.",
+      exact: true,
+    })
+    .check();
+  await web.getByRole("button", { name: "Record submission status", exact: true }).click();
+  await web.getByRole("button", { name: "I submitted it", exact: true }).click();
+  await web.getByText("Submitted and confirmed.", { exact: true }).waitFor();
+  await web.getByText("Submission confirmed by you.", { exact: true }).waitFor();
+  const webCalls = await web.evaluate(() => window.readD3AssuranceCalls());
+  const manualRequest = webCalls.find((call) => call.url.endsWith("/manual-submissions"));
+  assert.equal(manualRequest.body.observedForm.confirmed, true);
+  assert.equal(manualRequest.body.observedForm.capturedAtEpochMs, JSON.parse(freshText).capturedAt);
+  const savedRequest = webCalls.find((call) => call.url.endsWith("/packets"));
+  assert.equal(savedRequest.body.vaultSelections[0].version, 7);
+  assert.equal(savedRequest.body.vaultSelections[0].context, "us.explicit");
+  assert(
+    !JSON.stringify(savedRequest.body).includes(
+      "Are you legally authorized to work in the United States?",
+    ),
+  );
+  assert(!JSON.stringify(savedRequest.body).includes('"value"'));
+  assert.equal(await web.evaluate(() => localStorage.length + sessionStorage.length), 0);
   assert.deepEqual(violations, []);
   console.log(
     "PASS production handoff UI/background and static validators under MV3 script CSP: approved false answer, per-copy reads, mandatory confirmation reset, changed-tab refusal, no answer persistence. Auth/Chrome APIs/API responses synthetic; clipboard real Chromium. No employer requests or submissions.",
   );
+  console.log(
+    "PASS explicit question capture -> real Chromium clipboard -> exact saved-version/context selection -> protected packet-shaped review of No -> approval -> manual confirmation/history; values excluded from capture, raw questions excluded from preparation; zero browser storage or employer submission. Chrome/auth/service responses synthetic; not installed/live acceptance.",
+  );
 } finally {
   await browser.close();
+  await webServer?.close();
 }

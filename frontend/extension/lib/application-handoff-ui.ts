@@ -1,5 +1,5 @@
 import type { ApprovedHandoff } from "./application-handoff";
-import { HANDOFF_FAILURE } from "./application-handoff";
+import { FORM_CAPTURE_FAILURE, HANDOFF_FAILURE } from "./application-handoff";
 import { extensionConfiguration } from "./config";
 
 /** Popup/side-panel memory only. No document content or persistent handoff queue. */
@@ -10,7 +10,7 @@ export function mountApplicationHandoff() {
   const privacy = document.querySelector<HTMLElement>(".privacy");
   if (privacy)
     privacy.textContent =
-      "Public job capture excludes form values. Approved application answers are shown temporarily in extension memory; copying creates a clipboard copy under your control.";
+      "Explicit job/question capture excludes entered form values. Approved application answers are shown temporarily in extension memory; copying creates a clipboard copy under your control.";
   const input = section.querySelector<HTMLInputElement>("input");
   const load = section.querySelector<HTMLButtonElement>("[data-handoff-load]");
   const clear = section.querySelector<HTMLButtonElement>("[data-handoff-clear]");
@@ -163,6 +163,37 @@ export function mountApplicationHandoff() {
     }
   });
   clear.addEventListener("click", () => discard());
+  section
+    .querySelector<HTMLButtonElement>("[data-handoff-form]")
+    ?.addEventListener("click", async () => {
+      if (busy) return;
+      const reviewLink = input.value;
+      const clearing = discard();
+      busy = true;
+      load.disabled = true;
+      const current = generation;
+      try {
+        await clearing;
+        if (current !== generation) return;
+        const response = await chrome.runtime.sendMessage({
+          action: "application_form_capture",
+          reviewLink,
+        });
+        if (current !== generation) return;
+        if (!response.ok || typeof response.observedForm !== "string") throw new Error();
+        await navigator.clipboard.writeText(response.observedForm);
+        if (current === generation)
+          status.textContent =
+            "Question structure copied without entered answers. Paste it into the matching application's question review within 60 seconds. Clipboard copies remain under your control.";
+      } catch {
+        if (current === generation) void discard(FORM_CAPTURE_FAILURE);
+      } finally {
+        if (current === generation) {
+          busy = false;
+          load.disabled = false;
+        }
+      }
+    });
   document.querySelector("#login")?.addEventListener("click", () => discard());
   document.querySelector("#logout")?.addEventListener("click", () => discard());
   chrome.storage.onChanged.addListener((changes, area) => {
