@@ -904,3 +904,15 @@ submission authority or disposal. Submission binding checks repeat the observati
 handoff must still hold/revalidate its own content lease. Transport failures refuse approval.
 Activation requires updated native images, explicitly provisioned application NAT and exact NAT
 source access to native task port 8443. No infrastructure has been applied by this change.
+
+## Browser-native material access (2026-10-09, default off)
+
+Candidate click -> separate Auth0 SPA popup authorization code/PKCE -> memory-only bearer token
+-> configured native allocation HTTPS:8443. Web-session cookies authorize scalar BFF location
+reads only. Generated previews/files return directly to the browser, never through the BFF.
+The native process still verifies the exact candidate owner and original current packet.
+The browser checks packet/location proofs on both sides of each bounded read and disposes held
+references on expiry/exit/terminal transitions. No refresh tokens or silent renewal are used;
+local credentials last at most ten minutes. Download object URLs are revoked, byte buffers cleared,
+and all content retains its original 30-minute deadline. JavaScript string disposal is logical.
+See [ADR-044](../adr/044-browser-native-material-identity.md) for trust and activation gates.

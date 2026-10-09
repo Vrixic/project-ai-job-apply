@@ -28,7 +28,8 @@ Grounded preparation, packets/review, safe manual Apply, submission-safety contr
 The 2026-10-09 browser safety batch passes a simulated connected search-to-confirmed-history journey;
 cover-letter opt-in/status/cancellation UI is locally tested behind a separate default-off flag.
 Provider-neutral form plans reject conflicting claims/duplicate options and leave restricted answers and challenges to candidate action.
-Native browser transport, cover-letter preview/download UI and saved-answer selection remain unfinished source work.
+The owner-selected separate in-memory Auth0 PKCE path now supplies default-off native resume/cover-letter previews and approved PDF/DOCX downloads with local regression and synthetic Chromium evidence.
+Saved-answer selection and provider adapter/handoff source work remain; the existing SPA registration and live native acceptance are still unverified.
 Connected native/provider acceptance, ATS adapters/fixtures, all-copy expiry, rights/restore and accountable reviews remain.
 The D3-012 engineering review packet now links current evidence; existing development dispositions remain unchanged.
 [Implemented and remaining capabilities](phase-3-application-preparation.md).
@@ -64,8 +65,8 @@ The D3-012 engineering review packet now links current evidence; existing develo
 ## Current operating state
 
 Work resumed for D3 on 2026-10-09; D1/D3 are not complete. Independent D1 acceptance remains deferred.
-Development AWS runtimes, Docker and WSL were verified off on 2026-10-09; retained recovery/storage/security resources incur charges.
-Staging was not freshly verified because separate SSO access was unavailable; the PC remains on.
+Staging AWS runtimes are freshly verified off on 2026-10-09. Development was verified off earlier that day, but its SSO token is now missing and the available staging identity is denied development access; fresh development shutdown verification remains incomplete. Retained recovery/storage/security resources incur charges.
+Docker/WSL shutdown is recorded in the linked evidence; the PC remains on.
 [Current browser batch and shutdown evidence](evidence/d3-connected-candidate-journey-2026-10-09.md).
 
 ## Cross-delivery decisions and changes

@@ -47,11 +47,13 @@ export function ApplyPanel({
   applyUrl,
   fetchImplementation,
   onRecordManualSubmission,
+  nativeMaterialDownloads = false,
 }: {
   application: Application;
   applyUrl?: string | undefined;
   fetchImplementation?: typeof globalThis.fetch;
   onRecordManualSubmission(): Promise<void> | void;
+  nativeMaterialDownloads?: boolean;
 }) {
   const headingId = useId();
   const [message, setMessage] = useState<string>();
@@ -192,7 +194,7 @@ export function ApplyPanel({
         </p>
       )}
 
-      {!expired && application.currentPacket?.artifactHashes.resume ? (
+      {!nativeMaterialDownloads && !expired && application.currentPacket?.artifactHashes.resume ? (
         <div>
           <h4>Your tailored resume</h4>
           <p>Exactly the version you reviewed. Upload it on the application page.</p>

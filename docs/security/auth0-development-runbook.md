@@ -250,6 +250,32 @@ For each client, record login, cancellation, renewal, logout, and post-revocatio
 
 ## Evidence status
 
+### Separate native-material SPA (D3, default off)
+
+Inspect existing tenant applications first; the owner expects the separate SPA to exist. Do not
+reuse the confidential candidate-web or extension registration or create a duplicate by assumption.
+Confirm the intended application's type is **Single Page Application**, token endpoint authentication
+is **None**, Authorization Code is enabled, and Implicit/Refresh Token grants are disabled. Under
+the Platform API's per-app user-delegated grant, allow `applications:read` only; no client-credentials
+grant or offline access. Inspect effective configuration before changing any existing permissions.
+
+Set callback, web-origin and logout allowlists to the exact deployed HTTPS web origin (the popup
+SDK uses that origin as its redirect URI); never add wildcards. Match the native transport's exact
+allowed web origin and reviewed native DNS/TLS base host. Public configuration belongs in the
+ignored web environment or reviewed deployment variables:
+
+```text
+NEXT_PUBLIC_NATIVE_MATERIAL_UI=disabled
+NEXT_PUBLIC_NATIVE_AUTH0_DOMAIN=EXACT_TENANT_HOSTNAME
+NEXT_PUBLIC_NATIVE_AUTH0_CLIENT_ID=SEPARATE_SPA_PUBLIC_CLIENT_ID
+NEXT_PUBLIC_NATIVE_MATERIAL_BASE_HOST=REVIEWED_NATIVE_BASE_HOST
+```
+
+Enable only after exact-source/release and tenant/native transport review. No client secret is
+requested. Controlled same-account login, cancellation, cross-owner refusal, expiry, direct native
+PDF/DOCX reads and logout/withdrawal remain live acceptance; synthetic tests do not close them.
+See [ADR-044](../adr/044-browser-native-material-identity.md).
+
 Public discovery, web login/callback/logout, real API audience/scopes, identity mapping, durable
 profile operation, forced web renewal, and web grant revocation passed in isolated development.
 Local verifier coverage also passes algorithm/signature/claim rejection, overlapping signing-key

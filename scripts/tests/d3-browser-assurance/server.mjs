@@ -29,7 +29,10 @@ export async function startD3BrowserAssuranceServer() {
     nodePaths: [resolve(root, "frontend/web/node_modules")],
     sourcemap: false,
     legalComments: "none",
-    define: { "process.env": '{"NODE_ENV":"test","NEXT_PUBLIC_APPLICATIONS_UI":"enabled"}' },
+    define: {
+      "process.env":
+        '{"NODE_ENV":"test","NEXT_PUBLIC_APPLICATIONS_UI":"enabled","NEXT_PUBLIC_COVER_LETTER_PREPARATION_UI":"enabled","NEXT_PUBLIC_NATIVE_MATERIAL_UI":"enabled","NEXT_PUBLIC_NATIVE_AUTH0_DOMAIN":"identity.example.test","NEXT_PUBLIC_NATIVE_AUTH0_CLIENT_ID":"synthetic-client","NEXT_PUBLIC_NATIVE_MATERIAL_BASE_HOST":"materials.example.test"}',
+    },
   });
   const assets = new Map([
     ["/", [await readFile(resolve(gallery, "index.html")), "text/html; charset=utf-8"]],
@@ -51,6 +54,7 @@ export async function startD3BrowserAssuranceServer() {
       "cache-control": "no-store",
       "content-type": asset[1],
       "x-content-type-options": "nosniff",
+      "cross-origin-opener-policy": "same-origin-allow-popups",
     });
     response.end(asset[0]);
   });
@@ -58,9 +62,27 @@ export async function startD3BrowserAssuranceServer() {
     server.once("error", rejectListen);
     server.listen(4177, "127.0.0.1", resolveListen);
   });
+  const popupServer = createServer((_request, response) => {
+    response.writeHead(200, {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+    });
+    response.end(
+      '<!doctype html><title>Synthetic popup proof</title><script>if(window.opener)window.opener.postMessage("synthetic-popup-ready","http://127.0.0.1:4177");window.close();</script>',
+    );
+  });
+  await new Promise((resolveListen, rejectListen) => {
+    popupServer.once("error", rejectListen);
+    popupServer.listen(0, "127.0.0.1", resolveListen);
+  });
+  const popupAddress = popupServer.address();
+  if (!popupAddress || typeof popupAddress === "string")
+    throw Error("Synthetic popup port unavailable");
   return {
     origin: "http://127.0.0.1:4177",
+    popupOrigin: `http://127.0.0.1:${popupAddress.port}`,
     async close() {
+      await new Promise((resolveClose) => popupServer.close(resolveClose));
       await new Promise((resolveClose) => server.close(resolveClose));
       await rm(output, { recursive: true, force: true });
     },
