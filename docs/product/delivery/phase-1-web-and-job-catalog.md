@@ -43,4 +43,8 @@ Real resumes additionally require ADR-023 controls; its DNS residual is accepted
 
 ## Work log
 
+2026-10-09: Fixed search-result heading order and filter-label contrast required by the connected
+D3 browser journey. Local browser keyboard/axe checks pass with synthetic responses; independent
+D1 acceptance and hosted admin acceptance remain deferred. [Evidence](evidence/d3-connected-candidate-journey-2026-10-09.md).
+
 Historical checkpoints are retained in Git history and the linked evidence; this document records current status only.

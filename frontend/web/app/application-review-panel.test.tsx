@@ -107,6 +107,148 @@ describe("ApplicationReviewPanel", () => {
     });
   };
 
+  it("collects a sensitive yes/no answer explicitly and preserves false as a boolean", async () => {
+    const value = application();
+    if (!value.currentPacket) throw new Error("Missing fixture packet");
+    value.currentPacket.fields = [
+      field("authorization.sponsorship_required", {
+        value: null,
+        disposition: "user_action",
+        requiresReview: true,
+        reasons: ["restricted_answer", "never_infer"],
+      }),
+    ];
+    render(value);
+    const select = container.querySelector("select");
+    expect(select?.value).toBe("");
+    expect(actions.onProvideEntry).not.toHaveBeenCalled();
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+      setter?.call(select, "false");
+      select?.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await click(button(/Save answer/u));
+    expect(actions.onProvideEntry).toHaveBeenCalledWith({
+      fieldKey: "authorization.sponsorship_required",
+      value: false,
+    });
+  });
+
+  it("requires fresh acknowledgement when a sensitive answer is replaced", async () => {
+    const first = application();
+    if (!first.currentPacket) throw new Error("Missing fixture packet");
+    first.currentPacket.fields = [
+      field("authorization.us_authorized", {
+        value: true,
+        origin: "answer_vault",
+        disposition: "review",
+        requiresReview: true,
+        reasons: ["restricted_answer"],
+      }),
+    ];
+    render(first);
+    await click(container.querySelector('input[type="checkbox"]') ?? undefined);
+    expect((button(/Approve this packet/u) as HTMLButtonElement).disabled).toBe(false);
+    const changed = structuredClone(first);
+    if (!changed.currentPacket) throw new Error("Missing fixture packet");
+    changed.currentPacket.packetHash = "b".repeat(64);
+    changed.currentPacket.fields[0] = {
+      ...changed.currentPacket.fields[0],
+      value: false,
+    } as (typeof changed.currentPacket.fields)[number];
+    render(changed);
+    expect((button(/Approve this packet/u) as HTMLButtonElement).disabled).toBe(true);
+    expect((container.querySelector('input[type="checkbox"]') as HTMLInputElement).checked).toBe(
+      false,
+    );
+  });
+
+  it("admits only one action while an approval is unresolved", async () => {
+    let resolve: (() => void) | undefined;
+    actions.onApprove.mockImplementationOnce(
+      () =>
+        new Promise<void>((done) => {
+          resolve = done;
+        }),
+    );
+    const value = application();
+    if (!value.currentPacket) throw new Error("Missing fixture packet");
+    value.currentPacket.fields = [];
+    render(value);
+    await click(button(/Approve this packet/u));
+    await click(button(/Approve this packet/u));
+    await click(button(/Cancel application/u));
+    expect(actions.onApprove).toHaveBeenCalledOnce();
+    expect(actions.onCancel).not.toHaveBeenCalled();
+    await act(async () => resolve?.());
+  });
+
+  it("refuses approval when the original generated material expires", () => {
+    const value = application();
+    if (!value.currentPacket) throw new Error("Missing fixture packet");
+    value.currentPacket.fields = [];
+    value.currentPacket.temporaryMaterials = [
+      {
+        schemaVersion: 1,
+        kind: "tailored_resume",
+        generationId: value.id,
+        version: 1,
+        contentSha256: hash,
+        completedAtMs: 0,
+        expiresAtMs: 1_800_000,
+      },
+    ];
+    render(value);
+    expect((button(/Approve this packet/u) as HTMLButtonElement).disabled).toBe(true);
+    expect(container.textContent).toContain("Generated materials expired");
+  });
+
+  it("requires an available exact generated preview and a fresh candidate acknowledgement", async () => {
+    const value = application();
+    if (!value.currentPacket) throw new Error("Missing fixture packet");
+    value.currentPacket.fields = [];
+    const completedAtMs = Date.now();
+    value.currentPacket.temporaryMaterials = [
+      {
+        schemaVersion: 1,
+        kind: "tailored_resume",
+        generationId: value.id,
+        version: 1,
+        contentSha256: hash,
+        completedAtMs,
+        expiresAtMs: completedAtMs + 1_800_000,
+      },
+    ];
+    render(value);
+    expect((button(/Approve this packet/u) as HTMLButtonElement).disabled).toBe(true);
+    expect(container.textContent).toContain("exact preview is unavailable");
+    act(() =>
+      root.render(
+        <ApplicationReviewPanel
+          application={value}
+          actions={actions}
+          availableMaterialGenerations={[value.id]}
+        />,
+      ),
+    );
+    expect((button(/Approve this packet/u) as HTMLButtonElement).disabled).toBe(true);
+    await click(container.querySelector('input[type="checkbox"]') ?? undefined);
+    expect((button(/Approve this packet/u) as HTMLButtonElement).disabled).toBe(false);
+    const changed = structuredClone(value);
+    if (!changed.currentPacket) throw new Error("Missing fixture packet");
+    changed.currentPacket.packetHash = "b".repeat(64);
+    act(() =>
+      root.render(
+        <ApplicationReviewPanel
+          application={changed}
+          actions={actions}
+          availableMaterialGenerations={[value.id]}
+        />,
+      ),
+    );
+    expect((button(/Approve this packet/u) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("separates what needs input, what needs confirmation, and what is automatic", () => {
     const groups = reviewGroups(application());
     expect(groups.needsInput.map((entry) => entry.fieldKey)).toEqual(["attestation.truthful"]);

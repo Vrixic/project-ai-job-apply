@@ -2,7 +2,7 @@
 
 import type { Application, CanonicalJobDetail } from "@ai-job-apply/api-contracts";
 import { useEffect, useRef, useState } from "react";
-import { listAppliedApplications } from "../lib/applications-client";
+import { APPLICATIONS_CHANGED_EVENT, listAppliedApplications } from "../lib/applications-client";
 
 const loadFailureMessage = "Applied jobs are temporarily unavailable.";
 
@@ -24,7 +24,13 @@ export function AppliedJobsPanel({ authenticated }: { authenticated: boolean }) 
   const [rows, setRows] = useState<AppliedJobRow[]>();
   const [loading, setLoading] = useState(authenticated);
   const [message, setMessage] = useState<string>();
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const mounted = useRef(true);
+  useEffect(() => {
+    const refresh = () => setRefreshVersion((value) => value + 1);
+    window.addEventListener(APPLICATIONS_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(APPLICATIONS_CHANGED_EVENT, refresh);
+  }, []);
 
   useEffect(() => {
     mounted.current = true;
@@ -33,6 +39,7 @@ export function AppliedJobsPanel({ authenticated }: { authenticated: boolean }) 
     };
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: owner-scoped submission notifications trigger a fresh read.
   useEffect(() => {
     if (!authenticated) {
       setRows(undefined);
@@ -70,12 +77,13 @@ export function AppliedJobsPanel({ authenticated }: { authenticated: boolean }) 
       setLoading(false);
     })();
     return () => controller.abort();
-  }, [authenticated]);
+  }, [authenticated, refreshVersion]);
 
   if (!authenticated) return null;
 
   return (
     <section aria-label="Applied jobs">
+      <h2>Applied jobs</h2>
       {loading ? (
         <p>Loading applied jobs…</p>
       ) : message ? (
@@ -109,6 +117,13 @@ export function AppliedJobsPanel({ authenticated }: { authenticated: boolean }) 
                   <small>
                     Applied{confirmed ? ` ${new Date(confirmed).toLocaleDateString()}` : ""}
                   </small>
+                  <p>
+                    {application.attempts.some(
+                      (attempt) => attempt.confirmation?.kind === "user_attested",
+                    )
+                      ? "Submission confirmed by you."
+                      : "Submission confirmation recorded."}
+                  </p>
                 </article>
               </li>
             );

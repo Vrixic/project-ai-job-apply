@@ -230,7 +230,7 @@ representative-data, provider-failure, write/recovery, SLO, or Phase 1 acceptanc
 
 ## D3 Applications review
 
-The fifteen `/api/platform/applications/**` route handlers are thin wrappers over
+The `/api/platform/applications/**` route handlers are thin wrappers over
 `lib/applications-bff.ts`. Each request is validated against the generated OpenAPI schemas (UUIDv7
 identifiers, a bounded JSON body, an idempotency key for commands, and only the `afterSeq`/`limit`
 history query), forwarded to exactly one fixed platform path, and every success body is validated
@@ -264,6 +264,12 @@ use and a separately reviewed deployment enables the panel.
 
 
 ## Native material sign-out cleanup
+
+Application BFF preparation reads and resume/cover-letter location reads return validated scalar
+metadata only. A 202 packet response is accepted only for an explicit cover-letter request and
+is validated as a preparation operation. Browser-native identity transport and cover-letter
+preparation/preview UI remain unfinished. Generated-material review requires an exact available
+preview; expiry blocks approval and material use without renewing the original deadline.
 
 NATIVE_MATERIAL_LOGOUT_ENABLED defaults off. Enable it only after the managed owner-withdrawal
 route and durable cleanup worker are accepted, with AUTH0_APPLICATIONS_SCOPES=enabled and the

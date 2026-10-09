@@ -65,6 +65,130 @@ function post(path: string, body: unknown, headers: Record<string, string> = {})
 }
 
 describe("Applications browser boundary", () => {
+  it("forwards only exact generation queries and current scalar locations", async () => {
+    const completedAtMs = Date.now();
+    const material = {
+      schemaVersion: 1,
+      kind: "tailored_resume",
+      generationId: ATTEMPT,
+      version: 1,
+      contentSha256: "a".repeat(64),
+      completedAtMs,
+      expiresAtMs: completedAtMs + 1_800_000,
+    };
+    const location = {
+      schemaVersion: 1,
+      packetId: JOB,
+      packetHash: "b".repeat(64),
+      temporaryMaterial: material,
+      origin: `https://${ATTEMPT}.materials.example.test:8443`,
+    };
+    for (const operation of ["resumeLocation", "coverLetterLocation"] as const) {
+      const body = {
+        ...location,
+        temporaryMaterial: {
+          ...material,
+          kind: operation === "resumeLocation" ? "tailored_resume" : "cover_letter",
+        },
+      };
+      const { deps, fetch } = harness(() => json(body));
+      const response = await applicationsRoute(
+        operation,
+        new Request(`http://localhost:3000/x?generationId=${ATTEMPT}`),
+        { applicationId: APP },
+        deps,
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(String((fetch.mock.calls[0] as unknown as [URL])[0])).toBe(
+        `http://localhost:4000/v1/applications/${APP}/${operation === "resumeLocation" ? "resume" : "cover-letter"}/location?generationId=${ATTEMPT}`,
+      );
+    }
+    for (const query of [
+      "",
+      "?generationId=wrong",
+      `?generationId=${ATTEMPT}&generationId=${ATTEMPT}`,
+      `?generationId=${ATTEMPT}&token=forbidden`,
+    ]) {
+      const { deps, fetch } = harness(() => json(location));
+      const response = await applicationsRoute(
+        "resumeLocation",
+        new Request(`http://localhost:3000/x${query}`),
+        { applicationId: APP },
+        deps,
+      );
+      expect(response.status).toBe(400);
+      expect(fetch).not.toHaveBeenCalled();
+    }
+    for (const changed of [
+      { generationId: JOB },
+      { kind: "cover_letter" },
+      { expiresAtMs: material.expiresAtMs + 1 },
+      { completedAtMs: 0, expiresAtMs: 1_800_000 },
+    ]) {
+      const { deps } = harness(() =>
+        json({ ...location, temporaryMaterial: { ...material, ...changed } }),
+      );
+      const response = await applicationsRoute(
+        "resumeLocation",
+        new Request(`http://localhost:3000/x?generationId=${ATTEMPT}`),
+        { applicationId: APP },
+        deps,
+      );
+      expect(response.status).toBe(503);
+    }
+  });
+  it("accepts only disclosure-bound, owner-matching asynchronous preparation", async () => {
+    const preparation = {
+      id: ATTEMPT,
+      applicationId: APP,
+      state: "queued",
+      createdAt: AT,
+      updatedAt: AT,
+    };
+    const request = {
+      expectedRevision: 1,
+      coverLetter: { disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true } },
+    };
+    for (const [body, upstream, expected] of [
+      [request, preparation, 202],
+      [{ expectedRevision: 1 }, preparation, 503],
+      [request, { ...preparation, applicationId: JOB }, 503],
+    ] as const) {
+      const { deps } = harness(() => json(upstream, 202));
+      const response = await applicationsRoute(
+        "preparePacket",
+        post("/x", body),
+        { applicationId: APP },
+        deps,
+      );
+      expect(response.status).toBe(expected);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    }
+  });
+  it("polls exactly the addressed preparation and refuses substituted results", async () => {
+    for (const upstreamId of [ATTEMPT, JOB]) {
+      const { deps, fetch } = harness(() =>
+        json({
+          id: upstreamId,
+          applicationId: APP,
+          state: "running",
+          createdAt: AT,
+          updatedAt: AT,
+        }),
+      );
+      const response = await applicationsRoute(
+        "preparation",
+        new Request("http://localhost:3000/x"),
+        { applicationId: APP, preparationId: ATTEMPT },
+        deps,
+      );
+      expect(response.status).toBe(upstreamId === ATTEMPT ? 200 : 503);
+      expect(String((fetch.mock.calls[0] as unknown as [URL])[0])).toBe(
+        `http://localhost:4000/v1/applications/${APP}/preparations/${ATTEMPT}`,
+      );
+    }
+  });
   it("creates an application through one fixed path with the exact validated body and key", async () => {
     const { fetch, deps } = harness(() => json(application(), 201));
     const response = await applicationsRoute(

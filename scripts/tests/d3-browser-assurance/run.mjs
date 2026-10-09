@@ -26,10 +26,19 @@ async function findChrome() {
 
 const server = await startD3BrowserAssuranceServer();
 let browser;
+let page;
 try {
   browser = await chromium.launch({ executablePath: await findChrome(), headless: true });
-  const page = await browser.newPage();
+  page = await browser.newPage();
   await page.goto(server.origin);
+  await page.getByRole("button", { name: "Search", exact: true }).press("Enter");
+  await page.getByRole("button", { name: "View details and sources", exact: true }).press("Enter");
+  await page.getByRole("button", { name: "Prepare application", exact: true }).press("Enter");
+  const approve = page.getByRole("button", { name: "Approve this packet", exact: true });
+  await approve.waitFor();
+  assert.equal(await approve.isEnabled(), false);
+  await page.getByRole("checkbox", { name: "I reviewed contact.email", exact: true }).check();
+  await approve.press("Enter");
   const record = page.getByRole("button", { name: "Record submission status", exact: true });
   await record.waitFor();
   await record.focus();
@@ -45,6 +54,17 @@ try {
 
   await page.addScriptTag({ content: axe.source });
   const before = await page.evaluate(async () => (await window.axe.run(document)).violations);
+  if (before.length)
+    process.stderr.write(
+      `${JSON.stringify(
+        before.map(({ id, nodes }) => ({
+          id,
+          nodes: nodes.map(({ target, failureSummary }) => ({ target, failureSummary })),
+        })),
+        null,
+        2,
+      )}\n`,
+    );
   assert.deepEqual(
     before.map((violation) => violation.id),
     [],
@@ -56,13 +76,37 @@ try {
   const reconciliation = calls.find((call) => call.url.endsWith("/reconciliation"));
   assert.equal(reconciliation?.body.kind, "user_attested_submitted");
   assert(!calls.some((call) => call.url.includes("/submissions") && !call.url.includes("manual")));
+  const approval = calls.find((call) => call.url.endsWith("/approval"));
+  assert.deepEqual(approval?.body.acknowledgedFieldKeys, ["contact.email"]);
+  assert.equal(calls.filter((call) => call.url === "/api/platform/applications").length, 1);
+  await page.getByRole("tab", { name: "Applied", exact: true }).click();
+  await page.getByText("Submission confirmed by you.", { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
 
   const after = await page.evaluate(async () => (await window.axe.run(document)).violations);
   assert.deepEqual(
     after.map((violation) => violation.id),
     [],
   );
-  process.stdout.write("PASS manual-start/candidate-attestation/keyboard/WCAG scenario\n");
+  await page.evaluate(() => window.showD3ExpiryPreview());
+  await page.getByText("Generated synthetic one-off preview", { exact: true }).waitFor();
+  await page
+    .getByText("Your generated resume expired. Prepare again to review a new version.", {
+      exact: true,
+    })
+    .waitFor();
+  assert.equal(
+    await page.getByText("Generated synthetic one-off preview", { exact: true }).count(),
+    0,
+  );
+  assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
+  process.stdout.write(
+    "PASS search/prepare/review/approve/manual-Apply/candidate-confirmation/history/idle-preview-expiry/keyboard/WCAG (simulated BFF and native preview, no live generation or external submission)\n",
+  );
+} catch (error) {
+  // This harness contains generated fixtures only; report visible failure state for diagnosis.
+  if (page) process.stderr.write(`${await page.locator("body").innerText()}\n`);
+  throw error;
 } finally {
   await browser?.close();
   await server.close();

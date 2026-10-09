@@ -482,6 +482,10 @@ aside {
   font-weight: 700;
 }
 
+.job-filter > span {
+  color: #5b6a60;
+}
+
 .job-filter-narrow {
   flex: 0 1 120px;
 }

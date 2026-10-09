@@ -140,6 +140,49 @@ describe("safeApplyUrl", () => {
   });
 });
 
+it("refuses correctly hashed bytes from a different approved resume", async () => {
+  const createObjectURL = vi.fn(() => "blob:unexpected");
+  Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
+  const fetchImplementation = vi.fn(
+    async () => new Response(JSON.stringify(await fileBody({ contentSha256: "b".repeat(64) }))),
+  ) as typeof fetch;
+  await mount({ fetchImplementation });
+  await act(async () => button("Download PDF").click());
+  expect(await statusText()).toContain("changed or expired");
+  expect(createObjectURL).not.toHaveBeenCalled();
+});
+
+it("never offers an unresolved answer as the literal text null", async () => {
+  const value = approved(false);
+  if (!value.currentPacket) throw new Error("Missing fixture packet");
+  value.currentPacket.fields[0] = {
+    ...value.currentPacket.fields[0],
+    value: null,
+  } as (typeof value.currentPacket.fields)[number];
+  await mount({ application: value });
+  expect(container.textContent).not.toContain("null");
+  expect(container.textContent).not.toContain("Contact email:");
+});
+
+it("does not download a held result after leaving the approved application", async () => {
+  let resolve: ((response: Response) => void) | undefined;
+  const createObjectURL = vi.fn(() => "blob:unexpected");
+  Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
+  const body = await fileBody();
+  await mount({
+    fetchImplementation: vi.fn(
+      () =>
+        new Promise<Response>((done) => {
+          resolve = done;
+        }),
+    ) as typeof fetch,
+  });
+  await act(async () => button("Download PDF").click());
+  act(() => root.render(<div />));
+  await act(async () => resolve?.(new Response(JSON.stringify(body))));
+  expect(createObjectURL).not.toHaveBeenCalled();
+});
+
 describe("ApplyPanel", () => {
   it("opens the employer's page in a new tab and never claims anything was sent", async () => {
     await mount();

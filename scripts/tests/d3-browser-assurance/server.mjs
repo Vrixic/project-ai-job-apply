@@ -29,7 +29,7 @@ export async function startD3BrowserAssuranceServer() {
     nodePaths: [resolve(root, "frontend/web/node_modules")],
     sourcemap: false,
     legalComments: "none",
-    define: { "process.env": '{"NODE_ENV":"test"}' },
+    define: { "process.env": '{"NODE_ENV":"test","NEXT_PUBLIC_APPLICATIONS_UI":"enabled"}' },
   });
   const assets = new Map([
     ["/", [await readFile(resolve(gallery, "index.html")), "text/html; charset=utf-8"]],
