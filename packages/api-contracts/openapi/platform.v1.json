@@ -9636,6 +9636,11 @@
           "currentAction": {
             "$ref": "#/components/schemas/ApplicationCurrentAction"
           },
+          "packetAvailability": {
+            "type": "string",
+            "const": "withheld",
+            "description": "Selected saved-answer bindings are no longer current. Packet and approval are withheld; only metadata is returned for recovery or reconciliation."
+          },
           "currentPacket": {
             "$ref": "#/components/schemas/ApplicationPacket"
           },
@@ -9657,6 +9662,21 @@
             "type": "string",
             "format": "date-time"
           }
+        },
+        "not": {
+          "allOf": [
+            { "properties": { "packetAvailability": {} }, "required": ["packetAvailability"] },
+            {
+              "anyOf": [
+                { "properties": { "currentPacket": {} }, "required": ["currentPacket"] },
+                { "properties": { "approval": {} }, "required": ["approval"] },
+                {
+                  "properties": { "currentAction": { "const": "ready_to_submit" } },
+                  "required": ["currentAction"]
+                }
+              ]
+            }
+          ]
         },
         "additionalProperties": false
       },

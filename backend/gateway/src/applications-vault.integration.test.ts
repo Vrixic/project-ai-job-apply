@@ -325,8 +325,13 @@ suite("Applications selected vault owner composition", () => {
   );
 
   async function refusedCandidateMetadata(f: Awaited<ReturnType<typeof fixture>>) {
-    // A stale selected answer cannot be projected through the candidate value-read port.
-    await expect(f.api.get(f.owner, f.app.id)).rejects.toBeInstanceOf(ApplicationsUnavailableError);
+    // Value reads stay refused; the candidate receives explicit metadata for safe recovery.
+    const recovery = await f.api.get(f.owner, f.app.id);
+    expect(compileComponentValidator("Application")(recovery)).toBe(true);
+    expect(recovery.packetAvailability).toBe("withheld");
+    expect(recovery).not.toHaveProperty("currentPacket");
+    expect(recovery).not.toHaveProperty("approval");
+    expect(recovery.currentAction).not.toBe("ready_to_submit");
     const store = new PostgresApplicationStore(appDb, () => state.at, {
       definitions: defaultFieldDefinitions(),
       restrictedPackets: packetProtection.options,
@@ -366,6 +371,150 @@ suite("Applications selected vault owner composition", () => {
     );
     return { approved, started };
   }
+
+  it.each(["corrected", "deleted", "expired"] as const)(
+    "reopens and reprepares a %s selected answer with fresh review through confirmed history",
+    async (kind) => {
+      const f = await fixture(kind === "expired" ? new Date(Date.now() + 60_000) : undefined);
+      await approve(f);
+      if (kind === "corrected")
+        await vault.save({
+          ...f.command,
+          expectedVersion: 1,
+          value: "true",
+          idempotencyKey: key(),
+        });
+      if (kind === "deleted")
+        await vault.remove({
+          userId: f.owner,
+          id: f.selection.id,
+          expectedVersion: 1,
+          traceId: key(),
+        });
+      if (kind === "expired") state.at = new Date(state.at.getTime() + 60_001);
+      const withheld = await f.api.get(f.owner, f.app.id);
+      expect(withheld).toMatchObject({
+        status: "approved",
+        packetAvailability: "withheld",
+        currentAction: "re_review",
+      });
+      const reopenKey = key();
+      const reopened = await f.api.reopen(f.owner, f.app.id, withheld.revision, reopenKey);
+      expect(reopened).toMatchObject({ status: "review_required", packetAvailability: "withheld" });
+      expect((await f.api.reopen(f.owner, f.app.id, withheld.revision, reopenKey)).revision).toBe(
+        reopened.revision,
+      );
+      const fresh = await f.api.preparePacket(
+        f.owner,
+        f.app.id,
+        { expectedRevision: reopened.revision, form, userEntries: [{ fieldKey, value: true }] },
+        key(),
+      );
+      expect(fresh.packetAvailability).toBeUndefined();
+      expect(fresh.status).toBe("review_required");
+      expect(fresh.approval).toBeUndefined();
+      expect(fresh.currentPacket?.packetHash).not.toBe(f.app.currentPacket?.packetHash);
+      expect(
+        fresh.currentPacket?.fields.find((field) => field.fieldKey === fieldKey),
+      ).toMatchObject({ value: true, origin: "user_entered", requiresReview: true });
+      expect(
+        fresh.currentPacket?.fields.find((field) => field.fieldKey === fieldKey),
+      ).not.toHaveProperty("vaultReference");
+      const approved = await f.api.approve(
+        f.owner,
+        f.app.id,
+        {
+          expectedRevision: fresh.revision,
+          packetHash: fresh.currentPacket?.packetHash ?? "",
+          acknowledgedFieldKeys: [fieldKey],
+        },
+        key(),
+      );
+      const started = await f.api.startManualSubmission(
+        f.owner,
+        f.app.id,
+        {
+          expectedRevision: approved.revision,
+          observedForm: { form, capturedAtEpochMs: state.at.getTime(), confirmed: true },
+        },
+        key(),
+      );
+      const applied = await f.api.reconcile(
+        f.owner,
+        f.app.id,
+        started.attemptId ?? "",
+        {
+          kind: "user_attested_submitted",
+          observedAt: state.at.toISOString(),
+          fingerprintSha256: "e".repeat(64),
+        },
+        key(),
+      );
+      expect(applied.status).toBe("applied");
+      expect(applied.attempts).toHaveLength(1);
+      expect((await f.api.history(f.owner, f.app.id, {})).entries.at(-1)?.kind).toBe(
+        "submission_confirmed",
+      );
+    },
+  );
+  it.each(["submitted", "not_submitted"] as const)(
+    "reconciles an existing manual attempt after withdrawal: %s",
+    async (outcome) => {
+      const f = await fixture();
+      const approved = await approve(f);
+      const started = await f.api.startManualSubmission(
+        f.owner,
+        f.app.id,
+        {
+          expectedRevision: approved.revision,
+          observedForm: { form, capturedAtEpochMs: state.at.getTime(), confirmed: true },
+        },
+        key(),
+      );
+      await vault.remove({
+        userId: f.owner,
+        id: f.selection.id,
+        expectedVersion: 1,
+        traceId: key(),
+      });
+      const read = await f.api.get(f.owner, f.app.id);
+      expect(read).toMatchObject({
+        status: "takeover",
+        packetAvailability: "withheld",
+        currentAction: "complete_manually",
+      });
+      const request =
+        outcome === "submitted"
+          ? {
+              kind: "user_attested_submitted" as const,
+              observedAt: state.at.toISOString(),
+              fingerprintSha256: "e".repeat(64),
+            }
+          : {
+              kind: "user_attested_not_submitted" as const,
+              acknowledgesDuplicateRisk: true as const,
+            };
+      const receipt = key();
+      const result = await f.api.reconcile(
+        f.owner,
+        f.app.id,
+        started.attemptId ?? "",
+        request,
+        receipt,
+      );
+      expect(result.packetAvailability).toBe("withheld");
+      expect(result.status).toBe(outcome === "submitted" ? "applied" : "approved");
+      expect(
+        (await f.api.reconcile(f.owner, f.app.id, started.attemptId ?? "", request, receipt))
+          .revision,
+      ).toBe(result.revision);
+      const page = await f.api.search(f.owner, {});
+      expect(page.items).toEqual([result]);
+      expect((await f.api.history(f.owner, f.app.id, {})).entries.length).toBeGreaterThan(0);
+      await expect(f.api.get(uuidv7(), f.app.id)).rejects.toThrow();
+      expect((await f.api.search(uuidv7(), {})).items).toHaveLength(0);
+    },
+  );
 
   it("starts a freshly confirmed manual form once and records candidate-confirmed submission/history", async () => {
     const f = await fixture();
@@ -527,9 +676,13 @@ suite("Applications selected vault owner composition", () => {
         expectedRevision: approved.revision,
         observedForm: { form, capturedAtEpochMs: state.at.getTime(), confirmed: true as const },
       };
-      await expect(
-        f.api.startManualSubmission(f.owner, f.app.id, request, key()),
-      ).rejects.toThrow();
+      const refused = await f.api.startManualSubmission(f.owner, f.app.id, request, key());
+      expect(refused).toMatchObject({
+        outcome: "approval_invalidated",
+        application: { status: "review_required", packetAvailability: "withheld", attempts: [] },
+      });
+      expect(refused.invalidationReasons).toContain("vault_answer_changed");
+      expect(refused.attemptId).toBeUndefined();
       const view = await refusedCandidateMetadata(f);
       expect(view.status).toBe("review_required");
       expect(view.attempts).toHaveLength(0);
@@ -622,7 +775,11 @@ suite("Applications selected vault owner composition", () => {
         },
         key(),
       ),
-    ).rejects.toBeInstanceOf(ApplicationsUnavailableError);
+    ).resolves.toMatchObject({
+      outcome: "approval_invalidated",
+      invalidationReasons: ["vault_answer_changed"],
+      application: { status: "review_required", packetAvailability: "withheld", attempts: [] },
+    });
     expect((await refusedCandidateMetadata(f)).status).toBe("review_required");
     const [approval] = await appDb<
       Array<{ reason: string }>

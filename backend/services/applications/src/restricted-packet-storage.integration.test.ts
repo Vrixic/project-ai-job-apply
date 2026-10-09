@@ -19,6 +19,7 @@ import {
   ApplicationRevisionConflictError,
   PostgresApplicationStore,
   RestrictedPacketStoreUnavailableError,
+  RestrictedPacketValuesWithheldError,
 } from "./store.js";
 import { definitions, FACT_A, HASH_A, HASH_B, HASH_C, proposal } from "./test-support.js";
 
@@ -158,7 +159,7 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
     for (let index = 0; index < 2; index++) {
       const result = await run(process.execPath, [executable], { env });
       expect(result.stdout.trim()).toBe(
-        "Applications migrations through 0011_native_resume_execution_receipts applied and verified.",
+        "Applications migrations through 0015_legacy_receipt_archive applied and verified.",
       );
     }
   });
@@ -574,7 +575,7 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
       };
       try {
         await expect(vaultStore.readCurrentPacketValues(f.target)).rejects.toThrow(
-          RestrictedPacketStoreUnavailableError,
+          RestrictedPacketValuesWithheldError,
         );
       } finally {
         onDecrypt = undefined;
@@ -591,7 +592,7 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
     await waitUntil(deadline);
     const count = vi.mocked(cipher.decrypt).mock.calls.length;
     await expect(vaultStore.readCurrentPacketValues(f.target)).rejects.toThrow(
-      RestrictedPacketStoreUnavailableError,
+      RestrictedPacketValuesWithheldError,
     );
     expect(vi.mocked(cipher.decrypt).mock.calls.length).toBe(count);
   });
@@ -601,7 +602,7 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
     onDecrypt = () => waitUntil(deadline);
     try {
       await expect(vaultStore.readCurrentPacketValues(f.target)).rejects.toThrow(
-        RestrictedPacketStoreUnavailableError,
+        RestrictedPacketValuesWithheldError,
       );
     } finally {
       onDecrypt = undefined;
@@ -641,7 +642,7 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
       expect(result.values.get(f.save.fieldKey)).toBe(true);
       if (result.values instanceof Map) result.values.clear();
       await expect(vaultStore.readCurrentPacketValues(f.target)).rejects.toThrow(
-        RestrictedPacketStoreUnavailableError,
+        RestrictedPacketValuesWithheldError,
       );
     },
   );

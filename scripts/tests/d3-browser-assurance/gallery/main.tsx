@@ -403,6 +403,7 @@ declare global {
     showD3NativeJourney(): void;
     showD3SignedOut(): void;
     showD3SavedAnswerJourney(): void;
+    showD3WithdrawalRecovery(status: "approved" | "takeover"): void;
   }
 }
 
@@ -431,6 +432,55 @@ window.showD3SavedAnswerJourney = () => {
         fetchImplementation={syntheticFetch}
       />
       <AppliedJobsPanel authenticated />
+    </div>,
+  );
+};
+window.showD3WithdrawalRecovery = (status) => {
+  const base = status === "approved" ? approved : takenOver;
+  let recovery: Application = {
+    id: APP,
+    canonicalJobId: JOB,
+    status,
+    revision: base.revision,
+    currentAction: status === "approved" ? "re_review" : "complete_manually",
+    packetAvailability: "withheld",
+    attempts: base.attempts,
+    createdAt: AT,
+    updatedAt: AT,
+  };
+  calls.length = 0;
+  const recoveryFetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const url = String(input);
+    calls.push({
+      url,
+      method: init.method ?? "GET",
+      ...(init.body ? { body: JSON.parse(String(init.body)) } : {}),
+    });
+    if (url.endsWith("/search")) return respond({ items: [recovery] });
+    if (url.endsWith("/reopen"))
+      recovery = { ...recovery, status: "review_required", revision: recovery.revision + 1 };
+    if (url.endsWith("/packets")) recovery = { ...review, revision: recovery.revision + 1 };
+    if (url.endsWith("/resume")) return respond({ status: "no_resume", matchesPacket: false });
+    if (url.endsWith("/reconciliation"))
+      recovery = {
+        ...recovery,
+        status: "applied",
+        currentAction: "none",
+        revision: recovery.revision + 1,
+        attempts: applied.attempts,
+      };
+    return respond(recovery);
+  }) as typeof globalThis.fetch;
+  root.render(
+    <div>
+      <h1>Synthetic withdrawal recovery</h1>
+      <ApplicationsWorkspace
+        key={`withdrawal-${status}`}
+        jobId={JOB}
+        applicationId={APP}
+        applyUrl="https://employer.example/jobs/synthetic"
+        fetchImplementation={recoveryFetch}
+      />
     </div>,
   );
 };

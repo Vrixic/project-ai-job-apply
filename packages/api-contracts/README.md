@@ -138,3 +138,11 @@ valid; absent observation still invalidates a form-bound approval. Fresh observa
 attestations, checked under application/vault locks with a 60-second lease, not provider evidence.
 Deploy compatible Gateway/Applications readers before enabling client use; older strict readers
 reject the addition. No migration, provider activation, answer or raw question payload is added.
+
+
+Application v1 optionally returns `packetAvailability: "withheld"` for positively established
+withdrawn selected-answer bindings. This metadata-only response forbids `currentPacket`, `approval`
+and `ready_to_submit`; persisted status/attempt evidence remains available for recovery/history.
+It grants no submission permission and does not turn operational read failures into empty packets.
+Upgrade all strict readers before producer release; no migration or activation is included.
+See [ADR-047](../../docs/adr/047-withdrawn-answer-application-recovery.md).

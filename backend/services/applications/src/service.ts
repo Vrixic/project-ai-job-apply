@@ -49,7 +49,12 @@ import type {
   PostgresApplicationStore,
   StartAttemptResult,
 } from "./store.js";
-import { ApplicationIntegrityError, AttemptNotFoundError, StalePacketError } from "./store.js";
+import {
+  ApplicationIntegrityError,
+  AttemptNotFoundError,
+  RestrictedPacketValuesWithheldError,
+  StalePacketError,
+} from "./store.js";
 import {
   type ApplicationTemporaryMaterials,
   readBoundTemporaryCoverLetter,
@@ -1060,7 +1065,22 @@ export class ApplicationsService implements ApplicationsApi {
         expectedRevision: fixed.application.revision,
       });
       return toApiApplication(fixed, plaintext);
-    } catch {
+    } catch (error) {
+      if (error instanceof RestrictedPacketValuesWithheldError) {
+        // Preserve immutable evidence; never substitute null values or expose a live approval.
+        return {
+          id: fixed.application.id,
+          canonicalJobId: fixed.application.canonicalJobId,
+          status: fixed.application.status,
+          revision: fixed.application.revision,
+          currentAction:
+            fixed.currentAction === "ready_to_submit" ? "re_review" : fixed.currentAction,
+          packetAvailability: "withheld",
+          attempts: fixed.attempts.map(toApiAttempt),
+          createdAt: fixed.application.createdAt.toISOString(),
+          updatedAt: fixed.application.updatedAt.toISOString(),
+        };
+      }
       throw new ApplicationsUnavailableError();
     } finally {
       if (plaintext?.values instanceof Map) plaintext.values.clear();

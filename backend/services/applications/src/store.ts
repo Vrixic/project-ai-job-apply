@@ -405,6 +405,14 @@ export class RestrictedPacketStoreUnavailableError extends Error {
     this.name = "RestrictedPacketStoreUnavailableError";
   }
 }
+/** Exact current packet was admitted, but its selected saved-answer binding is no longer live.
+ * No private values may be returned. Distinct from transport, crypto or integrity failures. */
+export class RestrictedPacketValuesWithheldError extends RestrictedPacketStoreUnavailableError {
+  constructor() {
+    super();
+    this.name = "RestrictedPacketValuesWithheldError";
+  }
+}
 /** Ephemeral MAC result pins its exact authority; never serialize this object. */
 interface ProtectedRequestHash {
   hash: string;
@@ -1282,8 +1290,11 @@ export class PostgresApplicationStore {
           throw new RestrictedPacketStoreUnavailableError();
         if (!exportScope) {
           const references = await this.lockVaultReferences(tx, packet);
-          if (evaluateVaultBindings(packet, references, this.clock()).length)
+          const observedAt = this.clock();
+          if (!Number.isFinite(observedAt.getTime()))
             throw new RestrictedPacketStoreUnavailableError();
+          if (evaluateVaultBindings(packet, references, observedAt).length)
+            throw new RestrictedPacketValuesWithheldError();
         }
         const [row] = await tx<
           Array<{
@@ -1346,8 +1357,9 @@ export class PostgresApplicationStore {
         packetHash: command.packetHash,
         values,
       };
-    } catch {
+    } catch (error) {
       if (values instanceof Map) values.clear();
+      if (!exportScope && error instanceof RestrictedPacketValuesWithheldError) throw error;
       throw new RestrictedPacketStoreUnavailableError();
     }
   }
