@@ -1274,3 +1274,13 @@ restoring a zero-change managed plan. Recovery archive and download DNS/TLS meta
 [Publication and registration evidence](evidence/d3-native-application-disposal-2026-10-07.md#verified-resume-image-and-dormant-task-registration-2026-10-09).
 Fresh shutdown readback confirms runtimes off, fifteen encrypted recovery snapshots retained,
 Docker/WSL stopped and PC on. D1/D3 remain In progress behind connected runtime/acceptance gates.
+
+
+2026-10-09 disabled resume preparation and cleanup are deployed and independently verified at
+state 480: five exact function versions, five bounded roles/ten policies, six disabled event
+rules/targets, customer-encrypted durable state and an empty recovery queue. A managed EventBridge
+limit failure was corrected in PR #596 and recovered with a fresh create-only plan; all 300 prior
+identities are preserved. Zero drift, exact recovery archive and runtime shutdown checks pass.
+[Managed preparation evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-preparation-recovery-verified).
+No task or candidate journey ran. Fifteen encrypted snapshots are retained; ongoing durable-resource
+and monitoring charges remain. Docker/WSL stopped, PC on. D1/D3 remain In progress.
