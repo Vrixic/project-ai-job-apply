@@ -1689,8 +1689,14 @@ receipt and immutable image match; scan COMPLETE with zero High/Critical finding
 or Terraform mutation occurred. Current `c386a4c5` Gateway publication passes tests, dependency
 audit, two matching builds and independent exact-version readback of all four objects. Its receipt
 SHA-256 is `531381328603ee22a8c54dc9b19a167c9747e00d05494679cfd20f9dfdc9f8a0`.
-NativePreparation also published and independently verified sixteen companions at that source;
-the remaining connected native artifact publication batch is still running. No activation is claimed.
+All four native families also published and independently verified at that source: fourteen
+artifacts and fifty-six companions after dependency audits and two matching builds per family.
+No runtime deployment or activation is claimed by publication. Receipt SHA-256 values:
+
+- NativePreparation: `0fd3d7b06a1b31dfd3537ad9794adc7d40a7f93b84dace25b3b365732d0d4118`.
+- NativeMaterialControls: `4980aacb8753133413e215466022ec089509c5d109ceb5f7c08cce0c2883c3ec`.
+- NativeResume: `7af3b1de02cec270a68429521fde8c360dc7eec39f40f2a9f1dbe3bf33072307`.
+- NativeMaterialCleanup: `cef6b85ad3ee09b79e1185bff0908ae9119bc8a25528c6aa16a4d1215ec32b13`.
 
 Pre-deployment review found that native KMS and ECS/EC2 interface endpoints ignored the existing
 paid-endpoint shutdown switch. Both now honor it while retaining queues, release bindings, keys
@@ -1709,3 +1715,18 @@ The existing prelaunch shutdown runbook now includes optional native endpoints a
 quiescence. D1/D3 remain In progress. AWS development was independently observed dormant at
 2026-10-09T12:02:11Z with fifteen encrypted recovery snapshots; no runtime deployment occurred.
 Retained storage/security/DNS costs remain. Docker/WSL are stopped, PC on and hosted CI/CD deferred.
+
+
+The new input guard refused the first dormant foundation plan because retained resume source-access
+RPC flags were still enabled. No apply occurred. Disabling that original release in the complete
+inputs produced a valid plan: two retained packet keys and two scoped Gateway policies created,
+Gateway function/alias refreshed, and both resume RPCs disabled. No database, endpoints, routes or
+triggers are created. This plan remains unapplied. The source RPC numeric versions must be read
+back after quiescence and again after the later combined artifact refresh/activation; proposed
+image configuration is not deployed-version evidence.
+
+The bootstrap baseline plan preserves all twelve managed resources at state serial 22; its only
+changes are five new empty native-boundary outputs. Dedicated native boundaries are still absent
+and must be planned with exact release/key bindings before runtime deployment. TLS metadata has
+one current version. Live cover-letter testing awaits the development OpenAI API credential's
+secure location; no such credential was found in project development secrets or environment.

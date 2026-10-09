@@ -2948,5 +2948,6 @@ D1/D3 remain In progress; development remains dormant, Docker/WSL stopped and PC
 2026-10-09 native release preparation fixes the optional KMS/ECS/EC2 endpoint shutdown switches
 and rejects native activity during development database shutdown/restore while retaining original
 release maps. Gateway and NativePreparation artifacts at `c386a4c5` are published and independently
-verified; other native publication is running. [Shutdown compatibility evidence](evidence/d3-native-application-disposal-2026-10-07.md#native-release-shutdown-compatibility-2026-10-09).
+verified alongside NativeResume and NativeMaterialCleanup (fourteen native artifacts/fifty-six
+companions). [Shutdown compatibility evidence](evidence/d3-native-application-disposal-2026-10-07.md#native-release-shutdown-compatibility-2026-10-09).
 D1/D3 remain In progress; no runtime deployment or activation, development dormant and PC on.
