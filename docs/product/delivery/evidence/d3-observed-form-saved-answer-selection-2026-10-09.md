@@ -2,6 +2,7 @@
 
 Date: 2026-10-09. Default-off source; locally verified batch. D3 remains In progress.
 Independent D1 acceptance, including hosted admin acceptance, stays deferred.
+Source/review: [PR #614](https://github.com/Vrixic/project-ai-job-apply/pull/614).
 
 ## Implemented source
 
@@ -70,7 +71,13 @@ That run found a stale Turbo dependency expectation and a test checking before W
 the dependency list and asynchronous completion wait were corrected, web typechecking and both
 focused suites passed, and the unchanged script resumed from Tests through its final success.
 This is complete gate coverage, not a claim that the first uninterrupted invocation passed.
-Contract regeneration is byte-identical; diff/format and all checked local Markdown targets pass.
+Contract regeneration is byte-identical; diff/format and all 172 checked local Markdown targets pass.
+
+Hosted checks on verified source `f3bc38dc` are not green: GitHub explicitly reports jobs were not
+started because account payments/spending limits block execution. The Vercel candidate preview
+also failed; the base main already has a failed Vercel status, and its specific current failure
+reason was not inspected. Local production builds pass; this is not hosted acceptance. CI/CD and
+independent D1 hosted acceptance remain deferred; billing/deployment settings were not changed.
 
 Shutdown: no AWS runtime was activated. Fresh staging status at 2026-10-09T21:26Z verifies dormant:
 no database, managed interface endpoints, public runtime routes, enabled event mappings/rules or
