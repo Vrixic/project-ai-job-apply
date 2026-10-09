@@ -1,5 +1,14 @@
 # Delivery Tracker
 
+2026-10-08 managed revision-63 diagnostics establish a legacy blocker: seven create-packet
+receipts, seven packets, one packet with approval, and zero counted restricted values, protected
+markers or ambiguous attempts. Applications remains at three applied migrations after rollback;
+its guard and failed receipt are preserved. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-legacy-inventory-from-revision-63).
+An explicit receipt-compatible transition and complete field-shape proof remain before retry.
+Mandatory shutdown completes at state 456: both databases absent, twelve encrypted snapshots,
+289 other identities preserved, zero drift and verified recovery archive. D1/D3 stay In progress;
+staging SSO is unavailable, retained costs remain, Docker/WSL stopped, PC on and CI/CD deferred.
+
 2026-10-08 fixes the migration operator's post-apply source check for the four exact existing
 D1/D3 delivery evidence documents. The actual published-image-to-shutdown-evidence delta now
 passes without changing image identity; mixed runtime/SQL/infrastructure changes remain refused.

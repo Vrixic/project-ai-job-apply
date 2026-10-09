@@ -1433,3 +1433,65 @@ The real `a1b4ef2f..11950dcc` Git delta also passes the extracted production pre
 source validation, not a managed execution plan. Serverless infrastructure validation and
 whitespace checks pass. No cloud mutation occurs; development remains at the verified state-450
 dormancy above. Managed inventory and the compatible legacy transition remain outstanding.
+
+## Managed legacy inventory from revision 63
+
+On 2026-10-08 (local date), the guarded operator on merged `1a46dc3c` plans and executes exactly
+one deployed revision-63 migration task from release `a1b4ef2f`. The source/digest/task/network
+checks pass with no overrides. The database is restored privately from the verified state-450
+final snapshot with encryption, deletion protection, 35-day retention and PITR available;
+application routes and background triggers remain disabled.
+
+The task stops with exit 1 at the original Applications 0009 legacy-evidence guard. Six preceding
+owners report successful migration/verification. After Applications rolls back, the separate
+read-only diagnostic reports the following aggregate at 2026-10-09T02:39:15.627426+00:00:
+
+| Inventory | Count |
+|---|---:|
+| Applied Applications migrations | 3 |
+| Restricted migration recorded | 0 |
+| Packets | 7 |
+| Packets with counted restricted values | 0 |
+| Packets with protected markers | 0 |
+| Packets with invalid containers | 0 |
+| Historical create-packet receipts | 7 |
+| Historical queue-preparation receipts | 0 |
+| Packets with approvals | 1 |
+| Ambiguous attempts | 0 |
+
+The seven create-packet receipts establish a guard blocker; zero category counts do not establish
+full packet-shape compatibility. The approval count is distinct packets with approvals, not an
+approval-row total. No owner identifiers, candidate values, packet hashes or receipt hashes enter
+shared evidence. This is actual managed SQL inventory, not complete migration or candidate-flow
+acceptance. Applications remains at three ledger entries; 0009 is not recorded.
+
+The original failed execution claim and submitted receipt remain unchanged. Private receipt:
+`.terraform/development-document-migration/receipt-a1b4ef2f9c5a-20261008-223710.json` under the
+development Terraform directory. Sanitized counts are `.tmp/migration-a1b4ef2f-live-inventory.json`;
+raw task/log evidence stays private. There is no blind retry, evidence purge, old approval rehash,
+or immutable SQL modification. The next requirement is an explicit historical receipt transition
+preserving replay semantics and the existing approval, plus complete packet-shape compatibility
+proof under ADR-041. Counts do not authorize disposal of any candidate record.
+
+Mandatory cleanup completes with a fresh safety snapshot, verified private physical restore,
+reviewed final-snapshot deletion and removal of the exact temporary copy. Final state **456**
+preserves all **289 other managed identities**; the complete-input refresh-backed plan has zero
+drift. At **2026-10-09T03:01:04.942017+00:00**, live development readback shows zero database
+instances, API routes, enabled rules/mappings, NAT gateways, interface endpoints and non-stopped
+ECS tasks. All **12 encrypted manual recovery snapshots** are available; a separate tagged EC2
+read finds zero allocated Elastic IPs. Maintained lifecycle drain checks pass.
+
+Canonical recovery inputs, proof and manifest are updated with explicit KMS encryption and ETag
+preconditions; exact-version byte/KMS readback passes. Private recovery evidence is
+`.tmp/inventory63-*`. These state-456 inputs supersede state 450 for subsequent restoration.
+
+| Artifact | SHA-256 |
+|---|---|
+| Applied preparation plan | `aa13b36bd5d926fc1a04e0a414405a3fcea79f9757edab73a3b5cfa88761d2d5` |
+| Applied dormant plan | `70dc930285557c2ac9225edf3035871c57cf8c8491e297a78c968c1faaed5bcc` |
+| Final no-change plan | `6548cf40b6aac7036ea7f748003b87e219cd8beaeac8f035946b8aa388254011` |
+| Archived dormant inputs | `b53690eb5c54935fce8526cf2555d716840c39cfe2d7c95d0a9532da1ed203d5` |
+
+Retained snapshots/backups, object/image/log storage, KMS, Secrets Manager and DNS may still incur
+charges. Staging readback is still unavailable because its separate SSO token is missing. Docker
+Desktop and WSL are stopped; the PC stays on. D1/D3 remain In progress. CI/CD remains deferred.
