@@ -2938,3 +2938,9 @@ preserved, zero drift and versioned recovery archive readback passed.
 [Managed transition and shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-legacy-transition-and-shutdown-at-state-471-2026-10-09).
 D1/D3 remain In progress; retained costs and staging SSO gap remain. Docker/WSL stopped, PC on,
 CI/CD deferred and no repeat of accepted manual checks.
+
+2026-10-09 D1-013 repairs read-only migration-image verification after main advances: exact
+merged ancestor sources remain verifiable against their original receipt and immutable image.
+Build/publication still require current clean main, and deployment compatibility remains separate.
+[Historical image verification evidence](evidence/d3-native-application-disposal-2026-10-07.md#historical-migration-image-verification-2026-10-09).
+D1/D3 remain In progress; development remains dormant, Docker/WSL stopped and PC on.

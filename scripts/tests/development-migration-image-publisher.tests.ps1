@@ -481,4 +481,5 @@ if ($dockerfile.Contains('apk upgrade')) {
 }
 & node --test (Join-Path $PSScriptRoot "development-migration-runtime-smoke.test.mjs")
 if ($LASTEXITCODE -ne 0) { throw "The exact production migration runtime smoke regressions failed." }
+& (Join-Path $PSScriptRoot "development-migration-source-validation.tests.ps1")
 Write-Host "Development migration image publisher OCI guard tests passed."

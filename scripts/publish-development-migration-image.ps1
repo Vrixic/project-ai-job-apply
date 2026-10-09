@@ -659,6 +659,7 @@ function Assert-PublicationReceipt {
 function Assert-CallerToolsAndSource {
   param(
     [switch]$RequireExplicitSource,
+    [switch]$AllowMergedSource,
     [switch]$RequireDocker,
     [switch]$RequireAws,
     [switch]$RequireTerraform
@@ -684,8 +685,16 @@ function Assert-CallerToolsAndSource {
   if ($branch -cne "main" -or $head -cne $upstream -or $dirty.Count -ne 0) {
     throw "Publication requires a clean main checkout exactly matching origin/main."
   }
-  if ($RequireExplicitSource -and ($SourceSha -notmatch '^[a-f0-9]{40}$' -or $SourceSha -cne $head)) {
-    throw "SourceSha must equal the exact merged main checkout."
+  if ($RequireExplicitSource) {
+    if ($SourceSha -cnotmatch '^[a-f0-9]{40}$') { throw "An exact source commit is required." }
+    if ($AllowMergedSource) {
+      # Read-only Verify attests the original receipt/image, not compatibility with today's code.
+      # Publication and LocalBuild must still bind the exact current clean main checkout.
+      & git -C $repositoryRoot merge-base --is-ancestor $SourceSha $head 2>$null
+      if ($LASTEXITCODE -ne 0) { throw "Verification source must be a commit merged into current main." }
+    } elseif ($SourceSha -cne $head) {
+      throw "SourceSha must equal the exact merged main checkout."
+    }
   }
   return $head
 }
@@ -964,6 +973,7 @@ function Read-AndValidateReceipt {
 
 $requiresCloud = $Action -ne "LocalBuild"
 $headSha = Assert-CallerToolsAndSource -RequireExplicitSource:($Action -ne "Status") `
+  -AllowMergedSource:($Action -eq "Verify") `
   -RequireDocker:($Action -in @("LocalBuild", "Publish")) `
   -RequireAws:$requiresCloud -RequireTerraform:$requiresCloud
 if ($Action -eq "LocalBuild") {
