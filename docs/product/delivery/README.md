@@ -42,6 +42,9 @@ This folder turns the architecture roadmap into an auditable delivery system.
     Phase-level design reviews, repository authorship, internal tests, and automated scanners do
     not replace this final release gate.
 
+11. Hosted admin acceptance happens only after all implementation work for the phase is complete
+    and relevant automated checks pass. It remains required before marking the phase Complete.
+
 ## Status vocabulary
 
 - `Not started`

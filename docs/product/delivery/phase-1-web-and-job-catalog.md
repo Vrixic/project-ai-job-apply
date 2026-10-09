@@ -22,6 +22,8 @@ Status: In progress. Started: 2026-08-11. Completion: Not completed. Updated: 20
 
 ## Exit criteria
 
+Hosted admin acceptance follows full D1 implementation and passing automated checks.
+
 - [ ] Complete the hosted onboarding, discovery, moderation and public-page journey.
 - [ ] Accept source freshness, matching correctness, saved-job durability and representative reliability.
 - [ ] Complete security, privacy, accessibility, real-data and product acceptance.
