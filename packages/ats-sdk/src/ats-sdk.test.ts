@@ -85,9 +85,67 @@ describe("generic form extraction", () => {
     expect(formStructureHash(challenged)).not.toBe(formStructureHash(form));
   });
 
-  it("bounds the number of fields it reads", () => {
-    const many = Array.from({ length: 300 }, (_, index) => `<input name="f${index}">`).join("");
-    expect(extractGenericForm(page(many)).fields).toHaveLength(200);
+  it("accepts exactly 200 fields but refuses a partial model when another field follows", () => {
+    const maximum = Array.from({ length: 200 }, (_, index) => `<input name="f${index}">`).join("");
+    expect(extractGenericForm(page(maximum)).fields).toHaveLength(200);
+    expect(() => extractGenericForm(page(`${maximum}<input name="email" required>`))).toThrow(
+      "Application form fields exceed extraction limit",
+    );
+    expect(
+      extractGenericForm(page(`${maximum}<input type="hidden"><button>Submit</button>`)).fields,
+    ).toHaveLength(200);
+  });
+
+  it("refuses overlong question, control-name and option text instead of hashing a prefix", () => {
+    const long = "x".repeat(301);
+    for (const html of [
+      `<label>${long}<input name="email"></label>`,
+      `<input name="${long}" aria-label="Email">`,
+      `<select name="email"><option>${long}</option></select>`,
+      `<input name="email" aria-label="${long}">`,
+      `<span id="a">${"a".repeat(150)}</span><span id="b">${"b".repeat(150)}</span><input aria-labelledby="a b">`,
+    ]) {
+      expect(() => extractGenericForm(page(html))).toThrow(
+        "Application form text exceeds extraction limit",
+      );
+    }
+    expect(
+      extractGenericForm(page(`<input aria-label="${"a".repeat(300)}">`)).fields[0]?.label,
+    ).toHaveLength(300);
+  });
+
+  it("refuses a select whose hidden suffix could change an otherwise matching option", () => {
+    const options = Array.from({ length: 250 }, (_, i) => `<option>Option ${i}</option>`).join("");
+    expect(extractGenericForm(page(`<select>${options}</select>`)).fields[0]?.options).toHaveLength(
+      250,
+    );
+    expect(() =>
+      extractGenericForm(page(`<select>${options}<option>Option 0</option></select>`)),
+    ).toThrow("Application form options exceed extraction limit");
+  });
+
+  it("refuses an oversized radio group instead of dropping later options", () => {
+    const radios = Array.from(
+      { length: 250 },
+      (_, i) => `<label>Option ${i}<input type="radio" name="choice"></label>`,
+    ).join("");
+    expect(extractGenericForm(page(radios)).fields[0]?.options).toHaveLength(250);
+    expect(() => extractGenericForm(page(`${radios}<input type="radio" name="choice">`))).toThrow(
+      "Application form options exceed extraction limit",
+    );
+  });
+
+  it("processes the last field's remaining radios and preserves requiredness of later members", () => {
+    const prefix = Array.from({ length: 199 }, (_, i) => `<input name="f${i}">`).join("");
+    const form = extractGenericForm(
+      page(`${prefix}<fieldset><legend>Unknown question</legend>
+      <label>One<input type="radio" name="choice"></label>
+      <label>Two<input type="radio" name="choice" required></label></fieldset>`),
+    );
+    expect(form.fields[199]).toMatchObject({ options: ["One", "Two"], required: true });
+    expect(
+      buildFillPlan(form, [], { resume: false, coverLetter: false }).unresolvedRequired,
+    ).toContain("f199");
   });
 });
 

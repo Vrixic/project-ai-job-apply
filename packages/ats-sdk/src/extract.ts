@@ -8,7 +8,10 @@ const MAX_OPTIONS = 250;
 const MAX_LABEL = 300;
 
 function clean(value: string | null | undefined): string {
-  return (value ?? "").replace(/\s+/gu, " ").trim().slice(0, MAX_LABEL);
+  const text = (value ?? "").replace(/\s+/gu, " ").trim();
+  if (text.length > MAX_LABEL)
+    throw new RangeError("Application form text exceeds extraction limit");
+  return text;
 }
 
 function byId(root: ParentNode, id: string): Element | undefined {
@@ -27,7 +30,7 @@ function labelFor(root: ParentNode, element: Element): string {
       .map((id) => clean(byId(root, id)?.textContent))
       .filter(Boolean)
       .join(" ");
-    if (text) return text;
+    if (text) return clean(text);
   }
   const id = element.getAttribute("id");
   if (id) {
@@ -77,7 +80,8 @@ function isRequired(element: Element): boolean {
 /**
  * Provider-neutral extraction from standard form semantics only (labels, aria, fieldsets). It reads
  * structure and never reads or records any value a candidate typed. Hidden, disabled, and
- * submit-like controls are excluded, and everything is bounded.
+ * submit-like controls are excluded. Throws RangeError rather than returning a partial model when
+ * field, option or normalized text limits are exceeded. Callers must leave the page to the candidate.
  */
 export function extractGenericForm(root: ParentNode): ApplicationFormModel {
   const fields: FormField[] = [];
@@ -85,7 +89,6 @@ export function extractGenericForm(root: ParentNode): ApplicationFormModel {
   const controls = root.querySelectorAll("input, textarea, select");
   let index = 0;
   for (const control of Array.from(controls)) {
-    if (fields.length >= MAX_FIELDS) break;
     const type = fieldType(control);
     const inputType = (control.getAttribute("type") ?? "").toLowerCase();
     if (
@@ -99,9 +102,14 @@ export function extractGenericForm(root: ParentNode): ApplicationFormModel {
       const existing = radioGroups.get(name);
       const optionLabel = labelFor(control.ownerDocument, control);
       if (existing) {
-        if (existing.options.length < MAX_OPTIONS) existing.options.push(optionLabel);
+        if (existing.options.length >= MAX_OPTIONS)
+          throw new RangeError("Application form options exceed extraction limit");
+        existing.options.push(optionLabel);
+        existing.required ||= isRequired(control);
         continue;
       }
+      if (fields.length >= MAX_FIELDS)
+        throw new RangeError("Application form fields exceed extraction limit");
       const field: FormField = {
         ref: `f${index++}`,
         label:
@@ -115,12 +123,16 @@ export function extractGenericForm(root: ParentNode): ApplicationFormModel {
       fields.push(field);
       continue;
     }
+    if (fields.length >= MAX_FIELDS)
+      throw new RangeError("Application form fields exceed extraction limit");
+    const optionElements = type === "select" ? control.querySelectorAll("option") : [];
+    if (optionElements.length > MAX_OPTIONS)
+      throw new RangeError("Application form options exceed extraction limit");
     const options =
       type === "select"
-        ? Array.from(control.querySelectorAll("option"))
+        ? Array.from(optionElements)
             .map((option) => clean(option.textContent))
             .filter(Boolean)
-            .slice(0, MAX_OPTIONS)
         : [];
     fields.push({
       ref: `f${index++}`,

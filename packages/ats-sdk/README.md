@@ -23,3 +23,11 @@ duplicate normalized option labels. A detected challenge produces only candidate
 Restricted authorization/demographic/disclosure fields require direct candidate action even when
 the approved packet carries an answer, matching D3-013's adopted zero-sensitive-fill threshold.
 These synthetic SDK checks do not establish provider fidelity or live acceptance.
+
+Extraction refuses an oversized form rather than returning a prefix: at most 200 fields, 250
+options per control and 300 normalized characters per label/name/option. Combined accessible
+labels also obey the text bound. `extractGenericForm` throws a fixed, content-free `RangeError`;
+callers must stop planning and leave completion to the candidate. Radio grouping includes every
+member within the bounds and preserves requiredness from any member, including the last field.
+No current production consumer invokes this extractor; future adapter integration must handle
+this refusal before hashing, planning or acting on a form.

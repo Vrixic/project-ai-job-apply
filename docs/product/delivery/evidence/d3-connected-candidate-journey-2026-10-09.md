@@ -197,3 +197,42 @@ No AWS runtime was started during this configuration follow-up. Fresh staging re
 shows zero RDS instances and ECS running/pending tasks/services. Development still cannot load
 its SSO session, so fresh development shutdown verification remains incomplete. WSL shutdown
 completed with no running distributions, and no Docker process was found; the PC remains on.
+
+
+## D3-084 complete-form extraction and restored development access
+
+Source inspection found silent prefixes at 200 fields, 250 options and 300 normalized text
+characters. Extraction now throws a fixed content-free RangeError on overflow, including combined
+accessible labels, so no partial model reaches hashing or planning. At the exact field limit,
+remaining members of an existing radio group are still processed; any required member makes the
+group required. Valid in-bound form shapes/hashes, public API contracts and persistence are
+unchanged. Future adapter callers must handle refusal by leaving completion to the candidate.
+
+All 24 synthetic SDK tests pass (four added tests plus replacement of the old truncation test),
+with exact boundaries, hidden suffixes, duplicate options beyond the limit, long question/name/
+option text, combined accessible labels and last-field radio requiredness. Package typecheck and
+lint pass. The actual Chromium connected search/preparation/review/approval/manual Apply/
+candidate-attested confirmation/history journey passes again, including native previews/downloads,
+expiry/disconnect and keyboard/axe checks. Authentication, BFF and native responses are synthetic;
+no live model, employer submission or native acceptance is claimed. The full
+`scripts/verify-phase0.ps1` run exits zero: 38 typecheck tasks, 23 builds, 39 test-graph tasks,
+847 web tests, security/operator guards, bundle isolation and Compose/scope checks pass. Logs are
+ignored local files `.tmp/d3-form-extraction-verify.log` and `.tmp/d3-form-extraction-browser.log`.
+Standard opt-in persistence skips remain; no persistence implementation changed.
+
+Development SSO now verifies account 362544434697/us-east-2. The maintained native session
+operator's read-only --check passes with signInStarted=false and cloudMutated=false. Fresh
+shutdown inspection finds zero RDS instances, ECS running/pending tasks/services, live NAT
+gateways, interface endpoints, non-terminated EC2 instances, EIPs, EBS volumes, API routes,
+enabled Scheduler schedules and active Lambda event-source mappings. Only the retained GuardDuty
+protection rule is enabled. All 12 project queues/DLQs have zero visible/invisible/delayed messages;
+all three durable functions have zero running executions, and all 25 functions have zero
+provisioned concurrency. Fifteen encrypted manual recovery snapshots are available. Retained
+recovery/storage/security resources still incur charges. No cloud runtime was started.
+
+Staging's separate SSO session is now unavailable (`ai-job-apply-staging` token missing). Its earlier
+verified shutdown remains historical evidence; fresh staging verification remains incomplete.
+The AWS access blocker has moved environments, not been waived.
+
+Final local runtime inspection found no Docker process or running WSL distribution. WSL shutdown
+completed; Docker Desktop status could not find a running service. The PC remains on.
