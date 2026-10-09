@@ -5638,3 +5638,13 @@ The runtime correction now passes both actual-image checks (24 resume assertions
 cover-letter scenarios) plus all 42 musl kernel/session regressions without deadline changes.
 [Local verification](evidence/d3-native-application-disposal-2026-10-07.md#patched-runtime-local-verification).
 Patched publication/scan and managed candidate acceptance remain open.
+
+
+2026-10-09 the patched configured resume image passes its 24-assertion packaged smoke and ECR
+scan with no reported findings. Exact task revision 1 and bounded roles are verified at dormant
+state 475, preserving all 295 prior identities; no container launched. ECS empty-array defaults
+are now explicit in both native task modules, eliminating a detected replacement proposal and
+restoring a zero-change managed plan. Recovery archive and download DNS/TLS metadata are verified.
+[Publication and registration evidence](evidence/d3-native-application-disposal-2026-10-07.md#verified-resume-image-and-dormant-task-registration-2026-10-09).
+Fresh shutdown readback confirms runtimes off, fifteen encrypted recovery snapshots retained,
+Docker/WSL stopped and PC on. D1/D3 remain In progress behind connected runtime/acceptance gates.

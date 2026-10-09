@@ -79,9 +79,14 @@ locals {
     workingDirectory       = "/materials"
     entryPoint             = ["/usr/local/bin/node"]
     command                = ["native-material/main.mjs"]
-    linuxParameters        = { initProcessEnabled = true, capabilities = { drop = ["ALL"] } }
-    ulimits                = [{ name = "core", softLimit = 0, hardLimit = 0 }]
-    portMappings           = [{ containerPort = 8443, hostPort = 8443, protocol = "tcp" }]
+    # Match ECS readback defaults so refresh preserves the image-pinned revision.
+    environment     = []
+    mountPoints     = []
+    volumesFrom     = []
+    systemControls  = []
+    linuxParameters = { initProcessEnabled = true, capabilities = { add = [], drop = ["ALL"] } }
+    ulimits         = [{ name = "core", softLimit = 0, hardLimit = 0 }]
+    portMappings    = [{ containerPort = 8443, hostPort = 8443, protocol = "tcp" }]
   }
 }
 data "aws_caller_identity" "current" { count = local.enabled ? 1 : 0 }

@@ -49,9 +49,13 @@ run "exact_release_has_bounded_task_and_roles" {
       jsondecode(aws_ecs_task_definition.resume[0].container_definitions)[0].image == output.image &&
       length(jsondecode(aws_ecs_task_definition.resume[0].container_definitions)) == 1 &&
       !contains(keys(jsondecode(aws_ecs_task_definition.resume[0].container_definitions)[0]), "logConfiguration") &&
-      !contains(keys(jsondecode(aws_ecs_task_definition.resume[0].container_definitions)[0]), "environment") &&
+      length(jsondecode(aws_ecs_task_definition.resume[0].container_definitions)[0].environment) == 0 &&
       !contains(keys(jsondecode(aws_ecs_task_definition.resume[0].container_definitions)[0]), "secrets") &&
-      !contains(keys(jsondecode(aws_ecs_task_definition.resume[0].container_definitions)[0]), "mountPoints")
+      length(jsondecode(aws_ecs_task_definition.resume[0].container_definitions)[0].mountPoints) == 0 &&
+      length(jsondecode(aws_ecs_task_definition.resume[0].container_definitions)[0].volumesFrom) == 0 &&
+      length(jsondecode(aws_ecs_task_definition.resume[0].container_definitions)[0].systemControls) == 0 &&
+      length(jsondecode(aws_ecs_task_definition.resume[0].container_definitions)[0].linuxParameters.capabilities.add) == 0 &&
+      jsondecode(aws_ecs_task_definition.resume[0].container_definitions)[0].linuxParameters.capabilities.drop == ["ALL"]
     )
     error_message = "Native task envelope must preserve init, isolated memory, immutable image and no candidate-bearing side channels."
   }
