@@ -1928,3 +1928,40 @@ The cleanup target now explicitly uses a 60-second maximum event age and zero de
 matching the other periodic native sweeps. Six maintained Terraform mock cases, including the
 service-minimum assertion, and the infrastructure validator pass. Managed completion, independent
 readback, recovery archive and zero drift remain pending. D1/D3 remain In progress.
+
+
+### Managed preparation recovery verified
+
+PR #596 merged the delivery-age correction as `dc115efaaa53789759005b15c227612dac4714ff`.
+A fresh reviewed plan from partial state 478 created only the 32 remaining resources; it did not
+replay the failed plan or replace retained identities. The resulting development state is **480**:
+all 300 original managed identities are preserved, with 50 additions across both applies.
+
+Independent AWS readback at 2026-10-09T13:29:04Z verifies:
+
+- Resume control, durable workflow, dispatch and observer at numeric version 1; cleanup worker
+  also at version 1. All five match their immutable published code hashes and have runtime gates off.
+- Five bounded IAM roles and ten inline policies match the applied trust/boundary/policy documents.
+- All six event rules are disabled; all six targets bind the intended recipients and retry policies.
+- The durable workflow retains 2,400-second execution and seven-day history limits. Cloud Control
+  independently confirms its customer-managed state-encryption key; the Lambda configuration
+  response omits this field. This is configuration verification, not an executed recovery drill.
+- The original recovery queue is empty, customer-KMS encrypted and retains messages for fourteen days.
+- No ECS task launched. The earlier exact task definition remains revision 1; original source/owner
+  RPC versions 2 remain disabled and image-bound version 3 is still an activation prerequisite.
+
+The fresh complete-input plan reports **zero drift**. Recovery plan SHA-256 is
+`01333c87b450721678f048bf67e50d3f56e15a526e4e0070f60c620d97d92557`; complete dormant input SHA-256 is
+`4ce15b4c480cf0e5c50a1bf3145ef3ca429c123a2eff2f46f7f0cd4e4b7d57fe`.
+Canonical versioned customer-KMS recovery inputs, restore proof and manifest were updated and
+verified through exact-version readback. State 480 supersedes the state 475 inputs.
+
+Shutdown observation at **2026-10-09T13:27:44Z** confirms zero database instances, enabled rules or
+consumers, public API routes, live NAT gateways/interface endpoints and non-stopped ECS tasks.
+Fifteen encrypted available manual snapshots remain. Retained monitoring, snapshots, object/image/log
+storage, keys, secrets and DNS can still incur charges. Docker/WSL remain stopped; PC stays on.
+
+This closes disabled resume-preparation/cleanup deployment only. Gateway native composition,
+restored database readiness, exact RPC activation, authenticated generation/download/retirement,
+cover-letter provider configuration and the remaining candidate/client/ATS/accountable acceptance
+gates are still open. D1/D3 remain In progress; accepted manual checks and CI deferral are unchanged.
