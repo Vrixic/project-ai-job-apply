@@ -149,3 +149,15 @@ The endpoint and worker are default-off. Worker artifact/schedule/IAM and manage
 acceptance remain release gates. The source web logout hook also defaults off; enabling it
 requires managed withdrawal acceptance. A termination request is not observed task death,
 positive provider settlement or proof of all-copy removal.
+
+
+## Engineering delta: withdrawn-answer recovery (2026-10-09)
+
+[ADR-047](../adr/047-withdrawn-answer-application-recovery.md) adds a metadata-only candidate
+projection after exact selected-reference admission positively establishes withdrawal or expiry.
+No packet, approval, ordinary/private answer, hash or material reference is returned. Operational
+failures are still unavailable; export keeps its separate rights-authorized original-value path.
+Existing status/revision/attempt evidence supports recovery and explicit reconciliation. Fresh
+preparation drops remembered entries and requires new review/approval. Existing attempt fences,
+duplicate-risk acknowledgement and original generated-material expiry remain authoritative.
+This is engineering scope, not privacy/security approval or live activation evidence.

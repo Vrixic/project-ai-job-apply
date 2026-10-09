@@ -71,7 +71,10 @@ export function ApplyPanel({
   const deadlines = packet?.temporaryMaterials?.map(materialDeadline) ?? [];
   const expired = useMaterialExpiry(deadlines.length ? Math.min(...deadlines) : undefined);
   // biome-ignore lint/correctness/useExhaustiveDependencies: changed approval bindings invalidate any held file read.
-  useEffect(() => () => pending.current?.abort(), [application.id, application.revision]);
+  useEffect(
+    () => () => pending.current?.abort(),
+    [application.id, application.revision, application.packetAvailability],
+  );
   useEffect(() => {
     if (expired) pending.current?.abort();
   }, [expired]);
@@ -179,6 +182,8 @@ export function ApplyPanel({
       setRecording(false);
     }
   }
+
+  if (application.packetAvailability === "withheld") return null;
 
   return (
     <section aria-labelledby={headingId} className="apply-panel">

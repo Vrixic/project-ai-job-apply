@@ -255,6 +255,40 @@ describe("Applications OpenAPI contract", () => {
 describe("Application read models", () => {
   const validate = compileComponentValidator("Application");
 
+  it("accepts explicit withheld metadata only and refuses accidental packet, approval or Apply authority", () => {
+    const recovery = application({ packetAvailability: "withheld", currentAction: "re_review" });
+    expect(validate(recovery), JSON.stringify(validate.errors)).toBe(true);
+    for (const extra of [
+      { packetAvailability: "unknown" },
+      {
+        currentPacket: {
+          id: randomUUID(),
+          version: 1,
+          packetHash: hash,
+          jobRevision: hash,
+          fields: [],
+          artifactHashes: {},
+          createdAt: now,
+        },
+      },
+      {
+        approval: {
+          id: randomUUID(),
+          packetHash: hash,
+          acknowledgedFieldKeys: [],
+          approvedAt: now,
+          expiresAt: now,
+        },
+      },
+      { currentAction: "ready_to_submit" },
+      { withdrawnValue: "synthetic" },
+    ]) {
+      if ("currentPacket" in extra || "approval" in extra)
+        expect(validate(application(extra))).toBe(true);
+      expect(validate({ ...recovery, ...extra })).toBe(false);
+    }
+  });
+
   it("accepts a minimal application and a full packet/approval/attempt view", () => {
     expect(validate(application())).toBe(true);
     expect(

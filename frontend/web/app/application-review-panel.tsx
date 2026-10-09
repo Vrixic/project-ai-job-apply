@@ -215,7 +215,19 @@ function PacketReview({
   return (
     <section aria-labelledby={headingId}>
       <h2 id={headingId}>Application review</h2>
-      <p>{STATUS_COPY[application.status]}</p>
+      <p>
+        {application.packetAvailability === "withheld" && application.status === "approved"
+          ? "Your previous approval cannot be used. Reopen and prepare a new packet."
+          : STATUS_COPY[application.status]}
+      </p>
+      {application.packetAvailability === "withheld" ? (
+        <p role="status">
+          A saved answer changed, was removed or expired. The previous packet is withheld.
+          {["preparing", "review_required", "approved"].includes(application.status)
+            ? " Prepare a new packet and review every answer before approving again."
+            : " Your submission status is retained below."}
+        </p>
+      ) : null}
       <fieldset disabled={busy}>
         <legend>Application actions</legend>
 
@@ -354,6 +366,12 @@ function PacketReview({
               ? "Saved answers expired. Prepare again and review current answers before approving or applying."
               : "Generated materials expired. Prepare again and review the new packet before approving or applying."}
           </p>
+        ) : null}
+
+        {application.status === "approved" && application.packetAvailability === "withheld" ? (
+          <button type="button" onClick={() => run(actions.onReopen, "Reopened for editing.")}>
+            Reopen for preparation
+          </button>
         ) : null}
 
         {application.status === "approved" && application.approval ? (

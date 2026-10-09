@@ -911,3 +911,121 @@ describe("ApplicationsWorkspace", () => {
     expect((await axe.run(container)).violations).toEqual([]);
   });
 });
+
+describe("withdrawn packet recovery", () => {
+  it("drops a remembered edit when conflict refresh reveals a withheld packet", async () => {
+    const current = reviewable();
+    if (!current.currentPacket?.fields[0]) throw new Error("Missing synthetic field");
+    current.currentPacket.fields[0].origin = "user_entered";
+    const bodies: unknown[] = [];
+    const send = vi.fn<typeof fetch>(async (url, options) => {
+      if (String(url).endsWith("/search")) return respond({ items: [current] });
+      if (String(url).endsWith("/resume"))
+        return respond({ status: "no_resume", matchesPacket: false });
+      if (String(url).endsWith("/packets")) {
+        bodies.push(JSON.parse(String(options?.body)));
+        return bodies.length === 1
+          ? respond({ code: "application_revision_conflict" }, 409)
+          : respond(reviewable(5), 201);
+      }
+      return respond(
+        application({
+          status: "review_required",
+          revision: 4,
+          currentAction: "re_review",
+          packetAvailability: "withheld",
+        }),
+      );
+    });
+    await mount(send);
+    const control = container.querySelector('input[id$="-input"]');
+    if (!(control instanceof HTMLInputElement)) throw new Error("Missing editable field");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        control,
+        "fresh@example.test",
+      );
+      control.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () =>
+      control
+        .closest("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(container.textContent).toContain("previous packet is withheld");
+    await click("Prepare a new packet");
+    expect(bodies).toEqual([
+      {
+        expectedRevision: 2,
+        userEntries: [{ fieldKey: "contact.email", value: "fresh@example.test" }],
+      },
+      { expectedRevision: 4 },
+    ]);
+  });
+
+  it("reopens a withheld approval, prepares without old answers, then requires fresh review", async () => {
+    let current = application({
+      status: "approved",
+      revision: 3,
+      currentAction: "re_review",
+      packetAvailability: "withheld",
+    });
+    const bodies: unknown[] = [];
+    const send = vi.fn<typeof fetch>(async (url, options) => {
+      if (String(url).endsWith("/search")) return respond({ items: [current] });
+      if (String(url).endsWith("/reopen"))
+        current = { ...current, status: "review_required", revision: 4 };
+      if (String(url).endsWith("/packets")) {
+        bodies.push(JSON.parse(String(options?.body)));
+        current = reviewable(5);
+        return respond(current, 201);
+      }
+      if (String(url).endsWith("/resume"))
+        return respond({ status: "no_resume", matchesPacket: false });
+      return respond(current);
+    });
+    await mount(send, "https://employer.example/jobs/1");
+    expect(container.textContent).toContain("previous packet is withheld");
+    expect(container.textContent).not.toContain("Your application is approved and ready");
+    expect(container.querySelector('a[href="https://employer.example/jobs/1"]')).toBeNull();
+    await click("Reopen for preparation");
+    await click("Prepare a new packet");
+    expect(bodies).toEqual([{ expectedRevision: 4 }]);
+    expect(container.textContent).toContain("candidate@example.test");
+    const approve = Array.from(container.querySelectorAll("button")).find((button) =>
+      /Approve/.test(button.textContent ?? ""),
+    );
+    expect(approve?.disabled).toBe(true);
+    expect(container.textContent).not.toContain("previous packet is withheld");
+  });
+  it.each(["takeover", "reconciliation_required"] as const)(
+    "retains explicit duplicate-risk reconciliation for %s without packet content",
+    async (status) => {
+      const current = application({
+        status,
+        revision: 5,
+        currentAction: "confirm_submission_status",
+        packetAvailability: "withheld",
+        attempts: [
+          {
+            id: JOB,
+            sequence: 1,
+            status: "taken_over",
+            adapterId: "manual",
+            adapterVersion: "manual.v1",
+            startedAt: AT,
+          },
+        ],
+      });
+      const send = vi.fn<typeof fetch>(async () => respond({ items: [current] }));
+      await mount(send);
+      expect(container.textContent).toContain("I submitted it");
+      const notSubmitted = Array.from(container.querySelectorAll("button")).find(
+        (button) => button.textContent === "It was not submitted",
+      );
+      expect(notSubmitted?.disabled).toBe(true);
+      expect(container.textContent).not.toContain("Prepare a new packet");
+      expect(container.textContent).not.toContain("candidate@example.test");
+    },
+  );
+});

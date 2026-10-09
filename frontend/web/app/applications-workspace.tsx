@@ -88,6 +88,9 @@ function JobApplicationWorkspace({
   const [createKey] = useState(() => `web-create-${crypto.randomUUID()}`);
   const [application, setApplication] = useState<Application>();
   const [entries, setEntries] = useState<Entries>({});
+  useEffect(() => {
+    if (application?.packetAvailability === "withheld") setEntries({});
+  }, [application?.packetAvailability]);
   const [notice, setNotice] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -257,6 +260,8 @@ function JobApplicationWorkspace({
     includeCoverLetter = false,
     selected?: SavedApplicationAnswerSelection,
   ) {
+    // A withheld packet grants no authority to reuse answers kept in this workspace's memory.
+    if (current.packetAvailability === "withheld") answers = {};
     const previousEntries = Object.fromEntries(
       (current.currentPacket?.fields ?? [])
         .filter(
@@ -517,7 +522,11 @@ function JobApplicationWorkspace({
               }}
             />
           ) : null}
-          {!preparation && application.status === "preparing" && !application.currentPacket ? (
+          {!preparation &&
+          !application.currentPacket &&
+          (application.status === "preparing" ||
+            (application.status === "review_required" &&
+              application.packetAvailability === "withheld")) ? (
             <button
               type="button"
               onClick={() => void continuePreparing(application)}
@@ -527,7 +536,9 @@ function JobApplicationWorkspace({
                 ? "Preparing..."
                 : coverLetterRequested
                   ? "Prepare resume and cover letter"
-                  : "Prepare application"}
+                  : application.packetAvailability === "withheld"
+                    ? "Prepare a new packet"
+                    : "Prepare application"}
             </button>
           ) : null}
           {!preparation && !busy ? (
@@ -558,7 +569,10 @@ function JobApplicationWorkspace({
               }}
             />
           ) : null}
-          {!preparation && application.status === "review_required" && coverLetterRequested ? (
+          {!preparation &&
+          application.status === "review_required" &&
+          application.packetAvailability !== "withheld" &&
+          coverLetterRequested ? (
             <button
               type="button"
               disabled={busy}
@@ -567,7 +581,10 @@ function JobApplicationWorkspace({
               Prepare resume and cover letter
             </button>
           ) : null}
-          {!preparation && !busy && application.currentAction === "ready_to_submit" ? (
+          {!preparation &&
+          !busy &&
+          application.packetAvailability !== "withheld" &&
+          application.currentAction === "ready_to_submit" ? (
             <ApplyPanel
               application={application}
               nativeMaterialDownloads={Boolean(

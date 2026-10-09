@@ -1,9 +1,18 @@
 import { compileComponentValidator } from "@ai-job-apply/api-contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { assemblePacket, computePacketHash, verifyPacketHash } from "./packet.js";
 import type { RestrictedPacketPlaintext } from "./restricted-packet-cipher.js";
-import { ApplicationsUnavailableError, toApiApplication } from "./service.js";
-import type { ApplicationView } from "./store.js";
+import {
+  ApplicationsService,
+  type ApplicationsServiceDependencies,
+  ApplicationsUnavailableError,
+  toApiApplication,
+} from "./service.js";
+import {
+  type ApplicationView,
+  RestrictedPacketStoreUnavailableError,
+  RestrictedPacketValuesWithheldError,
+} from "./store.js";
 import {
   APPLICATION_ID,
   definitions,
@@ -132,5 +141,61 @@ describe("immediate restricted packet public projection", () => {
     view.currentPacket = packet;
     expect(validate(toApiApplication(view)), JSON.stringify(validate.errors)).toBe(true);
     expect(() => toApiApplication(view, plaintext)).toThrow(ApplicationsUnavailableError);
+  });
+});
+
+describe("withdrawn selected-value metadata recovery", () => {
+  function service(view: ApplicationView, error: Error) {
+    const read = vi.fn(async () => {
+      throw error;
+    });
+    const api = new ApplicationsService({
+      store: {
+        getApplication: async () => view,
+        listApplications: async () => ({ items: [view], hasMore: false }),
+      },
+      restrictedPackets: { readCurrentPacketValues: read },
+    } as unknown as ApplicationsServiceDependencies);
+    return { api, read };
+  }
+  it("returns only safe metadata for an exact typed withdrawal and keeps the source immutable", async () => {
+    const { view } = fixture();
+    view.application.status = "approved";
+    view.currentAction = "ready_to_submit";
+    const original = structuredClone(view);
+    const { api } = service(view, new RestrictedPacketValuesWithheldError());
+    const recovery = await api.get(USER_ID, APPLICATION_ID);
+    expect(validate(recovery), JSON.stringify(validate.errors)).toBe(true);
+    expect(recovery).toMatchObject({
+      id: APPLICATION_ID,
+      revision: 2,
+      status: "approved",
+      currentAction: "re_review",
+      packetAvailability: "withheld",
+    });
+    expect(recovery).not.toHaveProperty("currentPacket");
+    expect(recovery).not.toHaveProperty("approval");
+    expect(JSON.stringify(recovery)).not.toMatch(
+      /authorization|candidate@example|packetHash|ciphertext|vaultReference/,
+    );
+    expect(view).toEqual(original);
+    expect((await api.search(USER_ID, {})).items).toEqual([recovery]);
+  });
+  it.each([new RestrictedPacketStoreUnavailableError(), new Error("SyntheticCryptoFailure")])(
+    "keeps operational failures unavailable rather than guessing withdrawal",
+    async (error) => {
+      const { api } = service(fixture().view, error);
+      await expect(api.get(USER_ID, APPLICATION_ID)).rejects.toBeInstanceOf(
+        ApplicationsUnavailableError,
+      );
+      await expect(api.search(USER_ID, {})).rejects.toBeInstanceOf(ApplicationsUnavailableError);
+    },
+  );
+  it("refuses another owner before any protected read", async () => {
+    const { api, read } = service(fixture().view, new RestrictedPacketValuesWithheldError());
+    await expect(api.get(FACT_A, APPLICATION_ID)).rejects.toBeInstanceOf(
+      ApplicationsUnavailableError,
+    );
+    expect(read).not.toHaveBeenCalled();
   });
 });

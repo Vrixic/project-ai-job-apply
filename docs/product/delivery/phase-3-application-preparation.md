@@ -8,7 +8,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 
 | Capability / task IDs | Implemented | Remaining |
 |---|---|---|
-| Facts and saved answers (D3-001, D3-039, D3-055, D3-056, D3-075, D3-076) | Fact grounding, encrypted answer storage, selected-version checks and expiry/correction/quarantine guards are locally verified. | Compatible release, withdrawn-answer recovery (D3-088) and live saved-answer reuse acceptance; D3-087 supplies locally verified selection/review and reuse remains off. |
+| Facts and saved answers (D3-001, D3-039, D3-055, D3-056, D3-075, D3-076) | Fact grounding, encrypted answer storage, selected-version checks and expiry/correction/quarantine guards are locally verified. | Compatible release and live saved-answer reuse acceptance; D3-087 supplies locally verified selection/review and reuse remains off. |
 | Resume import (D3-002, D3-023, D3-024) | Immutable import, normalized resume structure and upload registration are implemented; synthetic scan/parse has development evidence. | Real-resume processing approval and final connected onboarding acceptance. |
 | Resume preparation (D3-003, D3-016, D3-022) | Deterministic tailoring, visible diffs, factuality checks and verified PDF/DOCX rendering are implemented. | Connected native generation/download and candidate output-quality acceptance. |
 | AI generation (D3-004, D3-037, D3-038) | A gated model adapter, grounded output validation and fresh disclosure checks are locally verified. | Provider configuration, real-model evaluation and live generation acceptance. |
@@ -36,14 +36,14 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Native browser materials (D3-083) | Owner-selected separate in-memory Auth0 popup PKCE, direct native resume/cover-letter previews, explicit review integration and approved PDF/DOCX downloads are implemented behind a default-off flag. 35 new auth/transport/UI/header regressions and the synthetic Chromium journey pass. The owner-approved separate SPA registration is configured and saved grant/origin settings are inspected. | Controlled same-owner sign-in, live DNS/TLS/CORS and native/provider/release acceptance remain. |
 | Form extraction limits (D3-084) | Oversized forms/options/question text are rejected instead of hashing or planning from a prefix. All 24 synthetic SDK tests pass, including exact-boundary, overflow and radio-requiredness regressions. | The full repository verifier and synthetic Chromium journey pass; future adapter integration must handle extraction refusal. Provider fixtures and live acceptance remain open. |
 | Shutdown status dependency (D3-085) | Staging status uses exact function inventory rather than treating empty mappings as proof of deployment. Nine synthetic absence/presence/active-trigger/read-failure cases, the full repository verifier and the synthetic connected Chromium journey pass. The corrected read-only operator verifies dormant staging. | AWS access/checks are sequential per the owner. This required shutdown dependency adds no D1 acceptance or D3 provider activation. |
-| Manual extension handoff (D3-086) | Default-off approved-answer handoff, exact application return, per-copy owner/job/approval/expiry/withdrawal checks and fresh sensitive context confirmation are implemented. Local regressions, the full repository verifier and the synthetic CSP/connected Chromium journeys pass. | Focused installed Chrome/Edge, live identity/endpoints and release acceptance. Automated provider integration and withdrawn-answer recovery remain unfinished. [Evidence](evidence/d3-manual-extension-handoff-2026-10-09.md). |
-| Observed-form saved-answer selection (D3-087) | Explicit bounded question capture, exact saved version/context selection, final sensitive review, original expiry and fresh form-confirmed manual Apply are implemented and locally verified. All repository checks, 95 PostgreSQL cases and both synthetic Chromium journeys pass. | Compatible release, installed/live reuse/native/provider acceptance and D3-088 recovery. [Evidence](evidence/d3-observed-form-saved-answer-selection-2026-10-09.md). |
-| Withdrawn-answer recovery (D3-088) | Current value reads correctly refuse stale/corrected/deleted/expired saved references; SQL negative cases pass. | Add an owner-scoped recovery path for reopening, repreparing or reconciling without exposing withheld values. The existing full Application read becomes unavailable, so local negative guards do not prove a recoverable candidate journey. |
+| Manual extension handoff (D3-086) | Default-off approved-answer handoff, exact application return, per-copy owner/job/approval/expiry/withdrawal checks and fresh sensitive context confirmation are implemented. Local regressions, the full repository verifier and the synthetic CSP/connected Chromium journeys pass. | Focused installed Chrome/Edge, live identity/endpoints and release acceptance. Automated provider integration and live acceptance remain unfinished. [Evidence](evidence/d3-manual-extension-handoff-2026-10-09.md). |
+| Observed-form saved-answer selection (D3-087) | Explicit bounded question capture, exact saved version/context selection, final sensitive review, original expiry and fresh form-confirmed manual Apply are implemented and locally verified. All repository checks, 95 PostgreSQL cases and both synthetic Chromium journeys pass. | Compatible release, installed/live reuse/native/provider acceptance. [Evidence](evidence/d3-observed-form-saved-answer-selection-2026-10-09.md). |
+| Withdrawn-answer recovery (D3-088) | Explicit metadata-only recovery is implemented across contract, Applications and web; private value refusal and immutable packet safety remain. Full repository verification, 72 real PostgreSQL cases and three synthetic Chromium journeys pass. | Compatible release and live acceptance remain. [Evidence](evidence/d3-withdrawn-answer-recovery-2026-10-09.md). |
 
 ## Decisions and scope changes
 
-D3-087 is locally verified; live acceptance remains separate. D3-088 records recovery work found
-by the negative-path inspection. See [current evidence](evidence/d3-observed-form-saved-answer-selection-2026-10-09.md).
+D3-087 is locally verified; live acceptance remains separate. D3-088 implements locally verified recovery found
+by the negative-path inspection; see [recovery evidence](evidence/d3-withdrawn-answer-recovery-2026-10-09.md). See [current evidence](evidence/d3-observed-form-saved-answer-selection-2026-10-09.md).
 
 Generated cover letters and tailored resumes must never persist and must expire within 30 minutes (ADR-038).
 Manual Apply is the first acceptance path; Greenhouse is the first automated adapter.
@@ -112,3 +112,11 @@ claimed. D3-088 remains implementation work: preserve withdrawn-value refusal wh
 owner-scoped reopening/repreparation/reconciliation. AWS access stays sequential; staging is
 freshly dormant, development was last verified dormant at 18:40Z with no later mutation,
 Docker/WSL are stopped and the PC stays on. D3 remains In progress; independent D1 acceptance stays deferred.
+
+
+2026-10-09: D3-088 adds explicit metadata-only recovery after saved-answer withdrawal, retaining
+private value refusal, immutable packets and existing attempt fences. Full repository verification,
+72 real PostgreSQL cases and three synthetic Chromium journeys pass. Compatible release/live
+acceptance remain; D3 is In progress and independent D1 acceptance stays deferred. Staging is
+freshly dormant at 21:55Z; development was last verified dormant at 18:40Z with no subsequent
+mutation. Docker/WSL are off and the PC stays on. [PR #615](https://github.com/Vrixic/project-ai-job-apply/pull/615) carries the verified batch; hosted CI is blocked by account billing/spending limits. See the linked recovery evidence.

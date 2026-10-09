@@ -141,6 +141,7 @@ describe("manual application handoff", () => {
     "destination",
     "proof",
     "withdrawn",
+    "withheld",
     "replaced",
     "oversized",
     "cache",
@@ -157,6 +158,12 @@ describe("manual application handoff", () => {
     }
     if (kind === "proof") f.proof.packetHash = "c".repeat(64);
     if (kind === "replaced") final.revision++;
+    if (kind === "withheld") {
+      delete final.currentPacket;
+      delete final.approval;
+      final.packetAvailability = "withheld";
+      final.currentAction = "re_review";
+    }
     let index = 0;
     const values = [f.application, f.job, f.proof, final];
     vi.stubGlobal(

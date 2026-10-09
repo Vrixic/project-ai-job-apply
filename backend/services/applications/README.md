@@ -311,3 +311,14 @@ form observations retain approval invalidation; stale/future/unconfirmed observa
 attempt. Original saved-answer expiry/correction/deletion and material guards remain authoritative.
 Accepted identical requests replay without renewing observation validity. This records manual
 candidate action; it grants no automated employer dispatch or provider-confirmed submission.
+
+
+### Withdrawn selected-answer recovery (2026-10-09)
+
+The owner candidate value reader distinguishes exact stale saved-reference admission from
+operational failures. It continues refusing private values. Applications presents explicit
+metadata-only `packetAvailability: "withheld"`, omitting the packet/approval and replacing a
+ready-to-submit action with re-review. Existing reopening, fresh preparation, reconciliation and
+history remain owner scoped; no immutable evidence or expiry changes. Unrelated unavailable
+reads remain unavailable. This source requires compatible readers before release; see
+[ADR-047](../../../docs/adr/047-withdrawn-answer-application-recovery.md).

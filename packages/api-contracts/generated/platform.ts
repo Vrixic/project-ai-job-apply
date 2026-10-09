@@ -2334,6 +2334,11 @@ export interface components {
             status: components["schemas"]["ApplicationStatus"];
             revision: number;
             currentAction: components["schemas"]["ApplicationCurrentAction"];
+            /**
+             * @description Selected saved-answer bindings are no longer current. Packet and approval are withheld; only metadata is returned for recovery or reconciliation.
+             * @constant
+             */
+            packetAvailability?: "withheld";
             currentPacket?: components["schemas"]["ApplicationPacket"];
             approval?: components["schemas"]["ApplicationApproval"];
             attempts: components["schemas"]["ApplicationAttempt"][];

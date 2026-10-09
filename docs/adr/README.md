@@ -66,3 +66,5 @@ ADRs are immutable historical records after acceptance. A new ADR supersedes an 
 - [ADR-045: Manual approved application handoff](045-manual-approved-application-handoff.md) (proposed; default-off source, installed-extension and live acceptance pending)
 
 - [ADR-046: Observed form and saved-answer selection](046-observed-form-saved-answer-selection.md) (proposed; default-off source, acceptance pending)
+
+- [ADR-047: Withdrawn-answer application recovery](047-withdrawn-answer-application-recovery.md) (proposed; compatible release and acceptance pending)
