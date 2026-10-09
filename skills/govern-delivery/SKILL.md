@@ -41,6 +41,11 @@ Do not rely on a prior summary when evidence can be inspected directly.
 Local verification can complete repository implementation tasks while the overall phase remains in
 progress behind deployed or external gates.
 
+When a batch of tasks is implemented before its tests (see `build-vertical-slice`), record each
+task's evidence as implementation complete with tests deferred to the batch verification pass;
+do not mark a task's testing state proven until that pass actually runs. Infrastructure and AWS
+changes keep their per-change verification evidence as usual.
+
 ## Complete a delivery
 
 A delivery is complete only when:

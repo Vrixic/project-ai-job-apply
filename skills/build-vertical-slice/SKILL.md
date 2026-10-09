@@ -39,6 +39,18 @@ Omit layers that add no value. A folder boundary does not require a new deployme
 For external actions, define timeout, retry, duplicate prevention, cancellation, human takeover,
 confirmation, and provider-isolation behavior.
 
+## Sequence implementation before test
+
+Across a batch of planned tasks, finish implementation (code, wiring, migrations) for every task
+in the batch before writing or running that code's test suite. Once a task compiles, typechecks,
+and lints, move to the next task instead of pausing to build out its tests; run the full test pass
+once across the whole batch at the end rather than per task.
+
+Infrastructure and AWS changes (Terraform, IAM, networking, Lambda deploy config, migration
+images, DNS/TLS) are the exception: verify these as each change is made (plan/apply dry-run,
+policy simulation, migration/image smoke check), because they are costly or unsafe to unwind once
+applied. Treat them as test-as-you-go even while the rest of the batch defers testing.
+
 ## Test by risk
 
 - Unit-test invariants and policy.
