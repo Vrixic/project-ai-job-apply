@@ -143,7 +143,10 @@ resource "aws_cloudwatch_event_target" "native_cleanup" {
   target_id = "bounded-native-cleanup"
   arn       = aws_lambda_function.native_cleanup[0].qualified_arn
   input     = jsonencode({ schemaVersion = 1, action = "drain" })
-  retry_policy { maximum_retry_attempts = 0 }
+  retry_policy {
+    maximum_event_age_in_seconds = 60
+    maximum_retry_attempts       = 0
+  }
 }
 resource "aws_lambda_permission" "native_cleanup" {
   count          = local.native_cleanup_deployed ? 1 : 0

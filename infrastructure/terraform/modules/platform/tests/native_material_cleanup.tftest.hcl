@@ -98,6 +98,10 @@ run "immutable_private_release_stays_disabled" {
     error_message = "Deployment alone must not authorize cleanup or scheduled invocation."
   }
   assert {
+    condition     = aws_cloudwatch_event_target.native_cleanup[0].retry_policy[0].maximum_event_age_in_seconds == 60 && aws_cloudwatch_event_target.native_cleanup[0].retry_policy[0].maximum_retry_attempts == 0
+    error_message = "EventBridge delivery age must satisfy the service minimum while scheduled cleanup retries stay disabled."
+  }
+  assert {
     condition     = aws_cloudwatch_event_target.native_cleanup[0].arn == aws_lambda_function.native_cleanup[0].qualified_arn && aws_lambda_permission.native_cleanup[0].qualifier == aws_lambda_function.native_cleanup[0].version && jsondecode(aws_cloudwatch_event_target.native_cleanup[0].input).action == "drain" && aws_lambda_function.native_cleanup[0].s3_object_version == "synthetic-version"
     error_message = "Invocation must bind numeric artifact and the closed scalar cleanup envelope."
   }
