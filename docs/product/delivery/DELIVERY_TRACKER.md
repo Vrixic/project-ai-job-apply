@@ -65,7 +65,7 @@ The D3-012 engineering review packet now links current evidence; existing develo
 ## Current operating state
 
 Work resumed for D3 on 2026-10-09; D1/D3 are not complete. Independent D1 acceptance remains deferred.
-Staging AWS runtimes are freshly verified off on 2026-10-09. Development was verified off earlier that day, but its SSO token is now missing and the available staging identity is denied development access; fresh development shutdown verification remains incomplete. Retained recovery/storage/security resources incur charges.
+Development SSO access is restored and current shutdown readback confirms dormant runtime capacity on 2026-10-09. Staging was verified off earlier that day, but its separate SSO session is now unavailable; fresh staging shutdown verification remains incomplete. No cloud runtime was started by these browser/form batches. Retained recovery/storage/security resources incur charges.
 Docker/WSL shutdown is recorded in the linked evidence; the PC remains on.
 [Current browser batch and shutdown evidence](evidence/d3-connected-candidate-journey-2026-10-09.md).
 

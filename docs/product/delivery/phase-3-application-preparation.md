@@ -33,8 +33,8 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Connected browser safety (D3-080) | Exact material/hash/deadline guards, explicit generated-material review, boolean sensitive answers, packet-change resets, retry-stable commands, async preparation/scalar-location BFF routes and immediate confirmed-history refresh are locally verified. | Saved-answer selection, native identity/CORS activation and live acceptance remain; D3-083 supplies locally tested native browser source. |
 | Cover-letter request/status UI (D3-081) | Default-off versioned disclosure opt-in, explicit asynchronous requests, retry-stable admission, bounded status polling, current-packet checks and latest-revision cancellation are locally verified, including the full repository verifier and synthetic Chromium checks. Preview availability binds every material-reference scalar, including later versions of the same generation. | Live native preview/download, generation and cleanup acceptance remain open; browser source is tracked in D3-083. |
 | Form-plan safety (D3-082) | Conflicting control claims and duplicate normalized options fail closed; challenges produce no fill/attach actions; restricted fields always require candidate action under the adopted D3-013 threshold. All 20 synthetic SDK tests, the synthetic connected Chromium journey and the full repository verifier pass. | Provider fixtures, first adapter integration and live acceptance remain open. |
-
 | Native browser materials (D3-083) | Owner-selected separate in-memory Auth0 popup PKCE, direct native resume/cover-letter previews, explicit review integration and approved PDF/DOCX downloads are implemented behind a default-off flag. 35 new auth/transport/UI/header regressions and the synthetic Chromium journey pass. The owner-approved separate SPA registration is configured and saved grant/origin settings are inspected. | Controlled same-owner sign-in, live DNS/TLS/CORS and native/provider/release acceptance remain. |
+| Form extraction limits (D3-084) | Oversized forms/options/question text are rejected instead of hashing or planning from a prefix. All 24 synthetic SDK tests pass, including exact-boundary, overflow and radio-requiredness regressions. | The full repository verifier and synthetic Chromium journey pass; future adapter integration must handle extraction refusal. Provider fixtures and live acceptance remain open. |
 
 ## Decisions and scope changes
 
@@ -83,3 +83,8 @@ repurposing Default App. The saved separate SPA has Authorization Code only, the
 HTTPS candidate origin and one user-delegated platform scope, `applications:read`; machine and
 anonymous platform access remain zero. This is configuration evidence, not live sign-in or
 native acceptance. Public identifiers are held only in ignored local configuration; UI stays off.
+
+2026-10-09: D3-084 rejects incomplete form extraction; 24 SDK tests, the full repository verifier
+and the synthetic connected Chromium journey pass. Development SSO is restored and dormant
+runtime readback is verified; staging fresh verification now lacks its separate SSO session.
+D3 remains In progress; no provider/native release or independent D1 acceptance is claimed.
