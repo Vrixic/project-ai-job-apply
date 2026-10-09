@@ -89,3 +89,12 @@ It defaults to null. Obtain the ARN from platform `restricted_packet_key_binding
 provisioning; keep it aligned with the original Gateway release. This does not grant other
 principals MAC operations or activate packet protection/native reads. See the
 [Gateway composition](../modules/platform/README.md#gateway-native-material-release).
+
+
+Deployment policy composition combines identical unconditional stack-management and boundary-read
+grants across retained native releases. Resume role-creation conditions remain separate from the
+general workload role condition. The deployment managed policy itself enforces the size limit.
+Preparation omits a duplicate starter queue-key decrypt statement only when its platform
+configuration-key grant already covers the same key and principal. A distinct queue key retains
+its original grant. Development fixtures include both download routes and all native families;
+passing shorter staging fixtures alone is insufficient evidence that deployment policies fit.

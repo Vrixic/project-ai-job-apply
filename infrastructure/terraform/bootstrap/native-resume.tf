@@ -29,17 +29,19 @@ locals {
     task      = "arn:aws:ecs:us-east-2:${data.aws_caller_identity.current.account_id}:task-definition/ai-job-apply-${var.environment}-native-resume:${revision}"
     roles     = [for kind in ["task", "execution"] : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-${var.environment}-native-resume-r${revision}-${kind}"]
   } }
+  # Coalesce only identical unconditional grants. Original role creation conditions stay
+  # separate; adding resume ceilings to the general role-creation list would broaden access.
+  native_resume_boundary_arns = flatten([for release in local.native_resume_controls : [
+    for kind in ["control", "observer", "durable"] : replace(release.boundary, "resume-control-", "resume-${kind}-")
+  ]])
+  native_deploy_stack_arns = concat(local.preparation_stack_arns, [
+    for revision in keys(local.native_resume_controls) : "arn:aws:cloudformation:us-east-2:${data.aws_caller_identity.current.account_id}:stack/ai-job-apply-${var.environment}-resume-durable-r${revision}/*"
+  ])
   native_resume_deploy_statements = flatten([for revision, release in local.native_resume_controls : [
     { Sid       = "CreateOriginalResumeRoles${revision}", Effect = "Allow", Action = ["iam:CreateRole"],
       Resource  = [for kind in ["control", "observer", "durable"] : replace(release.principal, "resume-control-", "resume-${kind}-")],
       Condition = { StringEquals = { "iam:PermissionsBoundary" = [for kind in ["control", "observer", "durable"] : replace(release.boundary, "resume-control-", "resume-${kind}-")] } }
-    },
-    { Sid      = "ReadOriginalResumeBoundaries${revision}", Effect = "Allow", Action = ["iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions"],
-      Resource = [for kind in ["control", "observer", "durable"] : replace(release.boundary, "resume-control-", "resume-${kind}-")]
-    },
-    { Sid    = "ManageOriginalResumeDurable${revision}", Effect = "Allow",
-      Action = ["cloudformation:CreateStack", "cloudformation:DeleteStack", "cloudformation:DescribeStackEvents", "cloudformation:DescribeStackResource", "cloudformation:DescribeStackResources", "cloudformation:DescribeStacks", "cloudformation:GetTemplate", "cloudformation:ListStackResources", "cloudformation:UpdateStack"],
-    Resource = "arn:aws:cloudformation:us-east-2:${data.aws_caller_identity.current.account_id}:stack/ai-job-apply-${var.environment}-resume-durable-r${revision}/*" }
+    }
   ]])
 }
 resource "aws_iam_policy" "native_resume_control_boundary" {

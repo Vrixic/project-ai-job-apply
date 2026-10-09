@@ -2951,3 +2951,12 @@ release maps. Gateway and NativePreparation artifacts at `c386a4c5` are publishe
 verified alongside NativeResume and NativeMaterialCleanup (fourteen native artifacts/fifty-six
 companions). [Shutdown compatibility evidence](evidence/d3-native-application-disposal-2026-10-07.md#native-release-shutdown-compatibility-2026-10-09).
 D1/D3 remain In progress; no runtime deployment or activation, development dormant and PC on.
+
+
+2026-10-09 dormant foundation deployment is verified at platform state 473: Gateway 88,
+disabled resume RPC versions 2, retained packet keys, exact recovery archive and zero drift.
+The next bootstrap plan exposed an IAM size limit; permission-preserving consolidation passes
+24 mock cases and a fresh IAM-only plan, which remains unapplied.
+[Foundation and policy-sizing evidence](evidence/d3-native-application-disposal-2026-10-07.md#dormant-foundation-and-bootstrap-policy-sizing-2026-10-09).
+D1/D3 remain In progress. AWS access works; development runtimes are off with fifteen encrypted
+recovery snapshots, Docker/WSL stopped, PC on and CI/CD deferred.

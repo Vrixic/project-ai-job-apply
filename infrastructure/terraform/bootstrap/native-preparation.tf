@@ -74,9 +74,15 @@ resource "aws_iam_policy" "native_preparation_boundary" {
     ] : merge(s, { Condition = { ArnEquals = { "aws:PrincipalArn" = [local.preparation_actors["${each.key}/activity"].principal] } } })],
     [for s in [
       { Sid = "OriginalWorkflow", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = "${local.preparation_actors["${each.key}/durable"].function}:*" },
-      { Sid = "OriginalQueue", Effect = "Allow", Action = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"], Resource = each.value.queue_arn },
-      { Sid = "ReadQueue", Effect = "Allow", Action = ["kms:Decrypt"], Resource = each.value.queue_kms_key_arn }
+      { Sid = "OriginalQueue", Effect = "Allow", Action = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"], Resource = each.value.queue_arn }
     ] : merge(s, { Condition = { ArnEquals = { "aws:PrincipalArn" = [local.preparation_actors["${each.key}/starter"].principal] } } })],
+    # Configuration already grants this principal Decrypt on the platform key.
+    # Retain the separate queue-key grant only when it names a different key.
+    each.value.queue_kms_key_arn == each.value.platform_kms_key_arn ? [] : [
+      { Sid       = "ReadQueue", Effect = "Allow", Action = ["kms:Decrypt"], Resource = each.value.queue_kms_key_arn,
+        Condition = { ArnEquals = { "aws:PrincipalArn" = [local.preparation_actors["${each.key}/starter"].principal] } }
+      }
+    ],
     [for s in [
       { Sid = "OriginalExecutionMetadata", Effect = "Allow", Action = ["lambda:GetDurableExecution"], Resource = "${local.preparation_actors["${each.key}/durable"].function}:*/durable-execution/*" },
       { Sid = "RetainFailure", Effect = "Allow", Action = ["sqs:SendMessage"], Resource = each.value.dead_letter_arn },
