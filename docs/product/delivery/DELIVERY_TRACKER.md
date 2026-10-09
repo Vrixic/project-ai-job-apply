@@ -1,5 +1,13 @@
 # Delivery Tracker
 
+2026-10-08 D3-077 begins the explicit historical receipt transition: a private default-off cipher
+protects the original digest and returns only match/no-match under its original context/key.
+Full verification passes: 38 typechecks, 39 test tasks, 23 builds and complete emitted isolation.
+[Evidence](evidence/d3-legacy-receipt-transition-2026-10-08.md). Proposed ADR-043 defines atomic
+transfer, original replay, collision prevention and privacy/restore requirements. SQL/store/runtime
+wiring remains unfinished; no cloud mutation or activation. D1/D3 stay In progress, development
+remains dormant at state 456, Docker/WSL stopped, PC on and hosted CI/CD deferred.
+
 2026-10-08 managed revision-63 diagnostics establish a legacy blocker: seven create-packet
 receipts, seven packets, one packet with approval, and zero counted restricted values, protected
 markers or ambiguous attempts. Applications remains at three applied migrations after rollback;

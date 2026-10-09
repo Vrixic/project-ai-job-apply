@@ -1188,3 +1188,11 @@ An explicit receipt-compatible transition and complete field-shape proof remain 
 Mandatory shutdown completes at state 456: both databases absent, twelve encrypted snapshots,
 289 other identities preserved, zero drift and verified recovery archive. D1/D3 stay In progress;
 staging SSO is unavailable, retained costs remain, Docker/WSL stopped, PC on and CI/CD deferred.
+
+2026-10-08 D3-077 begins the explicit historical receipt transition: a private default-off cipher
+protects the original digest and returns only match/no-match under its original context/key.
+Full verification passes: 38 typechecks, 39 test tasks, 23 builds and complete emitted isolation.
+[Evidence](evidence/d3-legacy-receipt-transition-2026-10-08.md). Proposed ADR-043 defines atomic
+transfer, original replay, collision prevention and privacy/restore requirements. SQL/store/runtime
+wiring remains unfinished; no cloud mutation or activation. D1/D3 stay In progress, development
+remains dormant at state 456, Docker/WSL stopped, PC on and hosted CI/CD deferred.

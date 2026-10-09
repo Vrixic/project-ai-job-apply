@@ -58,3 +58,5 @@ ADRs are immutable historical records after acceptance. A new ADR supersedes an 
 - [ADR-041: Restricted packet values and keyed replay](041-restricted-packet-values-and-keyed-replay.md) (proposed; private source work, storage and activation gates unfinished)
 
 - [ADR-042: Data-preserving development dormancy](042-data-preserving-development-dormancy.md) (owner-authorized prelaunch shutdown; see deployed evidence)
+
+- [ADR-043: Protected legacy application receipts](043-protected-legacy-application-receipts.md) (proposed; local protection component, atomic transition and replay wiring pending)
