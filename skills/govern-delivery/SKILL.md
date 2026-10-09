@@ -48,6 +48,10 @@ changes keep their per-change verification evidence as usual.
 
 ## Complete a delivery
 
+Schedule hosted admin acceptance only after the phase is fully implemented and relevant automated
+checks pass. Pending hosted admin acceptance does not block independent implementation work;
+it remains a required phase-completion gate.
+
 A delivery is complete only when:
 
 - Every exit criterion has linked, inspected evidence.
