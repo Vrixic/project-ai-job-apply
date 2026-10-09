@@ -2033,3 +2033,29 @@ enabled rules/mappings, public API routes, live NAT/interface endpoints and non-
 All fifteen recovery snapshots are available and encrypted. Retained snapshots, object/image/log
 storage, monitoring, keys, secrets and DNS still incur charges. Docker and WSL are stopped;
 the PC remains on. Browser automation is unavailable, and no live sign-in session was started.
+
+### Owner-requested stopping point — 2026-10-09
+
+The owner requested a stopping point with ready work merged and unfinished work discarded.
+The tested native-session implementation is merged in PR #599 (`2fb6e6b7`); implementation-first
+batch sequencing is merged in PR #600. No further connected test or runtime activation was started.
+
+The unpublished current-source migration image build was deliberately cancelled before its first
+build completed. No publication receipt, image scan acceptance, migration execution or deployment
+is claimed for that attempt. The prior verified `f8cc7de8` image and its receipt remain retained;
+future execution still requires the operator's current-source compatibility checks. The eight-endpoint
+plan and restore/activation drafts were never applied and are discarded as executable preparations.
+
+An audit of all 71 registered worktrees found only one dirty tree: 158 uncommitted deletions in
+`ai-job-apply-d1-source-pause-runtime`. Those deletions were discarded by restoring tracked files.
+Historical committed branches and recovery evidence are preserved. Six unvalidated Dependabot
+proposals (#569, #443, #442, #441, #398 and #2) were closed under the cleanup request; CI/CD remains
+deferred. No authored implementation PR was left open.
+
+Independent development AWS readback at **2026-10-09T14:13:56Z** confirms zero database instances,
+enabled rules/mappings, public API routes, live NAT/interface endpoints and non-stopped ECS tasks.
+All fifteen manual recovery snapshots are available and encrypted. Docker Desktop is stopped and
+WSL reports no running distributions. The PC remains on. Retained snapshots, object/image/log
+storage, monitoring, keys, secrets and DNS still incur charges. Staging was not newly verified;
+its separate SSO access gap remains recorded. D1/D3 remain In progress with connected acceptance
+and the previously recorded launch gates unfinished; work is paused at the owner's request.
