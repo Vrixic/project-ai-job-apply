@@ -1571,3 +1571,37 @@ provisioning, live transition/replay acceptance and mandatory data-preserving sh
 AWS CLI recheck still reports expired SSO credentials; no cloud mutation occurred. Local Docker
 and WSL are confirmed stopped. Earlier cloud evidence remains historical, not a fresh shutdown
 claim; retained recovery/security/storage/DNS costs remain. D1/D3 stay In progress.
+
+## Reproducible maintenance image verification (2026-10-09)
+
+PR #587 merged as `09020dbd1d48455b038b50189e45dc9740246414`. The maintained publisher's
+`LocalBuild` action completed successfully from that clean merged source. Both independent,
+uncached Linux/AMD64 OCI builds have identical index, platform, configuration and layer identities;
+the hardened runtime inventory smoke passed for all 79 migrations and 96 relations. Dependency
+audit passed without exceptions. This local action did not publish an image, run an ECR
+vulnerability scan, contact AWS, change Terraform or execute a managed migration.
+
+- Index: `sha256:73fabbd93efef127c1993d81eb125b305117a3e17f64994fa433ff3eb2b2c4ef`.
+- Platform: `sha256:d4034a3c7eac8cd11798684e0b67173837d212251a56b912e8dadc4eb49bcef1`.
+- Configuration: `sha256:eeee0aaefe5ac76a0bffb64b817530541a8b734b4dd25120f9e1d86577b875d9`.
+
+The actual loaded image additionally passed three compiled maintenance-command refusals:
+missing enable flag, explicit false, and enabled with invalid configuration. Each exited one
+with only the fixed sanitized failure JSON, under network-none, read-only, non-root,
+all-capabilities-dropped and no-new-privileges restrictions. OCI manifest/configuration checksums
+and the source revision label were checked before launching the immutable local image identity.
+Private logs: `.tmp/legacy-maintenance-local-image.log` and
+`.tmp/legacy-maintenance-image-refusals.log`. These checks establish packaging and safe refusal,
+not successful managed transition or live KMS/replay acceptance.
+
+Docker Desktop stopped successfully and `wsl --shutdown` completed; no running WSL distribution
+or Docker Desktop/backend process remained. The PC remains on. Fresh AWS identity rechecks still
+fail with expired SSO credentials. No cloud mutation occurred. The last successful development
+shutdown observation remains 2026-10-09T03:52:08Z (no databases/active runtimes; twelve encrypted
+recovery snapshots), not a current-state attestation. Retained recovery, storage, security and
+DNS resources may still incur charges.
+
+Next: restore AWS access, verify shutdown, publish and scan the immutable image, then provision
+the exact managed maintenance key/task and perform live transition/replay acceptance with the
+mandatory snapshot-backed shutdown afterward. D1/D3 remain In progress; accepted human checks
+and the hosted CI/CD deferral are unchanged.
