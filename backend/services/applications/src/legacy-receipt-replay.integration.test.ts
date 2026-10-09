@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { DecryptCommand, EncryptCommand } from "@aws-sdk/client-kms";
@@ -88,11 +87,6 @@ describe.skipIf(!url)("protected legacy receipt archive and store replay", () =>
       await execute(process.execPath, [fileURLToPath(new URL(target, import.meta.url))], {
         env: { ...inherited, NODE_ENV: "test", DATABASE_URL: url },
       });
-    const ddl = await readFile(
-      new URL("../transitions/0001_legacy_receipt_archive.sql", import.meta.url),
-      "utf8",
-    );
-    await sql.begin((tx) => tx.unsafe(ddl));
   }, 60_000);
   afterAll(async () => {
     for (const record of encrypted.values()) record.digest.fill(0);

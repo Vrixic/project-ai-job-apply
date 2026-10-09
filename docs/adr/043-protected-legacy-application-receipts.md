@@ -1,6 +1,6 @@
 # ADR-043: Protected legacy application receipts
 
-Status: Proposed; protection and opt-in archive/replay implemented locally, atomic transition/runtime pending
+Status: Proposed; atomic transition and archive/replay verified locally, managed operator/runtime pending
 Date: 2026-10-08
 
 ## Context
@@ -44,8 +44,8 @@ The proposed atomic transition must:
    request digest. Apply the unchanged migrations and install the complete paired boundary in one
    transaction. Preserve every packet, approval, attempt, original response revision, outcome,
    subject and timestamp. Any failure restores the original rows and schema through rollback.
-   Immutable migration bytes/checksums remain unchanged; explicit versioned transition SQL and
-   forward migration/manifest integration are required before this operation exists.
+   Existing migration bytes/checksums remain unchanged. Forward migration 0015 installs the
+   final archive boundary and records its checksum in the canonical restore manifest.
 4. Keep `(owner, idempotency key)` unique through the existing receipt primary key. Every command path must
    detect an archived operation mismatch, and database enforcement must prevent a new command
    from occupying an archived key, including concurrent commands for different applications.
@@ -65,17 +65,36 @@ ciphertext substitution, explicit historical keys, read-only/default-off behavio
 inputs, error redaction, buffer clearing, deadline admission and authority withdrawal. This is
 not live KMS, SQL transition, runtime replay or release approval evidence.
 
-The opt-in `transitions/0001_legacy_receipt_archive.sql` now defines paired immutable marker/archive
-constraints and candidate-authorized deletion. Eleven PostgreSQL 16.6 cases exercise synthetic
-archives after the current fourteen migrations: exact create-packet replay retains packet and
-approval evidence, conflicting/concurrent commands fail, incomplete pairs roll back, decryption
-holds no SQL locks, quarantine withdraws authority and deletion removes only its candidate's data.
-The default-off store reader admits opaque process-local proofs and rechecks ownership/binding
-under the command transaction. KMS transport is simulated. This does not transfer old rows.
+Forward migration `0015_legacy_receipt_archive.sql` now installs the paired immutable archive,
+candidate-authorized deletion and owner/key reservation. The ordinary driver verifies its guards;
+it still refuses legacy receipts at unchanged 0009. The restore boundary is 79 migrations and 96
+relations across the same twelve schemas. Eleven PostgreSQL archive/replay cases pass through the
+actual current driver, including authorized exact-owner deletion and quarantine refusal.
 
-Atomic transfer from the actual three-ledger legacy shape, migration-driver/forward-migration
-integration, positive queue-preparation replay, restore manifests/equality and production IAM/key
-composition remain unfinished. The canonical migration and restore manifests are unchanged.
+The separate default-off `transitionLegacyReceipts` capability admits original checksum-matched
+three-through-eight-migration ledgers, a bounded owning inventory and active candidates. It prepares
+and round-trip-checks ciphertext outside SQL locks, then takes the migration advisory lock and
+exclusive owning-table locks, rechecks exact rows/schema/functions and active ownership, and moves
+the original receipt table into a transaction-private, PUBLIC-revoked staging schema. A replacement
+table copies original constraints/indexes/defaults and reinstalls the exact owning FK and immutable/
+privacy guards. Ordinary receipts retain their original rows. The unchanged migrations then run,
+followed by encrypted legacy markers/archive insertion. Original metadata and all pre-existing
+application/packet/approval/attempt/history/outbox columns must match exactly. New migration columns
+use their declared defaults. Pair constraints are forced before dropping the old table and staging
+schema with RESTRICT. Unexpected dependencies abort the whole transaction; no CASCADE or disabled
+trigger is used. Original plaintext digests never remain in the committed current schema, but old
+backups/WAL remain subject to existing retention and access controls.
+
+Eight PostgreSQL transition cases cover seven receipts and one approved packet from the actual
+three-ledger shape, original create-packet replay, an eight-ledger queue-preparation identity,
+failed crypto, authority withdrawal, concurrent inventory changes, full restricted-plaintext
+rollback and rollback on an unexpected dependent view. KMS transport is simulated. A real local
+dump/restore matches all 96 relation row sets exactly, including eight archived receipts.
+
+A managed maintenance operator with verified drain/backup authority, immutable release packaging,
+explicit KMS IAM/key composition, complete queue-preparation store acceptance and actual managed
+acceptance remain. The capability has no CLI/environment activation or public package export;
+calling it is not proof that its managed prerequisites hold. D1/D3 remain In progress.
 No live data transition or saved-answer reuse activation is authorized by this proposal.
 
 ## Alternatives

@@ -10,14 +10,18 @@ terminal, and no recruiter, interview, offer, or rejection result is stored or m
 The private `legacy-receipt-cipher.ts` component protects an original legacy request digest under
 a separate KMS purpose and returns only match/no-match for replay. It is default-off, supports
 explicit original encryption keys, and keeps replay-only composition unable to encrypt. It has
-no migration authority or production wiring. The opt-in archive SQL and default-off store reader
-now preserve owner/key reservation through a paired immutable receipt marker, recheck active
-ownership around decryption and admit exact create-packet replay without new effects. Eleven
-PostgreSQL cases cover replay, conflicts, rollback, quarantine and authorized owner deletion;
-KMS transport is simulated. The atomic old-row transfer, migration/restore integration, positive
-queue-preparation replay and production composition remain required; see
-[proposed ADR-043](../../../docs/adr/043-protected-legacy-application-receipts.md). Original packets,
-approvals and immutable migration bytes remain unchanged.
+no production wiring. Forward migration `0015_legacy_receipt_archive` installs the empty archive
+boundary; the ordinary driver still refuses historical receipts at unchanged `0009`. The explicit,
+default-off `transitionLegacyReceipts` capability prepares ciphertext outside SQL locks, rechecks
+the exact historical inventory, replaces the receipt table atomically, and preserves original packet,
+approval and receipt metadata. It does not disable immutable triggers. Unknown dependencies or any
+failed check roll back the entire schema/data transition.
+
+Eight historical-transition and eleven archive/replay PostgreSQL cases pass with simulated KMS.
+A real local dump/restore matches all 96 relation row sets across 79 migrations, including populated
+archives. The managed operator, drain/backup checks, release/key composition and full queue-preparation
+store acceptance remain; see [proposed ADR-043](../../../docs/adr/043-protected-legacy-application-receipts.md).
+There is no automatic historical transfer or production activation.
 
 When migration `0009` refuses legacy evidence, the driver rolls back before opening a separate
 repeatable-read, read-only diagnostic transaction. One aggregate log reports migration/packet

@@ -104,3 +104,54 @@ and security guards, emitted bundle isolation, Compose and scope checks. Workflo
 passed and 123 opt-in database skips. Lint baseline is unchanged at 15 warnings/58 informational
 notes. Private log: `.tmp/legacy-receipt-archive-full-verification.log`. Targeted Biome checks,
 local documentation link targets and whitespace checks also pass.
+
+## Atomic historical transition and canonical forward migration
+
+The next connected batch promotes the opt-in schema into immutable forward migration
+`0015_legacy_receipt_archive.sql`; the earlier transition-file location is historical. The actual
+migration driver verifies the archive relation, five enabled guards, deferred pairing, two owning
+FKs and authorized deletion body. The canonical restore manifest and image-publisher checks now
+require 79 migrations and 96 relations across twelve schemas. Existing migration bytes/checksums
+remain unchanged. Fifty manifest/restore unit cases pass, retaining historical manifest fixtures.
+
+`legacy-receipt-transition.ts` provides an explicit default-off maintenance capability, outside the
+normal migration driver. It admits checksum-matched three-through-eight Applications ledgers,
+1000 or fewer legacy receipts, no more than 10000 rows per owning relation, active owners and the
+supported table boundary. It snapshots exact owning row fingerprints, columns, constraints,
+triggers and functions. Original digests are encrypted and round-trip checked outside SQL locks.
+The final transaction takes the ordinary migration advisory lock and exclusive table locks, then
+rechecks inventory and ownership. It moves the original receipt table to a revoked staging schema,
+constructs the replacement with original constraints/indexes/defaults and owning guards, copies
+ordinary receipts, runs the unchanged migrations, and inserts the encrypted legacy representation.
+
+Before commit it compares every original application/packet/approval/attempt/history/outbox column,
+ordinary receipt row, and protected receipt metadata in both directions. New columns use migration
+defaults. Deferred pairs must validate. Old table/staging removal uses RESTRICT, never CASCADE;
+no immutable trigger is disabled. Missing authority, crypto failure, drift, invalid packet values or
+unexpected dependencies roll back all schema and data changes. SQL errors are redacted to one fixed
+failure. No original digest or candidate value is returned or logged. Existing backup/WAL retention
+still applies to historical plaintext; this is not a retroactive backup rewrite.
+
+Eight real PostgreSQL 16.6 cases pass: seven historical receipts plus one approved packet from the
+three-ledger schema, preserved original create-packet replay, original queue-preparation identity
+from the eight-ledger schema, failed encryption, authority withdrawal, concurrent receipt insertion
+with no crypto-held SQL locks, restricted-plaintext rollback, and late dependency rollback from an
+unexpected view, and refusal of unknown receipt metadata. The fixture initially needed its circular application/packet insertion wrapped in
+one transaction, a valid historical status, and comparison that accounts for newly defaulted columns;
+those fixture errors were fixed without weakening production guards. Private log:
+`.tmp/legacy-receipt-transition-sql.log`.
+
+All eleven archive/replay cases also pass through the actual current compiled migration driver;
+private log `.tmp/legacy-transition-forward-sql.log`. KMS transport is simulated in both suites.
+All seven actual service migration drivers pass on the populated synthetic database. PostgreSQL
+`pg_dump`/`pg_restore` into a distinct database succeeds; the real aggregate verifier accepts both
+79-migration/96-relation boundaries and all 96 complete relation row sets match exactly, including
+eight archive rows. Private evidence: `.tmp/legacy-transition-restore.log`. This is local logical
+restore evidence, not an AWS snapshot or live KMS test.
+
+Remaining: managed maintenance command/operator with verified drain and recovery prerequisites,
+exact immutable image/release packaging, IAM/key composition for transition and runtime replay,
+full queue-preparation store acceptance, candidate-deletion recovery acceptance and live managed
+transition. The ordinary migration path does not activate this capability or bypass 0009. D1/D3
+remain In progress. No cloud runtime or candidate data changed. The owned temporary container was
+removed and Docker/WSL stopped; PC stays on and hosted CI/CD remains deferred.
