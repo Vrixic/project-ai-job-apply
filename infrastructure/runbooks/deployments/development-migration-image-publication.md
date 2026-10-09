@@ -6,8 +6,9 @@ apply Terraform, register a task definition, execute a migration, or change appl
 
 ## Boundary
 
-- Work from clean `main` exactly equal to `origin/main`, and pass that 40-character commit as
-  `SourceSha`.
+- Work from clean `main` exactly equal to `origin/main`. LocalBuild and Publish require that exact
+  40-character commit as `SourceSha`. Read-only Verify also accepts an exact ancestor merged into
+  current main, so later evidence commits do not require rebuilding an already published image.
 - Use Terraform `1.16.2`, Docker Buildx, and temporary IAM Identity Center credentials for the exact
   development account in `us-east-2`.
 - Resolve `ai-job-apply/migration` and its customer-managed KMS key from the encrypted development
@@ -115,13 +116,16 @@ SHA-256 out of band, and run:
 ```
 
 `Verify` rehashes the exact receipt, revalidates its environment and source bindings, resolves the
-exact digest and manifest again, and repeats the completed zero-High/zero-Critical scan check. Pass
+exact digest and manifest again, and repeats the completed zero-High/zero-Critical scan check.
+Historical source verification attests the original image; it does not certify its compatibility
+with newer deployment source. Deployment-specific source and schema gates still apply. Pass
 only the verified digest URI to the separately reviewed migration task-definition plan. Do not use
 the source tag in Terraform and do not run a migration merely because publication succeeded.
 
 ## Local source verification
 
-The guard suite is pure and makes no AWS or Docker calls:
+The guard suite makes no AWS or Docker calls. Its source checks use a disposable local Git
+repository to exercise current/ancestor commits and checkout cleanliness:
 
 ```powershell
 powershell.exe -NoProfile -File scripts/tests/development-migration-image-publisher.tests.ps1

@@ -1658,3 +1658,25 @@ incur charges. Docker and WSL are stopped; the PC stays on. Staging verification
 without its separate SSO token. D1/D3 remain In progress: managed Gateway replay, full migration/
 privacy reconciliation and native/client/ATS/accountable acceptance are not closed by this result.
 Accepted manual checks are not reopened; hosted CI/CD remains deferred until launch.
+
+
+## Historical migration-image verification (2026-10-09)
+
+Recording delivery evidence advanced main after the accepted image was published. The publisher's
+read-only Verify action consequently rejected that original source before checking its receipt.
+Verify now accepts an exact commit merged into the current clean main checkout. LocalBuild and
+Publish still require the exact current main source; receipt, immutable image and scan checks
+remain unchanged. This attests the historical image, not compatibility with newer deployment code.
+
+Fifteen real-Git checks pass on PowerShell 7 and Windows PowerShell 5, covering current and ancestor
+sources, missing/unmerged commits, dirty/untracked files, stale upstream, non-main and detached
+checkouts. The publisher suites and 194 packaging cases also pass on both hosts. Full maintained
+verification passes: 38 typecheck tasks, 39 test tasks, 23 builds, operational/security guards,
+bundle isolation and Compose validation. Lint retains zero errors and the existing fifteen warnings.
+Independent AWS Verify against the retained publication remains pending.
+
+AWS access is restored. Read-only observation at 2026-10-09T11:52:06Z confirms no development
+databases, enabled rules/mappings, API routes, non-stopped ECS tasks, NAT gateways or interface
+endpoints. Fifteen encrypted manual recovery snapshots are available. No cloud mutation occurred;
+retained recovery/storage/security/DNS costs remain. Docker and WSL are stopped; the PC stays on.
+D1/D3 remain In progress; this operator repair does not close managed journey acceptance.

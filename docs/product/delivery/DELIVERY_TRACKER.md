@@ -1,5 +1,11 @@
 # Delivery Tracker
 
+2026-10-09 D1-013 repairs read-only migration-image verification after main advances: exact
+merged ancestor sources remain verifiable against their original receipt and immutable image.
+Build/publication still require current clean main, and deployment compatibility remains separate.
+[Historical image verification evidence](evidence/d3-native-application-disposal-2026-10-07.md#historical-migration-image-verification-2026-10-09).
+D1/D3 remain In progress; development remains dormant, Docker/WSL stopped and PC on.
+
 2026-10-09 the published and independently verified `444c9346` image passes live legacy receipt
 maintenance: seven receipts archived with real KMS and twelve Applications migrations applied,
 through 0015. Gateway replay remains off and unaccepted. Mandatory snapshot-backed shutdown is
