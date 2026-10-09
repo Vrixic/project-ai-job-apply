@@ -12,6 +12,7 @@ import { createLegacyReceiptKmsCipher } from "./legacy-receipt-cipher.js";
 import { createLegacyReceiptReplay } from "./legacy-receipt-replay.js";
 import { transitionLegacyReceipts } from "./legacy-receipt-transition.js";
 import { assemblePacket } from "./packet.js";
+import type { PreparationRequest } from "./preparation.js";
 import { createIntegrationApplicationStore } from "./restricted-packet-integration-support.js";
 import { definitions, HASH_A, proposal } from "./test-support.js";
 
@@ -193,7 +194,14 @@ describe.skipIf(!url)("atomic historical receipt transition", () => {
   it("transfers seven original receipts from the three-migration schema and preserves approved replay", async () => {
     const fixture = await historical();
     const before = await snapshot();
-    expect(await transitionLegacyReceipts(sql, { enabled: () => true, cipher })).toEqual({
+    expect(
+      await transitionLegacyReceipts(sql, {
+        enabled: () => true,
+        cipher,
+        expectedAppliedMigrations: 3,
+        expectedLegacyReceipts: 7,
+      }),
+    ).toEqual({
       archivedReceipts: 7,
       appliedMigrations: 12,
     });
@@ -228,6 +236,31 @@ describe.skipIf(!url)("atomic historical receipt transition", () => {
     expect(replay.replayed).toBe(true);
     expect(replay.view.approval).not.toBeNull();
     expect(await snapshot()).toEqual(after);
+  });
+  it.each([
+    { expectedAppliedMigrations: 4, expectedLegacyReceipts: 7 },
+    { expectedAppliedMigrations: 3, expectedLegacyReceipts: 8 },
+    { expectedAppliedMigrations: 3, expectedLegacyReceipts: 0 },
+    { expectedAppliedMigrations: Number.NaN, expectedLegacyReceipts: 7 },
+  ])("refuses mismatched maintenance inventory before encryption: %j", async (expected) => {
+    await historical();
+    const before = await snapshot();
+    let encryptCalls = 0;
+    await expect(
+      transitionLegacyReceipts(sql, {
+        enabled: () => true,
+        ...expected,
+        cipher: {
+          encrypt: async (...args) => {
+            encryptCalls++;
+            return cipher.encrypt(...args);
+          },
+          matches: cipher.matches,
+        },
+      }),
+    ).rejects.toThrow("LegacyReceiptTransitionUnavailable");
+    expect(encryptCalls).toBe(0);
+    expect(await snapshot()).toEqual(before);
   });
   it("rolls back table replacement, all pending migrations and plaintext restrictions together", async () => {
     await historical(3, true);
@@ -302,6 +335,77 @@ describe.skipIf(!url)("atomic historical receipt transition", () => {
     await expect(
       reader.assert(sql, proof, fixture.owner, key, "queue_preparation"),
     ).resolves.toMatchObject({ applicationId: fixture.first.applicationId });
+  });
+  it("replays original queued preparation through the store without new packets or events", async () => {
+    const fixture = await historical(8);
+    const original = fixture.commands[1];
+    if (!original) throw Error("MissingSyntheticCommand");
+    const preparationId = uuidv7();
+    const idempotencyKey = uuidv7();
+    const request = {
+      expectedRevision: 1,
+      coverLetter: { disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true } },
+    } satisfies PreparationRequest;
+    const requestHash = canonicalHash({
+      operation: "queue_preparation",
+      applicationId: original.applicationId,
+      request,
+    });
+    const [packet] =
+      await sql`SELECT current_packet_id FROM applications.applications WHERE id=${original.applicationId}`;
+    await sql`INSERT INTO applications.packet_preparations
+      (id,application_id,owner_user_id,base_packet_id,expected_revision,job_context_hash,confirmed_facts_hash,
+       notice_version,approved_at,expires_at,created_at,updated_at)
+      VALUES (${preparationId},${original.applicationId},${fixture.owner},${packet?.current_packet_id},2,
+        ${HASH_A},${HASH_A},'openai-cover-letter.v1',${at},${new Date(at.getTime() + 900000)},${at},${at})`;
+    await sql`INSERT INTO applications.preparation_outbox(id,preparation_id,owner_user_id,payload,created_at)
+      VALUES (${uuidv7()},${preparationId},${fixture.owner},${sql.json({ preparationId })},${at})`;
+    await sql`INSERT INTO applications.preparation_audit(id,preparation_id,owner_user_id,action,occurred_at)
+      VALUES (${uuidv7()},${preparationId},${fixture.owner},'queued',${at})`;
+    await sql`INSERT INTO applications.command_receipts
+      (owner_user_id,idempotency_key,operation,request_hash,application_id,response_revision,outcome_code,subject_id,created_at)
+      VALUES (${fixture.owner},${idempotencyKey},'queue_preparation',${requestHash},${original.applicationId},2,
+        'preparation_queued',${preparationId},${at})`;
+    const preparationSnapshot = async () => {
+      const [row] = await sql`SELECT jsonb_build_object(
+        'preparations',(SELECT jsonb_agg(to_jsonb(r) ORDER BY id) FROM applications.packet_preparations r),
+        'outbox',(SELECT jsonb_agg(to_jsonb(r) ORDER BY id) FROM applications.preparation_outbox r),
+        'audit',(SELECT jsonb_agg(to_jsonb(r) ORDER BY id) FROM applications.preparation_audit r)
+      ) AS value`;
+      return row?.value;
+    };
+    const before = await preparationSnapshot();
+    await transitionLegacyReceipts(sql, {
+      enabled: () => true,
+      cipher,
+      expectedAppliedMigrations: 8,
+      expectedLegacyReceipts: 8,
+    });
+    expect(await preparationSnapshot()).toEqual(before);
+    const after = await snapshot();
+    const store = createIntegrationApplicationStore(sql, () => at, {
+      definitions,
+      legacyReceipts: { enabled: () => true, cipher },
+    });
+    const command = {
+      ownerUserId: fixture.owner,
+      applicationId: original.applicationId,
+      idempotencyKey,
+      request,
+      context: { jobContextHash: HASH_A, confirmedFactsHash: HASH_A },
+      packet: original.packet,
+    };
+    for (let retry = 0; retry < 2; retry++) {
+      const replay = await store.queuePreparation(command);
+      expect(replay.replayed).toBe(true);
+      expect(replay.preparation.id).toBe(preparationId);
+      expect(replay.preparation.state).toBe("queued");
+    }
+    await expect(
+      store.queuePreparation({ ...command, request: { ...request, expectedRevision: 2 } }),
+    ).rejects.toThrow();
+    expect(await snapshot()).toEqual(after);
+    expect(await preparationSnapshot()).toEqual(before);
   });
   it("refuses withdrawn authority before replacing the original table", async () => {
     await historical();

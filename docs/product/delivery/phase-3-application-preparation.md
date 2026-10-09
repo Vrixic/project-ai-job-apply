@@ -4,7 +4,7 @@
 - Start: 2026-09-18
 - Completion: Not completed
 - Owners: Unassigned
-- Last updated: 2026-10-07
+- Last updated: 2026-10-09
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d3--high-quality-application-preparation)
 
 ## Objective
@@ -2897,3 +2897,28 @@ populated archives. [Evidence](evidence/d3-legacy-receipt-transition-2026-10-08.
 Original packets/approval/receipt metadata and old migration checksums remain intact; failures roll
 back the table replacement and all migrations. Managed operator, key/release wiring and live
 acceptance remain. D1/D3 stay In progress; AWS is dormant, Docker/WSL stopped and PC on.
+
+
+2026-10-09 adds local default-off legacy receipt Gateway/maintenance composition and dedicated
+Terraform key/task permissions. 46 unit cases, 194 packaging regressions, 21 Terraform mock plans
+and 13 real PostgreSQL transition cases pass, including full queued-preparation replay without
+new effects. KMS is simulated; no image publication or AWS mutation occurred. The managed operator,
+full repository verification and live acceptance remain. [Checkpoint evidence](evidence/d3-native-application-disposal-2026-10-07.md#legacy-receipt-managed-composition-checkpoint-2026-10-09).
+D1/D3 remain In progress. Fresh AWS shutdown inspection awaits the pending SSO sign-in; last verified
+development state is dormant with twelve encrypted snapshots. Docker/WSL stopped, PC on.
+
+
+2026-10-09 completes full local verification of `298d29da` (38 typechecks, 39 test tasks, 23 builds,
+unchanged lint and all maintained guards). The separate managed legacy receipt operator is now
+implemented with 172 synthetic preflight/recovery checks and added to the verifier. It launches
+once from a permanent claim and recovers only the original task. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-legacy-receipt-operator-checkpoint-2026-10-09).
+Full operator verification, immutable publication and live acceptance remain. Fresh shutdown
+inspection awaits renewed SSO; no cloud changes, Docker/WSL stopped and PC on. D1/D3 In progress.
+
+
+2026-10-09 final operator-inclusive verifier passes at `c03079d2`: 38 typechecks, 39 test tasks,
+23 builds, 172 maintenance checks, all maintained guards/isolation/Compose and unchanged lint.
+[Final evidence](evidence/d3-native-application-disposal-2026-10-07.md#final-operator-verification),
+[PR #587](https://github.com/Vrixic/project-ai-job-apply/pull/587). Immutable publication and managed
+acceptance remain behind renewed AWS SSO. No cloud mutation; Docker/WSL stopped, PC on, D1/D3
+In progress. Existing manual acceptance and the CI/CD deferral remain unchanged.

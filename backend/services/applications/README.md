@@ -9,18 +9,21 @@ terminal, and no recruiter, interview, offer, or rejection result is stored or m
 
 The private `legacy-receipt-cipher.ts` component protects an original legacy request digest under
 a separate KMS purpose and returns only match/no-match for replay. It is default-off, supports
-explicit original encryption keys, and keeps replay-only composition unable to encrypt. It has
-no production wiring. Forward migration `0015_legacy_receipt_archive` installs the empty archive
+explicit original encryption keys, and keeps replay-only composition unable to encrypt. Gateway environment composition is now available but defaults off and exposes only matching, never encryption. Forward migration `0015_legacy_receipt_archive` installs the empty archive
 boundary; the ordinary driver still refuses historical receipts at unchanged `0009`. The explicit,
 default-off `transitionLegacyReceipts` capability prepares ciphertext outside SQL locks, rechecks
 the exact historical inventory, replaces the receipt table atomically, and preserves original packet,
 approval and receipt metadata. It does not disable immutable triggers. Unknown dependencies or any
 failed check roll back the entire schema/data transition.
 
-Eight historical-transition and eleven archive/replay PostgreSQL cases pass with simulated KMS.
+Thirteen historical-transition and eleven archive/replay PostgreSQL cases pass with simulated KMS.
+The transition cases include exact maintenance counts and full queued-preparation store replay.
 A real local dump/restore matches all 96 relation row sets across 79 migrations, including populated
-archives. The managed operator, drain/backup checks, release/key composition and full queue-preparation
-store acceptance remain; see [proposed ADR-043](../../../docs/adr/043-protected-legacy-application-receipts.md).
+archives. The standalone maintenance executable and dedicated Terraform key/task roles are implemented
+but not deployed. Its eighteen-field configuration binds the database, snapshot, image, source,
+counts and a maximum thirty-minute window; TLS is mandatory. Gateway replay is decrypt-only.
+The separate managed operator is now implemented with local failure/recovery checks. Fresh live
+drain/backup attestation, immutable image publication and managed acceptance remain; see [proposed ADR-043](../../../docs/adr/043-protected-legacy-application-receipts.md).
 There is no automatic historical transfer or production activation.
 
 When migration `0009` refuses legacy evidence, the driver rolls back before opening a separate

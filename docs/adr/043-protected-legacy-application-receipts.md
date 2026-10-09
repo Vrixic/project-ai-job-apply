@@ -1,6 +1,6 @@
 # ADR-043: Protected legacy application receipts
 
-Status: Proposed; atomic transition and archive/replay verified locally, managed operator/runtime pending
+Status: Proposed; atomic transition, archive/replay and managed operator verified locally; live acceptance pending
 Date: 2026-10-08
 
 ## Context
@@ -91,10 +91,16 @@ failed crypto, authority withdrawal, concurrent inventory changes, full restrict
 rollback and rollback on an unexpected dependent view. KMS transport is simulated. A real local
 dump/restore matches all 96 relation row sets exactly, including eight archived receipts.
 
-A managed maintenance operator with verified drain/backup authority, immutable release packaging,
-explicit KMS IAM/key composition, complete queue-preparation store acceptance and actual managed
-acceptance remain. The capability has no CLI/environment activation or public package export;
-calling it is not proof that its managed prerequisites hold. D1/D3 remain In progress.
+The separate managed maintenance operator now has local preflight and interrupted-execution proof.
+Fresh AWS drain/backup attestation, immutable release publication, live KMS IAM/key verification and
+actual managed acceptance remain.
+Local queue-preparation store acceptance now verifies original replay twice and conflicting-request
+refusal without new packets, preparations or events. A separate default-off maintenance CLI and Gateway replay environment composition now exist.
+The CLI binds exact database identity, TLS, source/image, snapshot, counts and a maximum thirty-minute
+lifetime. Terraform separates its retained key and encrypt/decrypt task role from Gateway decrypt-only
+replay. These resources have not been deployed. Calling the CLI is not proof that managed drain,
+snapshot or image prerequisites hold; the managed operator performs those fresh checks before its sole task launch. Its first live
+acceptance remains required. D1/D3 remain In progress.
 No live data transition or saved-answer reuse activation is authorized by this proposal.
 
 ## Alternatives
@@ -103,3 +109,22 @@ No live data transition or saved-answer reuse activation is authorized by this p
 - Rehashing receipts under the new scheme loses original request identity without original bodies.
 - Keeping plain legacy request hashes exposes a low-entropy answer comparison oracle.
 - Disabling the `0009` guard or altering its applied checksum weakens the existing migration boundary.
+
+
+## Managed operator local checkpoint (2026-10-09)
+
+The separate operator reuses maintained immutable-image verification and lifecycle drain checks,
+adds native durable execution inspection, exact task/configuration and Terraform state binding,
+current role/key policy comparison and a fresh encrypted same-instance recovery snapshot. Its
+plan contains no database credentials. Execute repeats the preflight, persists a permanent claim
+and submits one task without overrides. Recovery observes the original task/claim and verifies
+its image, identity, exit status and exact aggregate output; it never reissues RunTask after a
+lost response or timeout. Expiry prevents new work while allowing original-task observation.
+
+172 local checks use synthetic AWS responses and private temporary receipts. They cover the full
+preflight, drift and active-native refusal, a lost launch acknowledgement, an observation timeout,
+pending work, wrong image/original identity, unexpected overrides, failed task, mismatched aggregate,
+substituted plan hash and recovery after configuration expiry. No AWS mutation or live transition
+has occurred. The original source checkpoint passed the full maintained verifier at `298d29da`;
+the complete operator-inclusive verifier now passes at `c03079d2` (38 typechecks, 39 test tasks,
+23 builds, all operational/security/isolation/Compose checks and unchanged lint). [Runbook](../../scripts/README.md#legacy-application-receipt-maintenance-development-only).

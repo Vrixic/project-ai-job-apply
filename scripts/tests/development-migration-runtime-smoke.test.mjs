@@ -68,6 +68,7 @@ function fixture(context) {
     "documents/dist/src/run-document-processing-acceptance.js",
     "matching/dist/src/run-private-feature-acceptance.js",
     "runner/dist/src/restore-verifier-cli.js",
+    "applications/dist/src/run-legacy-receipt-transition.js",
   ]) {
     write(relative, "");
   }
@@ -200,4 +201,12 @@ test("rejects a mismatched manifest checksum for every owner", async (context) =
     });
   }
   f.accept();
+});
+
+test("rejects a missing standalone legacy receipt maintenance executable", (context) => {
+  const f = fixture(context);
+  rmSync(join(f.root, "applications/dist/src/run-legacy-receipt-transition.js"));
+  const result = f.run();
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /ENOENT/u);
 });

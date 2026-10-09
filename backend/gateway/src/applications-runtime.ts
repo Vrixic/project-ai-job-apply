@@ -39,6 +39,7 @@ export interface ApplicationsRuntimeOptions {
   client: postgres.Sql;
   /** Default absent; private exact-key storage capabilities require separate release acceptance. */
   restrictedPackets?: ApplicationStoreOptions["restrictedPackets"];
+  legacyReceipts?: ApplicationStoreOptions["legacyReceipts"];
   profile: { listProfileFacts(userId: string): Promise<{ facts: ProfileFact[] }> };
   /** The Documents runtime; without it packets carry no resume and the preview is unavailable. */
   tailoring?: ResumeTailoringClient;
@@ -92,6 +93,7 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
       ? { nativeResumePreparationEnabled: options.nativeResumePreparationEnabled }
       : {}),
     ...(options.restrictedPackets ? { restrictedPackets: options.restrictedPackets } : {}),
+    ...(options.legacyReceipts ? { legacyReceipts: options.legacyReceipts } : {}),
     ...(options.restrictedAnswerReuseEnabled === true &&
     options.restrictedAnswers?.lockCurrentReferences
       ? {

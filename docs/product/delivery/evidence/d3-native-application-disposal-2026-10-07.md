@@ -1495,3 +1495,79 @@ preconditions; exact-version byte/KMS readback passes. Private recovery evidence
 Retained snapshots/backups, object/image/log storage, KMS, Secrets Manager and DNS may still incur
 charges. Staging readback is still unavailable because its separate SSO token is missing. Docker
 Desktop and WSL are stopped; the PC stays on. D1/D3 remain In progress. CI/CD remains deferred.
+
+
+## Legacy receipt managed composition checkpoint (2026-10-09)
+
+The backend checkpoint adds default-off Gateway replay composition and a separate maintenance
+executable. The Gateway gets only matching/decryption authority. Maintenance binds the exact
+source, image, database identity, encrypted recovery snapshot, expected historical counts and
+short-lived configuration hash; its database URL must explicitly require TLS. Terraform defines
+one retained purpose-bound encryption key, a separate one-off maintenance task/role and scoped
+private KMS access. Ordinary migration task command/environment/role remain unchanged.
+The migration image's build and publication inventory now requires the maintenance executable.
+
+Local evidence from the isolated maintenance branch:
+
+- Applications build and Gateway typecheck pass; 46 configuration/replay unit cases pass.
+- Four compiled CLI launches without valid maintenance authority emit only the fixed refusal.
+- 194 executable packaging regressions and publisher guards pass without building/publishing an image.
+- 21 Terraform mock plans pass, including default-off, exact maintenance role, decrypt-only Gateway,
+  packet-protection prerequisite and existing KMS endpoint permissions. No AWS plan/apply occurred.
+- 13 real PostgreSQL 16.6 transition cases pass with simulated KMS. Four mismatched count cases
+  reject before encryption and preserve the full original snapshot. A full queued-preparation retry
+  returns its original operation twice, rejects changed input and leaves packet/preparation/outbox/
+  audit rows unchanged. The owned temporary container was removed; Docker/WSL stopped afterward.
+
+The managed operator with fresh AWS drain/snapshot/image attestation is still unfinished. This
+checkpoint is not a deployable managed transition or approval to invoke the CLI directly. Full
+repository verification, immutable release publication and managed acceptance remain. D1/D3 stay
+In progress; accepted candidate manual checks are not reopened and CI/CD stays deferred.
+No cloud mutation occurred. Fresh development shutdown readback is blocked by an expired SSO token;
+the original sign-in process remains pending. Last successful readback at 2026-10-09T03:52:08Z
+showed no databases or active runtimes and twelve available encrypted recovery snapshots. Retained
+security/storage/DNS resources still incur charges; the PC stays on.
+
+
+## Managed legacy receipt operator checkpoint (2026-10-09)
+
+Commit `298d29da` passes the full maintained verifier: 38 typecheck tasks, 39 test tasks, 23 builds,
+all operational/security/isolation and Compose checks; lint remains zero errors, 15 warnings and
+58 informational notes. Its private log is `.tmp/legacy-maintenance-full-verification.log`.
+
+The next source change implements the separate [managed operator](../../../../scripts/operate-legacy-receipt-transition.ps1)
+and [runbook](../../../../scripts/README.md#legacy-application-receipt-maintenance-development-only).
+Planning and execution both inspect the exact published image, managed task/role/key/state,
+recoverable same-instance snapshot, stopped routes/triggers/queues and all declared native durable
+functions. A late state read refuses concurrent infrastructure changes. The permanent claim
+precedes the single RunTask; repeat Execute refuses. Recover only observes the original task and
+requires its exact identity/image, no overrides, exit zero and matching aggregate output.
+
+172 synthetic operator checks pass, including the complete preflight, source executable absence,
+failed image verification, active native work, changed state, interrupted launch/observation,
+pending work, wrong task/image, failed exit, extra overrides, wrong aggregate/hash and recovery
+with expired launch authority. These are simulated AWS responses, not cloud verification.
+The checks are added to the maintained verifier; the new operator's full run remains pending.
+No source release, image publication, AWS plan/apply or live maintenance execution occurred.
+
+AWS SSO authorization expired without completing, so fresh shutdown readback remains unavailable.
+A new terminal sign-in request is pending. Last successful development observation remains
+2026-10-09T03:52:08Z: zero databases/active runtime and twelve encrypted recovery snapshots.
+No cloud mutation occurred during either local checkpoint. Docker/WSL remain stopped, PC on,
+retained costs acknowledged, CI/CD deferred and D1/D3 In progress.
+
+
+### Final operator verification
+
+The complete maintained verifier passes in one successful run at **`c03079d2`**: 38 typecheck
+tasks, 39 test tasks, 23 builds, all maintained operational/security/isolation checks and Compose.
+The newly integrated maintenance suite reports all 172 checks passing. Lint remains zero errors,
+15 warnings and 58 informational notes. Private log:
+`.tmp/legacy-maintenance-operator-full-verification.log`. The source worktree is clean after the run.
+[PR #587](https://github.com/Vrixic/project-ai-job-apply/pull/587) contains the connected batch.
+
+The remaining release gates are immutable image publication/readback, exact managed key/task
+provisioning, live transition/replay acceptance and mandatory data-preserving shutdown. An actual
+AWS CLI recheck still reports expired SSO credentials; no cloud mutation occurred. Local Docker
+and WSL are confirmed stopped. Earlier cloud evidence remains historical, not a fresh shutdown
+claim; retained recovery/security/storage/DNS costs remain. D1/D3 stay In progress.
