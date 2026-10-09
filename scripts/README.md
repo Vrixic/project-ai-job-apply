@@ -447,3 +447,79 @@ publisher's `NativePreparation` family uses dedicated local receipt, source/hash
 application preparation Terraform module. Existing source/merge, dependency audit, double-build,
 bucket/KMS/version and independent readback gates remain required. Building does not publish,
 deploy or activate; cloud publication still requires separate authorization.
+
+
+## Legacy application receipt maintenance (development only)
+
+`operate-legacy-receipt-transition.ps1` runs the separate, default-off legacy receipt transition.
+It never changes the ordinary database-migration task, applies Terraform, restores/deletes a
+database, enables traffic, or starts Docker. Use PowerShell Core 7.2+ and the selected portable
+Terraform 1.16.2. This operator is source-verified; its first live AWS acceptance is still pending.
+
+Before planning execution:
+
+1. Publish and independently verify the current immutable migration image using
+   `publish-development-migration-image.ps1`. Its source must contain the maintenance executable
+   and the fifteen-migration Applications manifest. Keep the publication receipt and its hash.
+2. Use the documented development lifecycle and complete current retained inputs to restore the
+   database with all application traffic, triggers, queues and durable work drained. Provision the
+   dedicated `legacy_receipt_key_provisioned=true` key without enabling Gateway replay.
+3. After the database is available, take an encrypted manual snapshot of that exact database
+   resource ID and wait for availability. Retain the exact ARN and creation timestamp.
+4. Create a fresh `legacy_receipt_transition` binding in private Terraform inputs: a unique
+   32-character hex run ID, exact image source commit, snapshot ARN/time, independently established
+   historical migration/legacy-receipt counts, and canonical millisecond UTC issue/expiry times
+   no more than thirty minutes apart. Enable private service endpoints and use the exact published
+   migration image. Review and apply the saved Terraform plan for the separate maintenance task,
+   role and KMS endpoint. Do not enable application/runtime switches. Never edit old SQL checksums.
+
+All operator plan/request/receipt/log files stay under this checkout's ignored
+`.tmp/legacy-receipt-maintenance/` directory. The examples use already established private values;
+no account, key or receipt is inferred from a placeholder.
+
+```powershell
+. ./scripts/use-deployment-terraform.ps1
+$maintenance = @{
+  AwsProfile = 'ai-job-apply-development-admin'
+  ExpectedAccountId = $account
+  StateBucket = $stateBucket
+  StateKmsKeyArn = $stateKmsKeyArn
+  PublicationReceiptPath = $publicationReceipt
+  PublicationReceiptSha256 = $publicationReceiptSha256
+  PlanPath = '.tmp/legacy-receipt-maintenance/execution.json'
+}
+# Reads only: image verification, exact task/state/role/key, backup and runtime drain.
+pwsh -NoProfile -File scripts/operate-legacy-receipt-transition.ps1 @maintenance -Action PlanExecution
+
+# Review the produced descriptor, then use its exact reported SHA-256.
+pwsh -NoProfile -File scripts/operate-legacy-receipt-transition.ps1 @maintenance -Action Execute `
+  -ReviewedPlanSha256 $executionPlanSha256
+
+# Observe this same task until terminal; no replacement task is ever submitted by Recover.
+pwsh -NoProfile -File scripts/operate-legacy-receipt-transition.ps1 @maintenance -Action Recover `
+  -ReviewedPlanSha256 $executionPlanSha256
+```
+
+Execute repeats the complete preflight and requires an unchanged descriptor. It creates a durable
+local claim before its only cloud mutation, one `ecs run-task` call with the original client token
+and no overrides. A second Execute refuses even if the first response was lost. Recover uses the
+original handle, or resolves exactly one task with the original `startedBy` value. An observation
+error, missing/ambiguous task or expired task configuration never authorizes resubmission. Keep
+private plans and claims intact. A pending result is not a completed operation; keep observing.
+
+Verified recovery requires the original task definition, cluster, launch identity, immutable
+image digest, no effective overrides, zero exit status and one exact aggregate success record.
+It does not activate Gateway replay or certify the candidate journey. Apply the strict readers
+and verify live original replay before enabling that separate flag.
+
+**Shutdown is mandatory after testing, including failure.** Follow the documented data-preserving
+snapshot/restore/final-snapshot database lifecycle. Remove the temporary maintenance task/role and
+private interface endpoints through a reviewed Terraform plan, with
+`legacy_receipt_transition=null`; keep `legacy_receipt_key_provisioned=true` in the complete retained
+recovery inputs. Never delete the receipt key while current archives or recovery snapshots need it.
+Verify no active runtimes remain, update the encrypted recovery-input archive, and report retained
+key/snapshot/storage costs. The operator's successful result explicitly reports shutdown required;
+it does not perform or imply that cleanup.
+
+Local operator regression: `pwsh -NoProfile -File scripts/tests/legacy-receipt-maintenance.tests.ps1`.
+It uses synthetic AWS responses and private temporary files; it cannot attest current AWS state.

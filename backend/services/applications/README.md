@@ -22,8 +22,8 @@ A real local dump/restore matches all 96 relation row sets across 79 migrations,
 archives. The standalone maintenance executable and dedicated Terraform key/task roles are implemented
 but not deployed. Its eighteen-field configuration binds the database, snapshot, image, source,
 counts and a maximum thirty-minute window; TLS is mandatory. Gateway replay is decrypt-only.
-The managed operator, fresh drain/backup attestation, immutable image publication and live acceptance
-remain; see [proposed ADR-043](../../../docs/adr/043-protected-legacy-application-receipts.md).
+The separate managed operator is now implemented with local failure/recovery checks. Fresh live
+drain/backup attestation, immutable image publication and managed acceptance remain; see [proposed ADR-043](../../../docs/adr/043-protected-legacy-application-receipts.md).
 There is no automatic historical transfer or production activation.
 
 When migration `0009` refuses legacy evidence, the driver rolls back before opening a separate

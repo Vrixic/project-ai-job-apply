@@ -5563,3 +5563,11 @@ new effects. KMS is simulated; no image publication or AWS mutation occurred. Th
 full repository verification and live acceptance remain. [Checkpoint evidence](evidence/d3-native-application-disposal-2026-10-07.md#legacy-receipt-managed-composition-checkpoint-2026-10-09).
 D1/D3 remain In progress. Fresh AWS shutdown inspection awaits the pending SSO sign-in; last verified
 development state is dormant with twelve encrypted snapshots. Docker/WSL stopped, PC on.
+
+
+2026-10-09 completes full local verification of `298d29da` (38 typechecks, 39 test tasks, 23 builds,
+unchanged lint and all maintained guards). The separate managed legacy receipt operator is now
+implemented with 172 synthetic preflight/recovery checks and added to the verifier. It launches
+once from a permanent claim and recovers only the original task. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-legacy-receipt-operator-checkpoint-2026-10-09).
+Full operator verification, immutable publication and live acceptance remain. Fresh shutdown
+inspection awaits renewed SSO; no cloud changes, Docker/WSL stopped and PC on. D1/D3 In progress.

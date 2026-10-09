@@ -27,6 +27,7 @@ Invoke-CheckedCommand "D2 immutable artifact source binding" { pnpm test:d2-arti
 Invoke-CheckedCommand "Development document dark guard validation" { & scripts/tests/development-document-dark-guards.tests.ps1 }
 Invoke-CheckedCommand "Development document dark operator validation" { & scripts/tests/development-document-dark-operator.tests.ps1 }
 Invoke-CheckedCommand "Development document migration operator path validation" { powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/development-document-migration-operator.tests.ps1 }
+Invoke-CheckedCommand "Legacy receipt maintenance operator validation" { node scripts/run-powershell.mjs --require-core -File scripts/tests/legacy-receipt-maintenance.tests.ps1 }
 Invoke-CheckedCommand "Executable migration runtime package validation" { node --test scripts/tests/development-migration-runtime-smoke.test.mjs }
 Invoke-CheckedCommand "Admin Auth0 authorization profile setup" { & scripts/tests/configure-auth0-admin-local.tests.ps1 }
 Invoke-CheckedCommand "Formatting" { pnpm format:check }

@@ -1527,3 +1527,31 @@ No cloud mutation occurred. Fresh development shutdown readback is blocked by an
 the original sign-in process remains pending. Last successful readback at 2026-10-09T03:52:08Z
 showed no databases or active runtimes and twelve available encrypted recovery snapshots. Retained
 security/storage/DNS resources still incur charges; the PC stays on.
+
+
+## Managed legacy receipt operator checkpoint (2026-10-09)
+
+Commit `298d29da` passes the full maintained verifier: 38 typecheck tasks, 39 test tasks, 23 builds,
+all operational/security/isolation and Compose checks; lint remains zero errors, 15 warnings and
+58 informational notes. Its private log is `.tmp/legacy-maintenance-full-verification.log`.
+
+The next source change implements the separate [managed operator](../../../../scripts/operate-legacy-receipt-transition.ps1)
+and [runbook](../../../../scripts/README.md#legacy-application-receipt-maintenance-development-only).
+Planning and execution both inspect the exact published image, managed task/role/key/state,
+recoverable same-instance snapshot, stopped routes/triggers/queues and all declared native durable
+functions. A late state read refuses concurrent infrastructure changes. The permanent claim
+precedes the single RunTask; repeat Execute refuses. Recover only observes the original task and
+requires its exact identity/image, no overrides, exit zero and matching aggregate output.
+
+172 synthetic operator checks pass, including the complete preflight, source executable absence,
+failed image verification, active native work, changed state, interrupted launch/observation,
+pending work, wrong task/image, failed exit, extra overrides, wrong aggregate/hash and recovery
+with expired launch authority. These are simulated AWS responses, not cloud verification.
+The checks are added to the maintained verifier; the new operator's full run remains pending.
+No source release, image publication, AWS plan/apply or live maintenance execution occurred.
+
+AWS SSO authorization expired without completing, so fresh shutdown readback remains unavailable.
+A new terminal sign-in request is pending. Last successful development observation remains
+2026-10-09T03:52:08Z: zero databases/active runtime and twelve encrypted recovery snapshots.
+No cloud mutation occurred during either local checkpoint. Docker/WSL remain stopped, PC on,
+retained costs acknowledged, CI/CD deferred and D1/D3 In progress.
