@@ -7,6 +7,7 @@ import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { defaultFieldDefinitions } from "./field-definitions.js";
+import { readRestrictedPacketLegacyDiagnostics } from "./migration-legacy-diagnostics.js";
 import { assemblePacket, computePacketHash } from "./packet.js";
 
 const requested = process.env.RESTRICTED_PACKET_LEGACY_INTEGRATION === "1";
@@ -170,12 +171,13 @@ describe.skipIf(!requested)(
           };
         }
         const packetHash = computePacketHash({ ...packet, fields });
+        const storedFields = kind === "scalar" ? ["vaultReference", "protectedValue"] : fields;
         await tx`INSERT INTO applications.applications
         (id, owner_user_id, canonical_job_id, status, revision, current_packet_id, created_at, updated_at)
         VALUES (${applicationId}, ${owner}, ${packet.canonicalJobId}, ${status}, 5, ${packetId}, ${at}, ${at})`;
         await tx`INSERT INTO applications.packets
         (id, application_id, owner_user_id, version, packet_hash, job_revision, fields, created_at)
-        VALUES (${packetId}, ${applicationId}, ${owner}, 1, ${packetHash}, ${hash}, ${tx.json(fields as unknown as postgres.JSONValue)}, ${at})`;
+        VALUES (${packetId}, ${applicationId}, ${owner}, 1, ${packetHash}, ${hash}, ${tx.json(storedFields as unknown as postgres.JSONValue)}, ${at})`;
         await tx`INSERT INTO applications.approvals
         (id, packet_id, application_id, owner_user_id, packet_hash, consent_id, acknowledged_field_keys, approved_at, expires_at)
         VALUES (${approvalId}, ${packetId}, ${applicationId}, ${owner}, ${packetHash}, ${uuidv7()},
@@ -260,22 +262,76 @@ describe.skipIf(!requested)(
 
     it("the actual current driver refuses a committed legacy database and rolls its whole transaction back", async () => {
       await sql.begin(async (tx) => {
-        await seed(tx, "false");
+        for (const kind of [
+          "false",
+          "true",
+          "vault",
+          "restricted_reason",
+          "create_packet",
+          "queue_preparation",
+          "scalar",
+        ]) {
+          await seed(tx, kind);
+        }
       });
       const before = await snapshot(sql);
-      await expect(
-        execute(
-          process.execPath,
-          [fileURLToPath(new URL("../dist/src/migrate.js", import.meta.url))],
-          {
-            env: { ...inherited, NODE_ENV: "test", DATABASE_URL: url },
-          },
-        ),
-      ).rejects.toThrow(
+      const expectedInventory = {
+        kind: "applications_restricted_legacy_inventory",
+        schemaVersion: 1,
+        counts: {
+          appliedMigrationCount: 8,
+          restrictedMigrationRecorded: 0,
+          packetCount: 14,
+          packetsWithRestrictedValues: 8,
+          packetsWithProtectedMarkers: 0,
+          packetsWithInvalidContainers: 0,
+          createPacketReceipts: 2,
+          queuePreparationReceipts: 2,
+          packetsWithApprovals: 14,
+          ambiguousAttempts: 7,
+        },
+      };
+      expect(await readRestrictedPacketLegacyDiagnostics(sql)).toEqual(expectedInventory);
+      const failedRun = execute(
+        process.execPath,
+        [fileURLToPath(new URL("../dist/src/migrate.js", import.meta.url))],
+        {
+          env: { ...inherited, NODE_ENV: "test", DATABASE_URL: url },
+        },
+      );
+      await expect(failedRun).rejects.toThrow(
         "restricted packet migration requires an explicit legacy evidence transition",
       );
+      const error = await failedRun.catch((failure: { stderr: string }) => failure);
+      const inventoryLines = error.stderr
+        .split(/\r?\n/u)
+        .filter((line) => line.startsWith('{"kind":"applications_restricted_legacy_inventory"'));
+      expect(inventoryLines).toHaveLength(1);
+      expect(JSON.parse(inventoryLines[0] ?? "null")).toEqual(expectedInventory);
+      expect(error.stderr).not.toContain("synthetic@example.test");
       expect(await snapshot(sql)).toEqual(before);
       expect(before.boundary).toEqual({ private_schema: null, new_function: null, new_columns: 0 });
+
+      const readerRole = `legacy_inventory_${uuidv7().replaceAll("-", "")}`;
+      await sql`CREATE ROLE ${sql(readerRole)} LOGIN PASSWORD 'local_only'`;
+      await sql`GRANT USAGE ON SCHEMA applications TO ${sql(readerRole)}`;
+      await sql`GRANT SELECT ON ALL TABLES IN SCHEMA applications TO ${sql(readerRole)}`;
+      const readerUrl = new URL(url);
+      readerUrl.username = readerRole;
+      readerUrl.password = "local_only";
+      const reader = postgres(readerUrl.toString(), { max: 1, onnotice: () => undefined });
+      try {
+        expect(await readRestrictedPacketLegacyDiagnostics(reader)).toEqual(expectedInventory);
+        await expect(reader`DELETE FROM applications.packets`).rejects.toMatchObject({
+          code: "42501",
+        });
+      } finally {
+        await reader.end();
+        await sql`REVOKE SELECT ON ALL TABLES IN SCHEMA applications FROM ${sql(readerRole)}`;
+        await sql`REVOKE USAGE ON SCHEMA applications FROM ${sql(readerRole)}`;
+        await sql`DROP ROLE ${sql(readerRole)}`;
+      }
+      expect(await snapshot(sql)).toEqual(before);
     });
   },
 );

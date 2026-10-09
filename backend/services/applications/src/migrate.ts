@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
+import { reportRestrictedPacketLegacyFailure } from "./migration-legacy-diagnostics.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
@@ -217,6 +218,10 @@ try {
     }
   });
   console.log(`Applications migrations through ${migrationVersions.at(-1)} applied and verified.`);
+} catch (error) {
+  // begin() has rolled back before the separate bounded read-only diagnostic snapshot begins.
+  await reportRestrictedPacketLegacyFailure(error, client, (message) => console.error(message));
+  throw error;
 } finally {
   await client.end();
 }
