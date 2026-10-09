@@ -79,6 +79,36 @@ describe("ApplicationReviewPanel", () => {
     onReconcile: vi.fn(),
   } satisfies ApplicationReviewActions;
 
+  it("shows the exact saved version/context and No without claiming profile fact provenance", () => {
+    const value = application();
+    const packet = value.currentPacket;
+    if (!packet) throw new Error();
+    packet.fields = [
+      field("authorization.us_authorized", {
+        value: false,
+        origin: "answer_vault",
+        requiresReview: true,
+        disposition: "review",
+        reasons: ["restricted_answer"],
+        vaultReference: {
+          id: "00000000-0000-7000-8000-000000000022",
+          version: 7,
+          context: "us.private",
+          questionHash: hash,
+          meaningConfirmed: true,
+          validUntilEpochMs: null,
+        },
+      }),
+    ];
+    act(() => root.render(<ApplicationReviewPanel application={value} actions={actions} />));
+    expect(container.textContent).toContain("Saved answer version 7. Context: us.private.");
+    expect(container.textContent).toContain("No");
+    expect(container.textContent).not.toContain("confirmed fact(s)");
+    expect((container.querySelector('input[type="checkbox"]') as HTMLInputElement).checked).toBe(
+      false,
+    );
+  });
+
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     vi.stubGlobal("React", React);
@@ -89,9 +119,46 @@ describe("ApplicationReviewPanel", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     act(() => root.unmount());
     container.remove();
+  });
+  it("blocks approval when a displayed saved version reaches its original expiry", async () => {
+    vi.useFakeTimers();
+    const value = application();
+    const packet = value.currentPacket;
+    if (!packet) throw new Error();
+    packet.fields = [
+      field("authorization.us_authorized", {
+        value: false,
+        origin: "answer_vault",
+        requiresReview: true,
+        disposition: "review",
+        reasons: ["restricted_answer"],
+        vaultReference: {
+          id: "00000000-0000-7000-8000-000000000022",
+          version: 7,
+          context: "us.explicit",
+          questionHash: hash,
+          meaningConfirmed: true,
+          validUntilEpochMs: Date.now() + 100,
+        },
+      }),
+    ];
+    act(() => root.render(<ApplicationReviewPanel application={value} actions={actions} />));
+    act(() => (container.querySelector('input[type="checkbox"]') as HTMLInputElement).click());
+    const approve = () =>
+      Array.from(container.querySelectorAll("button")).find(
+        (button) => button.textContent === "Approve this packet",
+      );
+    expect(approve()?.disabled).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(101);
+    });
+    expect(approve()?.disabled).toBe(true);
+    expect(container.textContent).toContain("Saved answers expired.");
+    expect(actions.onApprove).not.toHaveBeenCalled();
   });
 
   function render(value: Application) {

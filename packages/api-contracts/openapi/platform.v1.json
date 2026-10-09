@@ -10458,9 +10458,28 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 9007199254740991
+          },
+          "observedForm": {
+            "type": "object",
+            "required": ["form", "capturedAtEpochMs", "confirmed"],
+            "properties": {
+              "form": {
+                "$ref": "#/components/schemas/ApplicationFormBinding"
+              },
+              "capturedAtEpochMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "confirmed": {
+                "const": true
+              }
+            },
+            "additionalProperties": false
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Legacy manual starts carry no form and retain existing invalidation. A form-bound packet requires a fresh candidate-confirmed observed structure; the original 60-second capture lease is checked under admission locks. No raw question text or answer values are accepted. This is candidate attestation, not provider confirmation."
       },
       "ApplicationSubmissionStart": {
         "type": "object",

@@ -64,3 +64,5 @@ ADRs are immutable historical records after acceptance. A new ADR supersedes an 
 - [ADR-044: Separate browser identity for native material reads](044-browser-native-material-identity.md) (owner-selected design; default-off browser implementation, live activation pending)
 
 - [ADR-045: Manual approved application handoff](045-manual-approved-application-handoff.md) (proposed; default-off source, installed-extension and live acceptance pending)
+
+- [ADR-046: Observed form and saved-answer selection](046-observed-form-saved-answer-selection.md) (proposed; default-off source, acceptance pending)

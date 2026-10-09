@@ -10,6 +10,8 @@ import { safeApiOrigin } from "./config";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 export const HANDOFF_FAILURE =
   "Open the matching employer page and reload an approved, unexpired application review link. Sign in again if needed.";
+export const FORM_CAPTURE_FAILURE =
+  "Open the exact active employer page and current application review link, then capture again. Challenges and unsupported forms must be completed manually.";
 export interface HandoffLink {
   applicationId: string;
   jobId: string;
@@ -67,7 +69,7 @@ export function plainHttpsUrl(value: string): string | undefined {
 }
 
 /** Entire response, including streaming, has one deadline and a byte cap. Never follows redirects. */
-async function readJson(url: URL, token: string, signal?: AbortSignal): Promise<unknown> {
+export async function readJson(url: URL, token: string, signal?: AbortSignal): Promise<unknown> {
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });

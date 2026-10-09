@@ -2536,8 +2536,15 @@ export interface components {
             adapterVersion: string;
             observedFormHash: string;
         };
+        /** @description Legacy manual starts carry no form and retain existing invalidation. A form-bound packet requires a fresh candidate-confirmed observed structure; the original 60-second capture lease is checked under admission locks. No raw question text or answer values are accepted. This is candidate attestation, not provider confirmation. */
         StartManualApplicationSubmissionRequest: {
             expectedRevision: number;
+            observedForm?: {
+                form: components["schemas"]["ApplicationFormBinding"];
+                capturedAtEpochMs: number;
+                /** @constant */
+                confirmed: true;
+            };
         };
         ApplicationSubmissionStart: {
             /** @enum {string} */

@@ -302,3 +302,12 @@ no-source result. Legacy/null outcomes remain unknown. Private recovery can scan
 scalar receipts for an exact version with event-ID keyset pagination, independently of candidate
 activity; cycle full passes so late receipts are revisited. This reader does not reconcile AWS
 state or authorize replacement work. Candidate deletion retains the existing outbox deletion path.
+
+
+Form-bound manual starts optionally carry the candidate-confirmed `observedForm` v1 command.
+The application/vault transaction rechecks its original 60-second capture lease and exact adapter/
+variant, then evaluates the current form hash through existing approval guards. Missing or changed
+form observations retain approval invalidation; stale/future/unconfirmed observations refuse an
+attempt. Original saved-answer expiry/correction/deletion and material guards remain authoritative.
+Accepted identical requests replay without renewing observation validity. This records manual
+candidate action; it grants no automated employer dispatch or provider-confirmed submission.

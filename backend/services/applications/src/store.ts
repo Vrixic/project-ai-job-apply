@@ -1,4 +1,7 @@
-import { COVER_LETTER_DISCLOSURE_VERSION } from "@ai-job-apply/api-contracts";
+import {
+  COVER_LETTER_DISCLOSURE_VERSION,
+  type StartManualApplicationSubmissionRequest,
+} from "@ai-job-apply/api-contracts";
 import {
   sameTemporaryMaterialReference,
   type TemporaryMaterialReference,
@@ -872,6 +875,7 @@ export class PostgresApplicationStore {
     adapterId: string;
     adapterVersion: string;
     manual?: boolean;
+    manualObservation?: StartManualApplicationSubmissionRequest["observedForm"];
   }): Promise<StartAttemptResult> {
     const requestHash = canonicalHash({
       operation: command.manual ? "start_manual_attempt" : "start_attempt",
@@ -880,6 +884,7 @@ export class PostgresApplicationStore {
       current: command.current,
       adapterId: command.adapterId,
       adapterVersion: command.adapterVersion,
+      ...(command.manualObservation ? { manualObservation: command.manualObservation } : {}),
     });
     const result = await this.mutate(
       command,
@@ -893,6 +898,23 @@ export class PostgresApplicationStore {
           throw new ApplicationIntegrityError("approved application without packet or approval");
         }
         const vaultReferences = await this.lockVaultReferences(tx, packet);
+        if (command.manualObservation) {
+          const observed = command.manualObservation;
+          const observedNow = this.clock().getTime();
+          if (
+            !command.manual ||
+            !packet.form ||
+            observed.confirmed !== true ||
+            observed.form.adapterId !== packet.form.adapterId ||
+            observed.form.variantId !== packet.form.variantId ||
+            !Number.isSafeInteger(observed.capturedAtEpochMs) ||
+            observed.capturedAtEpochMs < 0 ||
+            !Number.isFinite(observedNow) ||
+            observed.capturedAtEpochMs > observedNow ||
+            observedNow >= observed.capturedAtEpochMs + 60_000
+          )
+            throw new AttemptRefusedError("APPROVAL_INVALID");
+        }
         const validity = evaluateApproval(
           packet,
           approval,

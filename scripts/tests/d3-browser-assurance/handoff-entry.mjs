@@ -14,6 +14,18 @@ const area = (records) => ({
   setAccessLevel: async () => undefined,
 });
 globalThis.chrome = {
+  scripting: {
+    executeScript: async ({ func }) => [
+      {
+        result: func(
+          new DOMParser().parseFromString(
+            '<form><label for="auth">Are you legally authorized to work in the United States?</label><select id="auth" name="auth"><option value="private-y">Yes</option><option value="private-n">No</option></select><label>Anything else?<textarea>PRIVATE_INITIAL_TEXT</textarea></label><label>Email<input value="PRIVATE_EMAIL"></label><input type="hidden" value="PRIVATE_TOKEN"></form>',
+            "text/html",
+          ),
+        ),
+      },
+    ],
+  },
   runtime: {
     id: "synthetic-extension",
     getURL: (path) => `chrome-extension://synthetic-extension/${path}`,

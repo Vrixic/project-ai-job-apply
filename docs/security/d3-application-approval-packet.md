@@ -45,7 +45,7 @@ not a fresh live run of the current connected journey. Current verification and 
 
 | Control | Where | Evidence |
 |---|---|---|
-| Restricted answers always shown; never-infer answers require candidate entry or an explicitly selected/meaning-confirmed saved version; attestations/signatures/challenges require direct action | [Applications field policy](../../backend/services/applications/src/field-policy.ts) | Source/unit tests; saved-answer reuse remains off pending UI and release acceptance |
+| Restricted answers always shown; never-infer answers require candidate entry or an explicitly selected/meaning-confirmed saved version; attestations/signatures/challenges require direct action | [Applications field policy](../../backend/services/applications/src/field-policy.ts) | Source/unit/SQL tests; D3-087 supplies locally verified selection/review; reuse remains off pending release and live acceptance |
 | Immutable packet with content hash; approval binds job/form/artifact state and expires at the earlier of the 24-hour cap or original temporary-material deadline; changes invalidate approval | Applications packet and store | Unit/SQL evidence; [temporary packet binding](../product/delivery/evidence/d3-temporary-packet-binding-2026-10-05.md) |
 | Write-ahead dispatch; ambiguous results block another submission until reconciled; database-level one-attempt-per-packet guard; crash recovery | Applications attempts and migration `0001` | Integration tests (race of 8, crash recovery) |
 | Technical history ends at `applied`; no hiring-outcome vocabulary in code, schema, API, or events | Applications, OpenAPI, events | Contract and parity tests |
@@ -58,7 +58,7 @@ not a fresh live run of the current connected journey. Current verification and 
 | Job-specific resume deterministically reorders/trims the candidate's own bullets, with hash binding and PDF/DOCX rendering; generated content belongs in the original memory-only native process | Accepted [ADR-031](../adr/031-deterministic-resume-tailoring-in-documents-runtime.md), [ADR-038](../adr/038-one-off-generated-application-materials.md), Documents/native runtime | Local rendering/process/transport evidence; direct browser-native generation/preview/download acceptance remains |
 | Manual Apply opens the canonical employer page, exposes approved answers and starts a candidate-owned `taken_over` attempt; reconciliation distinguishes candidate attestation from provider confirmation and refreshes terminal history | Web and Applications | Existing development manual acceptance is preserved; October 9 connected browser checks use synthetic BFF/native responses and make no external submission |
 | Automatic proposals only from exactly one confirmed, type-fitting fact; restricted answers never inferred | Applications packet source | Fact-source regressions; selected saved answers use the separate explicit-selection path |
-| Separate encrypted answer vault, metadata-only public listing and exact-version private reads; correction/deletion/quarantine/expiry checks and metadata locks at admission | [Profile vault](../../backend/services/profile/src/restricted-answer-vault.ts), [saved-answer packet binding](../product/delivery/evidence/d3-vault-packet-binding-2026-10-04.md) | Local source/SQL/restore evidence; no public plaintext read; observed-form candidate selection and connected reuse remain unfinished |
+| Separate encrypted answer vault, metadata-only public listing and exact-version private reads; correction/deletion/quarantine/expiry checks and metadata locks at admission | [Profile vault](../../backend/services/profile/src/restricted-answer-vault.ts), [saved-answer packet binding](../product/delivery/evidence/d3-vault-packet-binding-2026-10-04.md) | Local source/SQL/restore evidence; no public plaintext read; D3-087 observed-form selection/review and fresh manual-form confirmation pass local SQL/browser checks; live connected reuse remains unfinished |
 | Identifier-only preparation workflow/starter/recovery plus native activity; generated bodies excluded from durable state, packets, queues and ordinary Gateway content routes | [Workflows](../../backend/workflows/README.md), [native preparation evidence](../product/delivery/evidence/d3-native-application-preparation-release-2026-10-07.md) | Local isolation/replay tests and dormant managed resource evidence; complete activation/drain/cleanup acceptance remains |
 
 ## Remaining source work and external gates
@@ -70,12 +70,13 @@ not a fresh live run of the current connected journey. Current verification and 
   possible provider retention; `store:false`, cancellation or response deletion cannot close this gate.
 - No provider adapter exists (D3-013 fixtures are missing); no live form, submission, or
   confirmation detection has been exercised.
-- Saved-answer storage/backend reuse exists; observed-form selection/review UI, compatible
-  current release and connected correction/expiry/reuse acceptance remain. Do not infer context
+- Saved-answer storage/backend reuse and D3-087 observed-form selection/review source exist;
+  compatible current release and live correction/expiry/reuse acceptance remain. Do not infer context
   or question hashes from a job description or silently select the newest answer version.
 - The owner selected separate in-memory Auth0 popup PKCE ([ADR-044](../adr/044-browser-native-material-identity.md)). Default-off browser-native resume/cover-letter previews and approved downloads now have local source and synthetic Chromium evidence. The existing SPA registration/public configuration, native HTTPS/CORS and exact-owner live acceptance remain unverified. No confidential web token is returned and generated content does not cross the BFF.
-- The extension application executor/handoff is unfinished. No accepted form/confirmation
-  adapter exists, and no installed-extension application submission is claimed.
+- D3-086 manual extension handoff and D3-087 explicit question capture are locally verified and
+  default off. The automated executor and accepted form/confirmation adapter remain unfinished;
+  no installed-extension application submission is claimed.
 - Candidate export/deletion/restore and native withdrawal have local and partial managed evidence;
   fresh current-release document-inclusive rights/restore, backup aging, original-writer drain,
   all-copy disposal and accountable review remain. Use the [current phase register](../product/delivery/phase-3-application-preparation.md)

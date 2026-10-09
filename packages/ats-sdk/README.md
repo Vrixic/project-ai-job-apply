@@ -29,5 +29,9 @@ options per control and 300 normalized characters per label/name/option. Combine
 labels also obey the text bound. `extractGenericForm` throws a fixed, content-free `RangeError`;
 callers must stop planning and leave completion to the candidate. Radio grouping includes every
 member within the bounds and preserves requiredness from any member, including the last field.
-No current production consumer invokes this extractor; future adapter integration must handle
-this refusal before hashing, planning or acting on a form.
+The default-off manual question capture invokes the extractor as a self-contained top-frame
+function. Label resolution excludes text inside controls, including initial textarea contents.
+Browser-safe subpaths expose extraction, mapping and canonical structure inputs without Node crypto.
+The observed-form envelope parser rejects unknown fields, values, oversized input, challenges and
+expired/future captures. This is candidate-controlled metadata, not authorized provider evidence.
+See [ADR-046](../../docs/adr/046-observed-form-saved-answer-selection.md).

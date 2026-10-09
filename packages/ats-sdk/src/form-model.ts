@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { formStructureDigestInput } from "./observed-form.js";
 
 export type FormFieldType =
   | "text"
@@ -36,14 +37,5 @@ export interface ApplicationFormModel {
  * old one.
  */
 export function formStructureHash(form: ApplicationFormModel): string {
-  const structure = form.fields.map((field) => [
-    field.label.trim().toLowerCase(),
-    field.name,
-    field.type,
-    field.required,
-    field.options.map((option) => option.trim().toLowerCase()),
-  ]);
-  return createHash("sha256")
-    .update(JSON.stringify({ v: 1, challenge: form.challengePresent, fields: structure }))
-    .digest("hex");
+  return createHash("sha256").update(formStructureDigestInput(form)).digest("hex");
 }

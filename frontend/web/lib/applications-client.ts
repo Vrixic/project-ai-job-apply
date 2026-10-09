@@ -3,6 +3,7 @@ import type {
   ApplicationResumeFile,
   ApplicationResumePreview,
   ApplicationSubmissionStart,
+  StartManualApplicationSubmissionRequest,
 } from "@ai-job-apply/api-contracts";
 
 /**
@@ -101,6 +102,7 @@ export async function startManualApplicationSubmission(
   applicationId: string,
   expectedRevision: number,
   options: ApplicationsCallOptions = {},
+  observedForm?: StartManualApplicationSubmissionRequest["observedForm"],
 ): Promise<ApplicationsCallResult> {
   const send = options.fetch ?? fetch;
   try {
@@ -113,7 +115,7 @@ export async function startManualApplicationSubmission(
         "content-type": "application/json",
         "idempotency-key": commandKey("manual-submission", applicationId, expectedRevision),
       },
-      body: JSON.stringify({ expectedRevision }),
+      body: JSON.stringify({ expectedRevision, ...(observedForm ? { observedForm } : {}) }),
     });
     const value: unknown = await response.json().catch(() => undefined);
     if (response.ok && value && typeof value === "object") {

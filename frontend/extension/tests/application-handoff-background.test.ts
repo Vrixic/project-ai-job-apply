@@ -21,6 +21,7 @@ interface Result {
   snapshotId?: string;
   value?: string;
   handoff?: unknown;
+  observedForm?: string;
 }
 async function background(enabled = true) {
   vi.stubGlobal("__APPLICATION_HANDOFF_WEB_ORIGIN__", enabled ? WEB : "");
@@ -43,6 +44,25 @@ async function background(enabled = true) {
     respond: (result: Result) => void,
   ) => boolean;
   const browser = {
+    scripting: {
+      executeScript: vi.fn(async () => [
+        {
+          result: {
+            challengePresent: false,
+            fields: [
+              {
+                ref: "f0",
+                name: "authorization",
+                label: "Work authorization",
+                type: "select",
+                required: true,
+                options: ["Yes", "No"],
+              },
+            ],
+          },
+        },
+      ]),
+    },
     runtime: {
       id: "synthetic-extension",
       getURL: (path: string) => `chrome-extension://synthetic-extension/${path}`,
@@ -108,6 +128,91 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("manual handoff background trust boundary", () => {
+  it("captures only bounded structure after owner/job reads without requiring approval or persisting a queue", async () => {
+    const worker = await background();
+    worker.fixture.application.status = "review_required";
+    worker.fixture.application.currentAction = "review_and_approve";
+    const result = await worker.send({ action: "application_form_capture", reviewLink: LINK });
+    expect(result.ok).toBe(true);
+    expect(JSON.parse(result.observedForm ?? "{}")).toMatchObject({
+      schema: "application-observed-form.v1",
+      applicationId: worker.fixture.application.id,
+      destination: EMPLOYER,
+    });
+    expect(result.observedForm).not.toContain("synthetic@example.test");
+    expect(
+      worker.fetcher.mock.calls.filter(([url]) =>
+        /\/v1\/(?:applications|jobs)\//u.test(String(url)),
+      ),
+    ).toHaveLength(3);
+    expect(worker.local.size + worker.session.size).toBe(0);
+  });
+  it.each(["disabled", "destination", "owner", "challenge", "values", "active_attempt"])(
+    "refuses %s form capture",
+    async (kind) => {
+      const worker = await background(kind !== "disabled");
+      if (kind === "destination")
+        worker.browser.tabs.query.mockResolvedValue([{ id: 7, url: "https://other.example/" }]);
+      if (kind === "owner") worker.fixture.application.id = "00000000-0000-7000-8000-000000000099";
+      if (kind === "challenge")
+        worker.browser.scripting.executeScript.mockResolvedValue([
+          { result: { challengePresent: true, fields: [] } },
+        ]);
+      if (kind === "values")
+        worker.browser.scripting.executeScript.mockResolvedValue([
+          {
+            result: {
+              challengePresent: false,
+              fields: [
+                {
+                  ref: "f0",
+                  name: "auth",
+                  label: "Work authorization",
+                  type: "select",
+                  required: true,
+                  options: ["Yes", "No"],
+                  value: "PRIVATE",
+                } as never,
+              ],
+            },
+          },
+        ]);
+      if (kind === "active_attempt")
+        worker.fixture.application.attempts = [
+          {
+            id: "00000000-0000-7000-8000-000000000044",
+            sequence: 1,
+            status: "ambiguous",
+            adapterId: "manual",
+            adapterVersion: "none",
+            startedAt: new Date().toISOString(),
+          },
+        ];
+      expect((await worker.send({ action: "application_form_capture", reviewLink: LINK })).ok).toBe(
+        false,
+      );
+    },
+  );
+  it("refuses a tab change during structure inspection", async () => {
+    const worker = await background();
+    worker.browser.scripting.executeScript.mockImplementation(async () => {
+      worker.browser.tabs.query.mockResolvedValue([{ id: 8, url: EMPLOYER }]);
+      return [{ result: { challengePresent: false, fields: [] } }];
+    });
+    expect((await worker.send({ action: "application_form_capture", reviewLink: LINK })).ok).toBe(
+      false,
+    );
+  });
+  it("bounds a stalled page inspection and ignores its late result", async () => {
+    vi.useFakeTimers();
+    const worker = await background();
+    worker.browser.scripting.executeScript.mockImplementation(() => new Promise(() => undefined));
+    const result = worker.send({ action: "application_form_capture", reviewLink: LINK });
+    await vi.advanceTimersByTimeAsync(30_001);
+    expect((await result).ok).toBe(false);
+    expect((await worker.send({ action: "application_handoff_clear" })).ok).toBe(true);
+    vi.useRealTimers();
+  });
   it("rechecks each copy, preserves No, and writes no private answers to extension storage", async () => {
     const worker = await background();
     const preview = await worker.send({ action: "application_handoff_read", reviewLink: LINK });

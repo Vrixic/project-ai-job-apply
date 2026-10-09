@@ -6,6 +6,7 @@ import {
   type ApplicationTemporaryMaterial,
   COVER_LETTER_DISCLOSURE_TEXT,
   COVER_LETTER_DISCLOSURE_VERSION,
+  type PrepareApplicationPacketRequest,
 } from "@ai-job-apply/api-contracts";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { sameMaterial } from "../lib/application-material-lifetime";
@@ -28,9 +29,15 @@ import { type ApplicationReviewActions, ApplicationReviewPanel } from "./applica
 import { ApplyPanel } from "./apply-panel";
 import { NativeApplicationMaterials } from "./native-application-materials";
 import { ResumePreviewSection } from "./resume-preview-section";
+import {
+  type SavedApplicationAnswerSelection,
+  SavedApplicationAnswers,
+} from "./saved-application-answers";
 
 type Entries = Readonly<Record<string, string | boolean>>;
 const coverLetterUiEnabled = process.env.NEXT_PUBLIC_COVER_LETTER_PREPARATION_UI === "enabled";
+const savedAnswersUiEnabled =
+  process.env.NEXT_PUBLIC_APPLICATION_SAVED_ANSWER_SELECTION_UI === "enabled";
 
 /**
  * Starts and reviews one application for a job. If the candidate already has a live application
@@ -45,6 +52,7 @@ export function ApplicationsWorkspace({
   applyUrl,
   fetchImplementation,
   coverLetterPreparationEnabled = coverLetterUiEnabled,
+  savedAnswerSelectionEnabled = savedAnswersUiEnabled,
 }: {
   jobId: string;
   applicationId?: string;
@@ -52,6 +60,7 @@ export function ApplicationsWorkspace({
   applyUrl?: string | undefined;
   fetchImplementation?: typeof globalThis.fetch;
   coverLetterPreparationEnabled?: boolean;
+  savedAnswerSelectionEnabled?: boolean;
 }) {
   return (
     <JobApplicationWorkspace
@@ -60,6 +69,7 @@ export function ApplicationsWorkspace({
       {...(applicationId ? { applicationId } : {})}
       applyUrl={applyUrl}
       coverLetterPreparationEnabled={coverLetterPreparationEnabled}
+      savedAnswerSelectionEnabled={savedAnswerSelectionEnabled}
       {...(fetchImplementation ? { fetchImplementation } : {})}
     />
   );
@@ -71,6 +81,7 @@ function JobApplicationWorkspace({
   applyUrl,
   fetchImplementation,
   coverLetterPreparationEnabled,
+  savedAnswerSelectionEnabled,
 }: Parameters<typeof ApplicationsWorkspace>[0]) {
   const headingId = useId();
   const [nativeConfiguration] = useState(nativeMaterialConfiguration);
@@ -240,8 +251,44 @@ function JobApplicationWorkspace({
     }
   }
 
-  async function prepare(current: Application, answers: Entries, includeCoverLetter = false) {
-    const userEntries = Object.entries(answers)
+  async function prepare(
+    current: Application,
+    answers: Entries,
+    includeCoverLetter = false,
+    selected?: SavedApplicationAnswerSelection,
+  ) {
+    const previousEntries = Object.fromEntries(
+      (current.currentPacket?.fields ?? [])
+        .filter(
+          (field) =>
+            field.origin === "user_entered" &&
+            (typeof field.value === "string" || typeof field.value === "boolean"),
+        )
+        .map((field) => [field.fieldKey, field.value as string | boolean]),
+    );
+    // Reconstruct only exact selection metadata; values remain owned by the protected vault read.
+    const selections: PrepareApplicationPacketRequest["vaultSelections"] =
+      selected?.vaultSelections ??
+      (current.currentPacket?.fields ?? []).flatMap((field) =>
+        field.origin === "answer_vault" &&
+        field.vaultReference &&
+        !Object.hasOwn(answers, field.fieldKey)
+          ? [
+              {
+                id: field.vaultReference.id,
+                version: field.vaultReference.version,
+                fieldKey: field.fieldKey,
+                context: field.vaultReference.context,
+                questionHash: field.vaultReference.questionHash,
+                meaningConfirmed: true as const,
+              },
+            ]
+          : [],
+      );
+    const form = selected?.form ?? current.currentPacket?.form;
+    const selectedKeys = new Set(selections.map((selection) => selection.fieldKey));
+    const userEntries = Object.entries({ ...previousEntries, ...answers })
+      .filter(([fieldKey]) => !selectedKeys.has(fieldKey))
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([fieldKey, value]) => ({ fieldKey, value }));
     const coverLetter = includeCoverLetter
@@ -252,7 +299,14 @@ function JobApplicationWorkspace({
           },
         }
       : undefined;
-    const signature = JSON.stringify([current.id, current.revision, userEntries, coverLetter]);
+    const signature = JSON.stringify([
+      current.id,
+      current.revision,
+      userEntries,
+      coverLetter,
+      form,
+      selections,
+    ]);
     if (prepareIntent.current?.signature !== signature)
       prepareIntent.current = { signature, key: `web-prepare-${crypto.randomUUID()}` };
     const idempotencyKey = prepareIntent.current.key;
@@ -262,6 +316,8 @@ function JobApplicationWorkspace({
         expectedRevision: current.revision,
         ...(userEntries.length ? { userEntries } : {}),
         ...(coverLetter ? { coverLetter } : {}),
+        ...(form ? { form } : {}),
+        ...(selections.length ? { vaultSelections: selections } : {}),
       },
       idempotencyKey,
       options,
@@ -481,6 +537,27 @@ function JobApplicationWorkspace({
               availableMaterials={availableMaterials}
             />
           ) : null}
+          {!preparation &&
+          !busy &&
+          savedAnswerSelectionEnabled &&
+          application.status === "review_required" ? (
+            <SavedApplicationAnswers
+              key={`${application.id}:${application.revision}`}
+              application={application}
+              {...(fetchImplementation ? { fetchImplementation } : {})}
+              onPrepare={async (selection) => {
+                if (starting.current) return;
+                starting.current = true;
+                setBusy(true);
+                try {
+                  await prepare(application, entries, false, selection);
+                } finally {
+                  starting.current = false;
+                  setBusy(false);
+                }
+              }}
+            />
+          ) : null}
           {!preparation && application.status === "review_required" && coverLetterRequested ? (
             <button
               type="button"
@@ -498,15 +575,16 @@ function JobApplicationWorkspace({
               )}
               applyUrl={applyUrl}
               {...(fetchImplementation ? { fetchImplementation } : {})}
-              onRecordManualSubmission={async () => {
-                await settle(
-                  await startManualApplicationSubmission(
-                    application.id,
-                    application.revision,
-                    options,
-                  ),
+              onRecordManualSubmission={async (observation) => {
+                const result = await startManualApplicationSubmission(
                   application.id,
+                  application.revision,
+                  options,
+                  observation,
                 );
+                // A lost response may already have started takeover. Read it before offering another capture.
+                if (!result.ok && observation) await refresh(application.id);
+                await settle(result, application.id);
               }}
             />
           ) : null}

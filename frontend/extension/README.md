@@ -298,6 +298,14 @@ not make the extension live-ready or store-ready.
 
 ## Manual approved application handoff (D3, default off)
 
+The same unpacked-only configuration exposes explicit “Copy employer question structure”. Paste
+an exact application review link on its current canonical employer page. Protected owner/job
+reads bracket bounded top-frame extraction; tab/account/revision changes refuse the result.
+Only question metadata is copied, never entered answers, uploads or tokens. Challenges/oversized
+structures are refused. Paste into the web saved-answer selection surface within 60 seconds;
+clipboard content remains candidate controlled. No form is filled or submitted, and no snapshot
+queue is persisted. See [ADR-046](../../docs/adr/046-observed-form-saved-answer-selection.md).
+
 For controlled unpacked testing only, set `EXTENSION_APPLICATION_HANDOFF_ENABLED=true` and one
 exact HTTPS `EXTENSION_APPLICATION_HANDOFF_WEB_ORIGIN`. Identity and API configuration are required;
 the extension's public-client grant needs `applications:read`. No grant is created by the build.
@@ -307,7 +315,7 @@ rechecks. No clipboard-read or employer-host permission is added; default-off pe
 The web workspace independently needs `NEXT_PUBLIC_APPLICATION_EXTENSION_HANDOFF=enabled`.
 
 Copy the approved application's review link from the web workspace. Open the matching employer
-page and paste the link into “Complete an approved application.” Each answer copy rechecks the
+page and paste the link into “Application review handoff.” Each answer copy rechecks the
 current account, tab, job, packet, approval and original material expiry/withdrawal. Restricted
 answers require question/context confirmation on every copy. Documents stay in the native web
 workspace; the extension performs no fill or submission. Return to the linked application to

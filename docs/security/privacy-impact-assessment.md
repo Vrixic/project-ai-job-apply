@@ -1,5 +1,14 @@
 # Phase 0 Privacy Impact Assessment
 
+Default-off observed-form selection delta (2026-10-09): candidate-invoked question capture reads
+bounded top-frame structure only, excluding entered values and text inside controls. The candidate
+manually transfers metadata by clipboard; explain that clipboard copies remain under their control.
+Web lists saved metadata without values, confirms exact question meaning/context and requests
+existing protected packet preparation. Raw questions are not sent to Applications or telemetry.
+Memory is cleared on hidden/exit, unmount, packet change and original 60-second lease expiry.
+No privacy/legal approval is inferred; [ADR-046](../adr/046-observed-form-saved-answer-selection.md)
+retains default-off and accountable release gates.
+
 - Status: Engineering review ready; accountable privacy/legal and security approval pending
 - Last updated: 2026-08-25
 - Assessment owner: Security/privacy engineering
@@ -168,3 +177,12 @@ installed-extension/live-provider/privacy residuals.
 | Product owner | Founder/repository owner; legal name pending | Direction recorded | 2026-07-28 | Product decisions in this assessment | All product decisions recorded; external approval not granted |
 | Privacy/legal reviewer | Pending | Not reviewed | — | — | Counsel required |
 | Security reviewer | Pending | Not reviewed | — | — | Independent/accountable reviewer required |
+
+
+D3-087 manual continuation delta: form-bound starts require a fresh matching imported structure
+and explicit candidate confirmation. Only the scalar binding, original capture time and confirmation
+cross the existing Applications command; SQL admission checks the 60-second lease after locks and
+preserves saved-version/material/approval invalidation. This remains untrusted candidate attestation,
+not provider proof. Identical accepted commands replay; changed proofs cannot silently replace the
+original idempotent action. Compatible readers precede default-off client activation. No accountable
+review or live acceptance is inferred from local tests; see proposed ADR-046.

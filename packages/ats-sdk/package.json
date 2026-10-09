@@ -7,6 +7,18 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./extract": {
+      "types": "./dist/extract.d.ts",
+      "default": "./dist/extract.js"
+    },
+    "./observed-form": {
+      "types": "./dist/observed-form.d.ts",
+      "default": "./dist/observed-form.js"
+    },
+    "./mapping": {
+      "types": "./dist/mapping.d.ts",
+      "default": "./dist/mapping.js"
     }
   },
   "scripts": {

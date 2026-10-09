@@ -5,6 +5,7 @@ const FOUNDATION_RESPONSE_TIMEOUT_MILLISECONDS = 10_000;
 const JSON_CONTENT_TYPE_PATTERN = /^application\/json(?:\s*;\s*charset=utf-8)?$/i;
 
 export type FoundationResponseSchemaName =
+  | "CanonicalJobDetail"
   | "EntitlementSummary"
   | "Operation"
   | "JobPreferenceSet"
@@ -25,6 +26,7 @@ const validators = new Map<
   FoundationResponseSchemaName,
   ReturnType<typeof compileComponentValidator>
 >([
+  ["CanonicalJobDetail", compileComponentValidator("CanonicalJobDetail")],
   ["EntitlementSummary", compileComponentValidator("EntitlementSummary")],
   ["Operation", compileComponentValidator("Operation")],
   ["JobPreferenceSet", compileComponentValidator("JobPreferenceSet")],

@@ -1255,3 +1255,26 @@ describe("resume upload commands", () => {
     ).toBe(false);
   });
 });
+
+describe("fresh candidate-observed manual form command", () => {
+  const validate = compileComponentValidator("StartManualApplicationSubmissionRequest");
+  const observedForm = {
+    form: { adapterId: "generic-assisted-v1", variantId: "generic", formHash: "a".repeat(64) },
+    capturedAtEpochMs: 1000,
+    confirmed: true,
+  };
+  it("preserves legacy requests and accepts the closed optional attestation", () => {
+    expect(validate({ expectedRevision: 3 })).toBe(true);
+    expect(validate({ expectedRevision: 3, observedForm })).toBe(true);
+  });
+  it.each([
+    { ...observedForm, confirmed: false },
+    { ...observedForm, capturedAtEpochMs: -1 },
+    { ...observedForm, capturedAtEpochMs: 1.5 },
+    { ...observedForm, capturedAtEpochMs: Number.MAX_SAFE_INTEGER + 1 },
+    { ...observedForm, value: "private" },
+    { ...observedForm, form: { ...observedForm.form, questions: [] } },
+  ])("refuses invalid or value-bearing attestations %#", (value) => {
+    expect(validate({ expectedRevision: 3, observedForm: value })).toBe(false);
+  });
+});

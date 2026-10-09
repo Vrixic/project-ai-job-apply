@@ -1,5 +1,14 @@
 # Phase 0 Threat Model
 
+Default-off observed-form selection (2026-10-09): forged imports are untrusted candidate inputs,
+not signed provider evidence. Refuse unknown/value-bearing fields, wrong application/job/destination,
+future/expired captures, challenges and oversized structures. Bracket extraction with owner/revision,
+tab and identity checks; discard late/cancelled work. Exclude control contents from accessible labels.
+Conflicting/unmapped/direct-action questions remain manual. Exact saved versions/context require
+explicit meaning confirmation and final packet review; existing backend correction/deletion/expiry
+guards remain authoritative. Clipboard copies are candidate controlled. Installed/live/accountable
+acceptance remains open under [ADR-046](../adr/046-observed-form-saved-answer-selection.md).
+
 - Status: Engineering review ready; product, legal/privacy, and accountable security approval pending
 - Method: STRIDE with explicit trust boundaries
 - Last updated: 2026-08-11
@@ -353,3 +362,12 @@ release review remain gates in [ADR-045](../adr/045-manual-approved-application-
 The opt-in build adds write-only clipboard permission for asynchronous rechecks; default-off
 permissions stay unchanged. Clipboard refusal clears the sensitive preview. Installed popup
 focus and slow focused-copy behavior still require controlled acceptance; no focus bypass exists.
+
+
+D3-087 manual continuation delta: form-bound starts require a fresh matching imported structure
+and explicit candidate confirmation. Only the scalar binding, original capture time and confirmation
+cross the existing Applications command; SQL admission checks the 60-second lease after locks and
+preserves saved-version/material/approval invalidation. This remains untrusted candidate attestation,
+not provider proof. Identical accepted commands replay; changed proofs cannot silently replace the
+original idempotent action. Compatible readers precede default-off client activation. No accountable
+review or live acceptance is inferred from local tests; see proposed ADR-046.

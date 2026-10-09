@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@ai-job-apply/api-contracts": "workspace:*"
+    "@ai-job-apply/api-contracts": "workspace:*",
+    "@ai-job-apply/ats-sdk": "workspace:*"
   },
   "scripts": {
     "build": "node build.mjs",

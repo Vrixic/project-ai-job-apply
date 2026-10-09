@@ -480,6 +480,9 @@ importers:
       '@ai-job-apply/api-contracts':
         specifier: workspace:*
         version: link:../../packages/api-contracts
+      '@ai-job-apply/ats-sdk':
+        specifier: workspace:*
+        version: link:../../packages/ats-sdk
     devDependencies:
       '@types/chrome':
         specifier: 0.3.0
@@ -515,6 +518,9 @@ importers:
       '@ai-job-apply/api-contracts':
         specifier: workspace:*
         version: link:../../packages/api-contracts
+      '@ai-job-apply/ats-sdk':
+        specifier: workspace:*
+        version: link:../../packages/ats-sdk
       '@ai-job-apply/config':
         specifier: workspace:*
         version: link:../../packages/config

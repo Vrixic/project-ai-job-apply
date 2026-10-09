@@ -56,7 +56,7 @@ beforeEach(() => {
   });
   clipboard.mockClear();
   document.body.innerHTML =
-    '<button id="logout">Logout</button><section id="application-handoff" hidden><input><button data-handoff-load>Load</button><button data-handoff-clear>Clear</button><div data-handoff-content></div><div data-handoff-status></div></section>';
+    '<button id="logout">Logout</button><section id="application-handoff" hidden><input><button data-handoff-load>Load</button><button data-handoff-form>Copy structure</button><button data-handoff-clear>Clear</button><div data-handoff-content></div><div data-handoff-status></div></section>';
   for (const target of [window, document]) {
     const original = target.addEventListener.bind(target);
     vi.spyOn(target, "addEventListener").mockImplementation(((
@@ -101,6 +101,35 @@ function copyButton() {
   return button;
 }
 describe("manual handoff UI", () => {
+  it("copies explicit structure only and suppresses a late result after clear", async () => {
+    mountApplicationHandoff();
+    control<HTMLInputElement>("input").value = LINK;
+    send.mockImplementation(async (message) =>
+      message.action === "application_form_capture"
+        ? { ok: true, observedForm: "synthetic structure" }
+        : { ok: true },
+    );
+    control<HTMLButtonElement>("[data-handoff-form]").click();
+    await flush();
+    expect(clipboard).toHaveBeenCalledWith("synthetic structure");
+    expect(send).toHaveBeenCalledWith({ action: "application_form_capture", reviewLink: LINK });
+    clipboard.mockClear();
+    let finish: (value: unknown) => void = () => undefined;
+    send.mockImplementation(async (message) =>
+      message.action === "application_form_capture"
+        ? new Promise((resolve) => {
+            finish = resolve;
+          })
+        : { ok: true },
+    );
+    control<HTMLInputElement>("input").value = LINK;
+    control<HTMLButtonElement>("[data-handoff-form]").click();
+    await flush();
+    control<HTMLButtonElement>("[data-handoff-clear]").click();
+    finish({ ok: true, observedForm: "late" });
+    await flush();
+    expect(clipboard).not.toHaveBeenCalled();
+  });
   it("clears sensitive preview after the browser refuses clipboard access", async () => {
     await load();
     confirm();

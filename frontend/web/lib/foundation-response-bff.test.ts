@@ -198,6 +198,26 @@ const restrictedAnswer = {
 };
 
 const validValues: Record<FoundationResponseSchemaName, unknown> = {
+  CanonicalJobDetail: {
+    id: "00000000-0000-7000-8000-000000000002",
+    company: { id: "00000000-0000-7000-8000-000000000003", name: "Synthetic" },
+    title: "Synthetic Engineer",
+    locations: ["Synthetic location"],
+    description: "Synthetic description",
+    status: "active",
+    firstObservedAt: "2026-10-09T12:00:00Z",
+    lastVerifiedAt: "2026-10-09T12:00:00Z",
+    expiresAt: "2026-10-10T12:00:00Z",
+    sources: [
+      {
+        provider: "other",
+        provenance: "authorized_fixture",
+        canonicalUrl: "https://employer.example/jobs/1",
+        firstObservedAt: "2026-10-09T12:00:00Z",
+        lastVerifiedAt: "2026-10-09T12:00:00Z",
+      },
+    ],
+  },
   EntitlementSummary: freeEntitlement,
   JobPreferenceSet: preferenceSet,
   PutJobPreferencesResponse: putPreferenceResponse,
