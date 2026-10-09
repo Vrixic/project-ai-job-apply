@@ -123,3 +123,10 @@ New readers continue to accept old resume responses; older strict validators mus
 before native responses include the optional metadata. Deploy compatible consumers and the
 Gateway/Applications metadata route before activating native resume reads. Existing content
 routes are unchanged. No SQL migration, activation or frontend update is included in this change.
+
+`pnpm contracts:generate` also emits `generated/browser-validators.cjs` and its type declarations
+from the existing Application, CanonicalJobDetail and ApplicationTemporaryMaterialAuthorization
+v1 schemas. Import `@ai-job-apply/api-contracts/browser-validators` in the MV3 extension to validate
+closed shapes without runtime schema compilation or eval. Do not hand-edit generated files.
+The `job-revision-canonical` export shares the exact existing active-job digest input with the
+gateway; parity tests protect existing packet hashes. No wire or persistence schema changes.

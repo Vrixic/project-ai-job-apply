@@ -72,6 +72,17 @@ try {
   assert.equal(await approve.isEnabled(), false);
   await page.getByRole("checkbox", { name: "I reviewed contact.email", exact: true }).check();
   await approve.press("Enter");
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll("input")].some(
+      (input) => input.readOnly && input.value.includes("/jobs?application="),
+    ),
+  );
+  const handoffLink = new URL(
+    await page.getByLabel("Application review link", { exact: true }).inputValue(),
+  );
+  assert.equal(handoffLink.origin, server.origin);
+  assert.deepEqual([...handoffLink.searchParams.keys()], ["application", "job"]);
+  assert.equal(handoffLink.searchParams.get("application"), "00000000-0000-7000-8000-000000000001");
   const record = page.getByRole("button", { name: "Record submission status", exact: true });
   await record.waitFor();
   await record.focus();

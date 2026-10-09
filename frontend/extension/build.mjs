@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, context } from "esbuild";
 import {
+  applicationHandoffOriginForBuild,
   capabilityPolicyPublicKeysForBuild,
   developmentContributionProvidersForBuild,
   localExtensionEnvironment,
@@ -20,6 +21,7 @@ const iconPaths = {
 };
 
 const fileEnvironment = await localExtensionEnvironment(extensionRoot);
+const handoffWebOrigin = applicationHandoffOriginForBuild(process.env, fileEnvironment);
 const developmentContributions = parseDevelopmentContributions(
   process.env.EXTENSION_DEVELOPMENT_CONTRIBUTIONS ??
     fileEnvironment.EXTENSION_DEVELOPMENT_CONTRIBUTIONS,
@@ -116,6 +118,8 @@ const configured =
   !/\s/u.test(domain) &&
   clientId.length > 0 &&
   audience === "ai-job-apply-api";
+if (handoffWebOrigin && (!configured || !apiOrigin))
+  throw new Error("Application handoff requires public Auth0 and API configuration");
 
 const popupTemplate = await readFile(join(extensionRoot, "static", "popup.html"), "utf8");
 const diagnosticsStart = "<!-- DEVELOPMENT_DIAGNOSTICS_START -->";
@@ -150,6 +154,7 @@ const buildOptions = {
     ? { banner: { js: "// UNPACKED_DEVELOPMENT_CONTRIBUTIONS_ONLY" } }
     : {}),
   define: {
+    __APPLICATION_HANDOFF_WEB_ORIGIN__: JSON.stringify(handoffWebOrigin),
     __AUTH0_AUDIENCE__: JSON.stringify(configured ? audience : ""),
     __AUTH0_CLIENT_ID__: JSON.stringify(configured ? clientId : ""),
     __AUTH0_DOMAIN__: JSON.stringify(configured ? domain : ""),
@@ -179,15 +184,29 @@ const manifest = {
   manifest_version: 3,
   name: developmentContributions
     ? "ApplyDash Job Capture (Development)"
-    : "ApplyDash Job Capture (Default Dark)",
+    : handoffWebOrigin
+      ? "ApplyDash Application Handoff (Development)"
+      : "ApplyDash Job Capture (Default Dark)",
   version: packageMetadata.version,
-  ...(developmentContributions
-    ? { version_name: `${packageMetadata.version}-development-contributions` }
+  ...(developmentContributions || handoffWebOrigin
+    ? {
+        version_name: developmentContributions
+          ? `${packageMetadata.version}-development-contributions`
+          : `${packageMetadata.version}-application-handoff-development`,
+      }
     : {}),
   description: developmentContributions
     ? "Unpacked development-only contribution preview; not for store distribution."
     : "Synthetic-only current-tab job capture and explicit contribution preview.",
-  permissions: ["activeTab", "alarms", "identity", "scripting", "sidePanel", "storage"],
+  permissions: [
+    "activeTab",
+    "alarms",
+    "identity",
+    "scripting",
+    "sidePanel",
+    "storage",
+    ...(handoffWebOrigin ? ["clipboardWrite"] : []),
+  ],
   ...(configured || apiOrigin
     ? {
         host_permissions: [

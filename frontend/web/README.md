@@ -302,3 +302,14 @@ also requests Clear-Site-Data for cache/storage. Browser support, open tabs, dow
 external copies, offline logout and eventual remote retirement still need managed/client
 acceptance; this header alone does not prove that every memory copy was erased. No cleanup
 activation or phase-completion claim follows from the source flag or local mock-based tests.
+
+## Manual extension handoff (default off)
+
+`NEXT_PUBLIC_APPLICATION_EXTENSION_HANDOFF=enabled` offers an opaque application/job review link
+only for a current approved, unexpired packet. The separately configured unpacked extension reads
+that packet with its own account and copies candidate-approved answers on the matching employer
+page. Generated documents remain in this native browser workspace. The extension never submits.
+An exact `/jobs?application=UUID&job=UUID` link reopens that owner-scoped application; a failed or
+mismatched lookup shows retry rather than selecting another packet. The existing manual Apply
+and explicit outcome confirmation record history. Local synthetic tests do not establish installed
+extension or live-provider acceptance. See [ADR-045](../../docs/adr/045-manual-approved-application-handoff.md).

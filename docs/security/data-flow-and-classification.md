@@ -916,3 +916,22 @@ references on expiry/exit/terminal transitions. No refresh tokens or silent rene
 local credentials last at most ten minutes. Download object URLs are revoked, byte buffers cleared,
 and all content retains its original 30-minute deadline. JavaScript string disposal is logical.
 See [ADR-044](../adr/044-browser-native-material-identity.md) for trust and activation gates.
+
+## Manual approved-answer extension handoff (2026-10-09, default off)
+
+Candidate copies opaque web application/job link -> trusted extension popup -> existing public
+extension session -> owner-scoped application/job/scalar material-authorization reads. Candidate
+answers (confidential/restricted) remain popup memory for at most 60 seconds; the background holds
+only binding IDs/hash/deadline. Every copy repeats owner, tab, job, immutable approval, withdrawal
+and original-expiry checks. Restricted answers require explicit question/context confirmation for
+each copy. No generated content, document bytes, content-script bridge, provider request or submit
+capability crosses this boundary. Existing protected packet reads recheck saved-answer references.
+Clipboard copies are candidate controlled. Exact first-party return links carry only IDs and use
+no referrer; web lookup refuses mismatched/absent ownership rather than selecting another packet.
+No new persistence/logging/export surface; JavaScript logical disposal has the same limitations
+as native preview disposal. [ADR-045](../adr/045-manual-approved-application-handoff.md) records
+rollout and remaining installed-extension/live/accountable review gates.
+
+Only explicitly enabled unpacked handoff builds request write-only `clipboardWrite`, allowing
+candidate-triggered writes after asynchronous owner checks. No clipboard read or employer host
+permission is added. A browser refusal discards the preview; it never bypasses focus restrictions.

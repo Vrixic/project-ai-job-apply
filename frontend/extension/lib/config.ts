@@ -10,10 +10,12 @@ declare const __CAPABILITY_POLICY_PUBLIC_KEYS__: Readonly<Record<string, string>
 declare const __UGC_CONTRIBUTION_POLICY_VERSION__: string;
 declare const __DEVELOPMENT_CONTRIBUTIONS__: boolean;
 declare const __DEVELOPMENT_CONTRIBUTION_PROVIDERS__: unknown;
+declare const __APPLICATION_HANDOFF_WEB_ORIGIN__: string;
 
 const POLICY_VERSION = /^[a-z0-9][a-z0-9._-]{2,99}$/u;
 
 export interface ExtensionPublicConfiguration {
+  applicationHandoffWebOrigin?: string;
   apiOrigin?: string;
   apiConfigured: boolean;
   audience: string;
@@ -28,6 +30,7 @@ export interface ExtensionPublicConfiguration {
 }
 
 export function extensionPublicConfiguration(values: {
+  applicationHandoffWebOrigin?: string;
   apiOrigin?: string;
   audience: string;
   capabilityPolicyPublicKeys?: Readonly<Record<string, string>>;
@@ -42,6 +45,7 @@ export function extensionPublicConfiguration(values: {
   const clientId = values.clientId.trim();
   const audience = values.audience.trim();
   const apiOrigin = safeApiOrigin(values.apiOrigin ?? "");
+  const applicationHandoffWebOrigin = safeApiOrigin(values.applicationHandoffWebOrigin ?? "");
   const pendingRetentionMilliseconds = values.pendingRetentionMilliseconds;
   const ugcContributionPolicyVersion = values.ugcContributionPolicyVersion?.trim();
   const capabilityPolicyPublicKeys = Object.fromEntries(
@@ -58,6 +62,7 @@ export function extensionPublicConfiguration(values: {
       .slice(0, 5),
   );
   return {
+    ...(applicationHandoffWebOrigin ? { applicationHandoffWebOrigin } : {}),
     apiConfigured: apiOrigin !== undefined,
     audience,
     capabilityPolicyPublicKeys,
@@ -113,6 +118,10 @@ export function safeApiOrigin(value: string): string | undefined {
 }
 
 export const extensionConfiguration = extensionPublicConfiguration({
+  applicationHandoffWebOrigin:
+    typeof __APPLICATION_HANDOFF_WEB_ORIGIN__ === "string"
+      ? __APPLICATION_HANDOFF_WEB_ORIGIN__
+      : "",
   developmentContributionProviders:
     typeof __DEVELOPMENT_CONTRIBUTION_PROVIDERS__ === "undefined"
       ? undefined

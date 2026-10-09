@@ -7,6 +7,31 @@ export function parseDevelopmentContributions(value) {
   throw new Error("EXTENSION_DEVELOPMENT_CONTRIBUTIONS must be exactly true or false");
 }
 
+export function applicationHandoffOriginForBuild(environment, fileEnvironment) {
+  const enabled =
+    environment.EXTENSION_APPLICATION_HANDOFF_ENABLED ??
+    fileEnvironment.EXTENSION_APPLICATION_HANDOFF_ENABLED;
+  if (enabled === undefined || enabled === "false") return "";
+  if (enabled !== "true")
+    throw new Error("EXTENSION_APPLICATION_HANDOFF_ENABLED must be exactly true or false");
+  const value =
+    environment.EXTENSION_APPLICATION_HANDOFF_WEB_ORIGIN ??
+    fileEnvironment.EXTENSION_APPLICATION_HANDOFF_WEB_ORIGIN ??
+    "";
+  const url = new URL(value);
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error("Application handoff requires one exact HTTPS website origin");
+  }
+  return url.origin;
+}
+
 export function developmentContributionProvidersForBuild(
   environment,
   fileEnvironment,
@@ -75,6 +100,12 @@ export function capabilityPolicyPublicKeysForBuild(environment, fileEnvironment,
 }
 
 export function assertStoreContributionMode(environment, fileEnvironment) {
+  if (
+    applicationHandoffOriginForBuild(environment, {}) ||
+    applicationHandoffOriginForBuild({}, fileEnvironment)
+  ) {
+    throw new Error("Application handoff is unpacked-only until its release is accepted");
+  }
   // Never silently convert an explicitly configured development build into a store artifact.
   if (
     parseDevelopmentContributions(environment.EXTENSION_DEVELOPMENT_CONTRIBUTIONS) ||

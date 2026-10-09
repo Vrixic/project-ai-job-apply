@@ -1,4 +1,6 @@
 export function safeActionErrorMessage(error: unknown, action: string): string {
+  if (action.startsWith("application_handoff_"))
+    return "Open the matching employer page and reload an approved, unexpired application review link. Sign in again if needed.";
   const message = error instanceof Error ? error.message : "";
   if (
     message.includes("cancel") ||

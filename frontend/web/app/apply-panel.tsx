@@ -8,6 +8,7 @@ import {
   sameMaterial,
 } from "../lib/application-material-lifetime";
 import { fetchResumeFile, sha256OfBytes } from "../lib/applications-client";
+import { ExtensionApplicationHandoff } from "./extension-application-handoff";
 import { useMaterialExpiry } from "./use-material-expiry";
 
 /** Only a plain https link with no credentials is ever offered as the place to apply. */
@@ -182,6 +183,7 @@ export function ApplyPanel({
           already downloaded or sent are outside platform cleanup.
         </p>
       ) : null}
+      {!expired ? <ExtensionApplicationHandoff application={application} /> : null}
       {href && !expired ? (
         <p>
           <a href={href} target="_blank" rel="noopener noreferrer">

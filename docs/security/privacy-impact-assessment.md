@@ -154,6 +154,15 @@ record any approved conditions and expiry in the
 
 ## Approval record
 
+The default-off [manual extension handoff](../adr/045-manual-approved-application-handoff.md)
+temporarily displays confidential/restricted approved candidate answers in trusted extension UI.
+Preview memory lasts at most 60 seconds and respects earlier original deadlines; every copy
+rechecks owner/approval/withdrawal. Restricted copying requires current question/context confirmation.
+No documents, generated content, page capture, provider transmission or persistent answer queue is
+added. Clipboard copies are candidate controlled and outside deletion guarantees. Synthetic tests
+are engineering evidence; this addition does not alter the reviewer dispositions below or accept
+installed-extension/live-provider/privacy residuals.
+
 | Role | Reviewer | Result | Date | Scope/version | Conditions |
 |---|---|---|---|---|---|
 | Product owner | Founder/repository owner; legal name pending | Direction recorded | 2026-07-28 | Product decisions in this assessment | All product decisions recorded; external approval not granted |

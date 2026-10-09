@@ -1,3 +1,4 @@
+import { mountApplicationHandoff } from "../lib/application-handoff-ui";
 import { extensionConfiguration } from "../lib/config";
 import { appealEvidenceDigest } from "../lib/contribution-owner-api";
 import { CAPTURE_FIELDS, type CaptureField, type SanitizedJobCapture } from "../lib/job-capture";
@@ -757,4 +758,5 @@ appealForm?.addEventListener("submit", async (event) => {
 });
 
 renderDeliveryReadiness();
+mountApplicationHandoff();
 void invoke({ action: "status" });

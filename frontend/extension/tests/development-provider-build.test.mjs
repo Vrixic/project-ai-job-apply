@@ -64,6 +64,28 @@ afterEach(async () => {
 });
 
 describe("isolated real extension provider builds", () => {
+  it("adds only write-only clipboard permission for explicitly enabled handoff", async () => {
+    const candidate = await fixture();
+    candidate.environment.EXTENSION_APPLICATION_HANDOFF_ENABLED = "true";
+    candidate.environment.EXTENSION_APPLICATION_HANDOFF_WEB_ORIGIN = "https://candidate.example";
+    candidate.build();
+    const manifest = JSON.parse(await readFile(join(candidate.root, "dist/manifest.json"), "utf8"));
+    expect(manifest.permissions).toEqual([
+      "activeTab",
+      "alarms",
+      "identity",
+      "scripting",
+      "sidePanel",
+      "storage",
+      "clipboardWrite",
+    ]);
+    expect(manifest.host_permissions).toEqual([
+      "https://tenant.example.test/*",
+      "https://api.example.test/*",
+    ]);
+    expect(manifest.externally_connectable).toBeUndefined();
+    expect(manifest.content_scripts).toBeUndefined();
+  });
   it.each([undefined, "false", "true"])(
     "includes diagnostic HTML only for explicit development mode %s",
     async (mode) => {
@@ -152,9 +174,8 @@ describe("isolated real extension provider builds", () => {
       expect(background).toContain("UNPACKED_DEVELOPMENT_CONTRIBUTIONS_ONLY");
       expect(background.includes("typeof __DEVELOPMENT_CONTRIBUTION_PROVIDERS__")).toBe(false);
       // Esbuild emits the injected immutable-list input under this stable generated name.
-      const selected = /var define_DEVELOPMENT_CONTRIBUTION_PROVIDERS_default = (\[[^;]*\]);/u.exec(
-        background,
-      );
+      const selected =
+        /\bdefine_DEVELOPMENT_CONTRIBUTION_PROVIDERS_default\d* = (\[[^;]*\]);/u.exec(background);
       expect(selected).not.toBeNull();
       expect(JSON.parse(selected[1])).toEqual(expected);
     },

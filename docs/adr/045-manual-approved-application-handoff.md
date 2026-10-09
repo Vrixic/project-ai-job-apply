@@ -1,0 +1,45 @@
+# ADR-045: Manual approved application handoff
+
+Status: Proposed; default-off implementation, release acceptance pending
+Date: 2026-10-09
+
+The candidate copies an opaque first-party application/job review link into the extension while
+viewing the matching employer page. The extension reads the approved packet through existing
+owner-scoped APIs with its own public-client session and `applications:read`. It never receives
+the confidential web token or the separate browser-native material credential from ADR-044.
+No external messaging bridge, new host grant or content script is added. Enabled handoff builds
+request write-only `clipboardWrite`, because owner/expiry rechecks can outlast the browser's user
+gesture window. Default-off builds retain their existing permissions; no clipboard read is granted.
+
+Every preview and copy validates strict v1 responses, exact application/job IDs, current canonical
+job revision and exact HTTPS source URL, packet revision/hash, approval ID and expiry, and absence
+of active/ambiguous attempts. Temporary materials require current scalar authorization for each
+original generation; content remains in the browser-native workspace. A final protected packet
+read rechecks owner, saved-answer references and approval after those asynchronous checks.
+Each HTTP read refuses redirects/cookies/cache and is capped at ten seconds and 512 KiB.
+
+The popup holds only reviewed candidate field values in memory. Its preview lasts at most 60
+seconds and never exceeds original material, approval or saved-answer expiry. Background memory
+holds only binding identifiers/deadline, never a value queue. Every copy repeats the owner reads
+and checks the captured tab and account before returning one answer. Restricted answers require
+an explicit unchecked-by-default question/context confirmation for each copy. Preserve `false`
+as “No”; exclude generated fields, documents, challenges, signatures and attestations. No fill,
+upload, employer request, submission, automatic retry or history mutation is performed here.
+
+Clear on logout/login, identity change, page exit/hidden state or expiry; fence late work. Logical
+disposal cannot guarantee physical JavaScript string erasure. Clipboard copies are candidate
+controlled and outside platform deletion. The candidate returns to the exact application review
+to record manual submission, then explicitly confirms the outcome through the existing flow.
+An unavailable or mismatched application never falls back to another packet or creates one.
+
+Both clients default off. The extension build requires an exact HTTPS website origin and configured
+public identity/API. Store packaging refuses enabled handoff from either configuration source.
+Deploy compatible existing packet/job/material-authorization routes before controlled activation;
+strict readers refuse unsupported shapes. No REST schema, migration or approval policy changes.
+Static validators are generated from authoritative OpenAPI at build time for MV3 script CSP.
+
+Local regressions and Chromium use synthetic credentials, Chrome APIs and API responses. They
+exercise production handoff code and real clipboard behavior under restrictive script CSP, but
+do not accept installed Chrome/Edge identity, live native expiry, provider forms or submission.
+Saved-answer selection UI and the first provider adapter remain separate unfinished D3 work.
+Accountable privacy/security/product release gates and independent D1 deferral remain unchanged.

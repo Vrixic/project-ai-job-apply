@@ -1,5 +1,11 @@
 import { safeActionErrorMessage } from "../lib/action-error";
 import {
+  type ApprovedHandoff,
+  HANDOFF_FAILURE,
+  parseHandoffLink,
+  readApprovedHandoff,
+} from "../lib/application-handoff";
+import {
   capabilityForPage,
   DEFAULT_DARK_DETECTOR_POLICY_REVISION,
   extensionDetectorActivationPolicy,
@@ -60,6 +66,118 @@ import { restrictExtensionStorageToTrustedContexts } from "../lib/storage-bounda
 const LAST_CAPTURE_KEY = "d2LastJobCaptureV1";
 const RETRY_ALARM = "d2PendingJobIntentRetry";
 let identityGeneration = 0;
+let handoffGeneration = 0;
+let handoffPending: AbortController | undefined;
+let handoffTimer: ReturnType<typeof setTimeout> | undefined;
+let handoffContext:
+  | {
+      snapshotId: string;
+      reviewLink: string;
+      tabId: number;
+      tabUrl: string;
+      identityFence: string;
+      binding: Pick<ApprovedHandoff, "revision" | "packetHash" | "approvalId" | "deadline">;
+    }
+  | undefined;
+function clearHandoff() {
+  handoffGeneration++;
+  handoffPending?.abort();
+  handoffPending = undefined;
+  clearTimeout(handoffTimer);
+  handoffContext = undefined;
+}
+
+async function applicationHandoff(
+  message: Extract<
+    import("../lib/messages").ExtensionMessage,
+    { action: "application_handoff_read" | "application_handoff_copy" }
+  >,
+  generation: number,
+) {
+  const origin = extensionConfiguration.applicationHandoffWebOrigin;
+  const apiOrigin = extensionConfiguration.apiOrigin;
+  if (!origin || !apiOrigin || handoffPending) throw new Error(HANDOFF_FAILURE);
+  const prior = message.action === "application_handoff_copy" ? handoffContext : undefined;
+  if (
+    message.action === "application_handoff_copy" &&
+    (!prior || prior.snapshotId !== message.snapshotId || Date.now() >= prior.binding.deadline)
+  )
+    throw new Error(HANDOFF_FAILURE);
+  const link = parseHandoffLink(
+    message.action === "application_handoff_read" ? message.reviewLink : (prior?.reviewLink ?? ""),
+    origin,
+  );
+  if (!link) throw new Error(HANDOFF_FAILURE);
+  if (message.action === "application_handoff_read") clearHandoff();
+  const handoffFence = handoffGeneration;
+  const controller = new AbortController();
+  handoffPending = controller;
+  try {
+    assertIdentityGeneration(generation);
+    const tab = await activeBrowserTab();
+    if (
+      tab?.id === undefined ||
+      !tab.url ||
+      (prior && (prior.tabId !== tab.id || prior.tabUrl !== tab.url))
+    )
+      throw new Error(HANDOFF_FAILURE);
+    const session = await authenticatedApiSession();
+    if (prior && prior.identityFence !== session.identityFence) throw new Error(HANDOFF_FAILURE);
+    const snapshot = await readApprovedHandoff(
+      link,
+      tab.url,
+      apiOrigin,
+      session.accessToken,
+      controller.signal,
+    );
+    const current = await activeBrowserTab();
+    const identity = await authenticatedApiSession({ refreshIfNeeded: false });
+    assertIdentityGeneration(generation);
+    if (
+      controller.signal.aborted ||
+      handoffFence !== handoffGeneration ||
+      current?.id !== tab.id ||
+      current.url !== tab.url ||
+      identity.identityFence !== session.identityFence ||
+      Date.now() >= snapshot.deadline
+    )
+      throw new Error(HANDOFF_FAILURE);
+    if (message.action === "application_handoff_copy") {
+      if (
+        !prior ||
+        Date.now() >= prior.binding.deadline ||
+        snapshot.revision !== prior.binding.revision ||
+        snapshot.packetHash !== prior.binding.packetHash ||
+        snapshot.approvalId !== prior.binding.approvalId
+      )
+        throw new Error(HANDOFF_FAILURE);
+      const field = snapshot.fields.find((candidate) => candidate.fieldKey === message.fieldKey);
+      if (!field) throw new Error(HANDOFF_FAILURE);
+      return { ok: true, value: field.value };
+    }
+    const snapshotId = crypto.randomUUID();
+    handoffContext = {
+      snapshotId,
+      reviewLink: link.href,
+      tabId: tab.id,
+      tabUrl: tab.url,
+      identityFence: session.identityFence,
+      binding: {
+        revision: snapshot.revision,
+        packetHash: snapshot.packetHash,
+        approvalId: snapshot.approvalId,
+        deadline: snapshot.deadline,
+      },
+    };
+    handoffTimer = setTimeout(clearHandoff, snapshot.deadline - Date.now());
+    return { ok: true, snapshotId, handoff: snapshot };
+  } catch {
+    if (handoffGeneration === handoffFence) clearHandoff();
+    throw new Error(HANDOFF_FAILURE);
+  } finally {
+    if (handoffPending === controller) handoffPending = undefined;
+  }
+}
 let identityTransition: number | undefined;
 let localMutationTail: Promise<void> = Promise.resolve();
 let pendingDispatch:
@@ -777,6 +895,7 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
     return false;
   }
   const identityAction = message.action === "login" || message.action === "logout";
+  if (identityAction || message.action === "application_handoff_clear") clearHandoff();
   const generation = identityAction ? ++identityGeneration : identityGeneration;
   if (identityAction) identityTransition = generation;
   const logoutClearing = message.action === "logout" ? clearLocalForLogout() : undefined;
@@ -785,6 +904,12 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
     let historyResult: SharedJobsState | undefined;
     try {
       await storageBoundaryStartup;
+      if (message.action === "application_handoff_clear") return { ok: true };
+      if (
+        message.action === "application_handoff_read" ||
+        message.action === "application_handoff_copy"
+      )
+        return await applicationHandoff(message, generation);
       if (identityAction) {
         try {
           if (message.action === "login") await login();
