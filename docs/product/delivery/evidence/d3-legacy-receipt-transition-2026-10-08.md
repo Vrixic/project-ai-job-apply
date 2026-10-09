@@ -155,3 +155,35 @@ full queue-preparation store acceptance, candidate-deletion recovery acceptance 
 transition. The ordinary migration path does not activate this capability or bypass 0009. D1/D3
 remain In progress. No cloud runtime or candidate data changed. The owned temporary container was
 removed and Docker/WSL stopped; PC stays on and hosted CI/CD remains deferred.
+
+### Final verification of the atomic-transition batch — 2026-10-09
+
+Source commits `cf99c702` and `444a61d9` complete this local batch. The deletion-recovery TypeScript
+and PowerShell contracts now pin the new manifest byte hash, and the synthetic cross-runtime
+configuration/inspection hashes are regenerated. All 299 focused recovery tests and 697 generated
+PowerShell recovery assertions pass. Image-publisher/runtime-package guards pass after updating the
+Dockerfile inventory and ensuring the new SQL file uses canonical LF bytes. No image is published.
+
+Every check in the maintained `scripts/verify-phase0.ps1` sequence passes across the recorded runs.
+The first run exposed the committed-source requirement of the migration operator test; committing
+the source resolved it. The committed run passed all checks before formatting, then detected CRLF
+in two rewritten files. Normalizing them produced no Git diff. The exact remaining verifier commands
+were resumed from formatting, without skipping a check. That run found the stale deletion-recovery
+manifest pin, which was corrected and its affected PowerShell/TypeScript checks repeated. The final
+formatting-through-completion run passes: 38 typecheck tasks, 39 test tasks, 23 builds, dependency
+regressions, emitted isolation, Compose and scope checks. Applications reports 422 unit cases;
+Workflows reports 1,910 passed with 123 database opt-ins skipped. Lint remains 15 warnings/58
+informational notes. The full top-level script did not finish in one uninterrupted successful run;
+this records the complete passing check sequence and its resumed execution accurately.
+
+Private logs: `.tmp/legacy-receipt-transition-final-verification.log`,
+`.tmp/legacy-receipt-transition-final-remainder.log`, `.tmp/legacy-transition-operator-tests.log`,
+`.tmp/legacy-transition-publisher-tests.log`, `.tmp/legacy-transition-recovery-focused.log` and
+`.tmp/legacy-transition-recovery-powershell.log`. Local documentation targets and whitespace checks
+pass. No UI/browser test is claimed for this backend maintenance change.
+
+Read-only AWS observation at 2026-10-09T03:52:08.281444+00:00 confirms no development databases,
+active routes/rules/mappings, NAT gateways, interface endpoints or non-stopped ECS tasks; twelve
+encrypted manual recovery snapshots remain available. Runtime mutation is false; state-456
+recovery remains the last verified shutdown. Retained storage/security/DNS costs remain. Docker
+Desktop/backend processes and running WSL distributions are absent; the PC stays on.
