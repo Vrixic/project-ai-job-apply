@@ -1,6 +1,6 @@
 # D3-088: Withdrawn-answer recovery — 2026-10-09
 
-Locally verified implementation batch based on main `3b42968f`; merge reference follows below.
+Locally verified implementation batch based on main `3b42968f`; verified source is `478ae6495a0f5af85e37a0cc8f66e9814e21b411`.
 [ADR-047](../../../adr/047-withdrawn-answer-application-recovery.md) records the compatible-reader
 rollout and boundary. No live release or acceptance is claimed.
 
@@ -68,3 +68,11 @@ Local command logs are retained under ignored `.tmp/d3-withdrawal-*`: `pg.log`, 
 `unit.log`, `web.log`, `memory-regression.log`, `extension.log`, `final-types.log`,
 `final-format.log`, `final-lint.log` and `staging.log`. Contract regeneration is byte-identical;
 local Markdown links and diff checks pass. These logs contain synthetic test data only.
+
+
+[PR #615](https://github.com/Vrixic/project-ai-job-apply/pull/615) carries the verified source
+above; the final follow-up changes delivery documentation only. GitHub quality/static-analysis
+annotations explicitly say jobs did not start because account payments/spending limits block
+execution. This is not hosted CI success. Vercel preview was pending when inspected; no hosted
+acceptance is claimed. CI/CD and independent D1 acceptance remain deferred; billing, deployment
+settings and branch protections were not changed.

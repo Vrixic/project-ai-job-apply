@@ -119,4 +119,4 @@ private value refusal, immutable packets and existing attempt fences. Full repos
 72 real PostgreSQL cases and three synthetic Chromium journeys pass. Compatible release/live
 acceptance remain; D3 is In progress and independent D1 acceptance stays deferred. Staging is
 freshly dormant at 21:55Z; development was last verified dormant at 18:40Z with no subsequent
-mutation. Docker/WSL are off and the PC stays on. See the linked recovery evidence.
+mutation. Docker/WSL are off and the PC stays on. [PR #615](https://github.com/Vrixic/project-ai-job-apply/pull/615) carries the verified batch; hosted CI is blocked by account billing/spending limits. See the linked recovery evidence.
