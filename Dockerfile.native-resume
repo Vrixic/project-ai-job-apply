@@ -1,5 +1,5 @@
-FROM node:24.18.0-trixie-slim@sha256:5301bbf5e8046148348b1dea15436326f43c579031f8d76654a631225bdfe467 AS build
-RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev && rm -rf /var/lib/apt/lists/*
+FROM node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2 AS build
+RUN apk add --no-cache gcc musl-dev
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable
@@ -15,7 +15,27 @@ RUN pnpm install --frozen-lockfile \
   && mkdir /image \
   && node backend/workers/ai/native-resume/build.mjs "$SOURCE_SHA" "$NATIVE_CONFIGURATION" /tmp/kernel-deadline.node /image/native-resume
 
-FROM node:24.18.0-trixie-slim@sha256:5301bbf5e8046148348b1dea15436326f43c579031f8d76654a631225bdfe467 AS runtime
+FROM node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2 AS runtime
+# Keep the signed package inventory for vulnerability scans while removing install tools.
+RUN wget -q -O /tmp/libcrypto3.apk https://dl-cdn.alpinelinux.org/alpine/v3.23/main/x86_64/libcrypto3-3.5.9-r0.apk \
+  && echo "9c82c86f051f3372445ecdbae5068ccc39dbc423ba8f779eaa84549fef1cfc77  /tmp/libcrypto3.apk" | sha256sum -c - \
+  && wget -q -O /tmp/libssl3.apk https://dl-cdn.alpinelinux.org/alpine/v3.23/main/x86_64/libssl3-3.5.9-r0.apk \
+  && echo "b5ad11f5955b3b7ddfd8c32e8c1fdd79878d208bb4dfa9bbd8f35ddc59187242  /tmp/libssl3.apk" | sha256sum -c - \
+  && wget -q -O /tmp/zlib.apk https://dl-cdn.alpinelinux.org/alpine/v3.23/main/x86_64/zlib-1.3.2-r1.apk \
+  && echo "ee62e1864c235901e2aa4d1868c7ae8f7cc5d0740a98c48a2525332eb4bfda73  /tmp/zlib.apk" | sha256sum -c - \
+  && apk add --no-network /tmp/libcrypto3.apk /tmp/libssl3.apk /tmp/zlib.apk ca-certificates-bundle \
+  && apk info -e "libcrypto3=3.5.9-r0" \
+  && apk info -e "libssl3=3.5.9-r0" \
+  && apk info -e "zlib=1.3.2-r1" \
+  && apk del apk-tools \
+  && rm -f /tmp/libcrypto3.apk /tmp/libssl3.apk /tmp/zlib.apk \
+  && rm -rf /usr/local/lib/node_modules /opt/yarn-v1.22.22 \
+  && rm -f /usr/local/bin/corepack /usr/local/bin/docker-entrypoint.sh /usr/local/bin/nodejs \
+    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+    /var/log/apk.log \
+  && test ! -e /sbin/apk \
+  && test -f /lib/apk/db/installed \
+  && test -f /etc/ssl/certs/ca-certificates.crt
 ENV NODE_ENV=production
 WORKDIR /materials
 COPY --from=build --chown=65532:65532 /image/native-resume /materials/native-resume
