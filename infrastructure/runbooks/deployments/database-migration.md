@@ -3,6 +3,18 @@
 Run schema changes through the retained one-off ECS/Fargate migration task. The ECS cluster has no
 service and must return to zero running tasks after every migration.
 
+If Applications `0009` fails with `restricted packet migration requires an explicit legacy evidence
+transition`, preserve the failed execution receipt and original data. The current driver emits
+`applications_restricted_legacy_inventory` after rollback using a separate bounded read-only SQL
+snapshot. Retain only that aggregate record in shared evidence; never publish raw task logs.
+It counts legacy packet categories, packet/preparation receipts, approvals and ambiguous attempts.
+Categories can overlap, approvals/attempts are database-wide totals, and these counts do not
+implement the full migration predicate. A zero count is not permission to bypass the guard.
+The fixed unavailable message means no inventory was established. Resolve a compatible transition
+under ADR-041 before a new migration attempt; never relabel the failed receipt as verified, purge
+legacy evidence or change an applied migration checksum. Complete snapshot-backed shutdown after
+the failed test as required by the development lifecycle.
+
 ## Preconditions
 
 - Use exact merged source, portable Terraform `1.16.2`, and the selected environment's temporary IAM

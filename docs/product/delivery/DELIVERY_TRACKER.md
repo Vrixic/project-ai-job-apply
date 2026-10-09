@@ -1,5 +1,13 @@
 # Delivery Tracker
 
+2026-10-08 adds Applications migration-failure diagnostics after rollback: a separate bounded
+read-only snapshot emits only aggregate legacy packet/receipt/approval/attempt counts. The original
+guard and failure remain authoritative; diagnostic errors are redacted. Six focused cases and
+eight real PostgreSQL legacy cases pass, including exact rollback, malformed-field classification
+and SELECT-only inspection. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#legacy-migration-diagnostics-2026-10-08).
+Managed inventory and the compatible legacy transition remain; D1/D3 stay In progress. No cloud
+activation, public API or immutable SQL change. Docker/WSL stopped, PC on; CI/CD deferred.
+
 2026-10-08 executes the current 25a56127 migration image on development: six owners succeed;
 Applications 0009 intentionally refuses legacy packet/receipt evidence. Aggregate inventory and
 an explicit compatible transition are required before retry. Mandatory snapshot-backed shutdown

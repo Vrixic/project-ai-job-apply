@@ -1322,3 +1322,51 @@ readback passes. Local manifest: `.tmp/sqlrun25-recovery-manifest.json`. These s
 state-434 and older recovery inputs and retain the six successfully migrated owners.
 Docker Desktop and WSL are stopped; the PC remains on. D1/D3 remain In progress and hosted CI/CD
 remains owner-deferred. Next work is the legacy inventory/compatible transition above.
+
+## Legacy migration diagnostics 2026-10-08
+
+The live task's single failure message could not distinguish restricted packet values from
+historical create-packet/preparation receipts. The Applications driver now recognizes only that
+exact SQLSTATE/message pair and, after its migration transaction rolls back, opens a separate
+repeatable-read, read-only inventory transaction. Ten fixed integer counts describe the migration
+ledger, packet categories, receipts, packets with approvals and ambiguous attempts. No row IDs,
+candidate values, packet hashes, receipt hashes or database error details enter this output.
+Statement/lock timeouts limit inspection; missing permissions or other diagnostic failures emit
+a fixed unavailable message. A failing log sink cannot replace the original migration error.
+
+This is descriptive inventory, not a duplicate migration validator or transition authority.
+Packet categories can overlap; approval/attempt counts cover all legacy records. The complete
+immutable migration still decides compatibility. No guard, SQL/checksum, public contract, runtime
+activation, ledger entry, old approval, attempt or replay receipt is changed.
+
+An actual local PostgreSQL 16.6 driver smoke returns the expected aggregate and still fails at
+the guard. All eight historical SQL cases pass. The expanded committed fixture contains fourteen
+packets spanning both boolean answers, vault references, restricted reasons and both receipt
+operations, plus malformed scalar fields that must not be counted as object markers/references.
+It verifies the exact count record, one emitted diagnostic, unchanged full-row/schema
+snapshots after failed migration, and successful inspection through a SELECT-only role whose
+attempted DELETE is rejected. The synthetic role is removed after verification. Targeted failure
+tests (six cases) cover unrelated errors, private diagnostic errors and unavailable logging.
+
+The disposable memory-backed local database is removed, Docker/WSL stop, and AWS remains dormant.
+This is local source evidence; current live development task revision 62 still uses the earlier
+image and has no new inventory. Merged image publication and a bounded managed diagnostic run,
+then an evidence-preserving legacy transition, remain before full migration acceptance. D1/D3
+remain In progress; hosted CI/CD stays deferred and the PC stays on.
+
+Fresh development readback at **2026-10-09T01:00:39.740050+00:00** still has zero database instances,
+active routes/rules/mappings, NATs, interface endpoints and non-stopped ECS tasks; all eight
+encrypted manual snapshots are available. No AWS mutation is performed for this diagnostic change.
+Retained recovery/storage/security/DNS charges remain; staging is not reverified.
+
+Maintained local verification is complete with a recorded retry. The initial full verifier passes
+operator/runtime guards, formatting, lint (unchanged 15 warnings/58 infos), all 38 typecheck tasks
+and dependency regressions, then stops when the first Profile readiness entrypoint import exceeds
+30 seconds and the next test sees its late mock call. The unchanged file passes all 44 cases in
+isolation. Rerunning the verifier from its Tests step passes all 39 workspace test tasks (including
+404 Applications and 1,910 Workflow cases), all 23 build tasks, every remaining emitted isolation
+check, Compose and product-scope checks. No timeout, assertion or Workflow source is changed.
+Database opt-ins in the broad run remain skipped; the separate eight-case PostgreSQL run above
+is the actual persistence evidence. Private logs are `.tmp/legacy-diagnostics-full-verification.log`,
+`.tmp/legacy-diagnostics-entrypoint-recheck.log`, `.tmp/legacy-diagnostics-verification-remainder.log`
+and `.tmp/legacy-diagnostics-final-sql.log`. New Markdown links/anchors and whitespace checks pass.

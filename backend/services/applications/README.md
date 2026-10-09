@@ -7,6 +7,16 @@ terminal, and no recruiter, interview, offer, or rejection result is stored or m
 
 ## Current D3 slice (source and local verification only)
 
+When migration `0009` refuses legacy evidence, the driver rolls back before opening a separate
+repeatable-read, read-only diagnostic transaction. One aggregate log reports migration/packet
+counts, packets with restricted values or protected markers, invalid containers, create-packet/
+preparation receipt counts, packets with approvals and ambiguous attempts. No candidate values,
+identities, packet hashes or receipt hashes leave SQL. Query/lock timeouts bound inspection;
+diagnostic failure emits a fixed message and preserves the original migration failure.
+These are descriptive counts, not the complete field-shape guard or transition authority. Counts
+may overlap; approval/attempt counts describe the whole legacy database, not just flagged packets.
+Zero counts never authorize bypassing the immutable migration or rewriting historical evidence.
+
 Submission dispatch rechecks current owner job/artifact bindings and the original packet/approval
 under the application lock. Expiry is evaluated after those SQL reads. A stale queued attempt
 settles as `failed_no_effect`, invalidates approval and returns directly to review with one revision
