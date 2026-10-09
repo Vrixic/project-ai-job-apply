@@ -59,7 +59,7 @@ resource "aws_security_group" "native_resume_api" {
   }
 }
 resource "aws_vpc_endpoint" "native_resume_api" {
-  for_each            = local.native_resume_api_configured ? toset(concat(["ecs"], length(local.native_resume_address_releases) + length(local.material_address_releases) > 0 ? ["ec2"] : [])) : toset([])
+  for_each            = var.private_service_endpoints_enabled && local.native_resume_api_configured ? toset(concat(["ecs"], length(local.native_resume_address_releases) + length(local.material_address_releases) > 0 ? ["ec2"] : [])) : toset([])
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.${each.key}"
   vpc_endpoint_type   = "Interface"

@@ -21,11 +21,16 @@ Prepare a saved, refresh-backed plan from the complete baseline:
 - Set serverless_runtime_enabled=false and outbox_starts_paused=true.
 - Disable document scan mapping/event/security-health rules and document tailoring invocation.
 - Disable D2 runtime, policy endpoint, provider activation and provider-private-egress inputs.
+- Disable every native release source, owner, launch, intake, route, observation, recovery and
+  drain flag after original work is drained. Disable native cleanup runtime/schedule and Gateway
+  material disposal/preparation flags. Retain original release maps, queues, identities and keys.
+  Development shutdown/restore modes and endpoint removal reject active native release flags.
 - Once work is drained, set private_application_networking=false to remove the disposable NAT.
 - Preserve database deletion protection, persistent_data_plane_enabled, encryption, backups,
   buckets, queues, secrets, native DNS/TLS metadata and all recovery/security resources.
 - After quiescence and verified drain, separately set private_service_endpoints_enabled=false.
-  Its reviewed plan must delete only the seven interface endpoints. Retain the gateway endpoints
+  Its reviewed plan must delete only the deployed interface endpoints, including native KMS,
+  ECS and EC2 endpoints when configured. Retain the gateway endpoints
   and security/policy resources. The flag defaults true and refuses active-runtime removal.
   Restore these endpoints before starting any subsequent database, migration or native-task test.
 

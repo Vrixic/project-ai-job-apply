@@ -136,7 +136,7 @@ locals {
   )
 }
 resource "aws_vpc_endpoint" "native_preparation_kms" {
-  count               = (local.preparation_configured || var.gateway_native_materials != null || local.packet_export_configured || local.legacy_receipt_transition_configured) && var.persistent_data_plane_enabled ? 1 : 0
+  count               = var.private_service_endpoints_enabled && (local.preparation_configured || var.gateway_native_materials != null || local.packet_export_configured || local.legacy_receipt_transition_configured) && var.persistent_data_plane_enabled ? 1 : 0
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.region}.kms"
   vpc_endpoint_type   = "Interface"
