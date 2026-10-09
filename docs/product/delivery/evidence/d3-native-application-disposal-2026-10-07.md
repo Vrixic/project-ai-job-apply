@@ -1851,3 +1851,62 @@ native builds finished. No kernel, child deadline, assertion or test budget was 
 JavaScript syntax/format checks and the infrastructure validator pass. These checks establish local
 image behavior; patched-image publication and its completed zero-High/Critical registry scan remain
 required. The rejected Debian image is still withheld, and no connected AWS candidate flow is claimed.
+
+
+## Verified resume image and dormant task registration (2026-10-09)
+
+PR #594 merged the runtime security correction as `c66b458c04616278385c980a61a1972f9c49defa`.
+The configured resume image from that source passes 24 hardened packaged-runtime assertions,
+including two real generated files, HTTPS and kernel deadline termination without OOM. External
+AWS/OIDC ports remain synthetic and Docker networking is disabled during this test.
+
+The immutable image was published with exact remote manifest/config/rootfs readback:
+
+- Platform/index digest: `sha256:2e0b122982d8a4750fb6f2c32e6cf151c763267a1f2d51bd89d2e7a70d4b6c6b`.
+- Configuration digest: `7b07fa4a2a405fe8210b0fc14137c4faa8cf2aa835bf0617dabd52c8a181c450`.
+- Publication receipt SHA-256: `121440ca80ff8f41f1ecaac3152bb12d4ccadb63ee2bf15cc4cb595feee50028`.
+- ECR scan COMPLETE with no reported findings; independent scan readback agrees. The previous
+  Debian image with 26 High/8 Critical findings remains rejected and was never activated.
+
+The separately published migration image from merged source `f8cc7de808c0cd0b101940c073724be42474bf92`
+also passed its two reproducible builds, hardened runtime check, registry scan (zero High/Critical)
+and independent Verify action. Platform digest is
+`sha256:738b646ced6bf71a9fc5bb58e5d743af385fc0a7bbd345434412cdb886419c02`; receipt SHA-256 is
+`7f20e828811c071381b201069b5eed5464a7e5da6452c942c8b47017a3d1e378`. No migration was run in this batch.
+Future operators must still enforce their source-compatibility gates.
+
+Development platform state **475** registers the exact native resume task definition revision 1
+and its two bounded IAM roles/policies. All 295 pre-existing managed identities are preserved;
+only five resources were added. Independent ECS and IAM readback verifies the original image,
+read-only non-root container, resource limits, trust, boundaries and policies. No task was launched.
+The image expects original RPC versions 3; deployed versions 2 remain disabled. Activation must
+publish/verify those exact recipients together with the required prepared runtime dependencies.
+Task registration alone does not establish a working candidate path.
+
+The first follow-up plan exposed ECS adding empty environment, mount, volume, system-control and
+capability-add arrays. Omitted defaults caused Terraform to propose replacing the image-pinned
+revision. That replacement was not applied. Both native task modules now explicitly declare
+those empty arrays; the corrected source produces a fresh complete-input **zero-change** managed
+plan against state 475, preserving revision 1. IAM, image, process gates and deadline behavior
+are unchanged. Maintained module assertions check that the collections remain empty and all
+capabilities remain dropped. All 13 Terraform mock cases pass (five resume, eight material);
+the infrastructure guard, formatting and whitespace checks also pass. The managed zero-change
+plan supplies the actual ECS round-trip evidence; mock tests alone do not establish that behavior.
+
+Exact dormant inputs (SHA-256
+`c0a0b35741a60b79f86a968b9132671ec3e6ea8638f7078baf059cfeb8560ad3`) and the retained restore proof
+were archived under the canonical versioned, customer-KMS recovery keys; exact-version readback
+passes. These inputs supersede states 473/474. Public download DNS delegation matches the
+retained Route 53 zone. The exact TLS certificate version covers the wildcard download host and
+is valid through 2027-01-06; only public certificate metadata was recorded.
+
+Shutdown observation at **2026-10-09T13:16:24Z** confirms zero development database instances,
+enabled schedules/consumers, public API routes, live NAT gateways/interface endpoints and
+non-stopped ECS tasks. Fifteen encrypted available manual recovery snapshots remain. Retained
+snapshots, object/image/log storage, keys, secrets and DNS continue to incur charges. Docker
+Desktop and WSL are stopped; the PC stays on.
+
+D1/D3 remain **In progress**. Resume preparation/control deployment, original RPC activation,
+connected authenticated generation/download/retirement, the cover-letter provider credential,
+and the outstanding client/ATS/accountable acceptance gates remain. Prior accepted manual checks
+stay accepted and hosted CI remains deferred until launch.
