@@ -329,7 +329,13 @@ function Assert-OperatorOnlyReleaseDelta {
     "scripts/validate-serverless-workflow-infrastructure.mjs",
     # Bundles only the Gateway Lambda artifact; it is not part of the migration image or its inputs.
     "scripts/build-gateway-lambda.mjs",
-    "infrastructure/runbooks/deployments/database-migration.md"
+    "infrastructure/runbooks/deployments/database-migration.md",
+    # Shutdown evidence can land after task publication. These exact existing documents are
+    # not image inputs; permit modified blobs without admitting arbitrary docs or runtime code.
+    "docs/product/delivery/DELIVERY_TRACKER.md",
+    "docs/product/delivery/phase-1-web-and-job-catalog.md",
+    "docs/product/delivery/phase-3-application-preparation.md",
+    "docs/product/delivery/evidence/d3-native-application-disposal-2026-10-07.md"
   )
   if ($ChangeRecords.Count -eq 0) { throw "An ancestor release must have an attributable operator-only correction." }
   foreach ($record in $ChangeRecords) {

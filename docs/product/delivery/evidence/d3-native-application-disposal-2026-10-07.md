@@ -1414,3 +1414,22 @@ reports `Token for ai-job-apply-staging does not exist`. Restored development ac
 establish staging state. Docker Desktop and WSL are stopped, and the PC remains on. D1/D3 remain
 In progress, with managed legacy inventory, compatible transition and native acceptance open;
 hosted CI/CD remains deferred.
+
+## Post-apply delivery evidence compatibility
+
+The shutdown evidence merge `11950dcc` modifies exactly four delivery documents after the
+`a1b4ef2f` migration image/task publication. The post-apply source guard previously rejected
+that delta despite unchanged image inputs, preventing a fresh execution plan on current main.
+Its explicit path allowlist now also admits modifications to those four existing delivery
+documents. It still requires an ancestor release and exact current merged operator source;
+each path must be a blob at both revisions. Other documents, runtime/SQL/Terraform changes,
+additions, deletions and renames remain refused. Task publication still requires current main.
+Image digests, task/plan metadata, execution claims and original release identity are unchanged.
+
+The full migration-operator suite passes, including schema-7/schema-8 baseline round trips and
+adversarial checks. New cases exercise the four-document delta, recovery's two-revision blob
+inspection, non-modification statuses, and mixed SQL/runtime/unapproved-document changes.
+The real `a1b4ef2f..11950dcc` Git delta also passes the extracted production predicate; this is
+source validation, not a managed execution plan. Serverless infrastructure validation and
+whitespace checks pass. No cloud mutation occurs; development remains at the verified state-450
+dormancy above. Managed inventory and the compatible legacy transition remain outstanding.

@@ -1,5 +1,13 @@
 # Delivery Tracker
 
+2026-10-08 fixes the migration operator's post-apply source check for the four exact existing
+D1/D3 delivery evidence documents. The actual published-image-to-shutdown-evidence delta now
+passes without changing image identity; mixed runtime/SQL/infrastructure changes remain refused.
+Full migration-operator and schema-7/schema-8 adversarial suites plus infrastructure validation
+pass. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#post-apply-delivery-evidence-compatibility).
+No cloud mutation; development remains dormant at state 450. Managed legacy inventory and
+compatible transition remain; D1/D3 stay In progress, CI/CD deferred and PC on.
+
 2026-10-08 restored development access allows mandatory snapshot-backed shutdown to complete
 at state 450. Both databases are absent; ten encrypted snapshots are available, all 289 other
 managed identities are preserved, and the final plan has zero drift. Versioned recovery archive
