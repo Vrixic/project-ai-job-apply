@@ -2922,3 +2922,10 @@ inspection awaits renewed SSO; no cloud changes, Docker/WSL stopped and PC on. D
 [PR #587](https://github.com/Vrixic/project-ai-job-apply/pull/587). Immutable publication and managed
 acceptance remain behind renewed AWS SSO. No cloud mutation; Docker/WSL stopped, PC on, D1/D3
 In progress. Existing manual acceptance and the CI/CD deferral remain unchanged.
+
+2026-10-09 merged source `09020dbd` passes two independent uncached migration-image builds with
+identical OCI identities, the hardened 79-migration/96-relation inventory smoke and three actual
+packaged maintenance refusal checks. [Image evidence](evidence/d3-native-application-disposal-2026-10-07.md#reproducible-maintenance-image-verification-2026-10-09).
+No image publication, ECR scan, managed transition or cloud mutation occurred. Renewed AWS SSO is
+still required for fresh shutdown readback and live acceptance; earlier dormancy evidence is
+historical. Docker/WSL are stopped, PC on, CI/CD deferred and D1/D3 remain In progress.
