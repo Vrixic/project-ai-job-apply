@@ -1910,3 +1910,21 @@ D1/D3 remain **In progress**. Resume preparation/control deployment, original RP
 connected authenticated generation/download/retirement, the cover-letter provider credential,
 and the outstanding client/ATS/accountable acceptance gates remain. Prior accepted manual checks
 stay accepted and hosted CI remains deferred until launch.
+
+
+## Disabled resume preparation deployment correction (2026-10-09)
+
+The reviewed complete-input plan adds the original resume preparation functions, durable workflow,
+recovery queue and cleanup worker with all runtime/schedule gates disabled. Its two existing-resource
+updates preserve platform KMS statements and add original-task HTTPS secret access. No database,
+endpoint, NAT, task definition replacement or launch is part of the plan.
+
+AWS stopped the first apply because the cleanup target omitted EventBridge's delivery-age value;
+the provider submitted zero, below the service's 60-second minimum. Partial state 478 retains 318
+managed identities, including the original 300. No runtime was enabled. The original plan will not
+be replayed: recovery requires a fresh plan against that partial state.
+
+The cleanup target now explicitly uses a 60-second maximum event age and zero delivery retries,
+matching the other periodic native sweeps. Six maintained Terraform mock cases, including the
+service-minimum assertion, and the infrastructure validator pass. Managed completion, independent
+readback, recovery archive and zero drift remain pending. D1/D3 remain In progress.
