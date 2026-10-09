@@ -1144,3 +1144,13 @@ Fresh physical restore and mandatory shutdown complete at state 434: zero databa
 six encrypted snapshots, 289 other managed identities preserved, zero drift and verified updated
 recovery archive. Current inputs supersede state 427 and older. D1/D3 remain In progress;
 fresh migration release, managed SQL and native journey/acceptance remain. Docker/WSL stopped, PC on.
+
+
+2026-10-08 executes the current 25a56127 migration image on development: six owners succeed;
+Applications 0009 intentionally refuses legacy packet/receipt evidence. Aggregate inventory and
+an explicit compatible transition are required before retry. Mandatory snapshot-backed shutdown
+completes at state 442: both databases absent, eight encrypted snapshots available, 289 other
+managed identities preserved, zero drift and updated recovery archive verified.
+[Evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-sql-legacy-transition-gate-2026-10-08).
+D1/D3 remain In progress; full migration/privacy replay and native acceptance remain open.
+Docker/WSL stopped, PC on; hosted CI/CD remains deferred.
