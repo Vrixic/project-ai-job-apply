@@ -1,5 +1,13 @@
 # Delivery Tracker
 
+2026-10-08 restored development access allows mandatory snapshot-backed shutdown to complete
+at state 450. Both databases are absent; ten encrypted snapshots are available, all 289 other
+managed identities are preserved, and the final plan has zero drift. Versioned recovery archive
+readback passes. Migration task revision 63 is deployed but has not run; managed legacy inventory
+and compatible transition remain. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#restored-access-and-development-shutdown-at-state-450).
+D1/D3 stay In progress. Staging verification remains incomplete because its SSO token is missing.
+Retained storage/security/DNS charges remain; Docker/WSL stopped, PC on, hosted CI/CD deferred.
+
 2026-10-08 adds Applications migration-failure diagnostics after rollback: a separate bounded
 read-only snapshot emits only aggregate legacy packet/receipt/approval/attempt counts. The original
 guard and failure remain authoritative; diagnostic errors are redacted. Six focused cases and
