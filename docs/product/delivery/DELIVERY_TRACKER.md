@@ -5608,3 +5608,12 @@ packaged maintenance refusal checks. [Image evidence](evidence/d3-native-applica
 No image publication, ECR scan, managed transition or cloud mutation occurred. Renewed AWS SSO is
 still required for fresh shutdown readback and live acceptance; earlier dormancy evidence is
 historical. Docker/WSL are stopped, PC on, CI/CD deferred and D1/D3 remain In progress.
+
+
+2026-10-09 dormant foundation deployment is verified at platform state 473: Gateway 88,
+disabled resume RPC versions 2, retained packet keys, exact recovery archive and zero drift.
+The next bootstrap plan exposed an IAM size limit; permission-preserving consolidation passes
+24 mock cases and a fresh IAM-only plan, which remains unapplied.
+[Foundation and policy-sizing evidence](evidence/d3-native-application-disposal-2026-10-07.md#dormant-foundation-and-bootstrap-policy-sizing-2026-10-09).
+D1/D3 remain In progress. AWS access works; development runtimes are off with fifteen encrypted
+recovery snapshots, Docker/WSL stopped, PC on and CI/CD deferred.

@@ -148,7 +148,7 @@ locals {
           "cloudformation:ListStackResources",
           "cloudformation:UpdateStack"
         ]
-        Resource = jsondecode(length(local.preparation_stack_arns) == 0 ? jsonencode("arn:aws:cloudformation:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:stack/ai-job-apply-${var.environment}-profile-readiness-durable/*") : jsonencode(concat(["arn:aws:cloudformation:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:stack/ai-job-apply-${var.environment}-profile-readiness-durable/*"], local.preparation_stack_arns)))
+        Resource = jsondecode(length(local.native_deploy_stack_arns) == 0 ? jsonencode("arn:aws:cloudformation:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:stack/ai-job-apply-${var.environment}-profile-readiness-durable/*") : jsonencode(concat(["arn:aws:cloudformation:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:stack/ai-job-apply-${var.environment}-profile-readiness-durable/*"], local.native_deploy_stack_arns)))
       },
       {
         Sid      = "ValidateDurableTemplate"
@@ -244,7 +244,7 @@ locals {
         Resource = concat([
           local.workload_boundary_arn,
           "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-        ], local.additional_runtime_boundary_arns)
+        ], local.additional_runtime_boundary_arns, local.native_resume_boundary_arns)
       },
       {
         Sid      = "PassWorkloadRolesToApprovedServices"
@@ -482,6 +482,12 @@ resource "aws_iam_policy" "github_deploy_boundary" {
   name        = "ai-job-apply-${var.environment}-github-deploy-boundary"
   description = "Maximum permissions for the ${var.environment} GitHub deployment role."
   policy      = jsonencode(local.github_deploy_policy)
+  lifecycle {
+    postcondition {
+      condition     = length(self.policy) <= 6144
+      error_message = "Deployment boundary exceeds IAM size; retain original releases and review policy composition."
+    }
+  }
 }
 
 resource "aws_iam_role" "github_deploy" {

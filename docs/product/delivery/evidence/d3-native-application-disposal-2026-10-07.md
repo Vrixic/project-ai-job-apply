@@ -1730,3 +1730,48 @@ changes are five new empty native-boundary outputs. Dedicated native boundaries 
 and must be planned with exact release/key bindings before runtime deployment. TLS metadata has
 one current version. Live cover-letter testing awaits the development OpenAI API credential's
 secure location; no such credential was found in project development secrets or environment.
+
+
+## Dormant foundation and bootstrap policy sizing (2026-10-09)
+
+The reviewed foundation plan was applied after PR #591 merged. Platform state **473** preserves
+all 290 prior managed identities and adds two retained packet keys and two scoped Gateway policies.
+Gateway version **88** uses the independently verified `c386a4c5` artifact and an unweighted alias.
+The two original resume source-access RPCs are version **2**, disabled; their artifact source was
+not refreshed. Actual Lambda/KMS/IAM readback and a complete-input zero-drift plan pass. Public
+routes, triggers, endpoints and the database remain absent; this is configuration deployment,
+not live candidate acceptance. A future resume image must use the numeric RPC versions actually
+published by its later combined artifact refresh/activation, not assume a proposed version.
+
+Applied foundation plan SHA-256:
+`5cbcdde48d76acb4e6046df6b577c989d503d77e6504e9fea718c974b3d81344`.
+Complete dormant input SHA-256:
+`9ce5c0fa3ddab6b4ba7ab1d10f13e32fbc78d74533c121782b1b153b32a58c1c`.
+Versioned canonical dormant inputs, unchanged database restore proof and recovery manifest were
+archived with customer-KMS encryption and exact-version hash readback. Retained recovery data
+was not restored or altered by the foundation apply.
+
+The first populated bootstrap plan was refused before apply: its deployment policy reached
+**6,429 characters**, exceeding the 6,144-character guard. The former combined mocked fixture
+used staging names and omitted the preparation download route. A new development fixture includes
+both routes and all three native families. Identical unconditional stack-management and policy-read
+grants now share their original statements; resume role-creation conditions remain separate.
+A duplicate starter queue-key decrypt grant is omitted only when configuration decrypt already
+covers the exact same key and principal. A distinct queue key keeps its original grant.
+
+**24 bootstrap mock tests** pass, including exact development stack/boundary sets, constrained
+resume role creation and distinct queue-key retention. Bootstrap validation, recursive Terraform
+formatting and the infrastructure-policy validator pass. Fresh development planning succeeds:
+six native boundary policies added, existing deployment boundary/inline policy and workload boundary
+updated, no deletes or non-IAM mutations. The deployment policy is **5,906 characters**, and the
+preparation boundary is **5,937**. An independent expansion of action/resource/condition grants
+matches the failed deployment-policy proposal exactly. All managed policies fit the size guard.
+This bootstrap plan is **unapplied**; source tests and a valid plan do not establish effective IAM.
+Reviewed plan SHA-256: `1af127889ada1cff247fc6a3c02a7be47be9828a0bbb1a53a0a208b224cb7343`.
+
+Fresh AWS observation at **2026-10-09T12:35:55Z** confirms no development databases, API routes,
+enabled schedules/mappings, non-stopped ECS tasks, NAT gateways or interface endpoints; fifteen
+available encrypted manual recovery snapshots remain. Recovery storage, images/logs, keys, secrets
+and DNS can still incur charges. Docker/WSL remain stopped and the PC stays on. AWS access is
+restored; the secure development OpenAI credential location remains requested. D1/D3 remain
+In progress, with connected managed acceptance and other phase gates still open. CI/CD is deferred.

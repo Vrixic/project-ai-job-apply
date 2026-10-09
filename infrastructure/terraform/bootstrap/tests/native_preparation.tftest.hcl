@@ -107,3 +107,16 @@ run "original_routing_boundary" {
     error_message = "Deployment may attach only the reviewed original routing ceiling."
   }
 }
+
+run "separate_queue_key_preserved" {
+  command = plan
+  variables { native_preparation_releases = { r1 = { "database_secret_arn" : "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/staging/database-Abc123", "platform_kms_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-4234-8234-123456789012", "packet_encryption_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/22345678-1234-4234-8234-123456789012", "packet_fingerprint_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/32345678-1234-4234-8234-123456789012", "launcher_function_arn" : "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-staging-native-launch:9", "queue_arn" : "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-staging-preparation", "dead_letter_arn" : "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-staging-preparation-dlq", "queue_kms_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/42345678-1234-4234-8234-123456789012" } } }
+  assert {
+    condition = one([for s in jsondecode(aws_iam_policy.native_preparation_boundary["r1"].policy).Statement : s if s.Sid == "ReadQueue"]) == {
+      Sid       = "ReadQueue", Effect = "Allow", Action = ["kms:Decrypt"],
+      Resource  = "arn:aws:kms:us-east-2:111122223333:key/42345678-1234-4234-8234-123456789012",
+      Condition = { ArnEquals = { "aws:PrincipalArn" = ["arn:aws:iam::111122223333:role/ai-job-apply-staging-prep-starter-r1"] } }
+    }
+    error_message = "A separate queue key must retain the original starter-only decrypt grant."
+  }
+}
