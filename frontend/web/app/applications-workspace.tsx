@@ -22,9 +22,11 @@ import {
   sha256Hex,
   startManualApplicationSubmission,
 } from "../lib/applications-client";
-import { type ApplicationReviewActions, ApplicationReviewPanel } from "./application-review-panel";
+import { nativeMaterialConfiguration } from "../lib/native-material-session";
 import { ApplicationPreparationProgress } from "./application-preparation-progress";
+import { type ApplicationReviewActions, ApplicationReviewPanel } from "./application-review-panel";
 import { ApplyPanel } from "./apply-panel";
+import { NativeApplicationMaterials } from "./native-application-materials";
 import { ResumePreviewSection } from "./resume-preview-section";
 
 type Entries = Readonly<Record<string, string | boolean>>;
@@ -67,6 +69,7 @@ function JobApplicationWorkspace({
   coverLetterPreparationEnabled,
 }: Parameters<typeof ApplicationsWorkspace>[0]) {
   const headingId = useId();
+  const [nativeConfiguration] = useState(nativeMaterialConfiguration);
   const [createKey] = useState(() => `web-create-${crypto.randomUUID()}`);
   const [application, setApplication] = useState<Application>();
   const [entries, setEntries] = useState<Entries>({});
@@ -106,6 +109,7 @@ function JobApplicationWorkspace({
     [],
   );
   const prepareIntent = useRef<{ signature: string; key: string } | undefined>(undefined);
+  const materialsUnavailable = useCallback(() => setAvailableMaterials([]), []);
   const reconciliationIntent = useRef<{ signature: string; body: unknown } | undefined>(undefined);
   const lifetime = useRef(new AbortController());
   const starting = useRef(false);
@@ -389,6 +393,22 @@ function JobApplicationWorkspace({
             </>
           ) : null}
           {!preparation &&
+          nativeConfiguration &&
+          application.currentPacket?.temporaryMaterials?.length &&
+          application.status !== "applied" &&
+          application.status !== "cancelled" ? (
+            <NativeApplicationMaterials
+              key={`${application.id}:${application.currentPacket.id}:${application.currentPacket.packetHash}`}
+              application={application}
+              configuration={nativeConfiguration}
+              busy={busy}
+              onReady={materialReady}
+              onUnavailable={materialsUnavailable}
+              {...(fetchImplementation ? { fetchImplementation } : {})}
+            />
+          ) : null}
+          {!preparation &&
+          !(nativeConfiguration && application.currentPacket?.temporaryMaterials?.length) &&
           !busy &&
           application.currentPacket &&
           application.status !== "applied" &&
@@ -443,6 +463,9 @@ function JobApplicationWorkspace({
           {!preparation && !busy && application.currentAction === "ready_to_submit" ? (
             <ApplyPanel
               application={application}
+              nativeMaterialDownloads={Boolean(
+                nativeConfiguration && application.currentPacket?.temporaryMaterials?.length,
+              )}
               applyUrl={applyUrl}
               {...(fetchImplementation ? { fetchImplementation } : {})}
               onRecordManualSubmission={async () => {

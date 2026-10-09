@@ -30,9 +30,11 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | One-off material policy (D3-064, D3-072) | Memory-only storage, bounded expiry, hash-only packet guards and legacy export readers are implemented locally. | Complete no-persistence/30-minute enforcement across provider, browser, ATS and all copies; legacy saved-content paths must remain inactive or be replaced. |
 | Restricted packets (D3-077) | Separate-key packet protection and legacy receipt migration are implemented; managed archival of seven receipts passed. | Managed original-request replay, saved-answer reuse and broader candidate/privacy acceptance. |
 | Native material session (D3-079) | Native HTTPS/image, route/disposal bindings, preparation/cleanup resources and a bounded backend test driver are implemented; managed resources are deployed disabled. | Controlled sign-in, source/owner activation, live preview/PDF/DOCX, expiry/retirement, browser/CORS and client/ATS acceptance. |
-| Connected browser safety (D3-080) | Exact material/hash/deadline guards, explicit generated-material review, boolean sensitive answers, packet-change resets, retry-stable commands, async preparation/scalar-location BFF routes and immediate confirmed-history refresh are locally verified. | Native browser identity/material transport, cover-letter preview/download UI and saved-answer selection remain unfinished; local simulated journey is not live acceptance. |
-| Cover-letter request/status UI (D3-081) | Default-off versioned disclosure opt-in, explicit asynchronous requests, retry-stable admission, bounded status polling, current-packet checks and latest-revision cancellation are locally verified, including the full repository verifier and synthetic Chromium checks. Preview availability binds every material-reference scalar, including later versions of the same generation. | Direct native previews/downloads and live generation/cleanup acceptance remain open. |
+| Connected browser safety (D3-080) | Exact material/hash/deadline guards, explicit generated-material review, boolean sensitive answers, packet-change resets, retry-stable commands, async preparation/scalar-location BFF routes and immediate confirmed-history refresh are locally verified. | Saved-answer selection, native identity/CORS activation and live acceptance remain; D3-083 supplies locally tested native browser source. |
+| Cover-letter request/status UI (D3-081) | Default-off versioned disclosure opt-in, explicit asynchronous requests, retry-stable admission, bounded status polling, current-packet checks and latest-revision cancellation are locally verified, including the full repository verifier and synthetic Chromium checks. Preview availability binds every material-reference scalar, including later versions of the same generation. | Live native preview/download, generation and cleanup acceptance remain open; browser source is tracked in D3-083. |
 | Form-plan safety (D3-082) | Conflicting control claims and duplicate normalized options fail closed; challenges produce no fill/attach actions; restricted fields always require candidate action under the adopted D3-013 threshold. All 20 synthetic SDK tests, the synthetic connected Chromium journey and the full repository verifier pass. | Provider fixtures, first adapter integration and live acceptance remain open. |
+
+| Native browser materials (D3-083) | Owner-selected separate in-memory Auth0 popup PKCE, direct native resume/cover-letter previews, explicit review integration and approved PDF/DOCX downloads are implemented behind a default-off flag. 35 new auth/transport/UI/header regressions and the synthetic Chromium journey pass. | Inspect the existing separate SPA registration and exact public identifiers; controlled same-owner sign-in, live DNS/TLS/CORS and native/provider/release acceptance remain. |
 
 ## Decisions and scope changes
 
@@ -62,7 +64,7 @@ Application history ends at confirmed submission; sensitive answers and irrevers
 Historical checkpoints are retained in Git history and the linked evidence; this document records current status only.
 
 2026-10-09: Implemented and verified D3-080 browser safety batch. Full D3 remains in progress;
-native identity transport needs an owner decision and live/provider/accountable gates remain open.
+the native identity choice was subsequently resolved by ADR-044; live/provider/accountable gates remain open.
 Independent D1 acceptance, including hosted admin acceptance, remains deferred.
 
 2026-10-09: Added D3-081 preparation/status UI without activating providers or sending generated
@@ -73,3 +75,5 @@ path; missing exact cover-letter previews continue to block approval.
 to remove obsolete missing-vault/workflow claims and link current protection, native lifecycle,
 browser and managed evidence. The named development provider choice remains distinct from
 ADR-038 retention approval; no reviewer disposition or release gate was changed.
+
+2026-10-09: The owner selected separate in-memory Auth0 PKCE. D3-083 connects native resume/cover-letter review and four approved downloads; expiry/disconnect revoke local availability. Synthetic Chromium includes ten-minute credential expiry, reconnect, review/approve and confirmed manual history. Live registration identity/configuration is being inspected; no new SPA or permission grant was assumed.

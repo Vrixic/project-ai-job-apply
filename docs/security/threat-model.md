@@ -323,3 +323,17 @@ This is managed memory/content-boundary evidence, not arbitrary string erasure, 
 quiescence, HTTP/browser cleanup, packet/ATS admission or approved provider-retention evidence.
 Existing persisted generated-content paths remain ineligible for activation under ADR-038.
 [Evidence](../product/delivery/evidence/d3-one-off-memory-runtime-2026-10-04.md).
+
+## Separate browser-native identity (2026-10-09, default off)
+
+| Threat | Source control | Residual / release gate |
+|---|---|---|
+| Confidential web token exposure or generated-content proxying | Separate public Auth0 popup PKCE client; scalar BFF only; memory cache, no refresh/silent renewal | Exact SPA registration and live identity acceptance |
+| Wrong-account read or token forwarding to a hostile location | Native exact-owner verification; browser allowlists HTTPS UUID allocation under configured base host on port 8443, omits cookies and refuses redirects | Managed issuer/audience/scope, DNS/TLS/CORS and cross-owner negative checks |
+| Stale packet, late popup/read or renewed material lifetime | Session epochs, bounded cancellation, closed schemas, complete original reference, two scalar proofs and original expiry; explicit material review; content-free cross-tab logout signal | Synthetic browser tests do not prove live native/provider quiescence |
+| Retained generated browser bytes or unapproved download | Memory-only previews, current approval plus file SHA-256/size checks, exit/expiry disposal, immediate object-URL revocation | JavaScript strings cannot be physically zeroized; candidate/employer copies are outside platform control |
+
+Owner design choice is recorded in [ADR-044](../adr/044-browser-native-material-identity.md).
+Provider retention and accountable release gates are unchanged.
+
+The configured `/jobs` workspace alone allows popup opener communication (COOP `same-origin-allow-popups`); other/default-off routes retain `same-origin`. Employer/source links retain `noopener noreferrer`. Synthetic popup and same-profile cross-tab checks cover these browser controls; live tenant transport acceptance remains open.

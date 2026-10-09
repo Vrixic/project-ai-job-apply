@@ -1,4 +1,4 @@
-# D3 connected browser safety — 2026-10-09
+# D3 connected browser safety â€” 2026-10-09
 
 Status: locally verified implementation batch; D3 remains in progress. No deployment or live
 candidate/employer acceptance is claimed. Independent D1 acceptance, including hosted admin,
@@ -19,7 +19,7 @@ is deferred.
   workspace and confirmed history refreshes from its owner-scoped API.
 - BFF routes validate asynchronous preparation responses and owner/application binding, plus
   scalar-only native material locations and their kind/generation/deadline. They do not proxy
-  generated content through serverless. Direct browser native reads are still unfinished.
+  generated content through serverless. The subsequent D3-083 batch adds direct browser native reads.
 - Search heading order and filter-label contrast were the only independent D1 source changes,
   required by actual connected-browser accessibility failures.
 - The verifier and CI build before tests: native-resume control tests import the actual emitted
@@ -35,8 +35,8 @@ Sources: [workspace](../../../../frontend/web/app/applications-workspace.tsx),
 
 - Web tests: 63 files, 800 tests passed. Web typecheck and API contracts build passed.
 - Actual Chromium harness mounts the production search, workspace, review, Apply, history and
-  preview components. Search → Prepare → review → approve → manual Apply → candidate-attested
-  confirmation → Applied history passed with synthetic BFF/native-preview responses. Keyboard,
+  preview components. Search â†’ Prepare â†’ review â†’ approve â†’ manual Apply â†’ candidate-attested
+  confirmation â†’ Applied history passed with synthetic BFF/native-preview responses. Keyboard,
   axe checks and idle-preview expiry passed; local/session storage stayed empty. This does not
   test live generation, actual employer form submission or provider confirmation.
 - Regressions cover packet acknowledgement resets, action locks, exact material/hash/deadline,
@@ -104,7 +104,7 @@ expanded this batch to enforce the adopted restricted-field threshold; the final
 
 The [engineering approval packet](../../../security/d3-application-approval-packet.md) now
 distinguishes implemented vault/protected-packet/preparation workflow/browser controls from
-unfinished native identity, observed-form answer selection, provider adapters and live acceptance.
+then-unfinished native identity, observed-form answer selection, provider adapters and live acceptance; D3-083 subsequently implements the native browser source.
 The existing October 2 OpenAI development selection is acknowledged; it is not ADR-038
 all-copy retention approval. The original accountable disposition is unchanged. Source/evidence
 and local Markdown-link inspection validate this documentation-only update; no additional
@@ -115,13 +115,9 @@ runtime test or acceptance is claimed.
 GitHub Actions cannot start jobs: its check annotation reports failed recent account payments
 or an insufficient spending limit. Remote CI is unavailable; billing settings were not changed.
 
-Native material identity transport is unresolved: existing web tokens are server-held, while
-ADR-038 requires direct browser-to-native content reads. Owner choice is pending between a
-separate in-memory browser sign-in and extension-mediated material access. No token-returning
-BFF or serverless generated-content proxy was added. Cover-letter preview/download UI,
-saved-answer selection bound to an inspected provider form, and Greenhouse adapter integration
-remain unfinished source work; they are not all external blockers.
+The owner selected separate in-memory Auth0 popup PKCE on October 9 ([ADR-044](../../../adr/044-browser-native-material-identity.md)). D3-083 now implements default-off native browser reads and cover-letter preview/download UI. The local files identify candidate-web and extension clients but no material-SPA mapping; this does not establish that the SPA is absent. The owner expects the separate SPA to exist. The Auth0 dashboard requires sign-in through the available browser before its existing registration can be inspected. No duplicate SPA, permission grant, token-returning BFF or serverless generated-content proxy was created.
 
+Observed-form answer selection, Greenhouse adapter and extension application executor/handoff remain unfinished source work, dependent on the adopted authorized/independently accepted provider-derived fixture matrix. They are not represented as completed or solely external acceptance.
 Live validation additionally needs disposable controlled sign-in/MFA, approved provider/model
 configuration, authorized provider-derived fixtures, original-work cleanup/recovery evidence,
 candidate rights/restore and accountable legal/security/privacy/product review. Existing
@@ -149,3 +145,35 @@ API-route capacity and no enabled Scheduler schedules or active Lambda event-sou
 only the retained GuardDuty protection rule is enabled. Docker has no processes and WSL has no
 running distributions. Staging still cannot load its separate SSO token; no browser SSO session
 is available through the enabled browser surfaces. The PC remains on.
+
+
+## D3-083 separate browser-native material batch
+
+- Owner-selected separate Auth0 SPA popup PKCE, explicit memory cache, no refresh tokens/silent renewal, 65-second sign-in bound and ten-minute local credential lease. Late popup/read work cannot restore disconnected access.
+- Scalar BFF proof -> configured UUID allocation HTTPS:8443 -> exact native content/reference -> fresh scalar proof; no generated content crosses the BFF. Allocation and original generation IDs can differ. Native exact-owner verification remains authoritative.
+- Reads are bounded to 15 seconds/512 KiB with closed schemas, original expiry, full references and content hashes. Resume and cover-letter previews are inert and must both be reviewed before approval. Approved PDF/DOCX files require format/media consistency, byte count/SHA-256 and unchanged approval after asynchronous work.
+- Exit/disconnect/credential or material expiry removes previews and approval availability; terminal application/packet replacement unmounts and aborts. Byte buffers are cleared, Blob URLs revoked; JavaScript strings have logical disposal only. Candidate-held downloads/employer copies are outside cleanup.
+- 35 new auth/transport/UI/header regressions pass. Actual Chromium runs search -> opt-in preparation/status -> two native previews -> credential expiry/reconnect -> explicit material/contact review -> disconnect/reconnect -> approve -> four approved downloads -> manual candidate attestation -> confirmed history. Keyboard/axe and empty local/session storage pass. Authentication, BFF and native responses are synthetic; actual Auth0 popup exchange, native CORS/TLS, live generation or employer submission are not claimed.
+- The complete `scripts/verify-phase0.ps1` rerun passed with exit 0: 38 typecheck tasks, 23 builds, 39 test-graph tasks, 847 web tests, security/operator/contract guards, bundle isolation and Compose/scope validation. The first run found a NodeList iteration typing error in a new test; using the established `Array.from` pattern fixed it without changing compiler settings. The final popup-header change is additionally checked in configured/default-off production builds. No API contract, persistence, provider activation or D1 hosted/admin acceptance changed.
+
+- Cross-tab sign-out is exercised with two real Chromium tabs in one browser profile using the production signed-out signal. Unsupported BroadcastChannel blocks material access. The first browser fixture incorrectly used isolated profiles; fixing the fixture established the intended same-profile behavior without weakening source controls.
+- A synthetic cross-origin popup proves opener communication under the scoped enabled header; existing employer/source links retain `noopener`. No actual Auth0 exchange is simulated by this popup proof.
+
+### D3-083 shutdown readback, 2026-10-09
+
+No cloud runtime was started. Staging account 908203540025/us-east-2 now has working SSO and fresh
+readback: zero RDS instances, ECS running/pending tasks/services, live NAT gateways, interface
+endpoints, non-terminated EC2 instances, EIPs, EBS volumes, Gateway fqqw9k9v44 routes, enabled
+Scheduler/EventBridge rules, active Lambda event-source mappings, running durable executions and
+provisioned concurrency on all six project functions. All three project queues/DLQs have zero
+visible, invisible and delayed messages. Retained storage, recovery and security resources can
+still incur charges.
+
+Development's last successful readback is retained above; **fresh development verification is now
+blocked** because `ai-job-apply-development-admin` cannot load SSO session `ai-job-apply`.
+The available staging SSO identity is explicitly denied role credentials for development account
+362544434697 (`ForbiddenException: No access`). No AWS profile, assignment, permission or token
+cache was changed; a temporary public configuration check did not grant access. Required fresh
+development shutdown verification remains incomplete, even though this batch started no resources.
+
+Configured and default-off Next production builds both passed after the scoped popup-header change. Their emitted route manifests respectively contain the `/jobs` exception and retain only the strict global opener policy. The final local build is default off. At 2026-10-09T17:37Z, Docker Desktop status could not find a running Desktop service and no Docker process existed; `wsl --shutdown` completed with an empty running-distribution list. The PC remains on.

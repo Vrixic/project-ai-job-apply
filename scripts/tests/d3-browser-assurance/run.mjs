@@ -29,8 +29,41 @@ let browser;
 let page;
 try {
   browser = await chromium.launch({ executablePath: await findChrome(), headless: true });
-  page = await browser.newPage();
+  const context = await browser.newContext();
+  page = await context.newPage();
   await page.goto(server.origin);
+  assert.equal(
+    await page.evaluate(
+      (popupOrigin) =>
+        new Promise((resolve) => {
+          let popup;
+          const receive = (event) => {
+            if (
+              event.origin !== popupOrigin ||
+              event.source !== popup ||
+              event.data !== "synthetic-popup-ready"
+            )
+              return;
+            clearTimeout(timer);
+            window.removeEventListener("message", receive);
+            resolve(true);
+          };
+          const timer = setTimeout(() => {
+            window.removeEventListener("message", receive);
+            popup?.close();
+            resolve(false);
+          }, 3000);
+          window.addEventListener("message", receive);
+          popup = window.open(
+            popupOrigin,
+            "synthetic-popup-proof",
+            "popup=yes,width=400,height=400",
+          );
+        }),
+      server.popupOrigin,
+    ),
+    true,
+  );
   await page.getByRole("button", { name: "Search", exact: true }).press("Enter");
   await page.getByRole("button", { name: "View details and sources", exact: true }).press("Enter");
   await page.getByRole("button", { name: "Prepare application", exact: true }).press("Enter");
@@ -149,8 +182,115 @@ try {
     preparationA11y.map((violation) => violation.id),
     [],
   );
+  await page.clock.install();
+  await page.evaluate(() => window.showD3NativeJourney());
+  await page.getByRole("button", { name: "Search", exact: true }).press("Enter");
+  await page.getByRole("button", { name: "View details and sources", exact: true }).press("Enter");
+  await page
+    .getByRole("checkbox", {
+      name: "Prepare a cover letter with OpenAI using these terms",
+      exact: true,
+    })
+    .check();
+  await page
+    .getByRole("button", { name: "Prepare resume and cover letter", exact: true })
+    .press("Enter");
+  await page
+    .getByRole("button", { name: "Sign in to view generated materials", exact: true })
+    .waitFor();
+  await page
+    .getByRole("button", { name: "Sign in to view generated materials", exact: true })
+    .press("Enter");
+  await page.getByText("Native synthetic resume preview", { exact: true }).waitFor();
+  await page.getByText("Native synthetic grounded cover letter", { exact: true }).waitFor();
+  await page.clock.fastForward(600_001);
+  await page
+    .getByRole("button", { name: "Sign in to view generated materials", exact: true })
+    .waitFor();
+  assert.equal(await page.getByText("Native synthetic resume preview", { exact: true }).count(), 0);
+  assert.equal(await approve.isEnabled(), false);
+  await page
+    .getByRole("button", { name: "Sign in to view generated materials", exact: true })
+    .press("Enter");
+  await page.getByText("Native synthetic grounded cover letter", { exact: true }).waitFor();
+
+  await page.getByRole("checkbox", { name: "I reviewed contact.email", exact: true }).check();
+  await page
+    .getByRole("checkbox", { name: "I reviewed this generated resume.", exact: true })
+    .check();
+  await page
+    .getByRole("checkbox", { name: "I reviewed this generated cover letter.", exact: true })
+    .check();
+  assert.equal(await approve.isEnabled(), true);
+  const signedOutTab = await page.context().newPage();
+  try {
+    await signedOutTab.goto(server.origin);
+    await signedOutTab.evaluate(() => window.showD3SignedOut());
+    await page
+      .getByRole("button", { name: "Sign in to view generated materials", exact: true })
+      .waitFor();
+    assert.equal(await approve.isEnabled(), false);
+    assert.equal(
+      await page.getByText("Native synthetic resume preview", { exact: true }).count(),
+      0,
+    );
+  } finally {
+    await signedOutTab.close();
+  }
+  await page
+    .getByRole("button", { name: "Sign in to view generated materials", exact: true })
+    .press("Enter");
+  await page.getByText("Native synthetic grounded cover letter", { exact: true }).waitFor();
+  await page
+    .getByRole("button", { name: "Disconnect material access", exact: true })
+    .press("Enter");
+  assert.equal(await approve.isEnabled(), false);
+  assert.equal(await page.getByText("Native synthetic resume preview", { exact: true }).count(), 0);
+  await page
+    .getByRole("button", { name: "Sign in to view generated materials", exact: true })
+    .press("Enter");
+  await page.getByText("Native synthetic grounded cover letter", { exact: true }).waitFor();
+  await approve.press("Enter");
+  for (const kind of ["resume", "cover letter"]) {
+    for (const [label, extension] of [
+      ["PDF", "pdf"],
+      ["Word (DOCX)", "docx"],
+    ]) {
+      const waiting = page.waitForEvent("download");
+      await page
+        .getByRole("button", { name: `Download ${kind} ${label}`, exact: true })
+        .press("Enter");
+      const download = await waiting;
+      assert.equal(
+        download.suggestedFilename(),
+        `${kind === "resume" ? "tailored-resume" : "cover-letter"}.${extension}`,
+      );
+      assert.equal(await download.failure(), null);
+      await download.delete();
+    }
+  }
+  const nativeA11y = await page.evaluate(async () => (await window.axe.run(document)).violations);
+  assert.deepEqual(
+    nativeA11y.map((violation) => violation.id),
+    [],
+  );
+  assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
+  await page.getByRole("button", { name: "Record submission status", exact: true }).press("Enter");
+  await page.getByRole("button", { name: "I submitted it", exact: true }).press("Enter");
+  await page.getByText("Submitted and confirmed.", { exact: true }).waitFor();
+  assert.equal(
+    await page.getByText("Native synthetic grounded cover letter", { exact: true }).count(),
+    0,
+  );
+  await page.getByRole("tab", { name: "Applied", exact: true }).click();
+  await page.getByText("Submission confirmed by you.", { exact: true }).waitFor();
+  calls = await page.evaluate(() => window.readD3AssuranceCalls());
+  assert.equal(
+    calls.filter((call) => call.url.startsWith("https://") && call.url.includes("/file?")).length,
+    4,
+  );
   process.stdout.write(
-    "PASS search/prepare/review/approve/manual-Apply/candidate-confirmation/history/idle-preview-expiry/explicit-cover-letter-preparation/keyboard/WCAG (simulated BFF and native preview, no live generation or external submission)\n",
+    "PASS search/prepare/review/approve/manual-Apply/candidate-confirmation/history/idle-preview-expiry/explicit-cover-letter-preparation/native-resume-cover-review/disconnect/four-approved-downloads/keyboard/WCAG (simulated authentication, BFF and native preview, no live generation or external submission)\n",
   );
 } catch (error) {
   // This harness contains generated fixtures only; report visible failure state for diagnosis.

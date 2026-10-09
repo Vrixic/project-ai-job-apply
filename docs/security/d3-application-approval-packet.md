@@ -73,10 +73,7 @@ not a fresh live run of the current connected journey. Current verification and 
 - Saved-answer storage/backend reuse exists; observed-form selection/review UI, compatible
   current release and connected correction/expiry/reuse acceptance remain. Do not infer context
   or question hashes from a job description or silently select the newest answer version.
-- Direct browser-native identity/content transport and cover-letter preview/download UI remain
-  unfinished. The web session's server-held token cannot be returned to the browser or replaced
-  by a serverless generated-content proxy. The owner choice between separate in-memory browser
-  PKCE and extension-mediated access is pending. Native HTTPS/CORS and exact-owner acceptance remain.
+- The owner selected separate in-memory Auth0 popup PKCE ([ADR-044](../adr/044-browser-native-material-identity.md)). Default-off browser-native resume/cover-letter previews and approved downloads now have local source and synthetic Chromium evidence. The existing SPA registration/public configuration, native HTTPS/CORS and exact-owner live acceptance remain unverified. No confidential web token is returned and generated content does not cross the BFF.
 - The extension application executor/handoff is unfinished. No accepted form/confirmation
   adapter exists, and no installed-extension application submission is claimed.
 - Candidate export/deletion/restore and native withdrawal have local and partial managed evidence;

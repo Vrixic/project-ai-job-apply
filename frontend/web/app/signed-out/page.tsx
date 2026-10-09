@@ -8,6 +8,7 @@ export default async function SignedOutPage({
   const requested = (await searchParams).cleanup === "requested";
   return (
     <main className="container">
+      <MaterialSignOutSignal />
       <h1>Sign-out</h1>
       <p>
         {requested
@@ -19,3 +20,5 @@ export default async function SignedOutPage({
     </main>
   );
 }
+
+import { MaterialSignOutSignal } from "./material-sign-out-signal";
