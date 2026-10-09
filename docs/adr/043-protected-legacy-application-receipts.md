@@ -1,6 +1,6 @@
 # ADR-043: Protected legacy application receipts
 
-Status: Proposed; protection component implemented locally, atomic transition/runtime work pending
+Status: Proposed; protection and opt-in archive/replay implemented locally, atomic transition/runtime pending
 Date: 2026-10-08
 
 ## Context
@@ -38,13 +38,15 @@ The proposed atomic transition must:
    restricted plaintext, incomplete inventory or unexpected receipts. Counts alone are insufficient.
 2. Prepare and round-trip-check encryption outside SQL locks, retaining no plaintext intermediate
    artifacts. Reacquire owning locks and compare the exact original inventory before any mutation.
-3. Move the original receipt metadata and encrypted digest into an Applications-owned restricted
-   archive, apply the unchanged migrations and install archived-key collision protection in one
+3. Preserve original receipt metadata in an `archived_legacy` marker at the original owner/key,
+   with the original operation and encrypted digest in an Applications-owned restricted archive.
+   The marker's `legacy-ciphertext-sha256.v1` commitment hashes ciphertext, never the original
+   request digest. Apply the unchanged migrations and install the complete paired boundary in one
    transaction. Preserve every packet, approval, attempt, original response revision, outcome,
    subject and timestamp. Any failure restores the original rows and schema through rollback.
    Immutable migration bytes/checksums remain unchanged; explicit versioned transition SQL and
    forward migration/manifest integration are required before this operation exists.
-4. Make `(owner, idempotency key)` unique across archived and new receipts. Every command path must
+4. Keep `(owner, idempotency key)` unique through the existing receipt primary key. Every command path must
    detect an archived operation mismatch, and database enforcement must prevent a new command
    from occupying an archived key, including concurrent commands for different applications.
 5. Authorize active ownership before decryption and recheck the exact archived binding and owner
@@ -63,11 +65,17 @@ ciphertext substitution, explicit historical keys, read-only/default-off behavio
 inputs, error redaction, buffer clearing, deadline admission and authority withdrawal. This is
 not live KMS, SQL transition, runtime replay or release approval evidence.
 
-Versioned archive SQL, atomic transfer, all-command collision prevention, original request
-canonicalization, replay/store/runtime wiring, deletion/export/restore integration and actual
-PostgreSQL adversarial tests remain unfinished. Begin SQL acceptance from the actual three-ledger
-legacy shape and retain one original approval; also prove queue-preparation receipts, cross-owner
-isolation, concurrent key reuse, rollback, key withdrawal and complete restored row equality.
+The opt-in `transitions/0001_legacy_receipt_archive.sql` now defines paired immutable marker/archive
+constraints and candidate-authorized deletion. Eleven PostgreSQL 16.6 cases exercise synthetic
+archives after the current fourteen migrations: exact create-packet replay retains packet and
+approval evidence, conflicting/concurrent commands fail, incomplete pairs roll back, decryption
+holds no SQL locks, quarantine withdraws authority and deletion removes only its candidate's data.
+The default-off store reader admits opaque process-local proofs and rechecks ownership/binding
+under the command transaction. KMS transport is simulated. This does not transfer old rows.
+
+Atomic transfer from the actual three-ledger legacy shape, migration-driver/forward-migration
+integration, positive queue-preparation replay, restore manifests/equality and production IAM/key
+composition remain unfinished. The canonical migration and restore manifests are unchanged.
 No live data transition or saved-answer reuse activation is authorized by this proposal.
 
 ## Alternatives

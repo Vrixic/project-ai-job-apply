@@ -10,8 +10,12 @@ terminal, and no recruiter, interview, offer, or rejection result is stored or m
 The private `legacy-receipt-cipher.ts` component protects an original legacy request digest under
 a separate KMS purpose and returns only match/no-match for replay. It is default-off, supports
 explicit original encryption keys, and keeps replay-only composition unable to encrypt. It has
-no SQL/migration authority or production wiring. The atomic archive transition, cross-table key
-collision prevention and original replay/deletion/restore integration remain required; see
+no migration authority or production wiring. The opt-in archive SQL and default-off store reader
+now preserve owner/key reservation through a paired immutable receipt marker, recheck active
+ownership around decryption and admit exact create-packet replay without new effects. Eleven
+PostgreSQL cases cover replay, conflicts, rollback, quarantine and authorized owner deletion;
+KMS transport is simulated. The atomic old-row transfer, migration/restore integration, positive
+queue-preparation replay and production composition remain required; see
 [proposed ADR-043](../../../docs/adr/043-protected-legacy-application-receipts.md). Original packets,
 approvals and immutable migration bytes remain unchanged.
 

@@ -44,9 +44,9 @@ typecheck and final focused run. No SQL, Docker or live KMS test is claimed for 
 ## Remaining connected work
 
 The module has no public package export, SQL authority, migration hook or production composition.
-Versioned archive/transition SQL, unchanged-migration integration, cross-table key uniqueness,
-every-command replay admission, original canonicalization compatibility, privacy deletion/export,
-restore manifests/equality and runtime IAM/key composition remain. Begin integration acceptance
+The subsequent opt-in archive/replay implementation is recorded below. Atomic old-row transfer,
+unchanged-migration integration, full original canonicalization compatibility, privacy export/restore
+manifests and equality, and runtime IAM/key composition remain. Begin integration acceptance
 with the actual three-ledger legacy shape, seven receipts and an original approval, then include
 concurrent cross-application key reuse, failure rollback and historical-key restore cases.
 
@@ -57,3 +57,50 @@ Docker/WSL stay stopped, the PC stays on, and hosted CI/CD remains deferred.
 Fresh read-only AWS observation at 2026-10-09T03:17:58.371289+00:00 confirms no development
 databases, active routes/rules/mappings, NAT gateways, interface endpoints or non-stopped ECS
 tasks; all twelve encrypted recovery snapshots remain available. No runtime is reactivated.
+
+## Opt-in archive and store replay boundary
+
+The next source batch adds `transitions/0001_legacy_receipt_archive.sql`, explicitly outside the
+migration driver. It is tested after the current fourteen Applications migrations and cannot yet
+upgrade the actual three-ledger development database. Canonical migration/restore manifests stay
+at 78 migrations, 95 relations and 12 schemas. No immutable migration checksum changes.
+
+An immutable `archived_legacy` marker reserves the original `(owner, idempotency key)` using the
+existing receipt primary key. It retains original application, response revision, outcome, subject
+and microsecond timestamp. Its versioned hash commits only to ciphertext. A restricted archive
+holds the original operation, protection ID, metadata commitment, admitted key and encrypted
+original digest. Deferred pair constraints require the same application and matching ciphertext;
+incomplete pairs roll back. The existing candidate deletion function removes both rows under its
+original privacy authorization. Neither direct deletion nor update is newly permitted.
+
+The optional store capability defaults off. It reads active ownership before decrypting outside
+SQL locks, rechecks the exact binding afterward, and supplies an opaque process-local proof to
+command admission. Final admission rechecks the proof, owner and binding under the command
+transaction. Missing evidence fails unavailable instead of permitting a new write. Metadata hashing
+preserves SQL bigint and UTC microsecond timestamp strings without JavaScript rounding.
+
+Eleven real PostgreSQL 16.6 cases pass against a disposable loopback database with synthetic data
+and simulated KMS transport. They cover exact create-packet replay with complete unchanged packet,
+approval, revision, receipt, history and outbox rows; changed request/operation conflicts; concurrent
+cross-application key reuse; incomplete/mismatched pair rollback; absent capability; no held SQL
+locks during crypto; authority withdrawal and quarantine during decryption; forged/cross-owner
+proofs; immutable guards; exact-owner privacy deletion; and refusal of a proof after deletion.
+The fixture constructs the target archive representation; it does not exercise historical transfer.
+An initial fixture timestamp was rounded by parameter serialization and correctly rejected by the
+reader. Explicit text-to-timestamptz fixture insertion preserves microseconds; validation was not
+weakened. Private result: `.tmp/legacy-receipt-replay-sql.log`.
+
+Atomic pre-0009 transfer, forward migration/driver wiring, positive queue-preparation replay,
+complete restore/deletion-workflow integration and runtime IAM/key composition remain pending.
+No cloud data or runtime changed. Read-only AWS observation at 2026-10-09T03:29:02.717701+00:00
+confirms development has no database instances, active routes/rules/mappings, NAT gateways,
+interface endpoints or non-stopped ECS tasks; twelve encrypted recovery snapshots are available.
+Retained storage/security/DNS charges remain. The fixture was removed and Docker/WSL stopped;
+the PC remains on. Hosted CI/CD stays deferred until launch.
+
+Final archive/replay source passes Applications typechecking and 422 unit cases, plus the complete
+maintained `scripts/verify-phase0.ps1`: 38 typecheck tasks, 39 test tasks, 23 builds, operational
+and security guards, emitted bundle isolation, Compose and scope checks. Workflows reports 1,910
+passed and 123 opt-in database skips. Lint baseline is unchanged at 15 warnings/58 informational
+notes. Private log: `.tmp/legacy-receipt-archive-full-verification.log`. Targeted Biome checks,
+local documentation link targets and whitespace checks also pass.

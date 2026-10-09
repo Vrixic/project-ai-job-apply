@@ -1196,3 +1196,11 @@ Full verification passes: 38 typechecks, 39 test tasks, 23 builds and complete e
 transfer, original replay, collision prevention and privacy/restore requirements. SQL/store/runtime
 wiring remains unfinished; no cloud mutation or activation. D1/D3 stay In progress, development
 remains dormant at state 456, Docker/WSL stopped, PC on and hosted CI/CD deferred.
+
+2026-10-08 D3-077 adds an opt-in immutable legacy archive boundary and default-off store replay.
+Eleven real PostgreSQL cases pass for exact replay, concurrent key conflicts, rollback, ownership,
+quarantine and privacy-authorized deletion; KMS transport is simulated. The marker preserves global
+owner/key reservation while the original digest stays encrypted. [Evidence](evidence/d3-legacy-receipt-transition-2026-10-08.md#opt-in-archive-and-store-replay-boundary).
+Atomic old-row transfer, migration/restore integration and production wiring remain unfinished.
+D1/D3 stay In progress; no cloud mutation, development remains dormant, Docker/WSL stopped,
+PC on and hosted CI/CD deferred.
