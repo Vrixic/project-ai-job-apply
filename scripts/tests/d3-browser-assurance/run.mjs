@@ -100,8 +100,57 @@ try {
     0,
   );
   assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
+  await page.evaluate(() => window.showD3CoverLetterPreparation());
+  await page
+    .getByRole("checkbox", {
+      name: "Prepare a cover letter with OpenAI using these terms",
+      exact: true,
+    })
+    .check();
+  await page
+    .getByRole("button", { name: "Prepare resume and cover letter", exact: true })
+    .press("Enter");
+  await page.getByText("Preparing your resume and cover letter.", { exact: true }).waitFor();
+  assert.equal(
+    await page.getByRole("button", { name: "Approve this packet", exact: true }).count(),
+    0,
+  );
+  await page
+    .getByText(
+      "Preparation finished. Review the current packet and its exact generated materials before approving.",
+      { exact: true },
+    )
+    .waitFor();
+  calls = await page.evaluate(() => window.readD3AssuranceCalls());
+  const preparationCommands = calls.filter((call) => call.url.endsWith("/packets"));
+  assert.equal(preparationCommands.length, 1);
+  assert.deepEqual(preparationCommands[0]?.body.coverLetter, {
+    disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+  });
+  assert.equal(calls.filter((call) => call.url.includes("/preparations/")).length, 2);
+  assert.equal(
+    await page.getByRole("button", { name: "Approve this packet", exact: true }).isEnabled(),
+    false,
+  );
+  assert.equal(
+    await page
+      .getByRole("checkbox", {
+        name: "Prepare a cover letter with OpenAI using these terms",
+        exact: true,
+      })
+      .isChecked(),
+    false,
+  );
+  assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
+  const preparationA11y = await page.evaluate(
+    async () => (await window.axe.run(document)).violations,
+  );
+  assert.deepEqual(
+    preparationA11y.map((violation) => violation.id),
+    [],
+  );
   process.stdout.write(
-    "PASS search/prepare/review/approve/manual-Apply/candidate-confirmation/history/idle-preview-expiry/keyboard/WCAG (simulated BFF and native preview, no live generation or external submission)\n",
+    "PASS search/prepare/review/approve/manual-Apply/candidate-confirmation/history/idle-preview-expiry/explicit-cover-letter-preparation/keyboard/WCAG (simulated BFF and native preview, no live generation or external submission)\n",
   );
 } catch (error) {
   // This harness contains generated fixtures only; report visible failure state for diagnosis.

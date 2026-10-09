@@ -59,6 +59,26 @@ Sources: [workspace](../../../../frontend/web/app/applications-workspace.tsx),
   handler run during concurrent builds timed out; after builds finished all eight cases passed
   unchanged. The final resumed run exited zero with the verifier success marker.
 
+## D3-081 preparation client follow-up
+
+The separate default-off cover-letter UI now uses the existing versioned disclosure for an
+explicit request. It accepts an asynchronous operation, retains admission body/key on identical
+retry, polls only that operation (120 reads/four minutes; 15-second request bound), and checks
+current application/immutable result bindings before restoring review. Pending work hides
+review/Apply; cancellation reads the latest revision. Late reads cannot restore cancelled state.
+Status retries never redispatch generation and a new draft requires a new opt-in. Preview
+availability/acknowledgement now compare every material-reference scalar, preventing an earlier
+version's preview from authorizing a later version of the same generation.
+
+Sources: [preparation client](../../../../frontend/web/lib/application-preparation-client.ts),
+[bounded status UI](../../../../frontend/web/app/application-preparation-progress.tsx).
+All 43 focused regressions and the expanded actual Chromium harness pass with synthetic responses;
+the browser exercises opt-in, queued/running/succeeded metadata, exact-preview approval blocking
+and keyboard/axe checks. The full scripts/verify-phase0.ps1 run exited zero: 64 web files/812 tests,
+23 builds, 39 test/build graph tasks, guards, security checks and isolation/Compose checks passed.
+No live generation/provider activation
+or native content transport is claimed. The flag must stay off until the owning release gates close.
+
 ## Remaining work and genuine gates
 
 GitHub Actions cannot start jobs: its check annotation reports failed recent account payments
@@ -67,7 +87,7 @@ or an insufficient spending limit. Remote CI is unavailable; billing settings we
 Native material identity transport is unresolved: existing web tokens are server-held, while
 ADR-038 requires direct browser-to-native content reads. Owner choice is pending between a
 separate in-memory browser sign-in and extension-mediated material access. No token-returning
-BFF or serverless generated-content proxy was added. Cover-letter preparation/poll/preview UI,
+BFF or serverless generated-content proxy was added. Cover-letter preview/download UI,
 saved-answer selection bound to an inspected provider form, and Greenhouse adapter integration
 remain unfinished source work; they are not all external blockers.
 
@@ -92,3 +112,4 @@ running and no Docker process exists; WSL shutdown completed and its running-dis
 is empty. Additional development readback found no ECS services, enabled Scheduler schedules
 or non-terminated EC2 instances.
 The PC remains on.
+D3-081 shutdown readback at 2026-10-09T16:09:28Z reconfirmed the development runtime counts above, no enabled Scheduler schedules, and no active Lambda event-source mappings. WSL shutdown completed with no running distributions or Docker processes. Staging SSO remains unavailable.

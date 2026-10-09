@@ -1,8 +1,12 @@
 "use client";
 
-import type { Application } from "@ai-job-apply/api-contracts";
+import type { Application, ApplicationTemporaryMaterial } from "@ai-job-apply/api-contracts";
 import { useId, useRef, useState } from "react";
-import { materialDeadline, materialsExpired } from "../lib/application-material-lifetime";
+import {
+  materialDeadline,
+  materialsExpired,
+  sameMaterial,
+} from "../lib/application-material-lifetime";
 import { restrictedAnswerField } from "../lib/restricted-answer-fields";
 import {
   APPROVAL_EXPIRY_NOTE,
@@ -116,18 +120,18 @@ function FieldRow({
 export function ApplicationReviewPanel({
   application,
   actions,
-  availableMaterialGenerations = [],
+  availableMaterials = [],
 }: {
   application: Application;
   actions: ApplicationReviewActions;
-  availableMaterialGenerations?: readonly string[];
+  availableMaterials?: readonly ApplicationTemporaryMaterial[];
 }) {
   return (
     <PacketReview
       key={`${application.id}:${application.revision}:${application.currentPacket?.id}:${application.currentPacket?.packetHash}`}
       application={application}
       actions={actions}
-      availableMaterialGenerations={availableMaterialGenerations}
+      availableMaterials={availableMaterials}
     />
   );
 }
@@ -135,17 +139,19 @@ export function ApplicationReviewPanel({
 function PacketReview({
   application,
   actions,
-  availableMaterialGenerations,
+  availableMaterials,
 }: {
   application: Application;
   actions: ApplicationReviewActions;
-  availableMaterialGenerations: readonly string[];
+  availableMaterials: readonly ApplicationTemporaryMaterial[];
 }) {
   const headingId = useId();
   const active = useRef(false);
   const [busy, setBusy] = useState(false);
   const [acknowledged, setAcknowledged] = useState<ReadonlySet<string>>(new Set());
-  const [reviewedMaterials, setReviewedMaterials] = useState<ReadonlySet<string>>(new Set());
+  const [reviewedMaterials, setReviewedMaterials] = useState<
+    readonly ApplicationTemporaryMaterial[]
+  >([]);
   const [showAutomatic, setShowAutomatic] = useState(false);
   const [duplicateRisk, setDuplicateRisk] = useState(false);
   const [message, setMessage] = useState<string>();
@@ -157,8 +163,8 @@ function PacketReview({
   const approvable = canApprove(groups, acknowledged);
   const materialsReviewed = (packet?.temporaryMaterials ?? []).every(
     (material) =>
-      availableMaterialGenerations.includes(material.generationId) &&
-      reviewedMaterials.has(material.generationId),
+      availableMaterials.some((available) => sameMaterial(available, material)) &&
+      reviewedMaterials.some((reviewed) => sameMaterial(reviewed, material)),
   );
   const openAttempt = application.attempts.find(
     (attempt) => attempt.status === "ambiguous" || attempt.status === "taken_over",
@@ -204,22 +210,21 @@ function PacketReview({
                 <input
                   type="checkbox"
                   disabled={
-                    !availableMaterialGenerations.includes(material.generationId) || expired
+                    !availableMaterials.some((available) => sameMaterial(available, material)) ||
+                    expired
                   }
-                  checked={reviewedMaterials.has(material.generationId)}
+                  checked={reviewedMaterials.some((reviewed) => sameMaterial(reviewed, material))}
                   onChange={(event) => {
                     const checked = event.target.checked;
                     setReviewedMaterials((current) => {
-                      const next = new Set(current);
-                      if (checked) next.add(material.generationId);
-                      else next.delete(material.generationId);
-                      return next;
+                      const next = current.filter((reviewed) => !sameMaterial(reviewed, material));
+                      return checked ? [...next, material] : next;
                     });
                   }}
                 />
                 I reviewed this generated{" "}
                 {material.kind === "tailored_resume" ? "resume" : "cover letter"}.
-                {!availableMaterialGenerations.includes(material.generationId)
+                {!availableMaterials.some((available) => sameMaterial(available, material))
                   ? " Its exact preview is unavailable; approval is blocked."
                   : ""}
               </label>

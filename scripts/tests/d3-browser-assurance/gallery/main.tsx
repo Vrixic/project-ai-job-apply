@@ -2,6 +2,7 @@ import type { Application } from "@ai-job-apply/api-contracts";
 import { createRoot } from "react-dom/client";
 import "../../../../frontend/web/app/styles.css";
 import { AppliedJobsPanel } from "../../../../frontend/web/app/applied-jobs-panel";
+import { ApplicationsWorkspace } from "../../../../frontend/web/app/applications-workspace";
 import { JobSearchForm } from "../../../../frontend/web/app/job-search-form";
 import { ResumePreviewSection } from "../../../../frontend/web/app/resume-preview-section";
 
@@ -87,6 +88,9 @@ const review = {
   approval: undefined,
 } as unknown as Application;
 let current: Application | undefined;
+let coverLetterScenario = false;
+let preparationReads = 0;
+const PREPARATION = "00000000-0000-7000-8000-000000000020";
 
 const takenOver = {
   ...approved,
@@ -149,9 +153,46 @@ const syntheticFetch = (async (input: RequestInfo | URL, init: RequestInit = {})
     return respond(current, 201);
   }
   if (url.endsWith("/packets")) {
+    if (coverLetterScenario) {
+      const completedAtMs = Date.now();
+      current = {
+        ...review,
+        currentPacket: {
+          ...review.currentPacket,
+          artifactHashes: { coverLetter: HASH },
+          temporaryMaterials: [
+            {
+              schemaVersion: 1,
+              kind: "cover_letter",
+              generationId: PREPARATION,
+              version: 1,
+              contentSha256: HASH,
+              completedAtMs,
+              expiresAtMs: completedAtMs + 1_800_000,
+            },
+          ],
+        },
+      } as Application;
+      return respond(
+        { id: PREPARATION, applicationId: APP, state: "queued", createdAt: AT, updatedAt: AT },
+        202,
+      );
+    }
     current = review;
     return respond(current, 201);
   }
+  if (url.includes("/preparations/")) {
+    preparationReads += 1;
+    return respond({
+      id: PREPARATION,
+      applicationId: APP,
+      state: preparationReads === 1 ? "running" : "succeeded",
+      ...(preparationReads > 1 ? { result: { packetId: PACKET, revision: 2 } } : {}),
+      createdAt: AT,
+      updatedAt: AT,
+    });
+  }
+  if (url === `/api/platform/applications/${APP}`) return respond(current);
   if (url.endsWith("/approval")) {
     current = approved;
     return respond(current);
@@ -174,6 +215,7 @@ declare global {
   interface Window {
     readD3AssuranceCalls(): RecordedCall[];
     showD3ExpiryPreview(): void;
+    showD3CoverLetterPreparation(): void;
   }
 }
 
@@ -183,6 +225,22 @@ window.fetch = syntheticFetch;
 const container = document.querySelector<HTMLDivElement>("#root");
 if (!container) throw new Error("The browser-assurance root is missing");
 const root = createRoot(container);
+window.showD3CoverLetterPreparation = () => {
+  current = undefined;
+  coverLetterScenario = true;
+  preparationReads = 0;
+  calls.length = 0;
+  root.render(
+    <div>
+      <h1>Synthetic cover-letter preparation</h1>
+      <ApplicationsWorkspace
+        jobId={JOB}
+        coverLetterPreparationEnabled
+        fetchImplementation={syntheticFetch}
+      />
+    </div>,
+  );
+};
 window.showD3ExpiryPreview = () => {
   const expiresAtMs = Date.now() + 1500;
   root.render(

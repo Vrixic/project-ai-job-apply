@@ -227,7 +227,7 @@ describe("ApplicationReviewPanel", () => {
         <ApplicationReviewPanel
           application={value}
           actions={actions}
-          availableMaterialGenerations={[value.id]}
+          availableMaterials={value.currentPacket?.temporaryMaterials ?? []}
         />,
       ),
     );
@@ -237,16 +237,36 @@ describe("ApplicationReviewPanel", () => {
     const changed = structuredClone(value);
     if (!changed.currentPacket) throw new Error("Missing fixture packet");
     changed.currentPacket.packetHash = "b".repeat(64);
+    changed.currentPacket.temporaryMaterials = value.currentPacket.temporaryMaterials.map(
+      (material) => ({ ...material, version: material.version + 1 }),
+    );
     act(() =>
       root.render(
         <ApplicationReviewPanel
           application={changed}
           actions={actions}
-          availableMaterialGenerations={[value.id]}
+          availableMaterials={value.currentPacket?.temporaryMaterials ?? []}
         />,
       ),
     );
     expect((button(/Approve this packet/u) as HTMLButtonElement).disabled).toBe(true);
+    expect(container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.disabled).toBe(
+      true,
+    );
+    act(() =>
+      root.render(
+        <ApplicationReviewPanel
+          application={changed}
+          actions={actions}
+          availableMaterials={changed.currentPacket?.temporaryMaterials ?? []}
+        />,
+      ),
+    );
+    expect(container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(
+      false,
+    );
+    await click(container.querySelector('input[type="checkbox"]') ?? undefined);
+    expect((button(/Approve this packet/u) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("separates what needs input, what needs confirmation, and what is automatic", () => {

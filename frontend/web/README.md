@@ -249,6 +249,16 @@ submits: automated submission belongs to the browser extension, which is blocked
 - `NEXT_PUBLIC_APPLICATIONS_UI=enabled` (build time) shows the workspace on an active job for a
   signed-in candidate. The platform still refuses callers whose token lacks the permissions.
 
+`NEXT_PUBLIC_COVER_LETTER_PREPARATION_UI=enabled` separately exposes explicit cover-letter
+requests; it defaults off. Keep it off until provider retention, D3-012 and the native material
+release are accepted. Each request uses the exact versioned disclosure exported by API contracts.
+Identical admission retries retain their body/key; edits do not silently request another draft.
+The accepted operation is polled at most 120 times over four minutes, with bounded requests,
+then the candidate may explicitly check that same operation again. Review/Apply stay hidden
+while it is pending; cancellation reads the latest application revision. Completion reads
+current state and verifies the immutable result reference before showing review. No generated
+content passes through these status calls, and a missing exact preview blocks approval.
+
 ## D3 Restricted Answer Vault settings
 
 `RestrictedAnswersForm` and `/api/platform/restricted-answers/**` provide candidate-managed,
@@ -268,7 +278,7 @@ use and a separately reviewed deployment enables the panel.
 Application BFF preparation reads and resume/cover-letter location reads return validated scalar
 metadata only. A 202 packet response is accepted only for an explicit cover-letter request and
 is validated as a preparation operation. Browser-native identity transport and cover-letter
-preparation/preview UI remain unfinished. Generated-material review requires an exact available
+preview/download UI remain unfinished. Generated-material review requires an exact available
 preview; expiry blocks approval and material use without renewing the original deadline.
 
 NATIVE_MATERIAL_LOGOUT_ENABLED defaults off. Enable it only after the managed owner-withdrawal

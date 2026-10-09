@@ -64,7 +64,7 @@ export function ResumePreviewSection({
   onRefreshPacket?: () => Promise<void>;
   expectedHash?: string | undefined;
   temporaryMaterial?: ApplicationTemporaryMaterial | undefined;
-  onMaterialReady?: (generationId: string) => void;
+  onMaterialReady?: (material: ApplicationTemporaryMaterial) => void;
 }) {
   const headingId = useId();
   const [state, setState] = useState<State>({ phase: "loading" });
@@ -102,7 +102,7 @@ export function ResumePreviewSection({
         result.matchesPacket &&
         result.temporaryMaterial
       )
-        onMaterialReady?.(result.temporaryMaterial.generationId);
+        onMaterialReady?.(result.temporaryMaterial);
       setState(matches && bound ? { phase: "ready", preview: result } : { phase: "error" });
     });
     return () => controller.abort();

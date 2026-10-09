@@ -1,7 +1,18 @@
 "use client";
 
-import type { Application } from "@ai-job-apply/api-contracts";
+import {
+  type Application,
+  type ApplicationPacketPreparation,
+  type ApplicationTemporaryMaterial,
+  COVER_LETTER_DISCLOSURE_TEXT,
+  COVER_LETTER_DISCLOSURE_VERSION,
+} from "@ai-job-apply/api-contracts";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { sameMaterial } from "../lib/application-material-lifetime";
+import {
+  preparationFailureCopy,
+  prepareApplicationPacket,
+} from "../lib/application-preparation-client";
 import {
   APPLICATIONS_CHANGED_EVENT,
   type ApplicationsCallResult,
@@ -12,10 +23,12 @@ import {
   startManualApplicationSubmission,
 } from "../lib/applications-client";
 import { type ApplicationReviewActions, ApplicationReviewPanel } from "./application-review-panel";
+import { ApplicationPreparationProgress } from "./application-preparation-progress";
 import { ApplyPanel } from "./apply-panel";
 import { ResumePreviewSection } from "./resume-preview-section";
 
 type Entries = Readonly<Record<string, string | boolean>>;
+const coverLetterUiEnabled = process.env.NEXT_PUBLIC_COVER_LETTER_PREPARATION_UI === "enabled";
 
 /**
  * Starts and reviews one application for a job. If the candidate already has a live application
@@ -28,17 +41,20 @@ export function ApplicationsWorkspace({
   jobId,
   applyUrl,
   fetchImplementation,
+  coverLetterPreparationEnabled = coverLetterUiEnabled,
 }: {
   jobId: string;
   /** The employer's application page, from the job's own source link. */
   applyUrl?: string | undefined;
   fetchImplementation?: typeof globalThis.fetch;
+  coverLetterPreparationEnabled?: boolean;
 }) {
   return (
     <JobApplicationWorkspace
       key={jobId}
       jobId={jobId}
       applyUrl={applyUrl}
+      coverLetterPreparationEnabled={coverLetterPreparationEnabled}
       {...(fetchImplementation ? { fetchImplementation } : {})}
     />
   );
@@ -48,6 +64,7 @@ function JobApplicationWorkspace({
   jobId,
   applyUrl,
   fetchImplementation,
+  coverLetterPreparationEnabled,
 }: Parameters<typeof ApplicationsWorkspace>[0]) {
   const headingId = useId();
   const [createKey] = useState(() => `web-create-${crypto.randomUUID()}`);
@@ -56,13 +73,35 @@ function JobApplicationWorkspace({
   const [notice, setNotice] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(true);
-  const [availableMaterialGenerations, setAvailableMaterialGenerations] = useState<
-    readonly string[]
+  const [coverLetterRequested, setCoverLetterRequested] = useState(false);
+  const [preparation, setPreparation] = useState<ApplicationPacketPreparation>();
+  const acceptApplication = useCallback((next: Application) => {
+    setApplication((current) =>
+      current?.id === next.id && current.revision > next.revision ? current : next,
+    );
+  }, []);
+  const preparationResolved = useCallback(
+    (operation: ApplicationPacketPreparation, current: Application) => {
+      acceptApplication(current);
+      setPreparation(undefined);
+      setCoverLetterRequested(false);
+      setNotice(
+        operation.state === "failed"
+          ? preparationFailureCopy(operation.errorCode)
+          : "Preparation finished. Review the current packet and its exact generated materials before approving.",
+      );
+    },
+    [acceptApplication],
+  );
+  const [availableMaterials, setAvailableMaterials] = useState<
+    readonly ApplicationTemporaryMaterial[]
   >([]);
   const materialReady = useCallback(
-    (generationId: string) =>
-      setAvailableMaterialGenerations((current) =>
-        current.includes(generationId) ? current : [...current, generationId],
+    (material: ApplicationTemporaryMaterial) =>
+      setAvailableMaterials((current) =>
+        current.some((available) => sameMaterial(available, material))
+          ? current
+          : [...current, material],
       ),
     [],
   );
@@ -97,14 +136,15 @@ function JobApplicationWorkspace({
 
   async function refresh(id: string) {
     const latest = await applicationsCall("GET", `/api/platform/applications/${id}`, options);
-    if (latest.ok) setApplication(latest.application);
+    if (latest.ok && !lifetime.current.signal.aborted && latest.application.id === id)
+      acceptApplication(latest.application);
   }
 
   /** Applies a result to state; a failure sets the fixed copy and throws so the panel shows it too. */
   async function settle(result: ApplicationsCallResult, id?: string): Promise<Application> {
     if (lifetime.current.signal.aborted) throw new Error("Workspace closed");
     if (result.ok) {
-      setApplication(result.application);
+      acceptApplication(result.application);
       if (result.application.status === "applied")
         window.dispatchEvent(new Event(APPLICATIONS_CHANGED_EVENT));
       setNotice(undefined);
@@ -136,7 +176,11 @@ function JobApplicationWorkspace({
         }
       }
       const created = await settle(result);
-      await prepare(created, entries);
+      await prepare(
+        created,
+        entries,
+        coverLetterRequested && Boolean(coverLetterPreparationEnabled),
+      );
     } catch {
       // The notice already carries the fixed copy for this failure.
     } finally {
@@ -150,7 +194,11 @@ function JobApplicationWorkspace({
     setBusy(true);
     setNotice(undefined);
     try {
-      await prepare(current, entries);
+      await prepare(
+        current,
+        entries,
+        coverLetterRequested && Boolean(coverLetterPreparationEnabled),
+      );
     } catch {
       // The notice already carries the fixed copy for this failure.
     } finally {
@@ -158,25 +206,77 @@ function JobApplicationWorkspace({
     }
   }
 
-  async function prepare(current: Application, answers: Entries) {
+  async function prepare(current: Application, answers: Entries, includeCoverLetter = false) {
     const userEntries = Object.entries(answers)
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([fieldKey, value]) => ({ fieldKey, value }));
-    const signature = JSON.stringify([current.id, current.revision, userEntries]);
+    const coverLetter = includeCoverLetter
+      ? {
+          disclosure: {
+            noticeVersion: COVER_LETTER_DISCLOSURE_VERSION,
+            acknowledged: true as const,
+          },
+        }
+      : undefined;
+    const signature = JSON.stringify([current.id, current.revision, userEntries, coverLetter]);
     if (prepareIntent.current?.signature !== signature)
       prepareIntent.current = { signature, key: `web-prepare-${crypto.randomUUID()}` };
     const idempotencyKey = prepareIntent.current.key;
-    await settle(
-      await applicationsCall("POST", `/api/platform/applications/${current.id}/packets`, {
-        ...options,
-        body: {
-          expectedRevision: current.revision,
-          ...(userEntries.length ? { userEntries } : {}),
-        },
-        idempotencyKey,
-      }),
+    const result = await prepareApplicationPacket(
       current.id,
+      {
+        expectedRevision: current.revision,
+        ...(userEntries.length ? { userEntries } : {}),
+        ...(coverLetter ? { coverLetter } : {}),
+      },
+      idempotencyKey,
+      options,
     );
+    if (lifetime.current.signal.aborted) return;
+    if (result.ok && result.kind === "preparation") {
+      setPreparation(result.preparation);
+      setCoverLetterRequested(false);
+      return;
+    }
+    await settle(result, current.id);
+  }
+
+  async function cancelPreparation() {
+    if (!application || starting.current) return;
+    starting.current = true;
+    setBusy(true);
+    try {
+      const latest = await applicationsCall(
+        "GET",
+        `/api/platform/applications/${application.id}`,
+        options,
+      );
+      if (!latest.ok) {
+        await settle(latest);
+        return;
+      }
+      if (latest.application.id !== application.id) throw new Error("Application changed");
+      const current = latest.application;
+      await settle(
+        current.status === "cancelled" || current.status === "applied"
+          ? latest
+          : await applicationsCall("POST", `/api/platform/applications/${current.id}/cancel`, {
+              ...options,
+              body: { expectedRevision: current.revision },
+              idempotencyKey: commandKey("cancel", current.id, current.revision),
+            }),
+        current.id,
+      );
+      setPreparation(undefined);
+    } catch {
+      if (!lifetime.current.signal.aborted)
+        setNotice(
+          "Cancellation could not be confirmed. Check the current application before trying again.",
+        );
+    } finally {
+      starting.current = false;
+      setBusy(false);
+    }
   }
 
   const actions: ApplicationReviewActions | undefined = application
@@ -256,9 +356,41 @@ function JobApplicationWorkspace({
   return (
     <section aria-labelledby={headingId}>
       <h2 id={headingId}>Apply with review</h2>
+      {coverLetterPreparationEnabled &&
+      !preparation &&
+      (!application || ["preparing", "review_required"].includes(application.status)) ? (
+        <fieldset disabled={busy || checking}>
+          <legend>Optional cover letter</legend>
+          <p>{COVER_LETTER_DISCLOSURE_TEXT}</p>
+          <label>
+            <input
+              type="checkbox"
+              checked={coverLetterRequested}
+              onChange={(event) => setCoverLetterRequested(event.target.checked)}
+            />{" "}
+            Prepare a cover letter with OpenAI using these terms
+          </label>
+          <p>A new draft requires a new choice. Status checks never request another draft.</p>
+        </fieldset>
+      ) : null}
       {application && actions ? (
         <>
-          {application.currentPacket &&
+          {preparation ? (
+            <>
+              <ApplicationPreparationProgress
+                key={preparation.id}
+                preparation={preparation}
+                onResolved={preparationResolved}
+                {...(fetchImplementation ? { fetchImplementation } : {})}
+              />
+              <button type="button" disabled={busy} onClick={() => void cancelPreparation()}>
+                Cancel application
+              </button>
+            </>
+          ) : null}
+          {!preparation &&
+          !busy &&
+          application.currentPacket &&
           application.status !== "applied" &&
           application.status !== "cancelled" ? (
             <ResumePreviewSection
@@ -279,21 +411,36 @@ function JobApplicationWorkspace({
               }}
             />
           ) : null}
-          {application.status === "preparing" && !application.currentPacket ? (
+          {!preparation && application.status === "preparing" && !application.currentPacket ? (
             <button
               type="button"
               onClick={() => void continuePreparing(application)}
               disabled={busy}
             >
-              {busy ? "Preparing..." : "Prepare application"}
+              {busy
+                ? "Preparing..."
+                : coverLetterRequested
+                  ? "Prepare resume and cover letter"
+                  : "Prepare application"}
             </button>
           ) : null}
-          <ApplicationReviewPanel
-            application={application}
-            actions={actions}
-            availableMaterialGenerations={availableMaterialGenerations}
-          />
-          {application.currentAction === "ready_to_submit" ? (
+          {!preparation && !busy ? (
+            <ApplicationReviewPanel
+              application={application}
+              actions={actions}
+              availableMaterials={availableMaterials}
+            />
+          ) : null}
+          {!preparation && application.status === "review_required" && coverLetterRequested ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void continuePreparing(application)}
+            >
+              Prepare resume and cover letter
+            </button>
+          ) : null}
+          {!preparation && !busy && application.currentAction === "ready_to_submit" ? (
             <ApplyPanel
               application={application}
               applyUrl={applyUrl}
@@ -320,7 +467,11 @@ function JobApplicationWorkspace({
             anything is sent, and nothing is submitted from this page.
           </p>
           <button type="button" onClick={() => void start()} disabled={busy}>
-            {busy ? "Preparing..." : "Prepare application"}
+            {busy
+              ? "Preparing..."
+              : coverLetterRequested
+                ? "Prepare resume and cover letter"
+                : "Prepare application"}
           </button>
         </>
       )}

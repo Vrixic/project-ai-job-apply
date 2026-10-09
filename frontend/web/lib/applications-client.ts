@@ -40,6 +40,10 @@ export function applicationsProblemCopy(code: string): string {
   return COPY[code] ?? "That did not go through. Try again.";
 }
 
+export function applicationsProblemCode(code: unknown): string {
+  return typeof code === "string" && Object.hasOwn(COPY, code) ? code : "applications_unavailable";
+}
+
 export interface ApplicationsCallOptions {
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
