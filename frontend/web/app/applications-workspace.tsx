@@ -41,11 +41,13 @@ const coverLetterUiEnabled = process.env.NEXT_PUBLIC_COVER_LETTER_PREPARATION_UI
  */
 export function ApplicationsWorkspace({
   jobId,
+  applicationId,
   applyUrl,
   fetchImplementation,
   coverLetterPreparationEnabled = coverLetterUiEnabled,
 }: {
   jobId: string;
+  applicationId?: string;
   /** The employer's application page, from the job's own source link. */
   applyUrl?: string | undefined;
   fetchImplementation?: typeof globalThis.fetch;
@@ -53,8 +55,9 @@ export function ApplicationsWorkspace({
 }) {
   return (
     <JobApplicationWorkspace
-      key={jobId}
+      key={`${jobId}:${applicationId ?? ""}`}
       jobId={jobId}
+      {...(applicationId ? { applicationId } : {})}
       applyUrl={applyUrl}
       coverLetterPreparationEnabled={coverLetterPreparationEnabled}
       {...(fetchImplementation ? { fetchImplementation } : {})}
@@ -64,6 +67,7 @@ export function ApplicationsWorkspace({
 
 function JobApplicationWorkspace({
   jobId,
+  applicationId,
   applyUrl,
   fetchImplementation,
   coverLetterPreparationEnabled,
@@ -76,6 +80,8 @@ function JobApplicationWorkspace({
   const [notice, setNotice] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [lookupFailed, setLookupFailed] = useState(false);
+  const [lookupAttempt, setLookupAttempt] = useState(0);
   const [coverLetterRequested, setCoverLetterRequested] = useState(false);
   const [preparation, setPreparation] = useState<ApplicationPacketPreparation>();
   const acceptApplication = useCallback((next: Application) => {
@@ -130,13 +136,37 @@ function JobApplicationWorkspace({
   useEffect(() => {
     const controller = new AbortController();
     setChecking(true);
-    void findLiveApplication(jobId, { ...options, signal: controller.signal }).then((found) => {
+    setLookupFailed(false);
+    const timeout = setTimeout(() => {
+      controller.abort();
+      setChecking(false);
+      setLookupFailed(Boolean(applicationId));
+    }, 20_000);
+    const lookup = async () => {
+      if (!applicationId)
+        return findLiveApplication(jobId, { ...options, signal: controller.signal });
+      const result = await applicationsCall("GET", `/api/platform/applications/${applicationId}`, {
+        ...options,
+        signal: controller.signal,
+      });
+      return result.ok &&
+        result.application.id === applicationId &&
+        result.application.canonicalJobId === jobId
+        ? { ok: true as const, application: result.application }
+        : { ok: false as const };
+    };
+    void lookup().then((found) => {
       if (controller.signal.aborted) return;
+      clearTimeout(timeout);
       if (found.ok && found.application) setApplication(found.application);
+      if (applicationId && (!found.ok || !found.application)) setLookupFailed(true);
       setChecking(false);
     });
-    return () => controller.abort();
-  }, [jobId]);
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [jobId, applicationId, lookupAttempt]);
 
   async function refresh(id: string) {
     const latest = await applicationsCall("GET", `/api/platform/applications/${id}`, options);
@@ -483,6 +513,15 @@ function JobApplicationWorkspace({
         </>
       ) : checking ? (
         <p role="status">Checking for an existing application...</p>
+      ) : lookupFailed ? (
+        <>
+          <p role="alert">
+            This application review could not be opened. Check your account and try again.
+          </p>
+          <button type="button" onClick={() => setLookupAttempt((current) => current + 1)}>
+            Reload application review
+          </button>
+        </>
       ) : (
         <>
           <p>

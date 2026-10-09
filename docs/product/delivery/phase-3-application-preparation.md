@@ -36,6 +36,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Native browser materials (D3-083) | Owner-selected separate in-memory Auth0 popup PKCE, direct native resume/cover-letter previews, explicit review integration and approved PDF/DOCX downloads are implemented behind a default-off flag. 35 new auth/transport/UI/header regressions and the synthetic Chromium journey pass. The owner-approved separate SPA registration is configured and saved grant/origin settings are inspected. | Controlled same-owner sign-in, live DNS/TLS/CORS and native/provider/release acceptance remain. |
 | Form extraction limits (D3-084) | Oversized forms/options/question text are rejected instead of hashing or planning from a prefix. All 24 synthetic SDK tests pass, including exact-boundary, overflow and radio-requiredness regressions. | The full repository verifier and synthetic Chromium journey pass; future adapter integration must handle extraction refusal. Provider fixtures and live acceptance remain open. |
 | Shutdown status dependency (D3-085) | Staging status uses exact function inventory rather than treating empty mappings as proof of deployment. Nine synthetic absence/presence/active-trigger/read-failure cases, the full repository verifier and the synthetic connected Chromium journey pass. The corrected read-only operator verifies dormant staging. | AWS access/checks are sequential per the owner. This required shutdown dependency adds no D1 acceptance or D3 provider activation. |
+| Manual extension handoff (D3-086) | Default-off approved-answer handoff, exact application return, per-copy owner/job/approval/expiry/withdrawal checks and fresh sensitive context confirmation are implemented. Local regressions, the full repository verifier and the synthetic CSP/connected Chromium journeys pass. | Focused installed Chrome/Edge, live identity/endpoints and release acceptance. Saved-answer selection and automated provider integration remain unfinished. [Evidence](evidence/d3-manual-extension-handoff-2026-10-09.md). |
 
 ## Decisions and scope changes
 
@@ -94,3 +95,7 @@ D3 remains In progress; no provider/native release or independent D1 acceptance 
 Nine regressions, the full repository verifier and the synthetic connected Chromium journey pass;
 live read-only staging status verifies dormant. The owner clarified that AWS access must be
 sequential; staging need not remain signed in during development testing. D3 remains In progress.
+
+2026-10-09: D3-086 adds manual approved-answer handoff and exact application return. Reproducible
+local UI/background/CSP checks pass; actual unpacked focus/clipboard acceptance remains open.
+No provider action or capability activation is claimed. See the linked batch evidence.

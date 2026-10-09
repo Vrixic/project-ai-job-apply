@@ -34,6 +34,18 @@
         <p>Creates a local preview from supported public job fields.</p>
       </div>
 
+      <section id="application-handoff" class="card" aria-labelledby="application-handoff-heading" hidden>
+        <h2 id="application-handoff-heading">Complete an approved application</h2>
+        <p>Open the matching employer page. Paste the application review link copied from ApplyDash.</p>
+        <label for="application-review-link">Application review link</label>
+        <input id="application-review-link" type="url" maxlength="1024" autocomplete="off" />
+        <button type="button" data-handoff-load>Load approved answers</button>
+        <button type="button" data-handoff-clear>Clear application preview</button>
+        <p data-handoff-status role="status" aria-live="polite"></p>
+        <div data-handoff-content></div>
+        <p>Draft documents stay in ApplyDash. Copying puts an answer on your clipboard; the platform cannot delete copies you paste or submit.</p>
+      </section>
+
       <section id="preview" class="card preview-card" aria-labelledby="preview-heading" hidden>
         <div class="section-heading preview-heading">
           <div>

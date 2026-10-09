@@ -29,7 +29,7 @@ The 2026-10-09 browser safety batch passes a simulated connected search-to-confi
 cover-letter opt-in/status/cancellation UI is locally tested behind a separate default-off flag.
 Provider-neutral form plans reject conflicting claims/duplicate options and leave restricted answers and challenges to candidate action.
 The owner-selected separate in-memory Auth0 PKCE path now supplies default-off native resume/cover-letter previews and approved PDF/DOCX downloads with local regression and synthetic Chromium evidence.
-The owner-approved separate SPA registration is configured and its saved grant/origin settings are inspected; live sign-in/native acceptance remains unverified. Saved-answer selection and provider adapter/handoff source work remain.
+The owner-approved separate SPA registration is configured and its saved grant/origin settings are inspected; live sign-in/native acceptance remains unverified. D3-086 adds default-off manual extension handoff with passing local regression/CSP/browser and full repository verification; focused installed acceptance remains open. Saved-answer selection and provider adapter source work remain. [Handoff evidence](evidence/d3-manual-extension-handoff-2026-10-09.md).
 Connected native/provider acceptance, ATS adapters/fixtures, all-copy expiry, rights/restore and accountable reviews remain.
 The D3-012 engineering review packet now links current evidence; existing development dispositions remain unchanged.
 [Implemented and remaining capabilities](phase-3-application-preparation.md).

@@ -19,7 +19,7 @@ describe("popup and side-panel source assurance", () => {
 
     expect(html).toContain('href="#main-content"');
     expect(html).toContain('id="main-content"');
-    expect(html.match(/aria-live="polite"/gu)).toHaveLength(7);
+    expect(html.match(/aria-live="polite"/gu)).toHaveLength(8);
     expect(html).toContain('role="status"');
     expect(html).toContain('id="queue-panel" class="disclosure');
     expect(html).toContain('id="contributions-panel" class="disclosure');

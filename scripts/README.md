@@ -523,3 +523,10 @@ it does not perform or imply that cleanup.
 
 Local operator regression: `pwsh -NoProfile -File scripts/tests/legacy-receipt-maintenance.tests.ps1`.
 It uses synthetic AWS responses and private temporary files; it cannot attest current AWS state.
+
+`node scripts/tests/d3-browser-assurance/handoff.mjs` checks the production manual approved-answer
+UI/background and generated validators in Chromium under MV3 script CSP, including real clipboard
+copy, sensitive-answer confirmation reset, per-copy owner reads and changed-tab refusal. Auth,
+Chrome APIs and HTTP responses are synthetic. It starts no AWS/Docker runtime and makes no employer
+request. The connected web journey remains `node scripts/tests/d3-browser-assurance/run.mjs`;
+both runners are local evidence, not installed-extension or provider acceptance.

@@ -1,10 +1,57 @@
 import { describe, expect, it } from "vitest";
 import {
+  applicationHandoffOriginForBuild,
   assertStoreContributionMode,
   capabilityPolicyPublicKeysForBuild,
   developmentContributionProvidersForBuild,
   parseDevelopmentContributions,
 } from "../build-settings.mjs";
+
+describe("manual application handoff build boundary", () => {
+  const enabled = {
+    EXTENSION_APPLICATION_HANDOFF_ENABLED: "true",
+    EXTENSION_APPLICATION_HANDOFF_WEB_ORIGIN: "https://candidate.example",
+  };
+  it("defaults off and requires an exact explicit HTTPS origin", () => {
+    expect(applicationHandoffOriginForBuild({}, {})).toBe("");
+    expect(applicationHandoffOriginForBuild(enabled, {})).toBe("https://candidate.example");
+    expect(applicationHandoffOriginForBuild({}, enabled)).toBe("https://candidate.example");
+    for (const origin of [
+      "http://candidate.example",
+      "https://user@candidate.example",
+      "https://candidate.example/jobs",
+      "https://candidate.example?x=1",
+      "https://candidate.example#x",
+      "",
+    ]) {
+      expect(() =>
+        applicationHandoffOriginForBuild(
+          { ...enabled, EXTENSION_APPLICATION_HANDOFF_WEB_ORIGIN: origin },
+          {},
+        ),
+      ).toThrow();
+    }
+    for (const value of ["", "TRUE", "enabled", true]) {
+      expect(() =>
+        applicationHandoffOriginForBuild(
+          { ...enabled, EXTENSION_APPLICATION_HANDOFF_ENABLED: value },
+          {},
+        ),
+      ).toThrow();
+    }
+  });
+  it("rejects store packaging even when the other source overrides enabled configuration", () => {
+    const disabled = { EXTENSION_APPLICATION_HANDOFF_ENABLED: "false" };
+    for (const [environment, file] of [
+      [enabled, {}],
+      [{}, enabled],
+      [disabled, enabled],
+      [enabled, disabled],
+    ]) {
+      expect(() => assertStoreContributionMode(environment, file)).toThrow("unpacked-only");
+    }
+  });
+});
 
 describe("development contribution build and store boundary", () => {
   it("retains Greenhouse by default only in explicit development mode", () => {

@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
 import { coverLetterContext } from "@ai-job-apply/ai-sdk/context";
 import type { ProfileFact } from "@ai-job-apply/api-contracts";
+import { activeJobRevisionDigestInput } from "@ai-job-apply/api-contracts/job-revision-canonical";
 import {
   type ApplicationCoverLetters,
   type ApplicationJobGate,
@@ -145,14 +147,7 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
     const item = resolved.items.find((candidate) => candidate.requestedJobId === jobId);
     if (!item) return jobRevisionHash({ id: jobId, active: false });
     const { job } = item;
-    return jobRevisionHash({
-      id: job.id,
-      active: true,
-      company: { id: job.company.id, name: job.company.name },
-      title: job.title,
-      locations: job.locations,
-      department: job.department ?? null,
-    });
+    return createHash("sha256").update(activeJobRevisionDigestInput(job)).digest("hex");
   }
 
   /**

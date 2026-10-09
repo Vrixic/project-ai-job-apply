@@ -337,3 +337,19 @@ Owner design choice is recorded in [ADR-044](../adr/044-browser-native-material-
 Provider retention and accountable release gates are unchanged.
 
 The configured `/jobs` workspace alone allows popup opener communication (COOP `same-origin-allow-popups`); other/default-off routes retain `same-origin`. Employer/source links retain `noopener noreferrer`. Synthetic popup and same-profile cross-tab checks cover these browser controls; live tenant transport acceptance remains open.
+
+## Manual extension handoff (2026-10-09, default off)
+
+Forged/cross-owner links, changed employer tabs, corrected saved answers, stale approvals and
+withdrawn/expired drafts are refused through exact link/owner/job/packet checks before every copy.
+Only trusted extension UI can message the background; no external messaging bridge or host grant
+is added. Strict generated validators run under MV3 script CSP. No private answer queue or generated
+content is persisted. Restricted answers require fresh context confirmation; attestations,
+signatures, documents and challenges are excluded. Clear/expiry fences prevent late restoration.
+Clipboard copies and physical string erasure remain outside guaranteed platform disposal.
+Installed Chrome/Edge identity, live endpoint behavior and accountable privacy/security/product
+release review remain gates in [ADR-045](../adr/045-manual-approved-application-handoff.md).
+
+The opt-in build adds write-only clipboard permission for asynchronous rechecks; default-off
+permissions stay unchanged. Clipboard refusal clears the sensitive preview. Installed popup
+focus and slow focused-copy behavior still require controlled acceptance; no focus bypass exists.

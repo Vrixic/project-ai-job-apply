@@ -8,6 +8,14 @@
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
     },
+    "./job-revision-canonical": {
+      "types": "./dist/src/job-revision-canonical.d.ts",
+      "default": "./dist/src/job-revision-canonical.js"
+    },
+    "./browser-validators": {
+      "types": "./generated/browser-validators.d.ts",
+      "default": "./generated/browser-validators.cjs"
+    },
     "./job-contribution-canonical": {
       "types": "./dist/src/job-contribution-canonical.d.ts",
       "default": "./dist/src/job-contribution-canonical.js"
@@ -16,7 +24,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "generate": "openapi-typescript openapi/platform.v1.json -o generated/platform.ts",
+    "generate": "openapi-typescript openapi/platform.v1.json -o generated/platform.ts && node scripts/generate-browser-validators.mjs",
     "test": "vitest run src --exclude=dist/**",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

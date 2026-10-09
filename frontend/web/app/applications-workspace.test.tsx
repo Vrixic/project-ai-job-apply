@@ -94,11 +94,13 @@ async function mount(
   fetchImplementation: typeof globalThis.fetch,
   applyUrl?: string,
   coverLetterPreparationEnabled = false,
+  applicationId?: string,
 ) {
   await act(async () => {
     root.render(
       <ApplicationsWorkspace
         jobId={JOB}
+        {...(applicationId ? { applicationId } : {})}
         applyUrl={applyUrl}
         fetchImplementation={fetchImplementation}
         coverLetterPreparationEnabled={coverLetterPreparationEnabled}
@@ -108,6 +110,35 @@ async function mount(
 }
 
 describe("ApplicationsWorkspace", () => {
+  it("opens the exact handoff application without searching for another packet", async () => {
+    const send = vi.fn<typeof fetch>(async () => respond(application()));
+    await mount(send, undefined, false, APP);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(String(send.mock.calls[0]?.[0])).toBe(`/api/platform/applications/${APP}`);
+    expect(container.textContent).toContain("Preparing");
+  });
+  it.each(["wrong-job", "wrong-id", "not-found"])(
+    "refuses %s handoff lookup without creating or searching",
+    async (kind) => {
+      const send = vi.fn(async () =>
+        respond(
+          application({
+            ...(kind === "wrong-job"
+              ? { canonicalJobId: "00000000-0000-7000-8000-000000000099" }
+              : {}),
+            ...(kind === "wrong-id" ? { id: "00000000-0000-7000-8000-000000000099" } : {}),
+          }),
+          kind === "not-found" ? 404 : 200,
+        ),
+      );
+      await mount(send, undefined, false, APP);
+      expect(container.textContent).toContain("Reload application review");
+      expect(container.textContent).not.toContain("Prepare application");
+      expect(send).toHaveBeenCalledTimes(1);
+      await click("Reload application review");
+      expect(send).toHaveBeenCalledTimes(2);
+    },
+  );
   it("does not request or expose cover-letter generation by default", async () => {
     const send = vi.fn(async (input: RequestInfo | URL) =>
       String(input).endsWith("/search")

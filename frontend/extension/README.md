@@ -295,3 +295,26 @@ repeat completed work.
 
 Synthetic detector unit tests prove only local invariants. They are not provider evidence and do
 not make the extension live-ready or store-ready.
+
+## Manual approved application handoff (D3, default off)
+
+For controlled unpacked testing only, set `EXTENSION_APPLICATION_HANDOFF_ENABLED=true` and one
+exact HTTPS `EXTENSION_APPLICATION_HANDOFF_WEB_ORIGIN`. Identity and API configuration are required;
+the extension's public-client grant needs `applications:read`. No grant is created by the build.
+Store packaging rejects this feature even if another configuration source overrides it to false.
+Only enabled handoff builds request `clipboardWrite` so copying works after slow authorization
+rechecks. No clipboard-read or employer-host permission is added; default-off permissions stay unchanged.
+The web workspace independently needs `NEXT_PUBLIC_APPLICATION_EXTENSION_HANDOFF=enabled`.
+
+Copy the approved application's review link from the web workspace. Open the matching employer
+page and paste the link into “Complete an approved application.” Each answer copy rechecks the
+current account, tab, job, packet, approval and original material expiry/withdrawal. Restricted
+answers require question/context confirmation on every copy. Documents stay in the native web
+workspace; the extension performs no fill or submission. Return to the linked application to
+record and confirm manual submission. Previews expire within 60 seconds and clear on identity
+change, exit or explicit clear. Clipboard copies remain under the candidate's control.
+
+`node scripts/tests/d3-browser-assurance/handoff.mjs` from the repository root exercises production
+handoff UI/background and generated static validators under MV3 script CSP with a real Chromium
+clipboard. Auth, Chrome APIs and API responses are synthetic. Installed Chrome/Edge, live identity,
+provider fixtures and release acceptance remain unverified. See [ADR-045](../../docs/adr/045-manual-approved-application-handoff.md).
