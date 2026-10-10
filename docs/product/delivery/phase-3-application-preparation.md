@@ -40,8 +40,14 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Observed-form saved-answer selection (D3-087) | Explicit bounded question capture, exact saved version/context selection, final sensitive review, original expiry and fresh form-confirmed manual Apply are implemented and locally verified. All repository checks, 95 PostgreSQL cases and both synthetic Chromium journeys pass. | Compatible release, installed/live reuse/native/provider acceptance. [Evidence](evidence/d3-observed-form-saved-answer-selection-2026-10-09.md). |
 | Withdrawn-answer recovery (D3-088) | Explicit metadata-only recovery is implemented across contract, Applications and web; private value refusal and immutable packet safety remain. Full repository verification, 72 real PostgreSQL cases and three synthetic Chromium journeys pass. | Compatible release and live acceptance remain. [Evidence](evidence/d3-withdrawn-answer-recovery-2026-10-09.md). |
 | Release guard recovery (D3-089) | Complete boolean comparison and bounded deferred native identity-read validation pass focused regressions, independent source review, full repository verification and three synthetic Chromium journeys. Publication, restore and baseline checks are independently verified; fresh development shutdown and recovery archive pass. | Current-source deployment and live acceptance remain. [Evidence](evidence/d3-release-guard-recovery-2026-10-09.md). |
+| Candidate hosting build recovery (D3-090) | Exact frozen-install patches and ATS SDK upload, preflight guards and omission regressions are implemented and verified. All 42 repository stages, independent review, three synthetic Chromium journeys and the real Vercel preview build pass. | Compatible live release and candidate/native/provider acceptance remain. [Evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09.md). |
 
 ## Decisions and scope changes
+
+D3-090 restores candidate hosting build inputs: exact frozen-install patches and the ATS SDK.
+All 42 repository stages, independent review, three synthetic Chromium journeys and the real
+Vercel preview build pass. Live journey acceptance remains separate.
+See [hosting build recovery](evidence/d3-candidate-hosting-build-recovery-2026-10-09.md).
 
 D3-087 is locally verified; live acceptance remains separate. D3-088 implements locally verified recovery found
 by the negative-path inspection; see [recovery evidence](evidence/d3-withdrawn-answer-recovery-2026-10-09.md). See [current evidence](evidence/d3-observed-form-saved-answer-selection-2026-10-09.md).
@@ -59,6 +65,8 @@ Application history ends at confirmed submission; sensitive answers and irrevers
 - [ ] Complete rights/restore, AI evaluation, accessibility and accountable legal/security/privacy/product reviews.
 
 ## Evidence
+
+- [Candidate hosting build recovery, 2026-10-09](evidence/d3-candidate-hosting-build-recovery-2026-10-09.md)
 
 - [Connected browser implementation and verification, 2026-10-09](evidence/d3-connected-candidate-journey-2026-10-09.md)
 - [Independent release review and guard recovery, 2026-10-09](evidence/d3-release-guard-recovery-2026-10-09.md)
@@ -129,3 +137,8 @@ Chromium journeys pass. No release, migration or live candidate acceptance occur
 data-preserving development shutdown, physical restore, zero-drift plan and versioned recovery
 archive pass; Docker/WSL are off and the PC stays on. D3 remains In progress; independent D1
 acceptance stays deferred. [Evidence](evidence/d3-release-guard-recovery-2026-10-09.md).
+
+2026-10-09: D3-090 fixes candidate hosting's omitted security patches and ATS SDK. All 42
+repository stages, independent review, three synthetic Chromium journeys and the real Vercel
+preview build pass. Live candidate/native/provider acceptance remains open; independent D1
+and hosted admin acceptance stay deferred. [Evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09.md).

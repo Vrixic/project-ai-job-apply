@@ -124,12 +124,16 @@ function Assert-ExactVercelIgnoreBoundary {
     "!patches",
     "patches/*",
     "!patches/image-size@1.2.1.patch",
+    "!patches/node-forge@1.4.0.patch",
+    "!patches/braces@3.0.3.patch",
     "!frontend",
     "!frontend/**",
     "!packages",
     "packages/*",
     "!packages/api-contracts",
     "!packages/api-contracts/**",
+    "!packages/ats-sdk",
+    "!packages/ats-sdk/**",
     "!packages/config",
     "!packages/config/**",
     "frontend/extension",
@@ -162,29 +166,36 @@ function Assert-ExactVercelIgnoreBoundary {
 
 function Assert-DependencyPatchBoundary {
   # The frozen monorepo install reads root patches even when their consumer is not uploaded.
-  # Keep this exact reviewed security patch, not a wildcard directory of future local files.
-  $dependency = "image-size@1.2.1"
-  $relativePath = "patches/image-size@1.2.1.patch"
-  $expectedSha256 = "37a40e9556d8c610cb8627de7b5a141d10ae9a78b768915aefda1809f9aed608"
+  # Keep only these exact reviewed security patches, never a wildcard of local files.
+  $patches = @(
+    @{ Dependency = "braces@3.0.3"; Path = "patches/braces@3.0.3.patch"; Sha256 = "816530fe94f297f2ae23f1d98d9c4795b4898b9720e81fa900f0a89b84a1d707" },
+    @{ Dependency = "image-size@1.2.1"; Path = "patches/image-size@1.2.1.patch"; Sha256 = "37a40e9556d8c610cb8627de7b5a141d10ae9a78b768915aefda1809f9aed608" },
+    @{ Dependency = "node-forge@1.4.0"; Path = "patches/node-forge@1.4.0.patch"; Sha256 = "4fa957cddb4b4601a48b535053d0fec7ed013f9d075660a38365f285fc830fe0" }
+  )
   $package = ConvertFrom-BoundedFile (Join-Path $repositoryRoot "package.json") "The root package manifest" 65536
-  Assert-ExactProperties $package.pnpm.patchedDependencies @($dependency) "The approved dependency patches" | Out-Null
-  if ($package.pnpm.patchedDependencies.$dependency -cne $relativePath) {
-    throw "The dependency patch path is outside the exact approved upload boundary."
-  }
-  $patchPath = Join-Path $repositoryRoot $relativePath
-  foreach ($path in @((Join-Path $repositoryRoot "patches"), $patchPath)) {
-    $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
-    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-      throw "The dependency patch boundary cannot contain filesystem links."
+  Assert-ExactProperties $package.pnpm.patchedDependencies @($patches | ForEach-Object { $_.Dependency }) "The approved dependency patches" | Out-Null
+  foreach ($patch in $patches) {
+    $dependency = $patch.Dependency
+    $relativePath = $patch.Path
+    $expectedSha256 = $patch.Sha256
+    if ($package.pnpm.patchedDependencies.$dependency -cne $relativePath) {
+      throw "The dependency patch path is outside the exact approved upload boundary."
     }
-  }
-  if (-not (Test-Path -LiteralPath $patchPath -PathType Leaf) -or
-    (Get-FileSha256 $patchPath) -cne $expectedSha256) {
-    throw "The dependency patch is missing or differs from its reviewed SHA256."
-  }
-  $tracked = @(Invoke-GitText @("ls-files", "--error-unmatch", "--", $relativePath) "The tracked dependency patch")
-  if ($tracked.Count -ne 1 -or $tracked[0] -cne $relativePath) {
-    throw "The dependency patch must be the exact tracked source file."
+    $patchPath = Join-Path $repositoryRoot $relativePath
+    foreach ($path in @((Join-Path $repositoryRoot "patches"), $patchPath)) {
+      $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
+      if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "The dependency patch boundary cannot contain filesystem links."
+      }
+    }
+    if (-not (Test-Path -LiteralPath $patchPath -PathType Leaf) -or
+      (Get-FileSha256 $patchPath) -cne $expectedSha256) {
+      throw "The dependency patch is missing or differs from its reviewed SHA256."
+    }
+    $tracked = @(Invoke-GitText @("ls-files", "--error-unmatch", "--", $relativePath) "The tracked dependency patch")
+    if ($tracked.Count -ne 1 -or $tracked[0] -cne $relativePath) {
+      throw "The dependency patch must be the exact tracked source file."
+    }
   }
 
   $lockBytes = [IO.File]::ReadAllBytes((Join-Path $repositoryRoot "pnpm-lock.yaml"))
@@ -198,7 +209,9 @@ function Assert-DependencyPatchBoundary {
   }
   # Validate only pnpm's canonical top-level patch block; do not implement a YAML parser.
   $blocks = [regex]::Matches($lockText, '(?ms)^patchedDependencies:\n(.*?)(?=^[^ \t\n]|\z)')
-  $expectedBlock = "  ${dependency}:`n    hash: $expectedSha256`n    path: $relativePath"
+  $expectedBlock = ($patches | ForEach-Object {
+      "  $($_.Dependency):`n    hash: $($_.Sha256)`n    path: $($_.Path)"
+    }) -join "`n"
   if ($blocks.Count -ne 1 -or $blocks[0].Groups[1].Value.TrimEnd("`n") -cne $expectedBlock) {
     throw "The lockfile does not bind the exact approved dependency patch path and SHA256."
   }
