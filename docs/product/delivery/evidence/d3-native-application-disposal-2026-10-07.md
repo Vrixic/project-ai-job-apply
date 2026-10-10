@@ -2299,3 +2299,31 @@ routes, triggers, tasks, durable work and queued/scheduled work off. Independent
 `17:01:36Z` confirms all four encrypted source snapshots and state 506 unchanged. Docker/WSL are
 off and the PC remains on. Staging was not accessed; retained recovery/security/artifact storage
 still incurs charges. Independent D1/admin acceptance stays deferred.
+### Reconciliation task authority source — 2026-10-10
+
+The [separate diagnostic registration](../../../../infrastructure/terraform/modules/platform/application-restore-reconciliation.tf)
+defaults to null and retains the existing workload boundary/execution role. It requires dormant
+development, the retained receipt key, disabled paid endpoints and no replay/transition authority.
+The diagnostic has its own immutable image, hardcoded read-only CLI/default-off admission and
+run/source/lifetime tags. Its sole task-role grant is exact-key/purpose `kms:Decrypt` with allowed
+context keys and a maximum thirty-minute inclusive-start/exclusive-expiry IAM window. Ordinary
+migration, Gateway, key identity and endpoint composition are unchanged.
+
+This source is not deployed authority. Exact scanned image/source linkage, a fresh window, both
+isolated snapshot/resource identities, current state/full inputs, quiescence and one bounded task
+submission still require operational verification. IAM expiry is not process termination. The
+managed seven-receipt proof, privacy replay, primary recovery and live journey remain unfinished.
+[PR #625](https://github.com/Vrixic/project-ai-job-apply/pull/625) carries this source batch.
+All 22 Terraform cases pass (19 diagnostic and three retained legacy regressions), alongside
+module/development/staging validation and the complete 43-stage repository verifier. The verifier
+log SHA-256 is `2b26983ce05e6c255b0f1e642f864b1e5002676e8c93e91a2445321f1a22f931`.
+The first run refused new Terraform files absent from committed `HEAD`; committing the reviewed
+source satisfied the existing guard without weakening it. All five hosted checks never started
+because of account billing/spending limits; they supply no verification result.
+
+The prospective dual-restore helper passes independent static review and 12 simulated admission/
+cleanup cases with zero real cloud calls. It remains unexecuted. Current state 506 and the retained
+142-field input checksum are unchanged. Development runtime shutdown readback at
+`2026-10-10T17:21:25Z` reports no database, paid-network, route, trigger, task, durable or queued work.
+Docker/WSL remain off and the PC stays on; retained recovery/security/artifact storage incurs charges.
+Independent D1/admin acceptance remains deferred.

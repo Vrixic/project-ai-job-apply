@@ -88,6 +88,7 @@ module "platform" {
   legacy_receipt_key_provisioned       = var.legacy_receipt_key_provisioned
   legacy_receipt_replay_enabled        = var.legacy_receipt_replay_enabled
   legacy_receipt_transition            = var.legacy_receipt_transition
+  application_restore_reconciliation   = var.application_restore_reconciliation
   native_preparation_releases = { for id, item in var.native_preparation_releases : id => {
     queue_arn                  = item.release.queue_arn
     dead_letter_arn            = item.release.dead_letter_arn

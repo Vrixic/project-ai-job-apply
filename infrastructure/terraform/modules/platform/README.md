@@ -270,3 +270,27 @@ can remain available during a generation pause. Keep the original keys and reade
 retained protected packets. Enable and verify the compatible export release before starting
 protected packet writes. Historical key replacement and deployed export/deletion acceptance are
 separate release work; no flag supplies those proofs.
+
+## Read-only Applications restore reconciliation
+
+`application_restore_reconciliation` defaults to null. An explicit development-only configuration
+registers a separate Fargate task, task role and inline policy while the primary is dormant and
+paid interface endpoints, replay and transition authority are disabled. Its `image` is independent
+of `migration_image`; ordinary migration and Gateway permissions are unchanged. Required fields
+are `run_id`, `source_sha`, immutable dedicated-repository `image`, `issued_at` and `expires_at`.
+Use canonical whole-second UTC `.000Z` timestamps with a positive window of at most thirty minutes.
+
+The task hardcodes the reconciliation CLI, read-only filesystem and disabled admission. Its role
+permits only `kms:Decrypt` on the retained legacy-receipt key, its purpose and allowed context keys,
+within inclusive issue/exclusive expiry IAM time bounds. The owning cipher supplies the complete
+context. Registration creates no database, service, trigger or endpoint. This isolated diagnostic
+uses the separately verified public Fargate AWS-egress/private-database network path.
+
+Terraform validation does not establish image/source provenance, a fresh window, active quiescence
+or snapshot lineage. Before one RunTask, independently bind the scanned receipt, exact task/image,
+current state/full inputs, both isolated resource IDs/source snapshots, private network, zero backup
+retention, absent primary, drained writers, unique execution intent and exact bounded overrides.
+Historical transition timestamps are separate from this fresh permission window. IAM expiry limits
+KMS authority, not SQL/process lifetime; observe the original task to terminal status and explicitly
+stop it if its bounded execution cannot settle. Remove this registration through a reviewed null
+configuration after terminal evidence and cleanup; preserve the retained key and all source backups.
