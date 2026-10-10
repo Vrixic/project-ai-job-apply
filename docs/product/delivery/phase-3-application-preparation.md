@@ -42,6 +42,8 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Release guard recovery (D3-089) | Complete boolean comparison and bounded deferred native identity-read validation pass focused regressions, independent source review, full repository verification and three synthetic Chromium journeys. Publication, restore and baseline checks are independently verified; fresh development shutdown and recovery archive pass. | Current-source deployment and live acceptance remain. [Evidence](evidence/d3-release-guard-recovery-2026-10-09.md). |
 | Candidate hosting build recovery (D3-090) | Exact frozen-install patches and ATS SDK upload, preflight guards and omission regressions are implemented and verified. All 42 repository stages, independent review, three synthetic Chromium journeys and the real Vercel preview build pass. | Compatible live release and candidate/native/provider acceptance remain. [Evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09.md). |
 
+| Restore-selection correction (D3-091) | Ordinary restore requires the reviewed final snapshot and actual database creation to select the same snapshot. All 25 focused cases pass in both PowerShell hosts; all 41 pre-hosting repository stages and independent source review pass. Actual saved-plan regressions reject the earlier incorrect restore. | Explicit corrective post-transition recovery, fresh SQL verification, compatible release and live journey remain. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-selection-correction--2026-10-09). |
+
 ## Decisions and scope changes
 
 D3-090 restores candidate hosting build inputs: exact frozen-install patches and the ATS SDK.
@@ -142,3 +144,10 @@ acceptance stays deferred. [Evidence](evidence/d3-release-guard-recovery-2026-10
 repository stages, independent review, three synthetic Chromium journeys and the real Vercel
 preview build pass. Live candidate/native/provider acceptance remains open; independent D1
 and hosted admin acceptance stay deferred. [Evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09.md).
+
+2026-10-09: D3-091 corrects restore selection after independent review traced the migration refusal
+back to an earlier pre-transition snapshot restore. Focused guards, full source verification and
+actual saved-plan regressions pass. Corrective SQL recovery and live acceptance remain open;
+this is an internal recovery issue, not missing AWS access. Fresh development shutdown, physical
+restore, zero-drift and versioned KMS archive pass; Docker/WSL are off and the PC remains on.
+Independent D1/admin acceptance stays deferred. See the linked recovery correction.

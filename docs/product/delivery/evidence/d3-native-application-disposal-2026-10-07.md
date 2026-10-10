@@ -2059,3 +2059,32 @@ WSL reports no running distributions. The PC remains on. Retained snapshots, obj
 storage, monitoring, keys, secrets and DNS still incur charges. Staging was not newly verified;
 its separate SSO access gap remains recorded. D1/D3 remain In progress with connected acceptance
 and the previously recorded launch gates unfinished; work is paused at the owner's request.
+
+### Restore-selection correction — 2026-10-09
+
+Work resumed after the earlier stopping point. Independent review confirmed that an earlier
+applied restore selected the pre-transition `20261009023924` snapshot instead of the reviewed
+post-transition `20261009112116` final. Later snapshots inherited the old Applications ledger.
+The current-source migration stopped at the unchanged legacy guard; preceding service migrations
+completed, while the Applications transaction rolled back. The successful historical protected
+transition remains valid; repeating it is not the corrective action.
+
+D3-091 requires ordinary restore selection to equal the reviewed final snapshot before planning
+and during saved-plan review, including the actual database creation source. Later retained,
+snapshot-prepared and dormant modes preserve their historical restore input. All 25 focused
+cases pass in PowerShell 7 and Windows PowerShell; all 41 pre-hosting repository stages and
+independent source review pass. Read-only regressions reject both earlier incorrect saved plans
+and accept the matching current plan. Snapshot identity does not prove SQL contents.
+
+The retained post-transition snapshot has independently verified metadata provenance. Explicit
+corrective selection/data-provenance review and fresh SQL verification remain before compatible
+Gateway/native release and the live connected journey. AWS access is available; this is internal
+recovery work. No live native generation, employer submission or D1/admin acceptance is claimed.
+
+Development is freshly verified dormant at `2026-10-10T03:19:52Z`, Terraform state 505; independent
+readback at `03:21:05Z` confirms both databases, Interface endpoints, NAT/EIPs, routes, tasks,
+triggers, durable executions and queued messages are absent/off. Fresh encrypted safety/final
+snapshots, physical restore, exact-input zero drift and versioned KMS recovery archive pass.
+The archive explicitly retains the schema warning and corrective provenance. Staging's October 9
+verification remains historical with no later mutation. Docker/WSL are off; the PC stays on.
+Retained recovery/storage/security resources still incur charges. D3 remains In progress.

@@ -36,6 +36,7 @@ The managed Gateway plan was refused before deployment; D3-089 repairs boolean c
 deferred native identity-read handling. All 41 repository verification stages, focused regressions
 and three fresh synthetic Chromium journeys pass, with independent source review.
 [Release review evidence](evidence/d3-release-guard-recovery-2026-10-09.md).
+D3-091 adds verified restore-selection guards after review found a prior pre-transition backup restore. Corrective post-transition SQL recovery and compatible live release remain internal work. [Recovery correction](evidence/d3-native-application-disposal-2026-10-07.md#restore-selection-correction--2026-10-09).
 The D3-012 engineering review packet now links current evidence; existing development dispositions remain unchanged.
 D3-090 repairs missing candidate hosting build inputs; all 42 repository checks, independent review,
 three synthetic Chromium journeys and the actual Vercel preview build pass. Live acceptance remains
@@ -82,7 +83,7 @@ traced this to an earlier restore selecting a pre-transition snapshot; the retai
 snapshot has verified metadata provenance but still needs corrective SQL recovery. No Gateway
 release or live native acceptance occurred. Recovery/storage/security resources retain charges.
 Docker/WSL are off; the PC remains on.
-[Current release review and shutdown evidence](evidence/d3-release-guard-recovery-2026-10-09.md).
+[Current recovery correction and shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-selection-correction--2026-10-09).
 
 ## Cross-delivery decisions and changes
 
