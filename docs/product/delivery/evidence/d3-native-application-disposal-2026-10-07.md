@@ -2088,3 +2088,31 @@ snapshots, physical restore, exact-input zero drift and versioned KMS recovery a
 The archive explicitly retains the schema warning and corrective provenance. Staging's October 9
 verification remains historical with no later mutation. Docker/WSL are off; the PC stays on.
 Retained recovery/storage/security resources still incur charges. D3 remains In progress.
+
+### Restore verifier boundary recovery — 2026-10-09
+
+D3-092 fixes a reproduced preflight failure: the PowerShell restore guard still expected 93
+relations and 74 migrations; the current manifest contains 96 and 79. The guard now matches the
+current manifest without relaxing schema, identity, checksum or result parsing. Regression checks
+accept older evidence only against its own boundary and reject it as current. The previously
+omitted cloud-free restore/workload suite now runs in full repository verification.
+
+Both PowerShell hosts, independent source review and all 43 repository stages pass. A separately
+reviewed isolated restore of the retained post-transition snapshot completed privately with the
+original KMS key. Exactly one task ran the existing immutable `e061b910` read-only verifier. It
+exited zero and emitted one validated aggregate: seven owners, 96 relations and 79 checksum-valid
+migrations. Parent verification at `2026-10-10T03:48:42Z` and independent live verification at
+`03:50:00Z` agree. No migration, primary restoration or application activation occurred.
+
+This establishes current schema readiness for the historical snapshot. Its count digest cannot
+prove candidate record identity or exclude later durable changes. Bounded durable-data/privacy
+reconciliation against the newest backup, protected receipt comparison and recovery replay remain
+before primary promotion and the live D3 journey. Independent D1/admin acceptance stays deferred.
+
+The temporary database and its backup artifacts are removed. Fresh development shutdown at
+`2026-10-10T03:55:10Z` confirms zero databases, paid network endpoints, application traffic,
+background work and queued messages. The exact dormant inputs have zero drift and state 505's
+versioned recovery binding is unchanged. The schema proof has exact-version KMS/hash archive
+readback; original snapshots, recovery inputs and the known rollback warning remain retained.
+Docker/WSL are off and the PC remains on. Staging retains its October 9 verification with no later
+mutation. Retained recovery/storage/security resources incur charges. D3 remains In progress.
