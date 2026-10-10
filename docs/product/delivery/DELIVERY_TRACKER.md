@@ -103,6 +103,10 @@ resources incur charges.
 Docker/WSL are off; the PC remains on.
 [Current recovery and shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-snapshot-data-comparison--2026-10-10).
 
+D3 managed reconciliation preflight remains in progress: the diagnostic admission correction
+preserves historical Gateway replay permission with runtime off; 24 Terraform and 13 private
+boolean-guard cases pass. Full verification and managed execution are pending.
+[Admission evidence](evidence/d3-native-application-disposal-2026-10-07.md#dormant-reconciliation-admission-correction--2026-10-10).
 ## Cross-delivery decisions and changes
 
 Applications history belongs to D3, the generic inbox to D5, and structured Profile replacement to D3.1.
