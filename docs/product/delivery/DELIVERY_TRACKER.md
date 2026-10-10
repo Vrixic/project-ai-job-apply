@@ -44,11 +44,11 @@ D3-093 implements bounded whole-row comparison with 93 unit tests, all 96 restor
 digests and 21 real PostgreSQL probes passing. Its current immutable image is published, scanned
 and independently verified. Both isolated managed inventories and their original tasks pass independent
 review: 84 of 88 shared relations match exactly, including all 80 relations of the other six owners.
-Twelve Applications differences require explicit transition reconciliation, including seven encrypted
-original-request hashes. Privacy replay and primary recovery remain; no promotion or privacy acceptance is claimed.
+All twelve Applications differences now pass managed read-only transition reconciliation, including
+seven original-request hashes through actual KMS. Privacy replay and primary recovery remain; no promotion or privacy acceptance is claimed.
 D3-094 adds explicit read-only transition reconciliation: all 43 repository stages, independent review, 65 focused tests and
 seven real PostgreSQL reconciliation probes pass with simulated KMS. Its new immutable image is published, scanned and independently verified;
-separate default-off timed decrypt-only task registration passes 22 Terraform cases, configuration validation and all 43 repository stages. Deployment and the managed proof, privacy replay and primary recovery remain open.
+separate timed decrypt-only authority passes 24 Terraform cases and all 43 repository stages. The original managed task passes independent result review; its authority and both restores are removed. Privacy replay, primary recovery and the live journey remain open.
 [Reconciliation evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-transition-reconciliation--2026-10-10).
 [Comparison evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-data-comparison--2026-10-10).
 [Recovery evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-verifier-boundary-recovery--2026-10-09).
@@ -103,12 +103,15 @@ resources incur charges.
 Docker/WSL are off; the PC remains on.
 [Current recovery and shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-snapshot-data-comparison--2026-10-10).
 
-Current batch: two isolated temporary restores are active with backup retention zero and require
-cleanup before handoff; the primary remains absent, paid network runtimes are off and state 506
-is unchanged. D3 managed reconciliation preflight remains in progress: the diagnostic admission correction
-preserves historical Gateway replay permission with runtime off; 24 Terraform and 13 private
-boolean-guard cases and all 43 repository stages pass. Managed execution is pending.
-[Admission evidence](evidence/d3-native-application-disposal-2026-10-07.md#dormant-reconciliation-admission-correction--2026-10-10).
+Current batch: managed reconciliation passes for all seven original receipts. The task stopped;
+its temporary task/role/policy and both disposable restores are removed. Fresh development
+shutdown at `2026-10-10T18:47:12Z` verifies test runtimes off; all four encrypted source snapshots
+are preserved. Recovery state 508 and its manifest have exact-version KMS/hash readback, with
+zero baseline resource/output changes or drift and unchanged 142 inputs. Docker/WSL are off;
+the PC stays on. Retained storage/security resources incur charges; staging was not accessed.
+Privacy replay coverage needs a native-withdrawal count regression before recovery/live release.
+Independent D1/admin acceptance remains deferred.
+[Managed reconciliation evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-transition-reconciliation-and-cleanup--2026-10-10).
 
 ## Cross-delivery decisions and changes
 

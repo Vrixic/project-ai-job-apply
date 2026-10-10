@@ -2346,3 +2346,45 @@ All five hosted jobs never started because of billing/spending limits; they are 
 Both original isolated restores are available with backup retention zero; no authority apply,
 SQL execution, managed KMS proof, primary promotion or live journey is claimed by this correction.
 Independent D1/admin acceptance remains deferred.
+
+### Managed transition reconciliation and cleanup — 2026-10-10
+
+The single original task `b8f23dcf554f434e935c48b3c7af8ff2`, using published image
+`sha256:8a4cc857dfa4be76e7c14b61d0b2e8190e9196e38c87e2c11d42a9ab9d75ee5c`,
+stopped with exit zero. Its read-only aggregate reconciles 88 common relations, eight added tables,
+twelve migration entries and all seven encrypted original-request digests through actual managed
+KMS. Independent review verified the original task, exact overrides/image, one aggregate log event,
+both prior inventory digests and all twelve result fields. Result proof SHA-256:
+`5da7dbc6c6ac5671c0e0be42627ca0411b13bd63e703a30e18d7b3125e6b7ec9`;
+independent review: `60878fec801b135f87399832a2e90b4e6474a43cc9d794f3cdcc0311359cdf01`.
+Privacy replay and primary promotion remain explicitly false. No SQL values were retained.
+
+The original permission interval was `18:16:40Z`–`18:46:40Z`; it was never renewed. Private
+operator preflights caught UTC JSON parsing and PowerShell resource-address enumeration errors
+before apply intent. Narrow fixes passed thirteen UTC and thirteen address-guard regressions;
+fourteen deep request-comparison cases passed. Actual writer drain and resource bindings were
+rechecked before each mutation. The managed proof does not certify privacy/provider acceptance.
+
+After the original task stopped, the independently reviewed cleanup plan
+`a21b7bbb8da4e247af4529b7748cc2bdf43a9c819432384f66476ad48bb7b523` removed exactly
+the diagnostic task registration, role and inline policy. Independent live readback verifies the
+task inactive and role absent. Both original disposable restore IDs are absent; all four source
+snapshots remain available, encrypted and bound to their original database resource lineages.
+Fresh development shutdown at `2026-10-10T18:47:12Z` confirms zero database instances, paid
+network runtimes, routes, triggers, tasks, durable executions and queued/scheduled work.
+Docker/WSL are off; the PC stays on. Staging was not accessed. Retained storage/security/artifact
+resources incur charges.
+
+The original post-cleanup plan has zero resource changes, output changes or drift. State 508
+version `8c_VjKZzBLw0x0QamcXPCHJiu_8Qag0P` preserves the exact 142-field input checksum.
+Recovery manifest version `S.HyObulBJWJ2.ggORDVZVPVxQs5po1X`, SHA-256
+`cf0e4e749fcc35ae6cc759f56de7c6ebb9dc719c8f5fcbb29c3aeca6bb9672b5`, passes
+exact-version KMS/hash readback. It preserves the original restore proof, rollback warning,
+provenance and previous-manifest linkage, adding the scoped reconciliation result and cleanup.
+
+Next internal work is privacy replay, corrective primary recovery, compatible publication and
+the live native journey. Read-only review found that privacy reconciliation's Applications counts
+omit independent native withdrawal rows, potentially skipping a completed user's remaining data.
+Add explicit withdrawal/cleanup/archive coverage and real PostgreSQL regressions before that drill.
+Valid archive rows already require counted parent rows; no archive-orphan exploit is claimed.
+Independent D1/admin acceptance stays deferred.
