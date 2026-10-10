@@ -39,3 +39,13 @@ privacy replay, primary promotion or candidate acceptance. Development RDS is cu
 available for this ongoing test session and must be shut down through the data-preserving
 lifecycle before handoff. Staging was not accessed; Docker/WSL remain off and the PC remains on.
 Independent D1/admin acceptance remains deferred.
+
+## Subsequent shutdown closure — 2026-10-10
+
+The subsequent D3-099 batch completes the mandatory data-preserving shutdown. Primary and
+restore-check instances are absent; fresh encrypted final/safety snapshots and automated backups
+are retained. The maintained fresh plan has no changes or drift, recovery inputs/proof have
+versioned KMS-encrypted readback evidence, and independent closure review passes. Docker/WSL
+are off and the PC remains on. Retained storage/control-plane charges remain. See
+[D3-099 evidence](d3-replay-data-preservation-2026-10-10.md); physical restore readiness does not
+establish managed privacy replay or candidate acceptance.
