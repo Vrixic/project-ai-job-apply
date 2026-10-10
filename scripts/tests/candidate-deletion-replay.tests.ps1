@@ -774,4 +774,114 @@ Assert (@([regex]::Matches($operator,'Get-ReplayDiagnosisCleanupReadyAt \$runDir
   }
 }
 
+# Exercise the real mode, file-inventory and preflight functions with synthetic child Status
+# scripts. No top-level operator actions, AWS calls or Terraform processes run in this block.
+& {
+  . (Join-Path $root 'scripts/lib/development-postgresql-dark-recovery.ps1')
+  $modeAst = [Management.Automation.Language.Parser]::ParseFile($operatorPath,[ref]$tokens,[ref]$errors)
+  foreach ($name in @('Assert-ReplayRecoveryMode','Get-ReplayBoundFiles','Assert-ReplayNoDrift','Assert-ReplayCurrentBoundary')) {
+    $definitions = @($modeAst.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
+    Assert ($definitions.Count -eq 1) "real recovery function $name found once"
+    . ([scriptblock]::Create($definitions[0].Extent.Text))
+  }
+  $darkPreparation = Clone $preparation
+  $darkPreparation | Add-Member -NotePropertyName baselineMode -NotePropertyValue 'dark-recovery'
+  $darkPreparation.fileBindings += @(9..11 | ForEach-Object { Clone @{path="synthetic-$_.json";sha256=('e'*64)} })
+  Assert-DeletionReplayPreparation $darkPreparation
+  Assert ((Get-DeletionReplayBaselineMode $preparation) -ceq 'steady-state') 'legacy preparation remains steady-state'
+  Assert ((Get-DeletionReplayBaselineMode $darkPreparation) -ceq 'dark-recovery') 'explicit dark preparation accepted'
+  foreach ($value in @($null,$true,1,'DARK-RECOVERY','dark-recovery ','unknown')) {
+    $changed = Clone $darkPreparation; $changed.baselineMode=$value
+    Reject { Assert-DeletionReplayPreparation $changed } 'noncanonical mode refuses'
+  }
+  $changed = Clone $darkPreparation; $changed.PSObject.Properties.Remove('baselineMode')
+  Reject { Assert-DeletionReplayPreparation $changed } 'stripped dark mode cannot become legacy'
+  $changed = Clone $darkPreparation; $changed.fileBindings=@($changed.fileBindings | Select-Object -First 8)
+  Reject { Assert-DeletionReplayPreparation $changed } 'dark preparation requires recovery operator inventory'
+  $changed = Clone $preparation; $changed | Add-Member -NotePropertyName baselineMode -NotePropertyValue 'steady-state'
+  Assert-DeletionReplayPreparation $changed
+  Assert $true 'explicit steady-state remains compatible'
+
+  $DarkRecovery=$true
+  Assert-ReplayRecoveryMode $darkPreparation (Clone @{baseline_mode='dark-recovery'})
+  Assert $true 'dark context and preparation agree'
+  foreach ($context in @((Clone @{}),(Clone @{baseline_mode='steady-state'}),(Clone @{baseline_mode=$null}))) {
+    Reject { Assert-ReplayRecoveryMode $darkPreparation $context } 'dark invocation refuses legacy or wrong context'
+  }
+  Reject { Assert-ReplayRecoveryMode $preparation $null } 'dark invocation refuses normal preparation'
+  $DarkRecovery=$false
+  Assert-ReplayRecoveryMode $preparation (Clone @{})
+  Reject { Assert-ReplayRecoveryMode $preparation (Clone @{baseline_mode='dark-recovery'}) } 'normal invocation refuses dark context'
+  foreach ($cleanup in @($false,$true)) {
+    $awsCalls=0
+    function Invoke-ReplayAws { $awsCalls++; throw 'UnexpectedSyntheticAwsCall' }
+    Reject { Assert-ReplayCurrentBoundary $darkPreparation -Cleanup:$cleanup } 'mode mismatch refuses before AWS including cleanup'
+    Assert ($awsCalls -eq 0) 'mode mismatch performed no AWS read'
+  }
+
+  $temporary = Join-Path ([IO.Path]::GetTempPath()) "ai-job-apply-replay-mode-tests-$([guid]::NewGuid().ToString('N'))"
+  $null = New-Item -ItemType Directory -Path $temporary
+  try {
+    # Preserve PowerShell's definition-file automatic paths for the real functions.
+    $functionFile=Join-Path $temporary 'synthetic-functions.ps1'
+    $functionText=@($modeAst.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -cin @('Assert-ReplayRecoveryMode','Get-ReplayBoundFiles','Assert-ReplayNoDrift','Assert-ReplayCurrentBoundary')},$true) | ForEach-Object { $_.Extent.Text }) -join "`n"
+    [IO.File]::WriteAllText($functionFile,$functionText,[Text.UTF8Encoding]::new($false))
+    . $functionFile
+    $guardPath=Join-Path $root 'scripts/lib/candidate-deletion-replay.ps1'
+    $restoreContextPath=Join-Path $temporary 'applydash-development-dark-restore-context.json'
+    $manifestPath=Join-Path $temporary 'manifest.json'; $zipPath=Join-Path $temporary 'artifact.zip'; $sbomPath=Join-Path $temporary 'sbom.json'
+    $DarkRecovery=$true
+    $bound=@(Get-ReplayBoundFiles $darkPreparation.runtimePlanPath)
+    Assert ($bound.Count -eq 11 -and $bound -ccontains $restoreContextPath) 'dark file inventory binds selected context and eleven files'
+    foreach ($file in @('operate-development-postgresql-restore.ps1','operate-staging-postgresql-restore.ps1','lib/development-postgresql-dark-recovery.ps1')) {
+      Assert ($bound -ccontains (Join-Path $temporary $file)) 'dark recovery dependency checksum-bound'
+    }
+    $DarkRecovery=$false
+    Assert (@(Get-ReplayBoundFiles $preparation.runtimePlanPath).Count -eq 8) 'steady-state inventory unchanged'
+    $child=@'
+param($Action,[switch]$DarkRecovery,$Environment,$ExpectedAccountId,$StateBucket,$RuntimePlanPath,$AwsProfile,$Region)
+$calls.Add([pscustomobject]@{action=$Action;dark=[bool]$DarkRecovery;environment=$Environment;account=$ExpectedAccountId;bucket=$StateBucket;plan=$RuntimePlanPath;profile=$AwsProfile;region=$Region})
+if ($childFailure) { exit 1 }
+$statusResponse | ConvertTo-Json -Depth 10 -Compress
+exit 0
+'@
+    foreach ($file in @('operate-development-postgresql-restore.ps1','inspect-staging-workload-and-cost.ps1')) {
+      [IO.File]::WriteAllText((Join-Path $temporary $file),$child,[Text.UTF8Encoding]::new($false))
+    }
+    $calls=[Collections.Generic.List[object]]::new(); $childFailure=$false; $AwsProfile='synthetic-development'
+    $validStatus=Clone @{Environment='development';BaselineMode='dark-recovery';RestoreState='verified';BackupRetentionDays=35;DisposableRestoreTargets=1;SourceMultiAz=$false;SourceAvailable=$true;SourcePrivate=$true;SourceEncrypted=$true;SourceDeletionProtected=$true;LatestRestorablePoint=$true;EcsRuntimeIdle=$true;RestoreContext=$true}
+    $statusResponse=Clone $validStatus; $DarkRecovery=$true
+    Assert-ReplayNoDrift $darkPreparation
+    Assert ($calls.Count -eq 1 -and $calls[0].dark -and $calls[0].action -ceq 'Status' -and $calls[0].account -ceq $darkPreparation.accountId -and $calls[0].bucket -ceq $darkPreparation.stateBucket -and $calls[0].plan -ceq $darkPreparation.runtimePlanPath -and $calls[0].profile -ceq $AwsProfile -and $calls[0].region -ceq 'us-east-2') 'dark Status receives exact reviewed authority'
+    foreach ($name in @('SourceAvailable','SourcePrivate','SourceEncrypted','SourceDeletionProtected','LatestRestorablePoint','EcsRuntimeIdle','RestoreContext')) {
+      foreach ($value in @($false,'true',1,$null)) {
+        $statusResponse=Clone $validStatus; $statusResponse.$name=$value
+        Reject { Assert-ReplayNoDrift $darkPreparation } "missing or nonboolean recovery proof $name refuses"
+      }
+      $statusResponse=Clone $validStatus; $statusResponse.PSObject.Properties.Remove($name)
+      Reject { Assert-ReplayNoDrift $darkPreparation } "absent recovery proof $name refuses"
+    }
+    foreach ($pair in @(@('Environment','staging'),@('BaselineMode','steady-state'),@('RestoreState','in-progress'),@('BackupRetentionDays',34),@('BackupRetentionDays','35'),@('DisposableRestoreTargets',0),@('DisposableRestoreTargets',2),@('DisposableRestoreTargets','1'),@('SourceMultiAz',$true),@('SourceMultiAz','false'))) {
+      $statusResponse=Clone $validStatus; $statusResponse.($pair[0])=$pair[1]
+      Reject { Assert-ReplayNoDrift $darkPreparation } 'changed recovery baseline refuses'
+    }
+    $statusResponse=Clone $validStatus; $childFailure=$true
+    Reject { Assert-ReplayNoDrift $darkPreparation } 'failed recovery Status refuses'
+    $childFailure=$false; $calls.Clear()
+    $DarkRecovery=$false; $statusResponse=Clone @{NoDrift=$true}
+    Assert-ReplayNoDrift $preparation
+    Assert ($calls.Count -eq 1 -and -not $calls[0].dark -and $calls[0].environment -ceq 'development') 'normal preflight retains maintained workload inspector'
+    $statusResponse.NoDrift=$false
+    Reject { Assert-ReplayNoDrift $preparation } 'normal drift still refuses'
+    $calls.Clear(); $DarkRecovery=$true
+    Reject { Assert-ReplayNoDrift $preparation } 'preflight mode mismatch refuses before child execution'
+    Assert ($calls.Count -eq 0) 'mode mismatch invoked no child'
+  } finally {
+    $resolved=[IO.Path]::GetFullPath($temporary)
+    if ($resolved -cnotmatch 'ai-job-apply-replay-mode-tests-[a-f0-9]{32}$' -or -not $resolved.StartsWith([IO.Path]::GetTempPath(),[StringComparison]::OrdinalIgnoreCase)) { throw 'Synthetic cleanup target invalid' }
+    Remove-Item -LiteralPath $resolved -Recurse -Force
+    $global:LASTEXITCODE=0
+  }
+}
+
 [pscustomobject]@{suite='candidate-deletion-replay-generated-boundaries';checksPassed=$script:checks;cloudCalls=0;candidateDataRetained=$false} | ConvertTo-Json -Compress

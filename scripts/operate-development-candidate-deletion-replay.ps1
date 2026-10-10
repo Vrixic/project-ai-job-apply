@@ -17,6 +17,7 @@ param(
   [ValidatePattern('^[a-f0-9]{64}$')][string]$ReviewedInspectionReceiptSha256 = '',
   [ValidatePattern('^[a-f0-9]{64}$')][string]$ReviewedCleanupDisabledSha256 = '',
   [switch]$Execute,
+  [switch]$DarkRecovery,
   [switch]$Help
 )
 Set-StrictMode -Version Latest
@@ -28,6 +29,8 @@ Development restore-only deletion replay: Prepare / Create / Inspect / Replay / 
 Prepare is read-only in AWS and writes a private review packet. It requires a clean source-bound
 Lambda artifact, the reviewed current no-drift runtime plan, and verified current-schema PITR
 context. It cannot create or enable the separately reviewed default-off IAM role.
+Use -DarkRecovery on every action for a writer-off PITR context. It uses the maintained
+development recovery Status checks and binds that mode and its operator files in the packet.
 Create requires -Execute and the packet checksum. Inspect invokes only the numeric version and
 performs no database writes. Replay additionally requires -Execute and an exact reviewed inspection
 receipt. Cleanup requires -Execute and removes only the exact temporary Lambda, after a full
@@ -50,12 +53,14 @@ $terraformRoot = Join-Path $root 'infrastructure/terraform/environments/developm
 $terraformPrivate = Join-Path $terraformRoot '.terraform'
 $privateRoot = Join-Path $terraformPrivate 'development-candidate-deletion-replay'
 $restoreContextPath = Join-Path $terraformPrivate 'applydash-development-restore-context.json'
+if ($DarkRecovery) { $restoreContextPath = Join-Path $terraformPrivate 'applydash-development-dark-restore-context.json' }
 $artifactRoot = Join-Path $root 'backend/workflows/dist/lambda'
 $zipPath = Join-Path $artifactRoot 'candidate-deletion-restore-lambda.zip'
 $manifestPath = Join-Path $artifactRoot 'candidate-deletion-restore-lambda.manifest.json'
 $sbomPath = Join-Path $artifactRoot 'candidate-deletion-restore-lambda.cdx.json'
 $guardPath = Join-Path $PSScriptRoot 'lib/candidate-deletion-replay.ps1'
 . $guardPath
+. (Join-Path $PSScriptRoot 'lib/development-postgresql-dark-recovery.ps1')
 . (Join-Path $PSScriptRoot 'lib/terraform-toolchain.ps1')
 
 function Invoke-ReplayAws([string[]]$Arguments, [switch]$AllowNotFound) {
@@ -95,7 +100,35 @@ function Read-ReplayPlan([string]$Path, [string]$Sha256) {
   return $plan
 }
 
+function Assert-ReplayRecoveryMode([object]$Preparation, [object]$Context) {
+  $mode = Get-DeletionReplayBaselineMode $Preparation
+  if (($mode -ceq 'dark-recovery') -ne [bool]$DarkRecovery) { throw 'DeletionReplayBaselineModeChanged' }
+  if ($null -ne $Context) { Assert-D1RestoreRecoveryMode $Context 'development' ([bool]$DarkRecovery) }
+}
+
+function Get-ReplayBoundFiles([string]$PlanPath) {
+  $files = @($PSCommandPath,$guardPath,(Join-Path $PSScriptRoot 'lib/staging-postgresql-restore-verifier.ps1'),$restoreContextPath,[IO.Path]::GetFullPath($PlanPath),$manifestPath,$zipPath,$sbomPath)
+  if ($DarkRecovery) {
+    $files += @('operate-development-postgresql-restore.ps1','operate-staging-postgresql-restore.ps1','lib/development-postgresql-dark-recovery.ps1') | ForEach-Object { Join-Path $PSScriptRoot $_ }
+  }
+  return $files
+}
+
 function Assert-ReplayNoDrift([object]$Preparation) {
+  Assert-ReplayRecoveryMode $Preparation $null
+  if ($DarkRecovery) {
+    $raw = @(& (Join-Path $PSScriptRoot 'operate-development-postgresql-restore.ps1') -Action Status -DarkRecovery -ExpectedAccountId $Preparation.accountId -StateBucket $Preparation.stateBucket -RuntimePlanPath $Preparation.runtimePlanPath -AwsProfile $AwsProfile -Region us-east-2 2>$null)
+    if ($LASTEXITCODE -ne 0) { throw 'DeletionReplayRuntimeDriftCheckFailed' }
+    $result = ConvertFrom-D1RestoreJson ($raw -join "`n")
+    if ($result.Environment -cne 'development' -or $result.BaselineMode -cne 'dark-recovery' -or $result.RestoreState -cne 'verified' -or
+        -not (Test-D1RestoreBoundedInteger $result.BackupRetentionDays) -or $result.BackupRetentionDays -ne 35 -or
+        -not (Test-D1RestoreBoundedInteger $result.DisposableRestoreTargets) -or $result.DisposableRestoreTargets -ne 1 -or
+        $result.SourceMultiAz -isnot [bool] -or $result.SourceMultiAz) { throw 'DeletionReplayRecoveryBaselineInvalid' }
+    foreach ($name in @('SourceAvailable','SourcePrivate','SourceEncrypted','SourceDeletionProtected','LatestRestorablePoint','EcsRuntimeIdle','RestoreContext')) {
+      if ($result.$name -isnot [bool] -or -not $result.$name) { throw 'DeletionReplayRecoveryBaselineInvalid' }
+    }
+    return
+  }
   $raw = @(& (Join-Path $PSScriptRoot 'inspect-staging-workload-and-cost.ps1') -Environment development -Action Status -ExpectedAccountId $Preparation.accountId -StateBucket $Preparation.stateBucket -RuntimePlanPath $Preparation.runtimePlanPath -AwsProfile $AwsProfile -Region us-east-2 2>$null)
   if ($LASTEXITCODE -ne 0) { throw 'DeletionReplayRuntimeDriftCheckFailed' }
   $result = ConvertFrom-D1RestoreJson ($raw -join "`n")
@@ -153,7 +186,8 @@ function Assert-ReplayReviewedFiles([object]$Preparation) {
 
 function Assert-ReplayCurrentBoundary([object]$Preparation, [switch]$Cleanup) {
   Assert-DeletionReplayPreparation $Preparation
-  $expectedPaths = @($PSCommandPath,$guardPath,(Join-Path $PSScriptRoot 'lib/staging-postgresql-restore-verifier.ps1'),$restoreContextPath,[IO.Path]::GetFullPath($Preparation.runtimePlanPath),$manifestPath,$zipPath,$sbomPath)
+  Assert-ReplayRecoveryMode $Preparation $null
+  $expectedPaths = @(Get-ReplayBoundFiles $Preparation.runtimePlanPath)
   if ((@($Preparation.fileBindings.path | Sort-Object) -join "`n") -cne (@($expectedPaths | Sort-Object) -join "`n")) { throw 'DeletionReplayRequiredFileBindingsMissing' }
   Assert-ReplayReviewedFiles $Preparation
   $caller = Invoke-ReplayAws @('sts','get-caller-identity')
@@ -161,6 +195,7 @@ function Assert-ReplayCurrentBoundary([object]$Preparation, [switch]$Cleanup) {
   if (-not $Cleanup -and ((Invoke-ReplayGit @('rev-parse','HEAD')) -cne $Preparation.sourceSha -or (Invoke-ReplayGit @('status','--porcelain')) -cne '')) { throw 'DeletionReplaySourceChanged' }
   $boundary = Get-D1RestoreManifestBoundary $root
   $context = Read-D1RestoreContextFile $restoreContextPath $boundary
+  Assert-ReplayRecoveryMode $Preparation $context
   $null = Get-ReplayDatabases $context
   $plan = Read-ReplayPlan $Preparation.runtimePlanPath $Preparation.runtimePlanSha256
   if ((ConvertTo-DeletionReplayCanonicalJson (Get-ReplayRoleBoundary $plan $Preparation.accountId)) -cne (ConvertTo-DeletionReplayCanonicalJson $Preparation.roleBoundary)) { throw 'DeletionReplayRoleBoundaryChanged' }
@@ -259,6 +294,7 @@ try {
     $manifest = ConvertFrom-D1RestoreJson ([IO.File]::ReadAllText($manifestPath))
     Assert-DeletionReplayArtifact $manifest $SourceSha $zipPath $sbomPath
     $context = Read-D1RestoreContextFile $restoreContextPath (Get-D1RestoreManifestBoundary $root)
+    Assert-D1RestoreRecoveryMode $context 'development' ([bool]$DarkRecovery)
     $databases = Get-ReplayDatabases $context
     $roleBoundary = Get-ReplayRoleBoundary $plan $ExpectedAccountId
     $activity = Get-ReplayPlanResource $plan 'module.platform.aws_lambda_function.profile_readiness_activity[0]'
@@ -290,8 +326,9 @@ try {
       Environment=@{Variables=$environment};LoggingConfig=@{LogFormat='JSON';LogGroup='/ai-job-apply/development/application'}
       Tags=[ordered]@{Project='ai-job-apply';Environment='development';ManagedBy='restore-drill';Purpose='candidate-deletion-restore';RunId=$runId;ConfigurationSha256=$environment.RESTORE_REPLAY_CONFIG_SHA256;SourceSha=$SourceSha}
     }
-    $files = @($PSCommandPath,$guardPath,(Join-Path $PSScriptRoot 'lib/staging-postgresql-restore-verifier.ps1'),$restoreContextPath,[IO.Path]::GetFullPath($RuntimePlanPath),$manifestPath,$zipPath,$sbomPath)
+    $files = @(Get-ReplayBoundFiles $RuntimePlanPath)
     $preparation = [ordered]@{schemaVersion=1;kind='candidate-deletion-restore-preparation';runId=$runId;accountId=$ExpectedAccountId;sourceSha=$SourceSha;stateBucket=$StateBucket;runtimePlanPath=[IO.Path]::GetFullPath($RuntimePlanPath);runtimePlanSha256=$ReviewedRuntimePlanSha256;configurationSha256=$environment.RESTORE_REPLAY_CONFIG_SHA256;artifactBucket=$artifactBucket;artifactKey=$key;artifactSha256=$manifest.artifactSha256;artifactBase64Sha256=$manifest.artifactBase64Sha256;roleBoundary=$roleBoundary;createRequest=$create;fileBindings=@($files | ForEach-Object { [ordered]@{path=$_;sha256=(Get-D1RestoreFileSha256 $_)} })}
+    $preparation.baselineMode = if ($DarkRecovery) { 'dark-recovery' } else { 'steady-state' }
     Assert-ReplayNoDrift ([pscustomobject]$preparation)
     foreach ($binding in $preparation.fileBindings) { Assert-DeletionReplayHash $binding.path $binding.sha256 }
     Write-DeletionReplayPrivateJson $PreparationPath $preparation
