@@ -42,8 +42,10 @@ pass. The isolated historical backup passes live read-only schema/checksum verif
 Durable-data/privacy reconciliation and compatible live release remain internal work.
 D3-093 implements bounded whole-row comparison with 93 unit tests, all 96 restored relation
 digests and 21 real PostgreSQL probes passing. Its current immutable image is published, scanned
-and independently verified; dormant task revision 66 is registered but unexecuted. Managed snapshot
-comparison and transition-aware reconciliation remain; no primary promotion or privacy acceptance is claimed.
+and independently verified. Both isolated managed inventories and their original tasks pass independent
+review: 84 of 88 shared relations match exactly, including all 80 relations of the other six owners.
+Twelve Applications differences require explicit transition reconciliation, including seven encrypted
+original-request hashes. Privacy replay and primary recovery remain; no promotion or privacy acceptance is claimed.
 [Comparison evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-data-comparison--2026-10-10).
 [Recovery evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-verifier-boundary-recovery--2026-10-09).
 The D3-012 engineering review packet now links current evidence; existing development dispositions remain unchanged.
@@ -84,16 +86,18 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 
 Work continues for D3 on 2026-10-10; D1/D3 are not complete. Independent D1 acceptance remains deferred.
 AWS access is sequential per the owner. Staging retains its 2026-10-09 dormant verification, with
-no subsequent mutation. Development is freshly verified dormant at 2026-10-10T04:18:39Z, state 505:
-both database instances, ten Interface endpoints and all application traffic/background work are
-off. Retained encrypted snapshots and prior physical restore, exact-input zero drift and versioned
-KMS recovery archive evidence remain available. Current-source migration failed at the unchanged Applications legacy guard. Review
-traced this to an earlier restore selecting a pre-transition snapshot; the retained post-transition
-snapshot now passes live read-only schema/checksum verification. Durable-data/privacy comparison
-against the newest backup and corrective primary recovery remain. No Gateway
-release or live native acceptance occurred. Recovery/storage/security resources retain charges.
+no subsequent mutation. Development is freshly verified dormant at 2026-10-10T15:48:59Z, state 506:
+the primary and both diagnostic restores are absent; paid network runtimes, application routes,
+triggers, ECS/durable work and queued messages are off. Both retained backups pass isolated
+read-only data inventory. Strict comparison finds 84 identical shared relations and 12 Applications
+differences; transition-aware row/default/ledger accounting and seven encrypted original-request
+proofs remain internal work before privacy replay and corrective primary recovery. All four encrypted
+source snapshots and the exact-version state-506 recovery archive remain retained. The follow-up
+plan has no resource/output actions and one task-tags refresh difference; strict zero drift is not
+claimed. No Gateway release or live native acceptance occurred. Retained storage/security/artifact
+resources incur charges.
 Docker/WSL are off; the PC remains on.
-[Current recovery and shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-verifier-boundary-recovery--2026-10-09).
+[Current recovery and shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-snapshot-data-comparison--2026-10-10).
 
 ## Cross-delivery decisions and changes
 
