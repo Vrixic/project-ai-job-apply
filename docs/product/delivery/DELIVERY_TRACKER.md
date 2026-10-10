@@ -124,6 +124,10 @@ D3-097 adds matching default-off writer-off replay preflight, exact mode/context
 bindings. All 778 synthetic replay checks, 908 restore-role assertions and all 43 repository stages pass; managed replay
 remains pending. [Replay evidence](evidence/d3-dark-deletion-replay-2026-10-10.md).
 
+D3-098 is In progress: bounded bootstrap observation validation and exact typed dark-recovery
+inputs address managed preflight failures. Batch verification and managed replay remain pending.
+[Recovery input evidence](evidence/d3-bootstrap-recovery-inputs-2026-10-10.md).
+
 ## Cross-delivery decisions and changes
 
 Applications history belongs to D3, the generic inbox to D5, and structured Profile replacement to D3.1.

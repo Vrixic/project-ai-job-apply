@@ -180,6 +180,7 @@ function Assert-D1RestoreDarkBaseline {
   $savedData = $env:TF_DATA_DIR
   $saved = @{}
   $temporary = Join-Path $terraformDataDirectory "dark-recovery-$([guid]::NewGuid().ToString('N')).tfplan"
+  $inputFile = "$temporary.tfvars.json"
   try {
     $env:TF_DATA_DIR = $terraformDataDirectory
     $plan = Read-DeploymentTerraformPlan -Path $path -TerraformDirectory $environmentDirectory
@@ -190,14 +191,17 @@ function Assert-D1RestoreDarkBaseline {
       $values | Add-Member -NotePropertyName $name -NotePropertyValue $plan.variables.$name.value
     }
     Assert-D1RestoreDarkWriterInputs $values
+    # Windows PowerShell cannot propagate an empty environment value to native
+    # children. Bind the complete typed inputs explicitly as well as null-safe env.
+    [IO.File]::WriteAllText($inputFile, (ConvertTo-Json -InputObject $values -Depth 100), [Text.UTF8Encoding]::new($false))
     foreach ($entry in @(Get-ChildItem Env: | Where-Object Name -Like 'TF_VAR_*')) {
       if ($entry.Name.Substring(7) -cnotin $names) { throw 'Dark recovery refuses unknown Terraform environment inputs.' }
     }
     foreach ($name in $names) {
       $key = "TF_VAR_$name"
-      $saved[$key] = [Environment]::GetEnvironmentVariable($key, 'Process')
+      $saved[$key] = @{ Exists = Test-Path "Env:$key"; Value = [Environment]::GetEnvironmentVariable($key, 'Process') }
       $value = $values.$name
-      $serialized = if ($null -eq $value) { $null }
+      $serialized = if ($null -eq $value) { 'null' }
         elseif ($value -is [bool]) { $value.ToString().ToLowerInvariant() }
         elseif ($value -is [string]) { $value }
         else { ConvertTo-Json -InputObject $value -Compress -Depth 100 }
@@ -212,7 +216,7 @@ function Assert-D1RestoreDarkBaseline {
     if ($kms -cnotmatch "^arn:aws:kms:us-east-2:$ExpectedAccountId`:key/") { throw 'Dark recovery state key is outside the selected account.' }
     Assert-DeploymentTerraformBackend -TerraformDirectory $environmentDirectory -DataDirectory $terraformDataDirectory `
       -ExpectedBucket $StateBucket -ExpectedKey 'platform.tfstate' -ExpectedRegion $Region -ExpectedKmsKeyArn $kms
-    & terraform "-chdir=$environmentDirectory" plan -input=false -lock-timeout=30s -detailed-exitcode "-out=$temporary" *> "$temporary.log"
+    & terraform "-chdir=$environmentDirectory" plan -input=false -lock-timeout=30s -detailed-exitcode "-var-file=$inputFile" "-out=$temporary" *> "$temporary.log"
     if ($LASTEXITCODE -ne 0) { throw 'Dark recovery requires fresh exact-input zero drift.' }
     $fresh = Read-DeploymentTerraformPlan -Path $temporary -TerraformDirectory $environmentDirectory
     foreach ($name in @('complete', 'errored', 'applyable')) {
@@ -232,9 +236,12 @@ function Assert-D1RestoreDarkBaseline {
     return [pscustomobject]@{ EcsRuntimeIdle = $true; ManagedRuntimeAlarmsOk = 0; WritersStopped = $true }
   }
   finally {
-    foreach ($key in $saved.Keys) { [Environment]::SetEnvironmentVariable($key, $saved[$key], 'Process') }
+    foreach ($key in $saved.Keys) {
+      if ($saved[$key].Exists) { [Environment]::SetEnvironmentVariable($key, $saved[$key].Value, 'Process') }
+      else { Remove-Item "Env:$key" -ErrorAction SilentlyContinue }
+    }
     $env:TF_DATA_DIR = $savedData
-    foreach ($file in @($temporary, "$temporary.log")) {
+    foreach ($file in @($temporary, "$temporary.log", $inputFile)) {
       if (Test-Path -LiteralPath $file -PathType Leaf) { Remove-Item -LiteralPath $file -Force }
     }
   }

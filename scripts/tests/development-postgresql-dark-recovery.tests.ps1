@@ -192,6 +192,30 @@ try {
   }
   function terraform {
     $script:planCalls++
+    $inputArgument=@($args|Where-Object {$_ -clike '-var-file=*'})
+    if($inputArgument.Count -ne 1){throw 'Exact typed input file missing'}
+    $inputPath=$inputArgument[0].Substring(10)
+    $typed=Get-Content -LiteralPath $inputPath -Raw|ConvertFrom-Json
+    if($null -ne $typed.application_restore_reconciliation -or $null -ne $typed.job_retention_release -or
+       $typed.ingestion_durable_artifact_s3_key -cne '' -or $typed.serverless_runtime_enabled -isnot [bool] -or
+       $typed.serverless_runtime_enabled -or $typed.d2_community_runtime.enabled -isnot [bool] -or $typed.d2_community_runtime.enabled){throw 'Typed input file changed exact values'}
+    # A real child process must receive valid Terraform expressions. In particular,
+    # null objects cannot be silently removed or inherited as empty expressions.
+    $childCode=@'
+$ErrorActionPreference='Stop'
+if($env:TF_VAR_application_restore_reconciliation -cne 'null' -or $env:TF_VAR_job_retention_release -cne 'null'){throw 'Null expression lost'}
+if($env:TF_VAR_serverless_runtime_enabled -cne 'false'){throw 'Boolean expression lost'}
+# Windows PowerShell 5 cannot propagate empty env values; the explicit var-file
+# above preserves that expression for Terraform in either shell.
+if($null -ne $env:TF_VAR_ingestion_durable_artifact_s3_key -and $env:TF_VAR_ingestion_durable_artifact_s3_key -cne ''){throw 'Empty string expression changed'}
+$object=ConvertFrom-Json $env:TF_VAR_d2_community_runtime
+if($object.enabled -isnot [bool] -or $object.enabled){throw 'Object expression lost'}
+'@
+    $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childCode))
+    $priorPreference=$ErrorActionPreference
+    try{$ErrorActionPreference='Continue';$childOutput=& pwsh -NoProfile -EncodedCommand $encoded 2>&1;$childExit=$LASTEXITCODE}
+    finally{$ErrorActionPreference=$priorPreference}
+    if($childExit -ne 0){throw "Child environment did not preserve typed Terraform expressions: $childOutput"}
     $global:LASTEXITCODE=if($script:baselineFault -ceq 'plan-failure'){1}else{0}
   }
   function Invoke-AwsJson([string[]]$CommandArguments) {
@@ -201,11 +225,18 @@ try {
   }
   function Assert-D1RestoreDarkWritersStopped {$script:drainCalls++}
   $savedInput=$env:TF_VAR_serverless_runtime_enabled
+  $variables.ingestion_durable_artifact_s3_key.value=''
+  Remove-Item Env:TF_VAR_application_restore_reconciliation -ErrorAction SilentlyContinue
+  [Environment]::SetEnvironmentVariable('TF_VAR_job_retention_release','','Process')
+  $emptySupported=Test-Path Env:TF_VAR_job_retention_release
   $env:TF_VAR_serverless_runtime_enabled='synthetic-original'
   try {
     $result=Assert-D1RestoreDarkBaseline
     if(-not $result.WritersStopped -or $script:backendChecks -ne 1 -or $script:planCalls -ne 1 -or
        $script:drainCalls -ne 1 -or $env:TF_VAR_serverless_runtime_enabled -cne 'synthetic-original') {throw 'Baseline did not prove or restore exact input/backend/drain boundary'}
+    $script:checks++
+    if((Test-Path Env:TF_VAR_application_restore_reconciliation) -or
+       ($emptySupported -and (-not (Test-Path Env:TF_VAR_job_retention_release) -or $env:TF_VAR_job_retention_release -cne ''))){throw 'Absent and empty original inputs were not restored distinctly'}
     $script:checks++
     foreach($fault in @('resource-change','output-change','drift','plan-failure',
         'complete-missing','complete-string','complete-wrong',
@@ -214,11 +245,16 @@ try {
       $script:baselineFault=$fault
       Expect-DarkRefusal { Assert-D1RestoreDarkBaseline }
       if($env:TF_VAR_serverless_runtime_enabled -cne 'synthetic-original'){throw 'Baseline failure leaked environment inputs'}
+      if((Test-Path Env:TF_VAR_application_restore_reconciliation) -or
+         ($emptySupported -and (-not (Test-Path Env:TF_VAR_job_retention_release) -or $env:TF_VAR_job_retention_release -cne ''))){throw 'Failure did not restore absent and empty inputs'}
     }
     $script:baselineFault=''
     $variables.PSObject.Properties.Remove($names[0])
     Expect-DarkRefusal { Assert-D1RestoreDarkBaseline }
-  } finally { [Environment]::SetEnvironmentVariable('TF_VAR_serverless_runtime_enabled',$savedInput,'Process') }
+  } finally {
+    [Environment]::SetEnvironmentVariable('TF_VAR_serverless_runtime_enabled',$savedInput,'Process')
+    Remove-Item Env:TF_VAR_job_retention_release -ErrorAction SilentlyContinue
+  }
 } finally {
   # Only this freshly generated test-owned directory is removed.
   if([IO.Path]::GetFullPath($private).StartsWith([IO.Path]::GetFullPath([IO.Path]::GetTempPath()),[StringComparison]::OrdinalIgnoreCase)) {

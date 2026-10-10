@@ -341,8 +341,95 @@ function Assert-RestoreRoleComputedPolicyObservation {
     if($address -ceq $roleAddress){Assert-RestoreRoleObservationEqual $changes[0].change.before_sensitive $Record.change.after_sensitive}
   }
 }
+function Assert-RestoreRoleBootstrapDrift {
+  param([object]$Plan)
+  $map=Get-RestoreRoleResourceMap $Plan.planned_values.root_module
+  $boundary=Get-RestoreRoleResource $map 'aws_iam_policy.workload_boundary'
+  if($boundary.arn -cnotmatch '^arn:aws:iam::([0-9]{12}):policy/ai-job-apply-development-workload-boundary$'){
+    throw 'RestoreRoleBootstrapAccountRejected'
+  }
+  $bootstrapAccount=$Matches[1]
+  $seen=@{}
+  $nativeNames=@('native_material_control_boundary','native_preparation_boundary','native_preparation_durable_boundary','native_resume_control_boundary','native_resume_durable_boundary','native_resume_observer_boundary')
+  foreach($record in @(Get-RestoreRoleProperty $Plan 'resource_drift' @())){
+    if($seen.ContainsKey($record.address)){throw 'RestoreRoleBootstrapDuplicateObservation'}
+    $seen[$record.address]=$true
+    $isRole=$record.address -ceq 'aws_iam_role.github_deploy'
+    $keys=@('address','mode','type','name','provider_name','change')
+    if(-not $isRole){$keys+=@('index')}
+    Assert-ExactObjectKeys $record $keys 'bootstrap observation record'
+    Assert-ExactObjectKeys $record.change @('actions','before','after','after_unknown','before_sensitive','after_sensitive') 'bootstrap observation change'
+    if($record.mode -cne 'managed' -or $record.provider_name -cne 'registry.terraform.io/hashicorp/aws' -or
+       $record.change.actions -isnot [array] -or $record.change.actions.Count -ne 1 -or $record.change.actions[0] -cne 'update'){
+      throw 'RestoreRoleBootstrapObservationRecordRejected'
+    }
+    Assert-RestoreRoleObservationMetadata $record.change.after_unknown
+    Assert-RestoreRoleUnknowns $record.change.after_unknown
+    Assert-RestoreRoleObservationMetadata $record.change.before_sensitive
+    Assert-RestoreRoleObservationMetadata $record.change.after_sensitive
+    $after=Copy-RestoreRoleValue $record.change.after
+    $before=Copy-RestoreRoleValue $record.change.before
+    $left=Copy-RestoreRoleValue $record.change.before_sensitive
+    $right=Copy-RestoreRoleValue $record.change.after_sensitive
+    if($isRole){
+      if($record.type -cne 'aws_iam_role' -or $record.name -cne 'github_deploy' -or
+         $after.name -cne 'ai-job-apply-development-github-deploy' -or $after.id -cne $after.name -or
+         $after.arn -cne "arn:aws:iam::${bootstrapAccount}:role/ai-job-apply-development-github-deploy"){
+        throw 'RestoreRoleBootstrapRoleIdentityRejected'
+      }
+      $child=Get-RestoreRoleResource $map 'aws_iam_role_policy.github_deploy'
+      if($child.role -cne $after.id -or $child.name -cne 'terraform-state-and-deploy' -or
+         $before.inline_policy -isnot [array] -or $before.inline_policy.Count -ne 1 -or
+         $after.inline_policy -isnot [array] -or $after.inline_policy.Count -ne 1){throw 'RestoreRoleBootstrapChildPolicyRejected'}
+      foreach($entry in @($before.inline_policy[0],$after.inline_policy[0])){
+        Assert-ExactObjectKeys $entry @('name','policy') 'bootstrap computed policy'
+        if($entry.name -cne $child.name -or $entry.policy -isnot [string]){throw 'RestoreRoleBootstrapChildPolicyRejected'}
+        $null=ConvertFrom-RestoreRolePolicy $entry.policy
+      }
+      Assert-RestoreRolePolicyEqual $after.inline_policy[0].policy $child.policy
+      # The child owns the effective policy. A stale parent computed snapshot is
+      # accepted only while that exact separately owned child has no change.
+      $childChanges=@($Plan.resource_changes|Where-Object address -CEQ 'aws_iam_role_policy.github_deploy')
+      if($childChanges.Count -ne 1 -or $childChanges[0].mode -cne 'managed' -or
+         (@($childChanges[0].change.actions)-join ',') -cne 'no-op'){throw 'RestoreRoleBootstrapChildPolicyChanged'}
+      Assert-RestoreRoleObservationMetadata $childChanges[0].change.after_unknown
+      Assert-RestoreRoleUnknowns $childChanges[0].change.after_unknown
+      Assert-RestoreRoleObservationEqual $childChanges[0].change.before $child
+      Assert-RestoreRoleObservationEqual $childChanges[0].change.after $child
+      Assert-RestoreRoleObservationMetadata $childChanges[0].change.before_sensitive
+      Assert-RestoreRoleObservationMetadata $childChanges[0].change.after_sensitive
+      Assert-RestoreRoleObservationEqual $childChanges[0].change.before_sensitive $childChanges[0].change.after_sensitive
+      $after.inline_policy=$before.inline_policy
+    }else{
+      $index=if($record.name -clike 'native_resume_*'){'1'}else{'r1'}
+      if($record.type -cne 'aws_iam_policy' -or $record.name -cnotin $nativeNames -or
+         $record.index -isnot [string] -or $record.index -cne $index -or
+         $record.address -cne ('aws_iam_policy.'+$record.name+'["'+$index+'"]') -or
+         $after.arn -cnotmatch "^arn:aws:iam::${bootstrapAccount}:policy/ai-job-apply-development-[a-z0-9-]+-boundary$" -or
+         $after.id -cne $after.arn -or $null -eq $before.PSObject.Properties['tags'] -or $null -ne $before.tags -or
+         -not (Test-DevelopmentDocumentEmptyObject $after.tags) -or $null -ne $left.PSObject.Properties['tags'] -or
+         -not (Test-DevelopmentDocumentEmptyObject $right.tags)){throw 'RestoreRoleBootstrapTagsRejected'}
+      $after.tags=$null
+      $right.PSObject.Properties.Remove('tags')
+    }
+    Assert-RestoreRoleObservationEqual $after $before
+    Assert-RestoreRoleObservationEqual $left $right
+    $owned=Get-RestoreRoleResource $map $record.address
+    Assert-RestoreRoleObservationEqual $record.change.after $owned
+    $changes=@($Plan.resource_changes|Where-Object address -CEQ $record.address)
+    if($changes.Count -ne 1 -or $changes[0].mode -cne 'managed' -or
+       (@($changes[0].change.actions)-join ',') -cne 'no-op'){throw 'RestoreRoleBootstrapObservedResourceChanged'}
+    Assert-RestoreRoleObservationMetadata $changes[0].change.after_unknown
+    Assert-RestoreRoleUnknowns $changes[0].change.after_unknown
+    Assert-RestoreRoleObservationEqual $changes[0].change.before $owned
+    Assert-RestoreRoleObservationEqual $changes[0].change.after $owned
+    Assert-RestoreRoleObservationEqual $changes[0].change.before_sensitive $record.change.after_sensitive
+    Assert-RestoreRoleObservationEqual $changes[0].change.after_sensitive $record.change.after_sensitive
+  }
+}
 function Assert-RestoreRoleAcceptedPlanDrift {
-  param([object]$Plan,[switch]$Removal)
+  param([object]$Plan,[switch]$Removal,[ValidateSet('Bootstrap','Platform')][string]$Stage='Platform')
+  if($Stage -ceq 'Bootstrap'){Assert-RestoreRoleBootstrapDrift $Plan;return}
   $drift=@(Get-RestoreRoleProperty $Plan 'resource_drift' @())
   $roleAddress='module.platform.aws_iam_role.candidate_deletion_restore[0]'
   $observations=@($drift | Where-Object address -CEQ $roleAddress)
@@ -352,12 +439,12 @@ function Assert-RestoreRoleAcceptedPlanDrift {
   if($other.Count -gt 0){Assert-DevelopmentDocumentAcceptedResourceDrift -Records $other -RootModule $Plan.planned_values.root_module}
 }
 function Assert-RestoreRolePlanEnvelope {
-  param([object]$Plan, [switch]$ZeroDrift, [switch]$RestoreRoleRemoval)
+  param([object]$Plan, [switch]$ZeroDrift, [switch]$RestoreRoleRemoval,[ValidateSet('Bootstrap','Platform')][string]$Stage='Platform')
   $errored=Get-RestoreRoleProperty $Plan 'errored';$complete=Get-RestoreRoleProperty $Plan 'complete'
   if($Plan.terraform_version -cne (Get-DeploymentTerraformVersion) -or $errored -isnot [bool] -or $errored -ne $false -or
       $complete -isnot [bool] -or $complete -ne $true -or @(Get-RestoreRoleProperty $Plan 'deferred_changes' @()).Count -ne 0) { throw 'RestoreRolePlanEnvelopeRejected' }
   $drift=@(Get-RestoreRoleProperty $Plan 'resource_drift' @())
-  if($drift.Count -gt 0){Assert-RestoreRoleAcceptedPlanDrift $Plan -Removal:$RestoreRoleRemoval}
+  if($drift.Count -gt 0){Assert-RestoreRoleAcceptedPlanDrift $Plan -Removal:$RestoreRoleRemoval -Stage $Stage}
   foreach($property in (Get-RestoreRoleProperty $Plan 'output_changes' ([pscustomobject]@{})).PSObject.Properties) {
     if((@($property.Value.actions)-join ',') -cne 'no-op') { throw 'RestoreRoleOutputChanged' }
   }
@@ -365,15 +452,14 @@ function Assert-RestoreRolePlanEnvelope {
 }
 function Assert-RestoreRoleTransitionPlan {
   param([object]$Plan,[object]$Baseline,[ValidateSet('Bootstrap','Platform')][string]$Stage,[bool]$Enable,[string]$AccountId)
-  Assert-RestoreRolePlanEnvelope $Baseline -ZeroDrift
-  Assert-RestoreRolePlanEnvelope $Plan -RestoreRoleRemoval:($Stage -ceq 'Platform' -and -not $Enable)
+  Assert-RestoreRolePlanEnvelope $Baseline -ZeroDrift -Stage $Stage
+  Assert-RestoreRolePlanEnvelope $Plan -RestoreRoleRemoval:($Stage -ceq 'Platform' -and -not $Enable) -Stage $Stage
   Assert-RestoreRoleVariables $Baseline.variables $Plan.variables $Enable
   $map=Get-RestoreRoleResourceMap $Baseline.planned_values.root_module
   $changes=@($Plan.resource_changes | Where-Object { (@($_.change.actions)-join ',') -cne 'no-op' })
   if(@($changes | Where-Object {$_.mode -cne 'managed'}).Count -ne 0) { throw 'RestoreRoleUnexpectedDataChange' }
   $addresses=if($Stage -ceq 'Bootstrap'){@('aws_iam_policy.workload_boundary')}else{@('module.platform.aws_iam_role.candidate_deletion_restore[0]','module.platform.aws_iam_role_policy.candidate_deletion_restore[0]','module.platform.aws_vpc_endpoint.candidate_documents_s3[0]','module.platform.aws_vpc_endpoint.secretsmanager[0]')}
   if((@($changes|ForEach-Object {$_.address}|Sort-Object)-join ',') -cne (@($addresses|Sort-Object)-join ',')) { throw 'RestoreRoleResourceDeltaRejected' }
-  if($Stage -ceq 'Bootstrap' -and (@(Get-RestoreRoleProperty $Baseline 'resource_drift' @()).Count -ne 0 -or @(Get-RestoreRoleProperty $Plan 'resource_drift' @()).Count -ne 0)){throw 'RestoreRoleBootstrapDriftRejected'}
   foreach($change in $changes) {
     Assert-NoTerraformReplacementPaths $change.change
     if($map.ContainsKey($change.address) -and (ConvertTo-RestoreRoleCanonical $change.change.before) -cne (ConvertTo-RestoreRoleCanonical $map[$change.address])) { throw 'RestoreRoleBeforeStateMismatch' }
@@ -448,8 +534,8 @@ function Assert-RestoreRoleTransitionPlan {
 }
 
 function Get-RestoreRoleBeforeRefreshResources {
-  param([object]$Plan)
-  Assert-RestoreRolePlanEnvelope $Plan -ZeroDrift
+  param([object]$Plan,[ValidateSet('Bootstrap','Platform')][string]$Stage='Platform')
+  Assert-RestoreRolePlanEnvelope $Plan -ZeroDrift -Stage $Stage
   $map=Get-RestoreRoleResourceMap $Plan.planned_values.root_module
   foreach($drift in @(Get-RestoreRoleProperty $Plan 'resource_drift' @())){
     if(-not $map.ContainsKey($drift.address) -or (ConvertTo-RestoreRoleCanonical $map[$drift.address]) -cne (ConvertTo-RestoreRoleCanonical $drift.change.after)){throw 'RestoreRoleDriftNotPlanOwned'}

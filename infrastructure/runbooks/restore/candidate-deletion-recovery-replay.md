@@ -39,6 +39,15 @@ broaden the generic drift allowlist or fabricate a new baseline sidecar to bypas
 This compatibility is tested with generated fixtures; it does not assert that an actual newly
 created restore role has exhibited the observation or that recovery execution has passed.
 
+Bootstrap observations use a separate guard, without platform KMS assumptions. Only the six
+retained native boundary policies' null-to-empty explicit tags and the deployment role's
+computed inline-policy observation are accepted. The latter must equal the separately owned,
+unchanged `aws_iam_role_policy.github_deploy`; all other role values remain exact. Duplicate,
+unowned, unknown or changed observations refuse. The original pre-refresh state remains bound;
+an action-free plan with these observations is not a claim of strict zero observed drift.
+Dark recovery serializes explicit null Terraform inputs as `null` and restores originally absent
+environment inputs by removing them, preserving a distinct originally empty value.
+
 After this drill's exact Lambda and RDS cleanup, use the platform `Disable` transition with
 `-CleanupMode CompletedDrill`, the reviewed preparation, preserved original restore-context copy
 and cleanup journal. Verify role/function-version/restore absence, then disable the bootstrap
