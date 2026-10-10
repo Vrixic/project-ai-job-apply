@@ -36,7 +36,11 @@ The managed Gateway plan was refused before deployment; D3-089 repairs boolean c
 deferred native identity-read handling. All 41 repository verification stages, focused regressions
 and three fresh synthetic Chromium journeys pass, with independent source review.
 [Release review evidence](evidence/d3-release-guard-recovery-2026-10-09.md).
-D3-091 adds verified restore-selection guards after review found a prior pre-transition backup restore. Corrective post-transition SQL recovery and compatible live release remain internal work. [Recovery correction](evidence/d3-native-application-disposal-2026-10-07.md#restore-selection-correction--2026-10-09).
+D3-091 adds verified restore-selection guards after an earlier pre-transition backup restore.
+D3-092 fixes the stale restore-verifier boundary; all 43 repository stages and independent review
+pass. The isolated historical backup passes live read-only schema/checksum verification.
+Durable-data/privacy reconciliation and compatible live release remain internal work.
+[Recovery evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-verifier-boundary-recovery--2026-10-09).
 The D3-012 engineering review packet now links current evidence; existing development dispositions remain unchanged.
 D3-090 repairs missing candidate hosting build inputs; all 42 repository checks, independent review,
 three synthetic Chromium journeys and the actual Vercel preview build pass. Live acceptance remains
@@ -75,15 +79,16 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 
 Work resumed for D3 on 2026-10-09; D1/D3 are not complete. Independent D1 acceptance remains deferred.
 AWS access is sequential per the owner. Staging retains its 2026-10-09 dormant verification, with
-no subsequent mutation. Development is verified dormant at 2026-10-10T03:19:52Z, state 505:
+no subsequent mutation. Development is freshly verified dormant at 2026-10-10T03:55:10Z, state 505:
 both database instances, ten Interface endpoints and all application traffic/background work are
 off. Fresh encrypted snapshots, physical restore, exact-input zero drift and versioned KMS recovery
 archive pass. Current-source migration failed at the unchanged Applications legacy guard. Review
 traced this to an earlier restore selecting a pre-transition snapshot; the retained post-transition
-snapshot has verified metadata provenance but still needs corrective SQL recovery. No Gateway
+snapshot now passes live read-only schema/checksum verification. Durable-data/privacy comparison
+against the newest backup and corrective primary recovery remain. No Gateway
 release or live native acceptance occurred. Recovery/storage/security resources retain charges.
 Docker/WSL are off; the PC remains on.
-[Current recovery correction and shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-selection-correction--2026-10-09).
+[Current recovery and shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-verifier-boundary-recovery--2026-10-09).
 
 ## Cross-delivery decisions and changes
 
