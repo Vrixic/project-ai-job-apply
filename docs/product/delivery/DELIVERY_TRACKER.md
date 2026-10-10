@@ -37,6 +37,9 @@ deferred native identity-read handling. All 41 repository verification stages, f
 and three fresh synthetic Chromium journeys pass, with independent source review.
 [Release review evidence](evidence/d3-release-guard-recovery-2026-10-09.md).
 The D3-012 engineering review packet now links current evidence; existing development dispositions remain unchanged.
+D3-090 repairs missing candidate hosting build inputs; all 42 repository checks, independent review,
+three synthetic Chromium journeys and the actual Vercel preview build pass. Live acceptance remains
+open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09.md).
 [Implemented and remaining capabilities](phase-3-application-preparation.md).
 
 ## D0 — Product, data, and legal foundation
@@ -71,11 +74,13 @@ The D3-012 engineering review packet now links current evidence; existing develo
 
 Work resumed for D3 on 2026-10-09; D1/D3 are not complete. Independent D1 acceptance remains deferred.
 AWS access is sequential per the owner. Staging retains its 2026-10-09 dormant verification, with
-no subsequent mutation. Development was temporarily restored for release review, then verified
-dormant at 2026-10-10T01:15Z (2026-10-09 locally), including removal of its database, restore-check
-instance and ten Interface endpoints. Fresh encrypted recovery snapshots, physical restore,
-zero-drift plan and versioned recovery archive pass. No Gateway release, migration or live native
-acceptance occurred. Retained recovery/storage/security resources incur charges.
+no subsequent mutation. Development's 2026-10-10T01:15Z dormant checkpoint and versioned recovery
+archive remain retained. It was subsequently restored from that exact final snapshot for the
+current compatible-release batch; independent live database/reader checks pass and ten private
+Interface endpoints are available. Application traffic and background/native work remain off.
+Current-source publications pass independent verification; migration and live acceptance remain
+separate. Fresh data-preserving dormancy is required when this test batch ends. Database,
+endpoint and retained recovery/storage/security resources currently incur charges.
 Docker/WSL are off; the PC remains on.
 [Current release review and shutdown evidence](evidence/d3-release-guard-recovery-2026-10-09.md).
 
