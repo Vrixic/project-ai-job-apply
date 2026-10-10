@@ -43,7 +43,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Candidate hosting build recovery (D3-090) | Exact frozen-install patches and ATS SDK upload, preflight guards and omission regressions are implemented and verified. All 42 repository stages, independent review, three synthetic Chromium journeys and the real Vercel preview build pass. | Compatible live release and candidate/native/provider acceptance remain. [Evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09.md). |
 | Restore-selection correction (D3-091) | Ordinary restore requires the reviewed final snapshot and actual database creation to select the same snapshot. All 25 focused cases pass in both PowerShell hosts; all 41 pre-hosting repository stages and independent source review pass. Actual saved-plan regressions reject the earlier incorrect restore. | Historical snapshot schema/checksums are now freshly verified under D3-092. Durable-data/privacy reconciliation, corrective recovery, compatible release and live journey remain. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-selection-correction--2026-10-09). |
 | Restore verifier boundary recovery (D3-092) | Current 96-relation/79-migration verification replaces stale 93/74 expectations. Older evidence is rejected as current; focused PowerShell tests, independent review and all 43 repository stages pass. The isolated historical snapshot passes live read-only schema/checksum verification. | Durable-data/privacy reconciliation against the newest backup, compatible release and connected live acceptance remain. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-verifier-boundary-recovery--2026-10-09). |
-| Restore data comparison (D3-093) | Bounded SQL-side whole-row hashes, exact catalogs, explicit snapshot contracts and strict comparison are implemented. 93 unit tests, all 96 restored relation digests and 21 real PostgreSQL probes pass; independent source review passes. | Publish the current tool, compare both managed backups, reconcile every transition difference and complete privacy replay before primary promotion/live release. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-data-comparison--2026-10-10). |
+| Restore data comparison (D3-093) | Bounded SQL-side whole-row hashes, exact catalogs, explicit snapshot contracts and strict comparison are implemented. 93 unit tests, all 96 restored relation digests and 21 real PostgreSQL probes pass. The current immutable image and hardened smoke pass independent review; dormant task revision 66 is registered but unexecuted. | Compare both managed backups, reconcile every transition difference and complete privacy replay before primary promotion/live release. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-data-comparison--2026-10-10). |
 
 ## Decisions and scope changes
 
@@ -164,3 +164,9 @@ independent D1/admin acceptance stays deferred. See the linked boundary recovery
 review. Managed comparison, transition reconciliation, privacy replay and primary recovery remain.
 AWS test runtimes, Docker and WSL are verified off; the PC remains on. Independent D1/admin
 acceptance stays deferred. See the linked comparison evidence.
+
+2026-10-10: D3-093's diagnostic image is published from reviewed main, with matching clean builds,
+zero High/Critical scan findings and independent registry/runtime verification. Only dormant task
+revision 66 was registered; no task or database was started. State 506/current full inputs and the
+original recovery warning are archived with exact-version KMS/hash readback. AWS test runtimes,
+Docker and WSL are verified off; managed comparison and live acceptance remain unfinished.

@@ -2161,3 +2161,37 @@ normal build/test caching was used. The final compiled CLI also emitted only its
 category for malformed manifest input, with zero database calls. Source and delivery records passed
 independent review. The compressed manifest regression includes the complete ECS override envelope,
 malformed gzip/base64 and bounded expansion; raw expanded bytes are checksum-verified before parsing.
+
+### Comparison image publication — 2026-10-10
+
+D3-093's diagnostic image is published from reviewed main
+`2ec1f5c9ebcad71e1f6a79e802898e3ab577d4ae`. Two clean Linux/amd64 builds match; hardened runtime
+smokes, maintained registry readback and independent artifact review pass. ECR scanning completed
+with zero High and zero Critical findings. The supplemental smoke exercises the actual packaged
+inventory, compressed-contract refusals and redacted CLI without SQL or candidate data.
+
+- Platform digest: `sha256:975b79ce73ed0f0823676393a01a656e4addf996063ff5dbc935a33eb3cd12de`.
+- Final publication receipt SHA-256: `412ab6ade05e505c89325e2f66d5e5a0705afdf2c8d2db776f876e27f6e00e86`.
+- Applied saved task plan SHA-256: `ccb7bb5623c2814fefc738754ded5a94a5fd1a020565af01b33f54c1b86b97d5`.
+
+Independent review confirms the only semantic input change is `migration_image` across all 142
+inputs. The exact saved plan registers task revision 66 and changes its ARN output; four deferred
+native identity reads are source-bound. Actual registration preserves the execution role, secret
+reference, environment, logging, read-only root and absence of a task role. No task was run.
+The default command still runs migrations: diagnostic execution must separately review and use
+the explicit inventory CLI override. The follow-up plan has no resource/output actions; its sole
+refresh difference is task tags normalizing from null to an empty object, with effective tags unchanged.
+
+Current recovery authority is state 506, with complete inputs SHA-256
+`1556951346be1c0ba793b55813d37abb0d7b45ce29a6f5ec3db1048b59b265ef`. Exact-version KMS/hash
+readback verifies the updated recovery manifest and inputs, retaining the original restore-proof
+version, rollback warning and provenance. Reviewed prospective restore/cleanup requests remain
+unsubmitted. Neither backup has undergone the new managed data comparison; transition-aware
+reconciliation, privacy replay, primary recovery and the live journey remain unfinished.
+
+Independent development shutdown at `2026-10-10T15:00:46Z` confirms zero database instances,
+paid network runtimes, application routes, enabled triggers, ECS/durable work and queued messages.
+Docker/WSL are independently verified off at `15:00:32Z`; the PC remains on. All four retained
+recovery snapshots remain available and encrypted. Staging was not accessed or mutated in this
+batch; retained recovery/security/artifact storage incurs charges. No provider activation,
+submission, primary promotion, privacy acceptance or independent D1/admin acceptance occurred.
