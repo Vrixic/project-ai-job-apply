@@ -122,7 +122,7 @@ roots, each ignored `.vercel/project.json` must contain the exact `orgId`, `proj
 
 The CLI deployment is launched from the repository root because Vercel applies the project Root
 Directory after creating the upload. The canonical `.vercelignore` therefore contains the closed
-union needed by the two projects: both Next.js roots, `packages/api-contracts`, `packages/config`,
+union needed by the two projects: both Next.js roots, `packages/api-contracts`, `packages/ats-sdk`, `packages/config`,
 the six root workspace/build controls, and the three approved security patches. It excludes all
 other patch files, workspaces, tests, documentation,
 compiler caches, credentials, dependencies, and build outputs. Use pinned dry runs from the root

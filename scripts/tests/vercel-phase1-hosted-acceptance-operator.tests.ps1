@@ -173,9 +173,9 @@ try {
   [IO.File]::WriteAllText($vercelIgnorePath, $nonRecursiveIgnore)
   Assert-Rejected { Assert-ExactVercelIgnoreBoundary $vercelIgnorePath } "non-recursive Vercel frontend allowlist"
   $canonicalIgnore = Get-Content -LiteralPath (Join-Path $originalRepositoryRoot ".vercelignore") -Raw
-  foreach ($patchRule in @("!patches/node-forge@1.4.0.patch", "!patches/braces@3.0.3.patch")) {
+  foreach ($patchRule in @("!patches/node-forge@1.4.0.patch", "!patches/braces@3.0.3.patch", "!packages/ats-sdk", "!packages/ats-sdk/**")) {
     [IO.File]::WriteAllText($vercelIgnorePath, $canonicalIgnore.Replace($patchRule, ""))
-    Assert-Rejected { Assert-ExactVercelIgnoreBoundary $vercelIgnorePath } "missing required security patch upload rule"
+    Assert-Rejected { Assert-ExactVercelIgnoreBoundary $vercelIgnorePath } "missing required frozen-install or frontend dependency upload rule"
   }
   foreach ($changedIgnore in @(
       $canonicalIgnore.Replace("!patches/image-size@1.2.1.patch", ""),

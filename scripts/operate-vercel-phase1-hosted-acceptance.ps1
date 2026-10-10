@@ -132,6 +132,8 @@ function Assert-ExactVercelIgnoreBoundary {
     "packages/*",
     "!packages/api-contracts",
     "!packages/api-contracts/**",
+    "!packages/ats-sdk",
+    "!packages/ats-sdk/**",
     "!packages/config",
     "!packages/config/**",
     "frontend/extension",
