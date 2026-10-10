@@ -74,13 +74,13 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 
 Work resumed for D3 on 2026-10-09; D1/D3 are not complete. Independent D1 acceptance remains deferred.
 AWS access is sequential per the owner. Staging retains its 2026-10-09 dormant verification, with
-no subsequent mutation. Development's 2026-10-10T01:15Z dormant checkpoint and versioned recovery
-archive remain retained. It was subsequently restored from that exact final snapshot for the
-current compatible-release batch; independent live database/reader checks pass and ten private
-Interface endpoints are available. Application traffic and background/native work remain off.
-Current-source publications pass independent verification; migration and live acceptance remain
-separate. Fresh data-preserving dormancy is required when this test batch ends. Database,
-endpoint and retained recovery/storage/security resources currently incur charges.
+no subsequent mutation. Development is verified dormant at 2026-10-10T03:19:52Z, state 505:
+both database instances, ten Interface endpoints and all application traffic/background work are
+off. Fresh encrypted snapshots, physical restore, exact-input zero drift and versioned KMS recovery
+archive pass. Current-source migration failed at the unchanged Applications legacy guard. Review
+traced this to an earlier restore selecting a pre-transition snapshot; the retained post-transition
+snapshot has verified metadata provenance but still needs corrective SQL recovery. No Gateway
+release or live native acceptance occurred. Recovery/storage/security resources retain charges.
 Docker/WSL are off; the PC remains on.
 [Current release review and shutdown evidence](evidence/d3-release-guard-recovery-2026-10-09.md).
 
