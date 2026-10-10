@@ -63,8 +63,15 @@ commit these complete environment inputs or the state to Git.
 
 Start from the **latest dormant inputs**, not a historical active plan. Set mode `restore` and
 `development_database_recovery.restore_snapshot_identifier` to the exact final snapshot. Verify
-its account, source database, availability and KMS key first. Plan and inspect the private protected
-database creation and any required public-reader IAM/configuration updates or connection-secret
+its account, source database, availability and KMS key first. Ordinary restore rejects a selected
+snapshot that differs from the reviewed
+`final_snapshot_identifier`, including a stale pre-transition snapshot alongside newer recovery
+metadata. The actual database creation must also use that exact selection. Retained, preparation
+and dormancy inputs preserve their historical restore identifier to avoid resource replacement.
+Recovery from a known rollback using an older verified snapshot requires separate selection and
+data-provenance review; do not silently rewrite the latest recovery identity to bypass this guard.
+Plan and inspect the private protected database creation and any required public-reader
+IAM/configuration updates or connection-secret
 version refresh within the existing secret. The operator refuses
 unrelated resource changes; unusual restoration differences require an explicit reviewed extension.
 
