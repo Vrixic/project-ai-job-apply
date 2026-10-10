@@ -1,3 +1,4 @@
+import { restoredOwnerCountsQuery } from "./candidate-deletion-restore-postconditions.js";
 import { createHash } from "node:crypto";
 import type { DatabaseHandle } from "@ai-job-apply/profile-service";
 import {
@@ -21,11 +22,23 @@ export interface RestoredCandidateDocumentObjectRef {
   readonly normalizedObjectVersion?: string;
 }
 
+export interface RestoredCandidateCoverLetterObjectRef {
+  readonly kind: "cover_letter";
+  readonly userId: string;
+  readonly documentId: string;
+  readonly objectKey: string;
+  readonly objectVersion?: string;
+}
+
+export type RestoredCandidateObjectRef =
+  | RestoredCandidateDocumentObjectRef
+  | RestoredCandidateCoverLetterObjectRef;
+
 export interface CandidateDeletionRestorePreflight {
   readonly sha256: string;
   readonly restoredSubjectsPresent: number;
   readonly restoredSubjectsAbsent: number;
-  readonly documentObjects: readonly RestoredCandidateDocumentObjectRef[];
+  readonly documentObjects: readonly RestoredCandidateObjectRef[];
 }
 
 export interface CandidateDeletionRestoreReconciliation {
@@ -46,7 +59,7 @@ interface SubjectState {
   operation: Row | undefined;
   ledger: Row | undefined;
   identityDigests: readonly string[];
-  documentObjects: readonly RestoredCandidateDocumentObjectRef[];
+  documentObjects: readonly RestoredCandidateObjectRef[];
   ownerCounts: OwnerCounts;
   alreadyReconciled: boolean;
 }
@@ -249,50 +262,41 @@ function parseDocuments(
   );
 }
 
-// Count the current authoritative deletion ports' owned roots and independent children.
-// FK-owned descendants are removed by those ports/cascades; tombstones and deletion audit
-// records deliberately remain. Counts expose no candidate payload or raw identity.
-const ownerCountsQuery = `SELECT jsonb_build_object(
-  'identity', (SELECT count(*) FROM identity.external_identities WHERE user_id = $1::uuid),
-  'profile', (SELECT count(*) FROM profile.job_preferences WHERE user_id = $1::uuid) +
-    (SELECT count(*) FROM profile.profile_facts WHERE user_id = $1::uuid) +
-    (SELECT count(*) FROM profile.resume_fact_imports WHERE user_id = $1::uuid) +
-    (SELECT count(*) FROM profile.ugc_contribution_consents WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM platform.audit_events WHERE user_id = $1::uuid AND action NOT LIKE 'profile.account-deletion.%') +
-    (SELECT count(*) FROM platform.idempotency_keys WHERE user_id = $1::uuid AND scope IN ('ugc_contribution_consent.grant', 'ugc_contribution_consent.revoked', 'ugc_contribution_consent.superseded')),
-  'documents', (SELECT count(*) FROM documents.resume_documents WHERE user_id = $1::uuid) +
-    (SELECT count(*) FROM documents.audit_events WHERE user_id = $1::uuid) +
-    (SELECT count(*) FROM documents.idempotency_keys WHERE user_id = $1::uuid),
-  'jobs', (SELECT count(*) FROM jobs.job_contributions WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM jobs.job_reports WHERE reporter_user_id = $1::uuid),
-  'matching', (SELECT count(*) FROM matching.saved_jobs WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM matching.audit_events WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM matching.idempotency_keys WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM matching.saved_job_list_state WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM matching.private_saved_page_captures WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM matching.private_saved_page_capture_commands WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM matching.private_saved_page_capture_audit_events WHERE owner_user_id = $1::uuid),
-  'billing', (SELECT count(*) FROM billing.entitlement_accounts WHERE user_id = $1::uuid) +
-    (SELECT count(*) FROM billing.entitlement_changes WHERE user_id = $1::uuid) +
-    (SELECT count(*) FROM billing.entitlement_command_receipts WHERE user_id = $1::uuid) +
-    (SELECT count(*) FROM billing.entitlement_outbox WHERE user_id = $1::uuid),
-  'trust', (SELECT count(*) FROM trust.contribution_cases WHERE contributor_user_id = $1::uuid),
-  'applications', (SELECT count(*) FROM applications.applications WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM applications.packets WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM applications.approvals WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM applications.attempts WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM applications.history WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM applications.command_receipts WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM applications.outbox WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM applications.packet_preparations WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM applications.preparation_outbox WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM applications.preparation_audit WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM applications.native_material_withdrawals WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM applications.native_material_cleanup_queue WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM applications_restricted.legacy_receipts WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM applications_restricted.packet_values WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM applications_restricted.packet_read_audit WHERE owner_user_id = $1::uuid)
-) AS "ownerCounts"`;
+function parseCoverLetters(
+  userId: string,
+  records: Row[],
+): readonly RestoredCandidateCoverLetterObjectRef[] {
+  if (records.length > MAX_DOCUMENTS_PER_OWNER) rejected("DocumentInventoryLimit");
+  const seen = new Set<string>();
+  return Object.freeze(
+    records.map((row) => {
+      const { documentId, objectKey, objectVersion, status } = row;
+      if (
+        typeof documentId !== "string" ||
+        !UUID.test(documentId) ||
+        seen.has(documentId) ||
+        objectKey !== `normalized/${documentId}/cover-letter.v1.json` ||
+        (status !== "pending" && status !== "ready") ||
+        (status === "pending"
+          ? objectVersion != null
+          : typeof objectVersion !== "string" ||
+            objectVersion === "null" ||
+            objectVersion.length === 0 ||
+            objectVersion.length > 1024 ||
+            [...objectVersion].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127))
+      )
+        rejected("DocumentInventoryRejected");
+      seen.add(documentId);
+      return Object.freeze({
+        kind: "cover_letter" as const,
+        userId,
+        documentId,
+        objectKey: objectKey as string,
+        ...(objectVersion == null ? {} : { objectVersion: objectVersion as string }),
+      });
+    }),
+  );
+}
 
 /** Construct only after the executor authenticates a quiesced, isolated restore target. */
 export class PostgresCandidateDeletionRestoreStore {
@@ -464,7 +468,7 @@ export class PostgresCandidateDeletionRestoreStore {
     }
     if (!user) {
       if (request || operation) rejected("IdentityCollision");
-      const counts = await rows(sql, ownerCountsQuery, [entry.userId], signal);
+      const counts = await rows(sql, restoredOwnerCountsQuery, [entry.userId], signal);
       if (
         counts.length !== 1 ||
         Object.values(parseOwnerCounts(counts[0]?.ownerCounts)).some((count) => count !== 0)
@@ -525,8 +529,20 @@ export class PostgresCandidateDeletionRestoreStore {
       [entry.userId],
       signal,
     );
-    const documentObjects = parseDocuments(entry.userId, documents);
-    const counts = await rows(sql, ownerCountsQuery, [entry.userId], signal);
+    const coverLetters = await rows(
+      sql,
+      `SELECT id AS "documentId", object_key AS "objectKey", object_version AS "objectVersion", status FROM documents.cover_letters WHERE user_id = $1::uuid ORDER BY id LIMIT 1001${suffix}`,
+      [entry.userId],
+      signal,
+    );
+    const documentObjects = [
+      ...parseDocuments(entry.userId, documents),
+      ...parseCoverLetters(entry.userId, coverLetters),
+    ];
+    if (documentObjects.length > MAX_DOCUMENTS_PER_OWNER) rejected("DocumentInventoryLimit");
+    if (new Set(documentObjects.map((ref) => ref.documentId)).size !== documentObjects.length)
+      rejected("DocumentInventoryRejected");
+    const counts = await rows(sql, restoredOwnerCountsQuery, [entry.userId], signal);
     if (counts.length !== 1) rejected("OwnerInventoryRejected");
     const ownerCounts = parseOwnerCounts(counts[0]?.ownerCounts);
     const empty = Object.values(ownerCounts).every((count) => count === 0);
@@ -559,7 +575,7 @@ export class PostgresCandidateDeletionRestoreStore {
     signal?: AbortSignal,
   ) {
     const states: SubjectState[] = [];
-    const documents: RestoredCandidateDocumentObjectRef[] = [];
+    const documents: RestoredCandidateObjectRef[] = [];
     for (const entry of entries) {
       const state = await this.inspectSubject(sql, entry, lock, signal);
       states.push(state);
@@ -731,7 +747,7 @@ export class PostgresCandidateDeletionRestoreStore {
       [entry.userId],
       signal,
     );
-    const counts = await rows(sql, ownerCountsQuery, [entry.userId], signal);
+    const counts = await rows(sql, restoredOwnerCountsQuery, [entry.userId], signal);
     if (
       counts.length !== 1 ||
       Object.values(parseOwnerCounts(counts[0]?.ownerCounts)).some((count) => count !== 0)

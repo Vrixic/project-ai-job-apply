@@ -50,8 +50,14 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Quiescent deletion replay (D3-097) | Default-off development replay binds the dark context/mode and recovery dependencies, using maintained writer-off PITR preflight. All 778 synthetic replay checks, 908 restore-role assertions and 43 repository stages pass; independent source review passes. | Managed replay and connected acceptance remain. [Evidence](evidence/d3-dark-deletion-replay-2026-10-10.md). |
 | Recovery bootstrap inputs (D3-098) | Complete: bounded observations and typed inputs pass focused tests, independent review and all 43 repository stages. | Managed replay and connected acceptance remain. [Evidence](evidence/d3-bootstrap-recovery-inputs-2026-10-10.md). |
 | Replay data preservation (D3-099) | Complete for repository implementation: 348 focused tests, 790 operator assertions, 11 real PostgreSQL regressions, independent review and all 43 repository stages pass. | Dedicated promotion, managed replay and live acceptance remain separate. [Evidence](evidence/d3-replay-data-preservation-2026-10-10.md). |
+| Reconciled-copy verification (D3-100) | In progress: source passes 500 focused tests, 17 real PostgreSQL regressions, independent source review and all 43 repository stages; final record review/merge is pending. | Private runtime/promotion wiring, managed replay and live acceptance. [Evidence](evidence/d3-reconciled-copy-verification-2026-10-10.md). |
 
 ## Decisions and scope changes
+
+2026-10-10: D3-100 addresses independently confirmed recovery inventory omissions before primary
+promotion. Valid historical completed inventories remain compatible when all current owners are
+empty. The new read-only primitive is internal evidence, not cutover authority; ordinary cleanup
+and original expiry rules remain unchanged.
 
 D3-090 restores candidate hosting build inputs: exact frozen-install patches and the ATS SDK.
 All 42 repository stages, independent review, three synthetic Chromium journeys and the real

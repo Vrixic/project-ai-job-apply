@@ -7,7 +7,10 @@ import {
   type CandidateDeletionRestoreLedgerSnapshot,
 } from "./candidate-deletion-restore-aws.js";
 import { ACCEPTED_CANDIDATE_DELETION_POLICIES } from "./candidate-deletion-restore-policy.js";
-import type { RestoredCandidateDocumentObjectRef } from "./candidate-deletion-restore-store.js";
+import type {
+  RestoredCandidateDocumentObjectRef,
+  RestoredCandidateCoverLetterObjectRef,
+} from "./candidate-deletion-restore-store.js";
 
 const bucketName = "synthetic-restore-ledger";
 const expectedBucketOwner = "123456789012";
@@ -666,6 +669,79 @@ function documentSetup(override?: Override) {
 }
 
 describe("restore-only cloud document absence", () => {
+  const letter = (): RestoredCandidateCoverLetterObjectRef => ({
+    kind: "cover_letter",
+    userId: id(2001),
+    documentId: id(50),
+    objectKey: `normalized/${id(50)}/cover-letter.v1.json`,
+  });
+
+  it("checks pending and ready cover namespaces without fetching content or writing S3", async () => {
+    const state = documentSetup();
+    const pending = letter();
+    const ready = {
+      ...letter(),
+      documentId: id(51),
+      objectKey: `normalized/${id(51)}/cover-letter.v1.json`,
+      objectVersion: "retained-original",
+    };
+    expect(await state.documents.inspectExpectedAbsentDocuments([pending, ready])).toMatchObject({
+      documentKeysChecked: 2,
+      documentVersionsObserved: 0,
+    });
+    expect(state.send.mock.calls.map(([c]) => (c as Command).input.Prefix)).toEqual([
+      `normalized/${id(50)}/`,
+      `normalized/${id(51)}/`,
+    ]);
+  });
+
+  it.each(["current", "historical", "delete-marker", "unregistered-generation"])(
+    "refuses cover namespace %s including pending reservations",
+    async (kind) => {
+      const state = documentSetup((output) => ({
+        ...output,
+        [kind === "delete-marker" ? "DeleteMarkers" : "Versions"]: [
+          {
+            Key:
+              kind === "unregistered-generation"
+                ? `normalized/${id(50)}/generation/result.v1.json`
+                : letter().objectKey,
+            VersionId: "retained",
+            IsLatest: kind !== "historical",
+          },
+        ],
+      }));
+      await expect(state.documents.inspectExpectedAbsentDocuments([letter()])).rejects.toThrow(
+        error,
+      );
+    },
+  );
+
+  it.each([
+    { objectKey: `normalized/${id(51)}/cover-letter.v1.json` },
+    { objectVersion: "null" },
+    { kind: "resume" },
+    { userId: "invalid" },
+    { extra: true },
+    { sourceObjectKey: `quarantine/${id(50)}/source` },
+  ])("rejects malformed cover refs before any cloud call %j", async (mutation) => {
+    const state = documentSetup();
+    await expect(
+      state.documents.inspectExpectedAbsentDocuments([
+        document(),
+        { ...letter(), ...mutation } as RestoredCandidateCoverLetterObjectRef,
+      ]),
+    ).rejects.toThrow(error);
+    expect(state.send).not.toHaveBeenCalled();
+  });
+
+  it("refuses a cover/resume ID collision before any cloud call", async () => {
+    const state = documentSetup();
+    await expect(
+      state.documents.inspectExpectedAbsentDocuments([document(50), letter()]),
+    ).rejects.toThrow(error);
+    expect(state.send).not.toHaveBeenCalled();
+  });
   it("honors cancellation even for an empty inventory", async () => {
     const state = documentSetup();
     const controller = new AbortController();

@@ -40,6 +40,13 @@ import {
 } from "./candidate-deletion-restore-policy.js";
 import { PostgresCandidateDeletionRestoreStore } from "./candidate-deletion-restore-store.js";
 import { digestRestoredData } from "./candidate-deletion-restore-preservation.js";
+import { AwsReadOnlyCandidateRestoreDocuments } from "./candidate-deletion-restore-aws.js";
+import { verifyReconciledCandidateDeletionCopy } from "./candidate-deletion-reconciled-copy.js";
+import {
+  restoreInspectionSha256,
+  type CandidateDeletionRestoreReplayResult,
+} from "./candidate-deletion-restore-contract.js";
+import { inspectReconciledCandidateDeletionRows } from "./candidate-deletion-restore-postconditions.js";
 import { PostgresCandidateRightsActivityStore } from "./candidate-rights-activities.js";
 import { AwsCandidateDocumentObjectStore } from "./candidate-rights-aws.js";
 import type { CandidateRightsActivityInputV1 } from "./candidate-rights-durable.js";
@@ -283,6 +290,288 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
     await database.client`DELETE FROM privacy.account_deletion_ledger WHERE request_id = ${entry.requestId}`;
     await database.client`DELETE FROM identity.users WHERE id = ${entry.userId}`;
   }
+
+  it.each(["restricted_answer", "cover_letter", "native_admission"] as const)(
+    "reconciles a completed historical deletion with ONLY independent %s remaining",
+    async (kind) => {
+      const target = await seed(1);
+      const other = await seed(1);
+      const rootId = uuidv7();
+      try {
+        await store.reconcile([target.entry], await store.preflight([target.entry]));
+        const otherBefore = await counts(other.entry.userId);
+        if (kind === "restricted_answer") {
+          await database.client`INSERT INTO profile.restricted_answers (id,user_id,field_key) VALUES (${rootId},${target.entry.userId},'authorization.us_authorized')`;
+          await database.client`INSERT INTO profile.restricted_answer_versions
+            (answer_id,version,value_type,sensitivity,ciphertext,kms_key_id,encryption_algorithm,state,source_reference,confirmed_at)
+            VALUES (${rootId},1,'boolean','restricted',${randomBytes(80)},'synthetic-key','SYMMETRIC_DEFAULT','active','synthetic',now())`;
+        } else if (kind === "cover_letter") {
+          await database.client`INSERT INTO documents.cover_letters
+            (id,user_id,application_id,version,job_revision,confirmed_facts_hash,object_key)
+            VALUES (${rootId},${target.entry.userId},${uuidv7()},1,${"a".repeat(64)},${"b".repeat(64)},${`normalized/${rootId}/cover-letter.v1.json`})`;
+        } else {
+          await database.client`INSERT INTO documents.native_material_admission (user_id,application_id,epoch_id)
+            VALUES (${target.entry.userId},${rootId},${uuidv7()})`;
+        }
+        const reviewed = await store.preflight([target.entry]);
+        await expect(
+          database.client.begin("read only isolation level repeatable read", (sql) =>
+            inspectReconciledCandidateDeletionRows(
+              sql,
+              [target.entry],
+              Date.now() + 90_000,
+              new AbortController().signal,
+            ),
+          ),
+        ).rejects.toThrow("PostconditionsRejected");
+        if (kind === "cover_letter") {
+          expect(reviewed.documentObjects).toEqual([
+            {
+              kind: "cover_letter",
+              userId: target.entry.userId,
+              documentId: rootId,
+              objectKey: `normalized/${rootId}/cover-letter.v1.json`,
+            },
+          ]);
+          const objects = new AwsReadOnlyCandidateRestoreDocuments({
+            bucketName: "generated-restore-documents",
+            expectedBucketOwner: "123456789012",
+            s3: {
+              send: async (command: unknown) => {
+                if (!(command instanceof ListObjectVersionsCommand))
+                  throw new Error("UnexpectedSyntheticCloudWrite");
+                return {
+                  Name: command.input.Bucket,
+                  Prefix: command.input.Prefix,
+                  MaxKeys: command.input.MaxKeys,
+                  IsTruncated: false,
+                  Versions: [
+                    {
+                      Key: `normalized/${rootId}/generation/result.v1.json`,
+                      VersionId: "unregistered-original",
+                      IsLatest: true,
+                    },
+                  ],
+                };
+              },
+            },
+          });
+          await expect(
+            objects.inspectExpectedAbsentDocuments(reviewed.documentObjects),
+          ).rejects.toThrow("CloudInspectionRejected");
+          expect((await store.preflight([target.entry])).documentObjects).toEqual(
+            reviewed.documentObjects,
+          );
+        }
+        expect(await store.reconcile([target.entry], reviewed)).toMatchObject({
+          restoredUsersReconciled: 1,
+          restoredUsersAlreadyReconciled: 0,
+        });
+        expect(
+          await database.client.begin("read only isolation level repeatable read", (sql) =>
+            inspectReconciledCandidateDeletionRows(
+              sql,
+              [target.entry],
+              Date.now() + 90_000,
+              new AbortController().signal,
+            ),
+          ),
+        ).toEqual({ restoredSubjectsPresent: 1, restoredSubjectsAbsent: 0 });
+        expect(await counts(other.entry.userId)).toEqual(otherBefore);
+        expect(
+          await store.reconcile([target.entry], await store.preflight([target.entry])),
+        ).toMatchObject({ restoredUsersReconciled: 0, restoredUsersAlreadyReconciled: 1 });
+      } finally {
+        await finishAndRemove(target.entry);
+        await finishAndRemove(other.entry);
+      }
+    },
+    60_000,
+  );
+
+  it("verifies exact reconciled data read-only and refuses same-count changes and microsecond terminal conflicts", async () => {
+    const target = await seed(1);
+    const other = await seed(1);
+    try {
+      const replay = await store.reconcile([target.entry], await store.preflight([target.entry]));
+      const configurationSha256 = "a".repeat(64),
+        markerSnapshotSha256 = "b".repeat(64),
+        restoredPreflightSha256 = "c".repeat(64);
+      // Numeric deployment/immutable receipt provenance is SIMULATED; SQL/digest/transaction behavior is real.
+      const receipt: CandidateDeletionRestoreReplayResult = {
+        schemaVersion: 1,
+        action: "replay",
+        outcome: "replayed",
+        runId: "d".repeat(32),
+        sourceSha: "e".repeat(40),
+        configurationSha256,
+        functionVersion: "3",
+        expiresAt: "2026-09-01T00:30:00.000Z",
+        markerSnapshotSha256,
+        restoredPreflightSha256,
+        inspectionSha256: restoreInspectionSha256(
+          configurationSha256,
+          markerSnapshotSha256,
+          restoredPreflightSha256,
+        ),
+        markersValidated: 1,
+        historicalPolicyMarkers: 0,
+        currentPolicyMarkers: 1,
+        restoredSubjectsPresent: 1,
+        restoredSubjectsAbsent: 0,
+        documentKeysChecked: 1,
+        documentVersionsObserved: 0,
+        s3Writes: 0,
+        recoveryLedgerWrites: 0,
+        identityProviderCalls: 0,
+        ...replay,
+      };
+      const snapshot = {
+        entries: [target.entry],
+        sha256: markerSnapshotSha256,
+        historicalPolicyMarkers: 0,
+        currentPolicyMarkers: 1,
+      };
+      const ledger = {
+        inspectCompletedMarkers: async () => snapshot,
+        assertUnchanged: async () => undefined,
+      };
+      const verified = await verifyReconciledCandidateDeletionCopy(database, ledger, receipt);
+      expect(verified.reconciled).toEqual(replay.preservation?.reconciled);
+      await expect(
+        database.client.begin("read only isolation level repeatable read", async (sql) => {
+          await inspectReconciledCandidateDeletionRows(
+            sql,
+            [target.entry],
+            Date.now() + 90_000,
+            new AbortController().signal,
+          );
+          await sql.unsafe("UPDATE identity.users SET account_state='active' WHERE id=$1::uuid", [
+            target.entry.userId,
+          ]);
+        }),
+      ).rejects.toMatchObject({ code: "25006" });
+      expect(
+        (await verifyReconciledCandidateDeletionCopy(database, ledger, receipt)).reconciled,
+      ).toEqual(verified.reconciled);
+      await database.client`UPDATE billing.entitlement_accounts SET effective_at=effective_at-interval '1 second' WHERE user_id=${other.entry.userId}`;
+      await expect(
+        verifyReconciledCandidateDeletionCopy(database, ledger, receipt),
+      ).rejects.toThrow("ReconciledCopyRejected");
+      await database.client`UPDATE billing.entitlement_accounts SET effective_at=effective_at+interval '1 second' WHERE user_id=${other.entry.userId}`;
+      // A 1us difference has the same JavaScript millisecond projection; SQL must still reject it.
+      await database.client`UPDATE profile.account_deletion_requests SET completed_at=completed_at+interval '1 microsecond' WHERE id=${target.entry.requestId}`;
+      await expect(
+        database.client.begin("read only isolation level repeatable read", (sql) =>
+          inspectReconciledCandidateDeletionRows(
+            sql,
+            [target.entry],
+            Date.now() + 90_000,
+            new AbortController().signal,
+          ),
+        ),
+      ).rejects.toThrow("PostconditionsRejected");
+      await database.client`UPDATE profile.account_deletion_requests SET completed_at=completed_at-interval '1 microsecond' WHERE id=${target.entry.requestId}`;
+      expect(
+        (await verifyReconciledCandidateDeletionCopy(database, ledger, receipt)).reconciled,
+      ).toEqual(verified.reconciled);
+    } finally {
+      await finishAndRemove(target.entry);
+      await finishAndRemove(other.entry);
+    }
+  }, 60_000);
+
+  it("rejects nine real terminal-state corruptions without retaining any mutation", async () => {
+    const target = await seed(1);
+    try {
+      await store.reconcile([target.entry], await store.preflight([target.entry]));
+      const fingerprint = () =>
+        database.client.begin("read only isolation level repeatable read", (sql) =>
+          digestRestoredData(sql, [], { deadline: Date.now() + 90_000, rowCount: 0, byteCount: 0 }),
+        );
+      const before = await fingerprint();
+      const corruptions = [
+        "UPDATE identity.users SET account_state='active',quarantined_at=NULL WHERE id=$1::uuid",
+        "UPDATE platform.operations SET kind='candidate_data_export' WHERE id=$3::uuid",
+        "UPDATE platform.operations SET state='queued' WHERE id=$3::uuid",
+        "UPDATE platform.operations SET error_code='generated-conflict' WHERE id=$3::uuid",
+        "UPDATE platform.operations SET result=jsonb_build_object('resourceId',$1::text,'resourceType','account_deletion_request') WHERE id=$3::uuid",
+        'UPDATE privacy.account_deletion_ledger SET owner_inventory=\'{"profile":"completed"}\'::jsonb WHERE request_id=$2::uuid',
+        'UPDATE privacy.account_deletion_ledger SET subprocessor_inventory=\'{"generated":"pending"}\'::jsonb WHERE request_id=$2::uuid',
+        "UPDATE privacy.account_deletion_ledger SET completed_at=completed_at+interval '1 microsecond' WHERE request_id=$2::uuid",
+        "INSERT INTO privacy.account_deletion_ledger (request_id,subject_digest,policy_version,policy_sha256,state,owner_inventory,subprocessor_inventory,confirmed_at,backup_expires_at,completed_at) SELECT $1::uuid,subject_digest,policy_version,policy_sha256,state,owner_inventory,subprocessor_inventory,confirmed_at,backup_expires_at,completed_at FROM privacy.account_deletion_ledger WHERE request_id=$2::uuid",
+      ];
+      for (const mutation of corruptions) {
+        await expect(
+          database.client.begin(async (sql) => {
+            // Cast every declared positional binding, including parameters unused by this fixed case.
+            await sql.unsafe(`WITH bound AS (SELECT $1::uuid,$2::uuid,$3::uuid) ${mutation}`, [
+              target.entry.userId,
+              target.entry.requestId,
+              target.entry.operationId,
+            ]);
+            await expect(
+              inspectReconciledCandidateDeletionRows(
+                sql,
+                [target.entry],
+                Date.now() + 90_000,
+                new AbortController().signal,
+              ),
+            ).rejects.toThrow("PostconditionsRejected");
+            throw new Error("SyntheticCorruptionRollback");
+          }),
+        ).rejects.toThrow("SyntheticCorruptionRollback");
+      }
+      expect(await fingerprint()).toEqual(before);
+    } finally {
+      await finishAndRemove(target.entry);
+    }
+  }, 60_000);
+
+  it("preserves valid historical backup-expired inventory while proving every current owner empty", async () => {
+    const target = await seed(1);
+    try {
+      target.entry.confirmedAt = new Date(Date.now() - 40 * 86_400_000);
+      target.entry.backupExpiresAt = new Date(target.entry.confirmedAt.getTime() + 35 * 86_400_000);
+      target.entry.completedAt = new Date(target.entry.confirmedAt.getTime() + 1000);
+      await database.client`UPDATE identity.users SET created_at=${new Date(target.entry.confirmedAt.getTime() - 1000).toISOString()}::timestamptz WHERE id=${target.entry.userId}`;
+      await store.reconcile([target.entry], await store.preflight([target.entry]));
+      const policy = ACCEPTED_CANDIDATE_DELETION_POLICIES[1];
+      if (!policy) throw new Error("SyntheticPolicyMissing");
+      const historical = JSON.stringify(
+        Object.fromEntries(policy.ownerInventory.map((owner) => [owner, "completed"])),
+      );
+      const expiredAt = new Date(Date.now() - 86_400_000).toISOString();
+      await database.client`UPDATE profile.account_deletion_requests SET state='backup_expired',backup_expired_at=${expiredAt}::timestamptz WHERE id=${target.entry.requestId}`;
+      await database.client`UPDATE privacy.account_deletion_ledger SET state='backup_expired',backup_expired_at=${expiredAt}::timestamptz,owner_inventory=${historical}::jsonb WHERE request_id=${target.entry.requestId}`;
+      const before = await database.client.begin(
+        "read only isolation level repeatable read",
+        (sql) =>
+          digestRestoredData(sql, [], { deadline: Date.now() + 90_000, rowCount: 0, byteCount: 0 }),
+      );
+      expect(
+        await store.reconcile([target.entry], await store.preflight([target.entry])),
+      ).toMatchObject({ restoredUsersAlreadyReconciled: 1, restoredUsersReconciled: 0 });
+      expect(
+        await database.client.begin("read only isolation level repeatable read", (sql) =>
+          inspectReconciledCandidateDeletionRows(
+            sql,
+            [target.entry],
+            Date.now() + 90_000,
+            new AbortController().signal,
+          ),
+        ),
+      ).toMatchObject({ restoredSubjectsPresent: 1 });
+      const after = await database.client.begin(
+        "read only isolation level repeatable read",
+        (sql) =>
+          digestRestoredData(sql, [], { deadline: Date.now() + 90_000, rowCount: 0, byteCount: 0 }),
+      );
+      expect(after).toEqual(before);
+    } finally {
+      await finishAndRemove(target.entry);
+    }
+  }, 60_000);
 
   it("includes same-user unrelated requests, operations, keys, exports and nullable audit in preservation", async () => {
     const target = await seed(1);
