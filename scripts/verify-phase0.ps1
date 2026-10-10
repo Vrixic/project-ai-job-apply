@@ -31,6 +31,7 @@ Invoke-CheckedCommand "Development document migration operator path validation" 
 Invoke-CheckedCommand "Legacy receipt maintenance operator validation" { node scripts/run-powershell.mjs --require-core -File scripts/tests/legacy-receipt-maintenance.tests.ps1 }
 Invoke-CheckedCommand "Executable migration runtime package validation" { node --test scripts/tests/development-migration-runtime-smoke.test.mjs }
 Invoke-CheckedCommand "Admin Auth0 authorization profile setup" { & scripts/tests/configure-auth0-admin-local.tests.ps1 }
+Invoke-CheckedCommand "Vercel source upload and hosted operator guards" { & scripts/tests/vercel-phase1-hosted-acceptance-operator.tests.ps1 }
 Invoke-CheckedCommand "Formatting" { pnpm format:check }
 Invoke-CheckedCommand "Private Documents artifact publication guards" { & scripts/tests/development-document-artifact-publisher.tests.ps1 }
 Invoke-CheckedCommand "Lint" { pnpm lint }
