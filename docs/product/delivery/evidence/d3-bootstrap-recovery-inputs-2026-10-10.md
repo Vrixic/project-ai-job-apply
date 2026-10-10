@@ -17,7 +17,18 @@ temporary explicit variable file, and restores absent environment keys separatel
 values. The file is removed in the existing finally cleanup. This also covers Windows PowerShell
 5's inability to propagate empty environment strings to native children.
 
-Focused verification and independent review are underway; full repository verification and
+The subsequent typed cloud plan proposes no actions but reports the restored database's empty
+metadata/forward backup clock and the reader role's computed policy refresh. The dark guard
+now admits only these exact source-bound observations, with unchanged database settings and all
+three reader policies bound to unchanged owned children. Other policy/network/credential changes,
+unknown values, malformed metadata and unrelated observations refuse. This is action-free with
+bounded observations, not strict zero observed drift. The initial full verifier was interrupted
+to finish this discovered adjustment; it is not a passing full run.
+
+All 1,015 generated restore-role assertions and 155 dark-recovery cases pass. The latter pass in
+PowerShell 7 and Windows PowerShell 5, including real child-process input checks. Their private
+logs share SHA-256 ad2527f250bc55f223d08d9e35666e0db1864b9e2bf33b06f9cb37c90f928f05.
+Independent source review passes with no blocking findings. Final full repository verification and
 managed role/replay execution are pending. Earlier reviewed source recovery completed and its
 computed database, secret and reader bindings passed readback; this does not establish SQL,
 privacy replay, primary promotion or candidate acceptance. Development RDS is currently

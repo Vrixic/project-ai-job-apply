@@ -273,4 +273,114 @@ try {
   if($guardExit -eq 0 -or (Get-Content $guardLog -Raw) -notmatch 'restricted to development') {throw 'Staging did not refuse dark mode before help or AWS'}
   $script:checks++
 } finally {if(Test-Path -LiteralPath $guardLog){Remove-Item -LiteralPath $guardLog -Force}}
+function Copy-DarkObservation([object]$Value){return ConvertFrom-D1RestoreJson (ConvertTo-Json -InputObject $Value -Depth 100)}
+function New-DarkObservation {
+  $account='123456789012'
+  $db=Copy-DarkObservation @{arn="arn:aws:rds:us-east-2:${account}:db:ai-job-apply-development";identifier='ai-job-apply-development';resource_id='db-SYNTHETIC';engine='postgres';backup_retention_period=35;publicly_accessible=$false;storage_encrypted=$true;deletion_protection=$true;multi_az=$false;domain_dns_ips=@();tags=@{};latest_restorable_time='2026-09-01T10:01:00Z';kms_key_id='synthetic-key';vpc_security_group_ids=@('synthetic-private');password=$null}
+  $beforeDb=Copy-DarkObservation $db;$beforeDb.domain_dns_ips=$null;$beforeDb.tags=$null;$beforeDb.latest_restorable_time='2026-09-01T10:00:00Z'
+  $role=Copy-DarkObservation @{arn="arn:aws:iam::${account}:role/ai-job-apply-development-public-job-projection";id='ai-job-apply-development-public-job-projection';name='ai-job-apply-development-public-job-projection';permissions_boundary='synthetic-boundary';inline_policy=@()}
+  $children=@{public_job_lambda='public-job-reader-runtime';public_job_lambda_kms_code_guard='public-job-reader-kms-code-guard';public_job_lambda_vpc_guard='public-job-reader-vpc-code-guard'}
+  $key="arn:aws:kms:us-east-2:${account}:key/11111111-1111-1111-1111-111111111111"
+  $db.kms_key_id=$key;$beforeDb.kms_key_id=$key
+  $resources=@(Copy-DarkObservation @{address='module.platform.aws_kms_key.platform';mode='managed';values=@{arn=$key}});$changes=@();$drift=@()
+  foreach($name in @($children.Keys|Sort-Object)){
+    $value=Copy-DarkObservation @{name=$children[$name];role=$role.name;policy='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"synthetic:Read","Resource":"synthetic"}]}'}
+    $role.inline_policy+=@(Copy-DarkObservation @{name=$value.name;policy=$value.policy})
+    $address="module.platform.aws_iam_role_policy.$name"+'[0]'
+    $resources+=@(Copy-DarkObservation @{address=$address;mode='managed';values=$value})
+    $changes+=@(Copy-DarkObservation @{address=$address;module_address='module.platform';mode='managed';type='aws_iam_role_policy';name=$name;index=0;provider_name='registry.terraform.io/hashicorp/aws';change=@{actions=@('no-op');before=$value;after=$value;after_unknown=@{};before_sensitive=@{};after_sensitive=@{}}})
+  }
+  $beforeRole=Copy-DarkObservation $role
+  ($beforeRole.inline_policy|Where-Object name -CEQ 'public-job-reader-runtime').policy='{"Version":"2012-10-17","Statement":[]}'
+  foreach($definition in @(@('aws_db_instance','postgres',$beforeDb,$db),@('aws_iam_role','public_job_lambda',$beforeRole,$role))){
+    $type=$definition[0];$name=$definition[1];$before=$definition[2];$after=$definition[3];$address="module.platform.$type.$name"+'[0]'
+    $beforeMask=if($type -ceq 'aws_db_instance'){@{password=$true}}else{@{inline_policy=@(@{},@{},@{})}}
+    $afterMask=Copy-DarkObservation $beforeMask
+    if($type -ceq 'aws_db_instance'){$afterMask|Add-Member domain_dns_ips @();$afterMask|Add-Member tags ([pscustomobject]@{})}
+    $record=Copy-DarkObservation @{address=$address;module_address='module.platform';mode='managed';type=$type;name=$name;index=0;provider_name='registry.terraform.io/hashicorp/aws';change=@{actions=@('update');before=$before;after=$after;after_unknown=@{};before_sensitive=$beforeMask;after_sensitive=$afterMask}}
+    $drift+=@($record);$resources+=@(Copy-DarkObservation @{address=$address;mode='managed';values=$after})
+    $noOp=Copy-DarkObservation $record;$noOp.change.actions=@('no-op');$noOp.change.before=Copy-DarkObservation $after;$noOp.change.before_sensitive=Copy-DarkObservation $afterMask
+    $changes+=@($noOp)
+  }
+  return Copy-DarkObservation @{resource_drift=$drift;resource_changes=$changes;planned_values=@{root_module=@{resources=$resources}}}
+}
+function Sync-DarkObservation([object]$Plan){
+  foreach($record in $Plan.resource_drift){
+    $resource=@($Plan.planned_values.root_module.resources|Where-Object address -CEQ $record.address)
+    if($resource.Count -eq 1){$resource[0].values=Copy-DarkObservation $record.change.after}
+    $owned=@($Plan.resource_changes|Where-Object address -CEQ $record.address)
+    if($owned.Count -eq 1){
+      $owned[0].change.before=Copy-DarkObservation $record.change.after
+      $owned[0].change.after=Copy-DarkObservation $record.change.after
+      $owned[0].change.before_sensitive=Copy-DarkObservation $record.change.after_sensitive
+      $owned[0].change.after_sensitive=Copy-DarkObservation $record.change.after_sensitive
+    }
+  }
+}
+$observation=New-DarkObservation
+$original=ConvertTo-DeploymentCanonicalValue $observation
+Assert-D1RestoreDarkPlanDrift $observation '123456789012'
+if((ConvertTo-DeploymentCanonicalValue $observation) -cne $original){throw 'Dark observations mutated their original plan'}
+$script:checks++
+foreach($mutation in @(
+  {$p.resource_drift+=@(Copy-DarkObservation $p.resource_drift[0])},
+  {$p.resource_drift[0].address='module.platform.aws_db_instance.other[0]'},
+  {$p.resource_drift[0].change.after.latest_restorable_time='2026-09-01T09:00:00Z'},
+  {$p.resource_drift[0].change.after.latest_restorable_time='2099-09-01T10:00:00Z'},
+  {$p.resource_drift[0].change.after.latest_restorable_time='not-time'},
+  {$p.resource_drift[0].change.after.kms_key_id='other'},
+  {$p.resource_drift[0].change.after.vpc_security_group_ids=@('public')},
+  {$p.resource_drift[0].change.after.domain_dns_ips=@('127.0.0.1')},
+  {$p.resource_drift[0].change.after.tags=Copy-DarkObservation @{New='tag'}},
+  {$p.resource_drift[0].change.after.password='synthetic-password'},
+  {$p.resource_drift[0].change.after_sensitive.password=$false},
+  {$p.resource_drift[0].change.after_sensitive.tags=$true},
+  {$p.resource_drift[0].change|Add-Member replace_paths @('identifier')},
+  {$p.resource_drift[1].change.after.inline_policy=@()},
+  {$p.resource_drift[1].change.after.inline_policy+=@(Copy-DarkObservation $p.resource_drift[1].change.after.inline_policy[0])},
+  {$p.resource_drift[1].change.after.inline_policy[0].policy='{}'},
+  {$p.resource_drift[1].change.after.permissions_boundary='other'},
+  {$p.resource_changes[0].change.actions=@('update')},
+  {$p.resource_changes[0].change.after.role='other'},
+  {$p.resource_changes[0].change|Add-Member replace_paths @('policy')},
+  {$p.resource_changes+=@(Copy-DarkObservation $p.resource_changes[0])},
+  {$p.resource_drift[0].mode='data'},
+  {$p.resource_drift[0].provider_name='untrusted'}
+)){
+  $p=Copy-DarkObservation $observation;& $mutation;Sync-DarkObservation $p
+  Expect-DarkRefusal {Assert-D1RestoreDarkPlanDrift $p '123456789012'}
+}
+foreach($field in @('publicly_accessible','storage_encrypted','deletion_protection','multi_az','backup_retention_period','engine','identifier','resource_id','arn')){
+  $p=Copy-DarkObservation $observation;$p.resource_drift[0].change.after.$field='invalid'
+  Sync-DarkObservation $p
+  Expect-DarkRefusal {Assert-D1RestoreDarkPlanDrift $p '123456789012'}
+}
+foreach($mask in @('false',0,$null,(Copy-DarkObservation @{unknown=$true}))){
+  foreach($location in @('drift','owned','child')){
+    $p=Copy-DarkObservation $observation
+    if($location -ceq 'drift'){$p.resource_drift[0].change.after_unknown=$mask}
+    else{$i=if($location -ceq 'child'){0}else{3};$p.resource_changes[$i].change.after_unknown=$mask}
+    Expect-DarkRefusal {Assert-D1RestoreDarkPlanDrift $p '123456789012'}
+  }
+}
+$noDrift=Copy-DarkObservation $observation;$noDrift.PSObject.Properties.Remove('resource_drift')
+Assert-D1RestoreDarkPlanDrift $noDrift '123456789012';$script:checks++
+foreach($i in @(0,4)){
+  $p=Copy-DarkObservation $observation;$owned=$p.resource_changes[$i]
+  $identity=Copy-DarkObservation @{account_id='123456789012';name=$owned.change.after.name}
+  if($owned.type -ceq 'aws_iam_role_policy'){$identity|Add-Member role $owned.change.after.role}
+  $owned.change|Add-Member before_identity (Copy-DarkObservation $identity)
+  $owned.change|Add-Member after_identity (Copy-DarkObservation $identity)
+  Assert-D1RestoreDarkPlanDrift $p '123456789012';$script:checks++
+  foreach($badIdentity in @('missing-half','numeric-account','wrong-name','extra-key')){
+    $bad=Copy-DarkObservation $p;$change=$bad.resource_changes[$i].change
+    switch($badIdentity){
+      'missing-half' {$change.PSObject.Properties.Remove('after_identity')}
+      'numeric-account' {$change.before_identity.account_id=123456789012;$change.after_identity.account_id=123456789012}
+      'wrong-name' {$change.before_identity.name='other';$change.after_identity.name='other'}
+      'extra-key' {$change.before_identity|Add-Member unexpected $false;$change.after_identity|Add-Member unexpected $false}
+    }
+    Expect-DarkRefusal {Assert-D1RestoreDarkPlanDrift $bad '123456789012'}
+  }
+}
 Write-Output "Development dark recovery guards: $script:checks cases passed; synthetic only, no cloud calls."

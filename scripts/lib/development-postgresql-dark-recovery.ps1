@@ -1,4 +1,164 @@
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'deployment-operator-guards.ps1')
+
+function Assert-D1RestoreDarkObservationEqual {
+  param([AllowNull()][object]$Actual,[AllowNull()][object]$Expected)
+  if((ConvertTo-DeploymentCanonicalValue $Actual) -cne (ConvertTo-DeploymentCanonicalValue $Expected)){
+    throw 'Dark recovery observation differs from its exact owned value.'
+  }
+}
+function Assert-D1RestoreDarkMetadata {
+  param([AllowNull()][object]$Value)
+  if($Value -is [bool]){return}
+  if($Value -is [array]){foreach($item in $Value){Assert-D1RestoreDarkMetadata $item};return}
+  if($Value -is [pscustomobject]){foreach($property in $Value.PSObject.Properties){Assert-D1RestoreDarkMetadata $property.Value};return}
+  throw 'Dark recovery observation metadata is malformed.'
+}
+function Assert-D1RestoreDarkOwnedNoOp {
+  param([object]$Record,[object]$Value,[string]$AccountId)
+  Assert-D1RestoreExactObjectKeys $Record @('address','module_address','mode','type','name','index','provider_name','change') 'Dark owned record'
+  $keys=@('actions','before','after','after_unknown','before_sensitive','after_sensitive')
+  $hasIdentity=$null -ne $Record.change.PSObject.Properties['before_identity'] -or $null -ne $Record.change.PSObject.Properties['after_identity']
+  if($hasIdentity){$keys+=@('before_identity','after_identity')}
+  Assert-D1RestoreExactObjectKeys $Record.change $keys 'Dark owned change'
+  if($Record.module_address -cne 'module.platform' -or $Record.mode -cne 'managed' -or
+     $Record.provider_name -cne 'registry.terraform.io/hashicorp/aws' -or
+     ($Record.index -isnot [int] -and $Record.index -isnot [long]) -or $Record.index -ne 0 -or
+     $Record.address -cne ('module.platform.'+$Record.type+'.'+$Record.name+'[0]') -or
+     $Record.change.actions -isnot [array] -or $Record.change.actions.Count -ne 1 -or $Record.change.actions[0] -cne 'no-op' -or
+     $Record.change.after_unknown -isnot [pscustomobject] -or @($Record.change.after_unknown.PSObject.Properties).Count -ne 0){throw 'Dark recovery owned resource is not an exact no-op.'}
+  if($hasIdentity){
+    if($Record.type -cnotin @('aws_iam_role','aws_iam_role_policy')){throw 'Dark recovery owned identity type is invalid.'}
+    $identityKeys=@('account_id','name');if($Record.type -ceq 'aws_iam_role_policy'){$identityKeys+=@('role')}
+    Assert-D1RestoreExactObjectKeys $Record.change.before_identity $identityKeys 'Dark owned identity'
+    Assert-D1RestoreExactObjectKeys $Record.change.after_identity $identityKeys 'Dark owned identity'
+    Assert-D1RestoreDarkObservationEqual $Record.change.before_identity $Record.change.after_identity
+    if($Record.change.before_identity.account_id -isnot [string] -or $Record.change.before_identity.account_id -cne $AccountId -or
+       $Record.change.before_identity.name -isnot [string] -or $Record.change.before_identity.name -cne $Value.name -or
+       ($Record.type -ceq 'aws_iam_role_policy' -and ($Record.change.before_identity.role -isnot [string] -or $Record.change.before_identity.role -cne $Value.role))){throw 'Dark recovery owned identity changed.'}
+  }
+  Assert-D1RestoreDarkObservationEqual $Record.change.before $Value
+  Assert-D1RestoreDarkObservationEqual $Record.change.after $Value
+  Assert-D1RestoreDarkMetadata $Record.change.before_sensitive
+  Assert-D1RestoreDarkMetadata $Record.change.after_sensitive
+  Assert-D1RestoreDarkObservationEqual $Record.change.before_sensitive $Record.change.after_sensitive
+}
+function Assert-D1RestoreDarkPlanDrift {
+  param([object]$Plan,[string]$AccountId)
+  if($AccountId -cnotmatch '^[0-9]{12}$'){throw 'Dark recovery observation account is invalid.'}
+  if($null -eq $Plan.PSObject.Properties['resource_drift']){return}
+  if(@(Get-D1RestoreDarkCollection $Plan 'resource_drift').Count -eq 0){return}
+  $map=@{}
+  function Add-DarkObservedModule([object]$Module){
+    if($null -ne $Module.PSObject.Properties['resources']){
+      foreach($resource in @(Get-D1RestoreDarkCollection $Module 'resources')){
+        if($resource.mode -cne 'managed'){continue}
+        if($map.ContainsKey($resource.address)){throw 'Dark recovery observation has duplicate ownership.'}
+        $map[$resource.address]=$resource.values
+      }
+    }
+    if($null -ne $Module.PSObject.Properties['child_modules']){
+      foreach($child in @(Get-D1RestoreDarkCollection $Module 'child_modules')){Add-DarkObservedModule $child}
+    }
+  }
+  Add-DarkObservedModule $Plan.planned_values.root_module
+  $databaseAddress='module.platform.aws_db_instance.postgres[0]'
+  $readerAddress='module.platform.aws_iam_role.public_job_lambda[0]'
+  $seen=@{}
+  foreach($record in @(Get-D1RestoreDarkCollection $Plan 'resource_drift')){
+    if($record.address -cnotin @($databaseAddress,$readerAddress) -or $seen.ContainsKey($record.address)){
+      throw 'Dark recovery refuses unrelated or duplicate observed drift.'
+    }
+    $seen[$record.address]=$true
+    Assert-D1RestoreExactObjectKeys $record @('address','module_address','mode','type','name','index','provider_name','change') 'Dark observation record'
+    Assert-D1RestoreExactObjectKeys $record.change @('actions','before','after','after_unknown','before_sensitive','after_sensitive') 'Dark observation change'
+    $database=$record.address -ceq $databaseAddress
+    $type=if($database){'aws_db_instance'}else{'aws_iam_role'}
+    $name=if($database){'postgres'}else{'public_job_lambda'}
+    if($record.module_address -cne 'module.platform' -or $record.mode -cne 'managed' -or $record.type -cne $type -or
+       $record.name -cne $name -or ($record.index -isnot [int] -and $record.index -isnot [long]) -or $record.index -ne 0 -or
+       $record.provider_name -cne 'registry.terraform.io/hashicorp/aws' -or
+       $record.change.actions -isnot [array] -or $record.change.actions.Count -ne 1 -or $record.change.actions[0] -cne 'update'){
+      throw 'Dark recovery observation record is unsafe.'
+    }
+    if($record.change.after_unknown -isnot [pscustomobject] -or @($record.change.after_unknown.PSObject.Properties).Count -ne 0){throw 'Dark recovery observation has unknown values.'}
+    Assert-D1RestoreDarkMetadata $record.change.before_sensitive
+    Assert-D1RestoreDarkMetadata $record.change.after_sensitive
+    if(-not $map.ContainsKey($record.address)){throw 'Dark recovery observation lacks an owned resource.'}
+    Assert-D1RestoreDarkObservationEqual $record.change.after $map[$record.address]
+    $before=ConvertFrom-D1RestoreJson (ConvertTo-Json -InputObject $record.change.before -Depth 100)
+    $after=ConvertFrom-D1RestoreJson (ConvertTo-Json -InputObject $record.change.after -Depth 100)
+    $mask=ConvertFrom-D1RestoreJson (ConvertTo-Json -InputObject $record.change.after_sensitive -Depth 100)
+    if($database){
+      if($after.arn -cne "arn:aws:rds:us-east-2:${AccountId}:db:ai-job-apply-development" -or
+         $after.identifier -cne 'ai-job-apply-development' -or $after.resource_id -cnotmatch '^db-[A-Z0-9]+$' -or
+         $after.engine -cne 'postgres' -or $after.backup_retention_period -ne 35){throw 'Dark recovery observation source is invalid.'}
+      if(-not $map.ContainsKey('module.platform.aws_kms_key.platform') -or
+         $after.kms_key_id -cne $map['module.platform.aws_kms_key.platform'].arn -or
+         $after.kms_key_id -cnotmatch "^arn:aws:kms:us-east-2:${AccountId}:key/[a-f0-9-]{36}$"){throw 'Dark recovery observation source key is invalid.'}
+      foreach($pair in @(@('publicly_accessible',$false),@('storage_encrypted',$true),@('deletion_protection',$true),@('multi_az',$false))){
+        if($after.($pair[0]) -isnot [bool] -or $after.($pair[0]) -ne $pair[1]){throw 'Dark recovery observation source protection is invalid.'}
+      }
+      foreach($field in @('domain_dns_ips','tags')){
+        $beforeField=$before.PSObject.Properties[$field];$afterField=$after.PSObject.Properties[$field]
+        if($null -eq $beforeField -or $null -eq $afterField){throw 'Dark recovery observation field is missing.'}
+        if($null -eq $beforeField.Value){
+          $expected=if($field -ceq 'tags'){'{}'}else{'[]'}
+          if((ConvertTo-DeploymentCanonicalValue $afterField.Value) -cne $expected -or
+             $null -ne $record.change.before_sensitive.PSObject.Properties[$field] -or
+             (ConvertTo-DeploymentCanonicalValue $mask.PSObject.Properties[$field].Value) -cne $expected){throw 'Dark recovery observation empty metadata is invalid.'}
+          $afterField.Value=$null;$mask.PSObject.Properties.Remove($field)
+        }
+      }
+      $clocks=@(foreach($value in @($before.latest_restorable_time,$after.latest_restorable_time)){
+        if($value -isnot [string] -or $value -cnotmatch '^20\d{2}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'){throw 'Dark recovery restore clock is malformed.'}
+        [DateTimeOffset]::ParseExact($value,"yyyy-MM-dd'T'HH:mm:ss'Z'",[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal)
+      })
+      if($clocks[1] -lt $clocks[0] -or $clocks[1] -gt [DateTimeOffset]::UtcNow){throw 'Dark recovery restore clock moved backward or into the future.'}
+      $after.latest_restorable_time=$before.latest_restorable_time
+    }else{
+      if($after.arn -cne "arn:aws:iam::${AccountId}:role/ai-job-apply-development-public-job-projection" -or
+         $after.name -cne 'ai-job-apply-development-public-job-projection' -or $after.id -cne $after.name -or
+         $before.inline_policy -isnot [array] -or $before.inline_policy.Count -ne 3 -or
+         $after.inline_policy -isnot [array] -or $after.inline_policy.Count -ne 3){throw 'Dark recovery reader observation identity is invalid.'}
+      $children=@{
+        'public-job-reader-runtime'='module.platform.aws_iam_role_policy.public_job_lambda[0]'
+        'public-job-reader-kms-code-guard'='module.platform.aws_iam_role_policy.public_job_lambda_kms_code_guard[0]'
+        'public-job-reader-vpc-code-guard'='module.platform.aws_iam_role_policy.public_job_lambda_vpc_guard[0]'
+      }
+      foreach($values in @($before.inline_policy,$after.inline_policy)){
+        if((@($values.name|Sort-Object)-join ',') -cne (@($children.Keys|Sort-Object)-join ',')){throw 'Dark recovery reader policy inventory changed.'}
+        foreach($entry in $values){
+          Assert-D1RestoreExactObjectKeys $entry @('name','policy') 'Dark reader policy'
+          if($entry.policy -isnot [string]){throw 'Dark recovery reader policy is malformed.'}
+          $null=ConvertFrom-Json $entry.policy
+        }
+      }
+      foreach($entry in $after.inline_policy){
+        $address=$children[$entry.name]
+        if(-not $map.ContainsKey($address)){throw 'Dark recovery reader policy lacks ownership.'}
+        $child=$map[$address]
+        if($child.name -cne $entry.name -or $child.role -cne $after.id){throw 'Dark recovery reader child binding differs.'}
+        Assert-D1RestoreDarkObservationEqual (ConvertFrom-Json $entry.policy) (ConvertFrom-Json $child.policy)
+        if($entry.name -cne 'public-job-reader-runtime'){
+          $old=@($before.inline_policy|Where-Object name -CEQ $entry.name)[0]
+          Assert-D1RestoreDarkObservationEqual $entry $old
+        }
+        $changes=@($Plan.resource_changes|Where-Object address -CEQ $address)
+        if($changes.Count -ne 1){throw 'Dark recovery reader child changed.'}
+        Assert-D1RestoreDarkOwnedNoOp $changes[0] $child $AccountId
+      }
+      $after.inline_policy=$before.inline_policy
+    }
+    Assert-D1RestoreDarkObservationEqual $after $before
+    Assert-D1RestoreDarkObservationEqual $mask $record.change.before_sensitive
+    $owned=@($Plan.resource_changes|Where-Object address -CEQ $record.address)
+    if($owned.Count -ne 1){throw 'Dark recovery observed resource changed.'}
+    Assert-D1RestoreDarkOwnedNoOp $owned[0] $record.change.after $AccountId
+    Assert-D1RestoreDarkObservationEqual $owned[0].change.before_sensitive $record.change.after_sensitive
+    Assert-D1RestoreDarkObservationEqual $owned[0].change.after_sensitive $record.change.after_sensitive
+  }
+}
 function ConvertTo-D1RestoreDarkBoolean {
   param([AllowNull()][object]$Value)
   if ($Value -is [bool]) { return $Value }
@@ -226,9 +386,8 @@ function Assert-D1RestoreDarkBaseline {
         throw 'Dark recovery requires a complete, error-free, nonapplyable plan.'
       }
     }
-    $drift = $fresh.PSObject.Properties['resource_drift']
-    if (($null -ne $drift -and @($drift.Value).Count -ne 0) -or
-        @($fresh.resource_changes | Where-Object { ($_.change.actions -join ',') -cne 'no-op' }).Count -ne 0 -or
+    Assert-D1RestoreDarkPlanDrift -Plan $fresh -AccountId $ExpectedAccountId
+    if (@($fresh.resource_changes | Where-Object { ($_.change.actions -join ',') -cne 'no-op' }).Count -ne 0 -or
         @($fresh.output_changes.PSObject.Properties | Where-Object { ($_.Value.actions -join ',') -cne 'no-op' }).Count -ne 0) {
       throw 'Dark recovery refuses drift or planned changes.'
     }
