@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-10-09. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
+Last updated: 2026-10-10. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
 
 ## Summary
 
@@ -40,6 +40,10 @@ D3-091 adds verified restore-selection guards after an earlier pre-transition ba
 D3-092 fixes the stale restore-verifier boundary; all 43 repository stages and independent review
 pass. The isolated historical backup passes live read-only schema/checksum verification.
 Durable-data/privacy reconciliation and compatible live release remain internal work.
+D3-093 implements bounded whole-row comparison with 93 unit tests, all 96 restored relation
+digests and 21 real PostgreSQL probes passing. Managed snapshot comparison and explicit
+transition-aware reconciliation remain; no primary promotion or privacy acceptance is claimed.
+[Comparison evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-data-comparison--2026-10-10).
 [Recovery evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-verifier-boundary-recovery--2026-10-09).
 The D3-012 engineering review packet now links current evidence; existing development dispositions remain unchanged.
 D3-090 repairs missing candidate hosting build inputs; all 42 repository checks, independent review,
@@ -77,12 +81,12 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 
 ## Current operating state
 
-Work resumed for D3 on 2026-10-09; D1/D3 are not complete. Independent D1 acceptance remains deferred.
+Work continues for D3 on 2026-10-10; D1/D3 are not complete. Independent D1 acceptance remains deferred.
 AWS access is sequential per the owner. Staging retains its 2026-10-09 dormant verification, with
-no subsequent mutation. Development is freshly verified dormant at 2026-10-10T03:55:10Z, state 505:
+no subsequent mutation. Development is freshly verified dormant at 2026-10-10T04:18:39Z, state 505:
 both database instances, ten Interface endpoints and all application traffic/background work are
-off. Fresh encrypted snapshots, physical restore, exact-input zero drift and versioned KMS recovery
-archive pass. Current-source migration failed at the unchanged Applications legacy guard. Review
+off. Retained encrypted snapshots and prior physical restore, exact-input zero drift and versioned
+KMS recovery archive evidence remain available. Current-source migration failed at the unchanged Applications legacy guard. Review
 traced this to an earlier restore selecting a pre-transition snapshot; the retained post-transition
 snapshot now passes live read-only schema/checksum verification. Durable-data/privacy comparison
 against the newest backup and corrective primary recovery remain. No Gateway
