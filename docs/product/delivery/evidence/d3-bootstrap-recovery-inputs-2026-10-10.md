@@ -1,6 +1,6 @@
 # D3 recovery bootstrap observations and typed inputs — 2026-10-10
 
-D3-098 is In progress. Managed recovery exposed two tooling failures before privacy replay:
+D3-098 repository implementation and verification are complete. Managed recovery exposed two tooling failures before privacy replay:
 the restore-role guard sent bootstrap refresh observations through a platform-only KMS guard,
 and the dark baseline serialized null object inputs as empty environment expressions.
 
@@ -28,8 +28,12 @@ to finish this discovered adjustment; it is not a passing full run.
 All 1,015 generated restore-role assertions and 155 dark-recovery cases pass. The latter pass in
 PowerShell 7 and Windows PowerShell 5, including real child-process input checks. Their private
 logs share SHA-256 ad2527f250bc55f223d08d9e35666e0db1864b9e2bf33b06f9cb37c90f928f05.
-Independent source review passes with no blocking findings. Final full repository verification and
-managed role/replay execution are pending. Earlier reviewed source recovery completed and its
+Independent source review passes with no blocking findings. All 43 repository verification stages
+pass from source `9d8e34916336bdddf1ba661ed714518cd43a6f18` (original invocation 66220,
+terminal exit 0). Full log SHA-256: `a05945aed9021f5f2eda5542993c002cf5b768198e7afeeaadeb127718c531cf`.
+Maintained read-only dark Status also passes with the source database available and writers off.
+Managed role/replay execution remains pending. GitHub checks could not start because of account
+billing/spending limits; local verification does not establish hosted check acceptance. Earlier reviewed source recovery completed and its
 computed database, secret and reader bindings passed readback; this does not establish SQL,
 privacy replay, primary promotion or candidate acceptance. Development RDS is currently
 available for this ongoing test session and must be shut down through the data-preserving

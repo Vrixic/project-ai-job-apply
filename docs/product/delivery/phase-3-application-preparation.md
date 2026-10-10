@@ -48,7 +48,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Privacy replay inventory (D3-095) | Restore reconciliation counts all fifteen Applications tables, including independent native withdrawals and their cleanup queue. Eight real PostgreSQL cases, 234 focused store/contract tests, the maintained 96-relation dump/restore harness and all 43 repository stages pass. | Managed privacy replay and primary recovery remain. [Evidence](evidence/d3-privacy-replay-inventory-2026-10-10.md). |
 | Quiescent privacy recovery (D3-096) | Default-off development-only PITR checks writer drain and exact-input zero drift while preserving source/target safeguards. All 98 focused synthetic cases and 43 repository stages pass. | Managed recovery/privacy replay and live acceptance remain. [Evidence](evidence/d3-dark-privacy-recovery-2026-10-10.md). |
 | Quiescent deletion replay (D3-097) | Default-off development replay binds the dark context/mode and recovery dependencies, using maintained writer-off PITR preflight. All 778 synthetic replay checks, 908 restore-role assertions and 43 repository stages pass; independent source review passes. | Managed replay and connected acceptance remain. [Evidence](evidence/d3-dark-deletion-replay-2026-10-10.md). |
-| Recovery bootstrap inputs (D3-098) | In progress: bounded bootstrap observation checks and explicit typed dark-recovery inputs repair managed preflight failures. | Batch verification, managed replay and connected acceptance remain. [Evidence](evidence/d3-bootstrap-recovery-inputs-2026-10-10.md). |
+| Recovery bootstrap inputs (D3-098) | Complete: bounded observations and typed inputs pass focused tests, independent review and all 43 repository stages. | Managed replay and connected acceptance remain. [Evidence](evidence/d3-bootstrap-recovery-inputs-2026-10-10.md). |
 
 ## Decisions and scope changes
 
@@ -232,3 +232,9 @@ acceptance remain separate. Independent D1/admin acceptance stays deferred.
 and null/empty Terraform input serialization failures. The obsolete bootstrap plan was never
 applied. Source recovery binding readback passes; managed privacy acceptance is pending.
 [Evidence](evidence/d3-bootstrap-recovery-inputs-2026-10-10.md).
+
+2026-10-10: D3-098 repository implementation passes 1,015 restore-role assertions, 155 dark cases
+in both PowerShell hosts, independent source review and all 43 repository stages. Read-only managed
+dark Status passes. Managed replay, primary privacy recovery and connected acceptance remain pending;
+development RDS shutdown remains mandatory before handoff. Hosted checks could not start due to
+billing/spending limits. [Evidence](evidence/d3-bootstrap-recovery-inputs-2026-10-10.md).
