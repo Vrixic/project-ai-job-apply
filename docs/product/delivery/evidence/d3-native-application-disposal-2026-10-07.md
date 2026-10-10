@@ -2116,3 +2116,48 @@ versioned recovery binding is unchanged. The schema proof has exact-version KMS/
 readback; original snapshots, recovery inputs and the known rollback warning remain retained.
 Docker/WSL are off and the PC remains on. Staging retains its October 9 verification with no later
 mutation. Retained recovery/storage/security resources incur charges. D3 remains In progress.
+
+### Restore data comparison — 2026-10-10
+
+D3-093 adds a read-only data inventory beside the count-only schema verifier. Exact reviewed
+schema and migration checks run in the same repeatable-read transaction. Whole rows are serialized
+and hashed inside PostgreSQL 16 with fixed, attested settings; only schema metadata and aggregate
+counts/sizes/digests leave SQL. Duplicates, row associations, bigint/numeric precision and timestamp
+microseconds are preserved. Fixed row/byte limits, unsupported-table/type/RLS refusal, bounded
+statements and static error redaction prevent partial or misleading evidence.
+
+[Implementation and operator contract](../../../../backend/services/database-migrations/README.md#read-only-data-comparison),
+[comparison source](../../../../backend/services/database-migrations/src/restore-data-inventory.ts),
+[unit regressions](../../../../backend/services/database-migrations/src/restore-data-inventory.test.ts)
+and [synthetic PostgreSQL probes](../../../../scripts/tests/d2-recovery/data-inventory.mjs).
+
+The 93 migration-workspace unit tests and independent source/typecheck review pass. The maintained
+`pnpm test:d2-recovery` run passes fresh/replayed 79 migrations, exact restored row sets and whole-row
+digests for all 96 relations, 21 additional PostgreSQL probes and exact disposable-container cleanup.
+Probes cover changed values at equal counts, duplicate/association changes, microseconds, large
+numbers, JSON key ordering, bytea, empty-table schema changes, extra relations/views, RLS, oversized
+rows/tables, changed ledgers and the fixed-hash materialized query plan. One earlier run failed at
+Trust fixture seeding with P0001 before inventory; two subsequent complete runs passed. No production
+guard was weakened. Docker startup required retaining stale socket-only runtime directories and a
+normal restart; no database volume or application configuration was removed.
+
+Historical snapshots use separately reviewed checksum-bound manifests. Added columns/tables,
+ledgers and protected receipts remain explicit differences, including empty additions. The checksum
+is not authenticated provenance: bind each result privately to exact snapshot/resource/host,
+immutable artifact and original stopped task. The retained e061 migration image predates this tool.
+Publishing the tool, managed comparison of both retained backups, transition-aware reconciliation,
+privacy replay and primary recovery remain unfinished. No live journey, provider activation,
+employer action, independent D1/admin acceptance or recovery promotion occurred in this batch.
+
+Independent read-only development shutdown at 2026-10-10T04:18:39Z confirms zero database instances,
+paid network endpoints/NAT/EIPs, routes, enabled rules/mappings, ECS/durable work, queue messages
+and Scheduler work. Retained final/safety snapshots remain available and encrypted. Independent
+local verification at 04:17:36Z confirms Docker engine unavailable and zero running WSL distributions;
+the PC remains on. Staging was not accessed or mutated. Recovery/security storage retains charges.
+
+All 43 `scripts/verify-phase0.ps1` repository stages passed on the committed comparison source,
+including formatting, lint, typecheck, production builds, package regressions and isolation guards;
+normal build/test caching was used. The final compiled CLI also emitted only its fixed failure
+category for malformed manifest input, with zero database calls. Source and delivery records passed
+independent review. The compressed manifest regression includes the complete ECS override envelope,
+malformed gzip/base64 and bounded expansion; raw expanded bytes are checksum-verified before parsing.

@@ -9,8 +9,8 @@ another service's tables.
 - `src/` — Fail-fast process orchestration, restore verifier, CLI entry points, and tests.
 - `restore-manifest.v1.json` — Canonical Phase 3 seven-owner restore boundary (Applications added
   after Trust): twelve owned schemas (including the empty-table `jobs_public` projection schema and separate
-  `applications_restricted` storage), 95 regular relations, and 78 checksum-bound migrations
-  (Profile through `0011`; Jobs through `0027`; Applications through `0014`; Documents through `0016`). The
+  `applications_restricted` storage), 96 regular relations, and 79 checksum-bound migrations
+  (Profile through `0011`; Jobs through `0027`; Applications through `0015`; Documents through `0016`). The
   Docker-based recovery harness asserts this boundary and its restore-store integration test seeds and
   purges Applications data in an isolated local cluster.
 
@@ -29,6 +29,39 @@ checksum-bound export/delete database functions. Manifest inclusion and local re
 prove only the declared structural boundary; they do not prove deployed candidate-rights or
 decision-signal delivery, nor an AWS restore.
 
+## Read-only data comparison
+
+`src/restore-data-inventory-cli.ts` adds a separate diagnostic to the count-only verifier. It
+validates the exact reviewed schema/ledger in one read-only repeatable-read snapshot, then hashes
+complete rows inside PostgreSQL 16 under attested serialization settings. Only column metadata,
+counts, serialized byte totals and per-relation aggregate hashes leave SQL; candidate values and
+individual row hashes do not. Duplicates and full numeric/timestamp precision are preserved.
+Unsupported relations/types, RLS, missing tables, oversized inputs and unexpected differences fail.
+
+Fixed limits are 10,000 rows/4 MiB per relation, 256 KiB per serialized row, 100,000 rows/64 MiB
+overall, and a 60-second refusal deadline checked between queries (each statement remains limited
+to 15 seconds). The materialized query retains only sizes and fixed-length hashes. Oversized rows
+are still serialized transiently to measure their size; this is not a database memory quota.
+
+The CLI defaults to the packaged manifest. An older snapshot requires both
+`RESTORE_DATA_MANIFEST_GZIP_BASE64` and `RESTORE_DATA_MANIFEST_SHA256`: canonical base64 of gzip
+containing exact reviewed UTF-8 structural bytes, at most 7,000 encoded characters/64 KiB expanded,
+with the uncompressed SHA-256. Malformed, oversized or mismatched inputs fail. Compression keeps
+the current contract within the [ECS task-override limit](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html);
+the operator must still check the complete actual override is at most 8,192 characters. Preserve the original
+bytes privately and bind them to the reviewed snapshot/resource/host, immutable executable/image
+and original stopped task. A digest is an integrity check, not authenticated provenance.
+
+`compareRestoreDataInventories` requires both explicit contracts when manifests differ and reports
+the union of changed/missing relations. Added columns, empty tables, ledgers and protected receipts
+remain differences; there are no exclusions or automatic migration normalization. This diagnostic
+does not authorize primary promotion, replace deletion-ledger replay, or prove privacy acceptance.
+The retained e061 image predates this tool; publish and verify a new immutable artifact before use.
+
+The local recovery command below also compares all 96 relation hashes after restore and exercises
+21 synthetic PostgreSQL probes in a separate empty disposable database, including precision,
+duplicate/association changes, schema changes, RLS, budgets and the materialized query plan.
+
 ## Generated Phase 2 logical recovery regression
 
 Run `pnpm test:d2-recovery` with Docker already running and the local
@@ -37,12 +70,12 @@ orchestrator, checks the disposable-container ownership guards, and uses a uniqu
 PostgreSQL container with a dynamic loopback-only port. It does not use `.env`, existing
 databases, AWS, Auth0, providers, bind mounts, named volumes, or downloaded images.
 
-The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 78-migration
+The maintained harness at `scripts/tests/d2-recovery/` applies and replays the current 79-migration
 seven-owner boundary while retaining its D2-focused generated-data and behavior assertions,
 then seeds generated Profile consent/revocation, private page capture, contribution processing,
 Trust review/appeal, decision delivery, reputation, and three-provider publication leases through
 the existing stores. A real custom-format `pg_dump` and `pg_restore` run inside tmpfs only.
-The source/target aggregate verifier results and exact sorted full-row JSON for all 95 relations
+The source/target aggregate verifier results and exact sorted full-row JSON for all 96 relations
 must match; 18 Phase 2 relations must contain generated data. Restored behavioral checks cover
 owner isolation, current/revoked/cancelled consent, lease immutability and concurrent renewal,
 stale-lease refusal, and idempotent publication. No rows or dump files are retained on the host.

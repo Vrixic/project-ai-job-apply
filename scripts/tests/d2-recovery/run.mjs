@@ -8,6 +8,10 @@ import { promisify } from "node:util";
 import { createApplicationsDatabase } from "../../../backend/services/applications/dist/src/index.js";
 import { migrationRunners } from "../../../backend/services/database-migrations/dist/src/index.js";
 import {
+  collectRestoreDataInventory,
+  compareRestoreDataInventories,
+} from "../../../backend/services/database-migrations/dist/src/restore-data-inventory.js";
+import {
   loadCurrentRestoreManifest,
   verifyRestoreDatabase,
 } from "../../../backend/services/database-migrations/dist/src/restore-verifier.js";
@@ -15,6 +19,7 @@ import { createRestoreClient } from "../../../backend/services/database-migratio
 import { createJobCatalogDatabase } from "../../../backend/services/jobs/dist/src/persistence/catalog.js";
 import { createDatabase } from "../../../backend/services/profile/dist/src/index.js";
 import { assertOwnedContainer, image, label, ownedDatabasePort } from "./container-boundary.mjs";
+import { exerciseRestoreDataInventory } from "./data-inventory.mjs";
 import {
   exerciseRestoredD2,
   requiredNonemptyD2Relations,
@@ -307,7 +312,25 @@ try {
   stage = "restored-aggregate-and-row-equality";
   assert.deepEqual(await verifyRestoreDatabase(targetReader, source), sourceAggregate);
   assert.deepEqual(await exactRows(targetReader, source.manifest), sourceRows);
+  const sourceInventory = await collectRestoreDataInventory(sourceReader, source);
+  const targetInventory = await collectRestoreDataInventory(targetReader, source);
+  assert.equal(compareRestoreDataInventories(sourceInventory, targetInventory, source).equal, true);
   await rejectReadOnlyWrite(targetReader);
+  stage = "restore-data-inventory-probes";
+  await docker([
+    "exec",
+    owned.id,
+    "createdb",
+    "-U",
+    "ai_job_apply",
+    "--template=template0",
+    "inventory_probe",
+  ]);
+  const probeUrl = new URL(targetUrl);
+  probeUrl.pathname = "/inventory_probe";
+  const probeClient = createRestoreClient(probeUrl.toString());
+  clients.push(probeClient);
+  const inventoryBehavior = await exerciseRestoreDataInventory(probeClient);
   stage = "restored-response-inventory-behavior";
   const responseBehavior = await exerciseRestoredResponseInventory(targetStore, responseFixtures);
   const materialBehavior = await exerciseRestoredTemporaryMaterialCompletion(
@@ -343,6 +366,8 @@ try {
     exactRelationRowSetsMatched: 96,
     nonemptyD2RelationsMatched: requiredNonemptyD2Relations.length,
     aggregateVerifierMatched: true,
+    wholeRowDigestRelationsMatched: sourceInventory.relations.length,
+    ...inventoryBehavior,
     sourceUnchanged: true,
     readOnlyWritesRejected: 2,
     ...responseBehavior,
@@ -360,13 +385,22 @@ try {
     typeof error?.code === "string" && /^[A-Z0-9_]{1,40}$/u.test(error.code)
       ? error.code
       : "FAILED";
+  const guard =
+    error?.message === "trust contribution case is future-dated"
+      ? "TRUST_FUTURE_TIMESTAMP"
+      : undefined;
   const location =
     typeof error?.stack === "string"
       ? /((?:fixtures|response-inventory|temporary-packets|restricted-packets|native-launches|run)\.mjs:[0-9]+:[0-9]+)/u.exec(
           error.stack,
         )?.[1]
       : undefined;
-  failure = { stage, code, ...(location ? { testLocation: location } : {}) };
+  failure = {
+    stage,
+    code,
+    ...(guard ? { guard } : {}),
+    ...(location ? { testLocation: location } : {}),
+  };
 } finally {
   protection.destroy();
   const closed = await Promise.allSettled(clients.map((client) => client.end({ timeout: 5 })));
