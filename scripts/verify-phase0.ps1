@@ -17,6 +17,7 @@ Invoke-CheckedCommand "Repository skill validation" { pnpm skills:validate }
 Invoke-CheckedCommand "Serverless workflow infrastructure policy validation" { node scripts/validate-serverless-workflow-infrastructure.mjs }
 Invoke-CheckedCommand "Portable Terraform and locked-backend operator validation" { pnpm test:terraform-toolchain }
 Invoke-CheckedCommand "Deployment operator guard validation" { & scripts/tests/deployment-operator-guards.tests.ps1 }
+Invoke-CheckedCommand "PostgreSQL restore verifier and workload inspection guards" { pnpm test:staging-restore:ps7 }
 Invoke-CheckedCommand "Isolated deletion restore contract/operator validation" { pnpm test:deletion-restore }
 Invoke-CheckedCommand "Coordinated D2 maintenance and runtime release validation" { pnpm test:d2-runtime-release }
 Invoke-CheckedCommand "Scoped D2 provider configuration validation" { pnpm test:d2-provider-configuration }
