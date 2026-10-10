@@ -30,13 +30,18 @@ navigation, account changes, logout, approval revision, unmount and expiry withd
 Only a separate unpacked/default-off execution build installs external messaging and requests the
 existing application write scope. Production adapter controls remain dark; a build creates no grant.
 
-The connected transport/lifecycle pass has 205 extension tests across seven files and 70 web tests
+The connected transport/lifecycle pass has 216 extension tests across seven files and 70 web tests
 across four files. Installed headless Chromium passes the production workspace's search → Prepare
 resume/cover letter → review → approve → manual Apply → candidate-confirmed history journey,
 four approved downloads and PDF/Word transfer/withdrawal actions. Identity, native service, Chrome
 receiver and provider responses are simulated. This is not installed-extension, ATS upload,
 provider-confirmed submission or live acceptance. The reviewer cleared initial transport and
 composition source; final batch review and full repository verification remain pending.
+Review also identified PostgreSQL JSONB/native object key-order incompatibility. A bounded exact
+plain-JSON comparator now ignores only object key order, preserving types, exact key sets and
+array order. Reordered material/admission/receipt/owner proofs and malformed/deep inputs have
+regressions. The initial full-verifier run was interrupted for this fix and is not pass evidence;
+the complete verifier must run against the corrected source before merge.
 
 Remaining internal work: actual ATS attachment and effect-bound execution; live delegated-grant
 verification; one-shot write-ahead dispatch, strict attempt-bound confirmation/results and the

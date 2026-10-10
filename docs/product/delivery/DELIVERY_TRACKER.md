@@ -39,7 +39,7 @@ fresh development readback is unavailable because SSO still reports expired cred
 
 D3-101 implements bounded Greenhouse DOM primitives and a separate default-off native file bridge
 with explicit tab selection, generated contracts, one-use admission, withdrawal and original expiry.
-The focused batch passes 275 extension/web tests and the simulated manual candidate journey including
+The focused batch passes 286 extension/web tests and the simulated manual candidate journey including
 two-format file transfer/withdrawal. ATS attachment, dispatch/result wiring, managed recovery and
 live acceptance remain unfinished; proposed [ADR-049](../../adr/049-greenhouse-approved-application-execution.md)
 records the narrow batches. No live provider authority or activation is inferred.

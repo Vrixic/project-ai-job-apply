@@ -168,6 +168,18 @@ it("keeps production registry dark even when the separate transport is installed
   await expect(f.message(f.begin)).resolves.toEqual({ error: "NativeMaterialTransferUnavailable" });
 });
 
+it("accepts matching owner metadata returned in PostgreSQL JSONB key order", async () => {
+  const f = setup();
+  await f.composition.select(LINK);
+  const materials = f.fixture.application.currentPacket?.temporaryMaterials;
+  const material = materials?.[0];
+  if (!materials || !material) throw Error("fixture");
+  materials[0] = Object.fromEntries(Object.entries(material).reverse()) as typeof material;
+  await expect(f.message(f.begin)).resolves.toMatchObject({
+    schema: "application-native-transfer-admission.v1",
+  });
+});
+
 it.each([
   "destination-navigation",
   "source-navigation",

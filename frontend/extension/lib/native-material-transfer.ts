@@ -15,10 +15,10 @@ import {
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 import { parseHandoffLink } from "./application-handoff";
 import { greenhouseApplicationIdentity } from "./greenhouse/inspect";
+import { sameNativeTransferBinding as same } from "./native-transfer-binding";
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
 const unavailable = () => Error("NativeMaterialTransferUnavailable");
-const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
 
 export interface NativeTransferSelection {
   applicationId: string;

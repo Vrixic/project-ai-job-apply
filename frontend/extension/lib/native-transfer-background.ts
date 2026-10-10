@@ -6,6 +6,7 @@ import {
   createNativeMaterialTransfer,
   type NativeTransferSelection,
 } from "./native-material-transfer";
+import { sameNativeTransferBinding } from "./native-transfer-binding";
 
 const unavailable = () => Error("NativeMaterialTransferUnavailable");
 
@@ -28,7 +29,7 @@ export function installNativeTransferBackground(options: {
         signal,
         selection.documentId,
       );
-      if (JSON.stringify(proof) !== JSON.stringify(selection)) throw unavailable();
+      if (!sameNativeTransferBinding(proof, selection)) throw unavailable();
     },
   });
 

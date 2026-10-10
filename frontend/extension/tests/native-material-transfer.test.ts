@@ -12,6 +12,7 @@ import {
   createNativeMaterialTransfer,
   type NativeTransferSelection,
 } from "../lib/native-material-transfer";
+import { sameNativeTransferBinding } from "../lib/native-transfer-binding";
 
 const id = (value: number) => `00000000-0000-7000-8000-${String(value).padStart(12, "0")}`;
 const ORIGIN = "https://workspace.example.invalid";
@@ -269,6 +270,45 @@ describe("website-to-extension transport with simulated native and Chrome bounda
 });
 
 describe("bounded memory-only native file transfer", () => {
+  it("accepts reordered JSONB material, admission and receipt keys without changing values", async () => {
+    const f = setup();
+    const admission = await f.transfer.begin(f.begin, f.sender);
+    const input = f.commit(admission);
+    input.admission = Object.fromEntries(Object.entries(admission).reverse()) as typeof admission;
+    const file = input.files[0];
+    if (!file?.temporaryMaterial) throw Error("fixture");
+    file.temporaryMaterial = Object.fromEntries(
+      Object.entries(file.temporaryMaterial).reverse(),
+    ) as typeof file.temporaryMaterial;
+    const receipt = await f.transfer.commit(input, f.sender);
+    expect(
+      f.transfer.consume(Object.fromEntries(Object.entries(receipt).reverse()) as typeof receipt)
+        .files,
+    ).toHaveLength(1);
+  });
+
+  it.each([
+    [{ value: 1 }, { value: "1" }],
+    [{ value: 1 }, {}],
+    [{ value: 1 }, { value: 1, extra: true }],
+    [{ values: [1, 2] }, { values: [2, 1] }],
+    [{ value: undefined }, { value: undefined }],
+    [{ value: Number.NaN }, { value: Number.NaN }],
+    [{ value: new Date(0) }, { value: new Date(0) }],
+    [{ values: [1, 2, 3] }, { values: [1, 2, 3] }],
+  ])("keeps metadata type, exact key set and array order strict (%j)", (left, right) => {
+    expect(sameNativeTransferBinding(left, right)).toBe(false);
+  });
+
+  it("refuses cyclic/deep or excessive-key metadata without unbounded recursion", () => {
+    const cycle: { next?: unknown } = {};
+    cycle.next = cycle;
+    expect(sameNativeTransferBinding(cycle, cycle)).toBe(false);
+    const large = Object.fromEntries(
+      Array.from({ length: 17 }, (_, index) => [String(index), index]),
+    );
+    expect(sameNativeTransferBinding(large, large)).toBe(false);
+  });
   it("binds original expiry, admits once, consumes once, and zeroes the executor's exact bytes", async () => {
     const f = setup();
     const admission = await f.transfer.begin(f.begin, f.sender);
