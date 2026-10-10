@@ -16,7 +16,8 @@ claim, or authorization to restore real candidate data into a shared environment
 - Require the source to be available, private, KMS-encrypted, deletion-protected, and covered by
   the candidate-rights 35-day automated-backup window with a latest restorable point.
 - Require stable gateway and worker services, healthy endpoints, managed alarms in `OK`, and a
-  refresh-backed no-drift plan before the exercise.
+  refresh-backed no-drift plan before the exercise. For privacy recovery, use the explicit
+  development-only dark mode below instead of activating application writers.
 - Use a unique target identifier and explicit `Purpose=d1-current-isolated-restore`,
   `ManagedBy=restore-drill`, and start-time tags.
 - Never update the managed database secret, application task definitions, ECS services, DNS,
@@ -60,15 +61,38 @@ reviewed Phase 1 evidence. `Cleanup -AllowUnverifiedCleanup -Execute` is emergen
 the exact authenticated disposable target; it never weakens account, tag, source, network, or
 target-identity guards.
 
+### Quiescent privacy recovery
+
+Use `-DarkRecovery` on every action when preparing candidate deletion recovery. It requires a
+live protected private source with the same 35-day backup window and current immutable verifier;
+it does not restore or promote the source. Source recovery from an older reviewed snapshot is a
+separate operation. Keep the public runtime and all automatic writers disabled throughout.
+
+```powershell
+.\scripts\operate-development-postgresql-restore.ps1 -Action Status -DarkRecovery @restoreBoundary
+.\scripts\operate-development-postgresql-restore.ps1 -Action Start -DarkRecovery -Execute @restoreBoundary
+.\scripts\operate-development-postgresql-restore.ps1 -Action Verify -DarkRecovery -Execute @restoreBoundary
+.\scripts\operate-development-postgresql-restore.ps1 -Action Cleanup -DarkRecovery -Execute @restoreBoundary
+```
+
+The operator uses the applied plan's complete current root inputs for fresh locked zero-change,
+zero-drift verification against the exact encrypted backend. It requires writer activation off,
+zero public routes, enabled rules/mappings/schedules, ECS services or RUNNING/PENDING tasks,
+running durable executions and queued/in-flight/delayed work. It checks around each original
+read-only verifier and before restore/delete requests. It retains deployed candidate-rights
+infrastructure and immutable releases; retained read/replay permissions do not activate writers.
+The dark context has a separate ignored file and records its mode. Legacy contexts are normal
+only; mode changes refuse. Staging refuses the switch before any AWS call. Dark mode does not
+claim public endpoint or alarm health. Exact-target emergency cleanup keeps its original guards.
+
 ## Establish the source baseline
 
 1. Resolve the existing immutable database-migration task definition, application subnets, and
    application security group from encrypted Terraform state.
 2. Require the task image to be digest-pinned, scanned, and compatible with `linux/amd64`.
 3. Run a read-only one-off Fargate verifier against the source connection secret. It must:
-   - find the exact six-owner/ten-schema/68-relation Phase 2 manifest;
-   - find all 44 expected migration journal entries through Profile `0009`, Jobs `0023`,
-     Documents `0003`, Matching `0003`, Billing `0002`, and Trust `0004`;
+   - find the current seven-contributor/twelve-schema/96-relation restore manifest;
+   - find all 79 expected migration journal entries from the maintained current manifest;
    - query only aggregate row counts; and
    - emit one aggregate result for in-memory hashing.
 4. Retain only the table/journal pass state and aggregate digest comparison value in operator
@@ -104,7 +128,7 @@ After the target becomes available:
 2. Run the same immutable one-off verifier. Keep the Terraform-managed source `DATABASE_URL` in
    Secrets Manager; pass only the non-secret restored hostname as `RESTORE_HOST`, and replace the
    hostname in memory inside the task.
-3. Require the exact six-owner/ten-schema/68-relation/44-migration manifest and an exact
+3. Require the exact seven-contributor/twelve-schema/96-relation/79-migration manifest and an exact
    aggregate digest match with the source baseline.
 4. Measure functional recovery through the successful verifier exit.
 5. Inspect only the two verifier streams in memory. Require zero credential/candidate-field,

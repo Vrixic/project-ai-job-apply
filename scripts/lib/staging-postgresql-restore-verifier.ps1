@@ -383,7 +383,7 @@ function Assert-D1RestoreContextBoundary {
     [object]$ExpectedBoundary
   )
 
-  Assert-D1RestoreExactObjectKeys $Context @(
+  $expectedKeys = @(
     "source_identifier",
     "target_identifier",
     "started_at",
@@ -419,7 +419,16 @@ function Assert-D1RestoreContextBoundary {
     "restore_available_seconds",
     "functional_recovery_seconds",
     "verified"
-  ) "Restore context"
+  )
+  $mode = $Context.PSObject.Properties["baseline_mode"]
+  if ($null -ne $mode) {
+    if ($mode.Value -isnot [string] -or $mode.Value -cnotin @("steady-state", "dark-recovery") -or
+        ($mode.Value -ceq "dark-recovery" -and [string]$Context.source_identifier -cne "ai-job-apply-development")) {
+      throw "The restore context baseline mode is invalid."
+    }
+    $expectedKeys += "baseline_mode"
+  }
+  Assert-D1RestoreExactObjectKeys $Context $expectedKeys "Restore context"
   $identityChecks = [ordered]@{
     source_manifest_id = [string]$Context.source_manifest_id -ceq [string]$ExpectedBoundary.ManifestId
     source_manifest_sha256 = [string]$Context.source_manifest_sha256 -ceq [string]$ExpectedBoundary.ManifestSha256

@@ -11,6 +11,7 @@ param(
   [string]$RuntimePlanPath = "",
   [switch]$Execute,
   [switch]$AllowUnverifiedCleanup,
+  [switch]$DarkRecovery,
   [switch]$Help
 )
 
@@ -23,6 +24,7 @@ $arguments = @{
   Region                 = $Region
   Execute                = $Execute
   AllowUnverifiedCleanup = $AllowUnverifiedCleanup
+  DarkRecovery           = $DarkRecovery
   Help                   = $Help
 }
 foreach ($name in @("ExpectedAccountId", "StateBucket", "RuntimePlanPath")) {
