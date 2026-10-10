@@ -2237,3 +2237,40 @@ complete recovery inputs are unchanged; independent shutdown readback at `15:49:
 No primary was promoted or traffic enabled. Docker/WSL
 are off and the PC remains on. Staging was not accessed or mutated; retained
 recovery/security/artifact storage incurs charges.
+
+### Restore transition reconciliation — 2026-10-10
+
+D3-094 implements the explicit read-only comparison for the reviewed Applications three-to-fifteen
+transition. Both exact manifests, all six other owners, original whole-row projections, original
+ledger timestamps, added defaults, twelve atomic ledger entries and all eight new table catalogs
+are accounted for. The owning cipher must prove all seven original request digests against their
+protected archive bindings. Complete snapshots and receipt bindings are rechecked after crypto.
+
+Independent source review and 65 focused tests pass. The maintained generated PostgreSQL recovery
+harness passes all 79 migrations, 96 restored row sets/digests, 21 inventory probes and seven new
+reconciliation probes. It uses actual read-only transactions and authenticated simulated KMS;
+no live KMS or managed reconciliation is claimed. Container cleanup passes. Failed fixture attempts
+exposed a wrong client transform, a locking Identity lease incompatible with READ ONLY, driver
+transaction admission and an invalid material fixture; these were corrected without weakening
+production guards. Identity now owns a bounded read-only active/unquarantined snapshot check.
+It grants no live lease, replay authority or primary-promotion authority.
+
+The new CLI defaults off, requires exact snapshot/interval/key admission, honors shared SQL/KMS
+deadlines, clears captured buffers on failure, redacts errors and emits success only after both
+clients close. Neither schema migrations, default migration execution nor IAM changed. Current
+published image/task 66 predates this capability and has no KMS task role. New immutable
+publication and separately reviewed exact-key/purpose decrypt-only authority remain necessary.
+Both isolated clones must be quiescent and their actual lineage independently bound. Full managed
+reconciliation, rights replay, primary recovery, compatible release and the connected live journey
+remain unfinished. Independent D1/admin acceptance stays deferred.
+
+Development readback at `2026-10-10T16:24:27Z` confirms zero database instances, paid network
+runtimes, application routes, enabled triggers, ECS/durable work, queue messages and Scheduler
+work. Independent preservation/local readback at `16:26:55Z` confirms all four encrypted recovery
+snapshots and state 506 unchanged, Docker/WSL off and the PC on. No cloud runtime or AWS write
+was needed in this source batch. Staging was not accessed; retained storage/security resources
+still incur charges.
+
+The complete 43-stage repository verifier also passes, including formatting, lint, owner
+typechecks/builds/tests, Terraform validation, emitted capability isolation and Compose configuration.
+The compiled reconciliation CLI independently refuses default-off execution without SQL or cloud calls.

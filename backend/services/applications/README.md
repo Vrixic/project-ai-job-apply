@@ -322,3 +322,10 @@ ready-to-submit action with re-review. Existing reopening, fresh preparation, re
 history remain owner scoped; no immutable evidence or expiry changes. Unrelated unavailable
 reads remain unavailable. This source requires compatible readers before release; see
 [ADR-047](../../../docs/adr/047-withdrawn-answer-application-recovery.md).
+
+## Isolated legacy receipt reconciliation
+
+The internal `legacy-receipt-restore-verifier` proves seven archived original request digests
+without migrating or replaying commands. It closes read-only SQL transactions before decrypt,
+uses Identity-owned snapshot admission, rechecks bindings after crypto and clears captured
+buffers. See the [fixed diagnostic and remaining managed gates](../database-migrations/README.md#fixed-applications-transition-reconciliation).
