@@ -12,7 +12,7 @@ variable "application_restore_reconciliation" {
     condition = var.application_restore_reconciliation == null ? true : (
       var.environment == "development" && var.persistent_data_plane_enabled &&
       var.development_database_mode == "dormant" && var.legacy_receipt_key_provisioned &&
-      !var.private_service_endpoints_enabled && !var.legacy_receipt_replay_enabled && var.legacy_receipt_transition == null &&
+      !var.private_service_endpoints_enabled && !var.serverless_runtime_enabled && var.legacy_receipt_transition == null &&
       can(regex("^[a-f0-9]{32}$", var.application_restore_reconciliation.run_id)) &&
       can(regex("^[a-f0-9]{40}$", var.application_restore_reconciliation.source_sha)) &&
       can(regex("^${data.aws_caller_identity.current.account_id}[.]dkr[.]ecr[.]us-east-2[.]amazonaws[.]com/ai-job-apply/migration@sha256:[a-f0-9]{64}$", var.application_restore_reconciliation.image)) &&
@@ -21,7 +21,7 @@ variable "application_restore_reconciliation" {
       try(timecmp(var.application_restore_reconciliation.expires_at, var.application_restore_reconciliation.issued_at) > 0 &&
       timecmp(var.application_restore_reconciliation.expires_at, timeadd(var.application_restore_reconciliation.issued_at, "30m")) <= 0, false)
     )
-    error_message = "Reconciliation requires dormant development, retained receipt key, no paid endpoints or replay/transition authority, an exact migration-repository image and a maximum thirty-minute whole-second UTC window."
+    error_message = "Reconciliation requires dormant development, retained receipt key, disabled runtime and paid endpoints, no transition authority, an exact migration-repository image and a maximum thirty-minute whole-second UTC window."
   }
 }
 

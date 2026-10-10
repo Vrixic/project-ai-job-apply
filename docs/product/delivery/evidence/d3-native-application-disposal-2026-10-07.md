@@ -2327,3 +2327,22 @@ cleanup cases with zero real cloud calls. It remains unexecuted. Current state 5
 `2026-10-10T17:21:25Z` reports no database, paid-network, route, trigger, task, durable or queued work.
 Docker/WSL remain off and the PC stays on; retained recovery/security/artifact storage incurs charges.
 Independent D1/admin acceptance remains deferred.
+### Dormant reconciliation admission correction — 2026-10-10
+
+The managed preflight stopped before authority creation or SQL: the retained full input enables
+historical Gateway receipt replay. Revoking that permission would also change the Gateway release.
+Independent review of ADR-043 confirms that the read-only diagnostic should preserve it while
+requiring the serverless runtime off. The source now enforces that condition explicitly; dormant
+primary, disabled paid endpoints, absent transition and all timed decrypt-only restrictions remain.
+The actual task operator still requires fresh writer/route/trigger drain and exact dual-clone bindings.
+
+All 24 Terraform cases pass (21 diagnostic, three legacy). The added retained-replay case verifies
+zero public routes; the active-runtime case is refused by the existing endpoint dependency guard.
+Two preliminary fixture failures were corrected without weakening production validation. Thirteen
+private guard regressions verify actual booleans and canonical lowercase Terraform strings, including
+rejecting string truthiness and malformed values. All 43 repository stages pass on committed source; the log SHA-256 is `df674b3d04381487d5513a21cb4d0d778367dbd5cbc54eee61914e83599e0c3e`.
+All five hosted jobs never started because of billing/spending limits; they are not verification.
+[PR #626](https://github.com/Vrixic/project-ai-job-apply/pull/626) carries this correction.
+Both original isolated restores are available with backup retention zero; no authority apply,
+SQL execution, managed KMS proof, primary promotion or live journey is claimed by this correction.
+Independent D1/admin acceptance remains deferred.

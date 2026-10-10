@@ -285,13 +285,73 @@ run "paid_endpoints" {
   expect_failures = [var.development_database_mode]
 }
 
-run "gateway_replay" {
+run "gateway_replay_still_requires_protected_gateway" {
   command = plan
   variables {
     application_restore_reconciliation = { run_id = "11111111111111111111111111111111", source_sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", image = "111122223333.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", issued_at = "2026-10-10T04:00:00.000Z", expires_at = "2026-10-10T04:30:00.000Z" }
     legacy_receipt_replay_enabled      = true
   }
   expect_failures = [var.legacy_receipt_replay_enabled]
+}
+
+run "retained_gateway_replay_with_runtime_off" {
+  command = plan
+  variables {
+    application_restore_reconciliation        = { run_id = "11111111111111111111111111111111", source_sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", image = "111122223333.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", issued_at = "2026-10-10T04:00:00.000Z", expires_at = "2026-10-10T04:30:00.000Z" }
+    legacy_receipt_replay_enabled             = true
+    serverless_runtime_enabled                = false
+    deploy_applications                       = true
+    deploy_gateway_lambda                     = true
+    gateway_lambda_artifact_s3_key            = "lambda/gateway.zip"
+    gateway_lambda_artifact_s3_object_version = "gateway-version"
+    gateway_lambda_artifact_sha256            = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    gateway_lambda_artifact_base64sha256      = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
+    gateway_lambda_extension_layer_arn        = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+    restricted_packet_keys_provisioned        = true
+    gateway_native_materials                  = { packet_protection_enabled = true }
+    oidc_issuer                               = "https://example.auth0.com/"
+    oidc_audience                             = "https://api.example.invalid"
+  }
+  assert {
+    condition     = length(aws_iam_role_policy.legacy_receipt_replay) == 1 && length(aws_ecs_task_definition.application_restore_reconciliation) == 1 && length(aws_apigatewayv2_route.gateway) == 0
+    error_message = "Retained Gateway replay permission must coexist with the isolated diagnostic without activating public routes."
+  }
+}
+
+run "active_serverless_runtime_rejected" {
+  command = plan
+  variables {
+    application_restore_reconciliation        = { run_id = "11111111111111111111111111111111", source_sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", image = "111122223333.dkr.ecr.us-east-2.amazonaws.com/ai-job-apply/migration@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", issued_at = "2026-10-10T04:00:00.000Z", expires_at = "2026-10-10T04:30:00.000Z" }
+    serverless_runtime_enabled                = true
+    oidc_issuer                               = "https://example.auth0.com/"
+    oidc_audience                             = "https://api.example.invalid"
+    deploy_applications                       = true
+    deploy_gateway_lambda                     = true
+    gateway_lambda_artifact_s3_key            = "lambda/gateway.zip"
+    gateway_lambda_artifact_s3_object_version = "gateway-version"
+    gateway_lambda_artifact_sha256            = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    gateway_lambda_artifact_base64sha256      = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
+    gateway_lambda_extension_layer_arn        = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+
+    deploy_serverless_outbox                              = true
+    workflow_ingress_artifact_s3_key                      = "lambda/workflow-ingress.zip"
+    workflow_ingress_artifact_s3_object_version           = "ingress-version"
+    workflow_ingress_artifact_sha256                      = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    workflow_ingress_artifact_base64sha256                = "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="
+    workflow_ingress_lambda_extension_layer_arn           = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+    deploy_profile_readiness_durable                      = true
+    profile_readiness_durable_artifact_s3_key             = "lambda/profile/durable.zip"
+    profile_readiness_durable_artifact_s3_object_version  = "durable-version"
+    profile_readiness_durable_artifact_sha256             = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    profile_readiness_durable_artifact_base64sha256       = "Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2M="
+    profile_readiness_activity_artifact_s3_key            = "lambda/profile/activity.zip"
+    profile_readiness_activity_artifact_s3_object_version = "activity-version"
+    profile_readiness_activity_artifact_sha256            = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    profile_readiness_activity_artifact_base64sha256      = "ZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGQ="
+    profile_readiness_lambda_extension_layer_arn          = "arn:aws:lambda:us-east-2:590474943231:layer:AWS-Parameters-and-Secrets-Lambda-Extension:114"
+  }
+  # The endpoint input rejects active runtime before the diagnostic validation can run.
+  expect_failures = [var.private_service_endpoints_enabled]
 }
 
 run "transition_cannot_share_authority" {

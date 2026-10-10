@@ -193,3 +193,9 @@ shutdown and four-snapshot/state preservation checks pass; Docker/WSL are off an
 2026-10-10: Added separate default-null, development-only timed decrypt-only diagnostic task
 registration. Its image and permissions are isolated from the ordinary migration task and Gateway.
 Independent source review, 22 Terraform cases, module/development/staging validation and all 43 repository stages pass. Operational activation, dual-restore execution and managed acceptance remain pending.
+
+2026-10-10: The managed reconciliation preflight exposed an unnecessary replay-permission
+restriction. Independent review supports preserving the retained Gateway release while requiring
+runtime off. The correction passes 24 Terraform cases and 13 private canonical-boolean regressions;
+all 43 repository stages pass; managed execution remains pending. See the
+[dormant admission evidence](evidence/d3-native-application-disposal-2026-10-07.md#dormant-reconciliation-admission-correction--2026-10-10).
