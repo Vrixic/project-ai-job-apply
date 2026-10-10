@@ -2195,3 +2195,45 @@ Docker/WSL are independently verified off at `15:00:32Z`; the PC remains on. All
 recovery snapshots remain available and encrypted. Staging was not accessed or mutated in this
 batch; retained recovery/security/artifact storage incurs charges. No provider activation,
 submission, primary promotion, privacy acceptance or independent D1/admin acceptance occurred.
+
+### Managed snapshot data comparison — 2026-10-10
+
+The retained post-transition `20261009112116` and newest `20261010025012` snapshots each pass
+an isolated, read-only inventory using task revision 66 and the published diagnostic image above.
+Separate exact-request reviews bind the snapshot, new temporary resource, immutable image, explicit
+inventory CLI override and schema contract. No ordinary migration or legacy transition was rerun.
+
+The original historical task `cc26a69a5e7c43fd8e72cf2a8b0614e1` stopped with exit zero and
+verified 96 relations/1,073 rows. The original newest task `f7c191b1054b40c4b71cb341dee6f336`
+stopped with exit zero and verified its separately reviewed older contract: 88 relations/1,054 rows.
+Independent fresh task/stream readbacks, exact actual overrides, compiled-validator checks and
+saved evidence hashes pass. Only column metadata and aggregate counts/bytes/hashes leave SQL;
+candidate values and individual row hashes are not retained.
+
+Strict comparison, independently reproduced at `2026-10-10T15:45:49Z`, finds 84 identical shared
+relations out of 88. All 80 relations of the other six owners, including complete ledgers and
+privacy records, match exactly. The 12 differences are confined to Applications:
+
+- Packets, outbox and command receipts retain row counts but differ in columns and whole-row hashes.
+- The Applications ledger has 15 rows versus three; applied timestamps remain part of the difference.
+- Eight added tables comprise seven empty tables and one legacy-receipt table with seven encrypted rows.
+
+The comparison artifact SHA-256 is
+`d6d0fcbb11cdf41a23b165fd12ea76c7b91292f8d3e7b68b13fecc94c3797c64`.
+No columns, ledgers, empty tables or receipts were excluded or normalized. Remaining internal work
+is exact common-column whole-row projection, added-column/default and ledger accounting, and
+original-request proof for the seven encrypted receipts. Metadata and ciphertext integrity alone
+cannot prove original request-hash equality: those hashes are deliberately excluded from the
+metadata commitment. Task 66 has no task role; a separately reviewed bounded read-only KMS proof
+is required rather than silently adding decrypt authority. Privacy replay, primary promotion,
+compatible release and the connected live journey remain unaccepted. Independent D1/admin
+acceptance stays deferred.
+
+Both disposable restores are deleted, with original deletion waiters and fresh absence readback.
+Development shutdown at `2026-10-10T15:48:59Z` verifies zero database instances, paid network
+runtimes, application routes, enabled triggers, ECS/durable work, queue messages and Scheduler
+work. All four source final/safety snapshots remain retained and encrypted. State 506 and its
+complete recovery inputs are unchanged; independent shutdown readback at `15:49:23Z` agrees.
+No primary was promoted or traffic enabled. Docker/WSL
+are off and the PC remains on. Staging was not accessed or mutated; retained
+recovery/security/artifact storage incurs charges.
