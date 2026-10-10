@@ -589,7 +589,22 @@ function Assert-GatewayCapturedSeedInputs {
       "outbox_starts_paused",
       "restricted_answer_vault_enabled",
       "restricted_answer_export_enabled",
-      "applications_attempt_recovery_enabled"
+      "applications_attempt_recovery_enabled",
+      "job_retention_enabled",
+      "job_retention_schedule_enabled",
+      "legacy_receipt_key_provisioned",
+      "legacy_receipt_replay_enabled",
+      "native_cleanup_enabled",
+      "native_cleanup_schedule_enabled",
+      "native_material_dns_enabled",
+      "native_material_repositories_enabled",
+      "native_material_tls_managed",
+      "private_service_endpoints_enabled",
+      "privileged_audit_retention_enabled",
+      "privileged_audit_retention_schedule_enabled",
+      "privileged_moderation_audit_enabled",
+      "restricted_packet_export_enabled",
+      "restricted_packet_keys_provisioned"
     )
   foreach ($name in $DeclaredVariableNames) {
     if ($inputs.DefaultVariables.ContainsKey($name)) { $expected = $inputs.DefaultVariables[$name] }

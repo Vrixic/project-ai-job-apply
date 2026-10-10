@@ -30,7 +30,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | One-off material policy (D3-064, D3-072) | Memory-only storage, bounded expiry, hash-only packet guards and legacy export readers are implemented locally. | Complete no-persistence/30-minute enforcement across provider, browser, ATS and all copies; legacy saved-content paths must remain inactive or be replaced. |
 | Restricted packets (D3-077) | Separate-key packet protection and legacy receipt migration are implemented; managed archival of seven receipts passed. | Managed original-request replay, saved-answer reuse and broader candidate/privacy acceptance. |
 | Native material session (D3-079) | Native HTTPS/image, route/disposal bindings, preparation/cleanup resources and a bounded backend test driver are implemented; managed resources are deployed disabled. | Controlled sign-in, source/owner activation, live preview/PDF/DOCX, expiry/retirement, browser/CORS and client/ATS acceptance. |
-| Connected browser safety (D3-080) | Exact material/hash/deadline guards, explicit generated-material review, boolean sensitive answers, packet-change resets, retry-stable commands, async preparation/scalar-location BFF routes and immediate confirmed-history refresh are locally verified. | Withdrawn-answer recovery, native identity/CORS activation and live acceptance remain; D3-083 supplies locally tested native browser source. |
+| Connected browser safety (D3-080) | Exact material/hash/deadline guards, explicit generated-material review, boolean sensitive answers, packet-change resets, retry-stable commands, async preparation/scalar-location BFF routes and immediate confirmed-history refresh are locally verified. D3-088 supplies locally verified withdrawn-answer recovery. | Native identity/CORS activation and live acceptance remain; D3-083 supplies locally tested native browser source. |
 | Cover-letter request/status UI (D3-081) | Default-off versioned disclosure opt-in, explicit asynchronous requests, retry-stable admission, bounded status polling, current-packet checks and latest-revision cancellation are locally verified, including the full repository verifier and synthetic Chromium checks. Preview availability binds every material-reference scalar, including later versions of the same generation. | Live native preview/download, generation and cleanup acceptance remain open; browser source is tracked in D3-083. |
 | Form-plan safety (D3-082) | Conflicting control claims and duplicate normalized options fail closed; challenges produce no fill/attach actions; restricted fields always require candidate action under the adopted D3-013 threshold. All 20 synthetic SDK tests, the synthetic connected Chromium journey and the full repository verifier pass. | Provider fixtures, first adapter integration and live acceptance remain open. |
 | Native browser materials (D3-083) | Owner-selected separate in-memory Auth0 popup PKCE, direct native resume/cover-letter previews, explicit review integration and approved PDF/DOCX downloads are implemented behind a default-off flag. 35 new auth/transport/UI/header regressions and the synthetic Chromium journey pass. The owner-approved separate SPA registration is configured and saved grant/origin settings are inspected. | Controlled same-owner sign-in, live DNS/TLS/CORS and native/provider/release acceptance remain. |
@@ -39,6 +39,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Manual extension handoff (D3-086) | Default-off approved-answer handoff, exact application return, per-copy owner/job/approval/expiry/withdrawal checks and fresh sensitive context confirmation are implemented. Local regressions, the full repository verifier and the synthetic CSP/connected Chromium journeys pass. | Focused installed Chrome/Edge, live identity/endpoints and release acceptance. Automated provider integration and live acceptance remain unfinished. [Evidence](evidence/d3-manual-extension-handoff-2026-10-09.md). |
 | Observed-form saved-answer selection (D3-087) | Explicit bounded question capture, exact saved version/context selection, final sensitive review, original expiry and fresh form-confirmed manual Apply are implemented and locally verified. All repository checks, 95 PostgreSQL cases and both synthetic Chromium journeys pass. | Compatible release, installed/live reuse/native/provider acceptance. [Evidence](evidence/d3-observed-form-saved-answer-selection-2026-10-09.md). |
 | Withdrawn-answer recovery (D3-088) | Explicit metadata-only recovery is implemented across contract, Applications and web; private value refusal and immutable packet safety remain. Full repository verification, 72 real PostgreSQL cases and three synthetic Chromium journeys pass. | Compatible release and live acceptance remain. [Evidence](evidence/d3-withdrawn-answer-recovery-2026-10-09.md). |
+| Release guard recovery (D3-089) | Complete boolean comparison and bounded deferred native identity-read validation pass focused regressions, independent source review, full repository verification and three synthetic Chromium journeys. Publication, restore and baseline checks are independently verified; fresh development shutdown and recovery archive pass. | Current-source deployment and live acceptance remain. [Evidence](evidence/d3-release-guard-recovery-2026-10-09.md). |
 
 ## Decisions and scope changes
 
@@ -60,6 +61,7 @@ Application history ends at confirmed submission; sensitive answers and irrevers
 ## Evidence
 
 - [Connected browser implementation and verification, 2026-10-09](evidence/d3-connected-candidate-journey-2026-10-09.md)
+- [Independent release review and guard recovery, 2026-10-09](evidence/d3-release-guard-recovery-2026-10-09.md)
 - [Current native release, deployment and remaining acceptance](evidence/d3-native-application-disposal-2026-10-07.md)
 - [Native preparation composition](evidence/d3-native-application-preparation-release-2026-10-07.md)
 - [One-off material policy](../../adr/038-one-off-generated-application-materials.md)
@@ -120,3 +122,10 @@ private value refusal, immutable packets and existing attempt fences. Full repos
 acceptance remain; D3 is In progress and independent D1 acceptance stays deferred. Staging is
 freshly dormant at 21:55Z; development was last verified dormant at 18:40Z with no subsequent
 mutation. Docker/WSL are off and the PC stays on. [PR #615](https://github.com/Vrixic/project-ai-job-apply/pull/615) carries the verified batch; hosted CI is blocked by account billing/spending limits. See the linked recovery evidence.
+
+2026-10-09: D3-089 repairs two release guard refusals found during owner-requested independent
+review. All 41 repository verification stages, 687 focused guard checks and three fresh synthetic
+Chromium journeys pass. No release, migration or live candidate acceptance occurred. Fresh
+data-preserving development shutdown, physical restore, zero-drift plan and versioned recovery
+archive pass; Docker/WSL are off and the PC stays on. D3 remains In progress; independent D1
+acceptance stays deferred. [Evidence](evidence/d3-release-guard-recovery-2026-10-09.md).

@@ -616,7 +616,22 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
     "outbox_starts_paused",
     "restricted_answer_vault_enabled",
     "restricted_answer_export_enabled",
-    "applications_attempt_recovery_enabled"
+    "applications_attempt_recovery_enabled",
+    "job_retention_enabled",
+    "job_retention_schedule_enabled",
+    "legacy_receipt_key_provisioned",
+    "legacy_receipt_replay_enabled",
+    "native_cleanup_enabled",
+    "native_cleanup_schedule_enabled",
+    "native_material_dns_enabled",
+    "native_material_repositories_enabled",
+    "native_material_tls_managed",
+    "private_service_endpoints_enabled",
+    "privileged_audit_retention_enabled",
+    "privileged_audit_retention_schedule_enabled",
+    "privileged_moderation_audit_enabled",
+    "restricted_packet_export_enabled",
+    "restricted_packet_keys_provisioned"
   )
   $declaredBooleanNames = @(Get-ChildItem -LiteralPath (Join-Path $repositoryRoot "infrastructure/terraform/environments/development") -File -Filter "*.tf" | ForEach-Object {
       $declarations = [regex]::Matches((Get-Content -LiteralPath $_.FullName -Raw), '(?ms)^variable\s+"([^"]+)"\s*\{(.*?)^\}')
@@ -765,7 +780,7 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
   $ingestionFlags = @("deploy_ingestion_runtime", "ingestion_provider_activation_allowed", "ingestion_provider_private_egress",
     "ingestion_runtime_enabled", "ingestion_synthetic_source_enabled")
   $invalidBooleanInputs = @($null, "False", "True", " false", "false ", "0", "1", "yes", "", 0, 1, [pscustomobject]@{}, [object[]]@($false))
-  foreach ($name in @($ingestionFlags + @($restoreFlag, "outbox_starts_paused"))) {
+  foreach ($name in $declaredBooleanNames) {
     foreach ($invalid in $invalidBooleanInputs) {
       $badSeed = Copy-CaptureFixture $current; $badSeed.variables.$name.value = $invalid
       $badCaptured = Copy-CaptureFixture $current; $badCaptured.variables.$name.value = $invalid
