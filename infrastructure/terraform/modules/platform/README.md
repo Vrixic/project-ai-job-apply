@@ -275,8 +275,10 @@ separate release work; no flag supplies those proofs.
 
 `application_restore_reconciliation` defaults to null. An explicit development-only configuration
 registers a separate Fargate task, task role and inline policy while the primary is dormant and
-paid interface endpoints, replay and transition authority are disabled. Its `image` is independent
-of `migration_image`; ordinary migration and Gateway permissions are unchanged. Required fields
+paid interface endpoints, serverless runtime and transition authority are disabled. Its `image` is independent
+of `migration_image`; ordinary migration and Gateway permissions are unchanged. Retained Gateway
+replay permission does not activate routes or triggers; fresh writer-drain evidence remains mandatory.
+Required fields
 are `run_id`, `source_sha`, immutable dedicated-repository `image`, `issued_at` and `expires_at`.
 Use canonical whole-second UTC `.000Z` timestamps with a positive window of at most thirty minutes.
 

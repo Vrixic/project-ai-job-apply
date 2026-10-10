@@ -89,7 +89,7 @@ The current one-off issuance receipt does not establish automated renewal or exp
 
 Development exposes the default-null `application_restore_reconciliation` input and its separate
 task-definition output. See the [platform diagnostic boundary](../../modules/platform/README.md#read-only-applications-restore-reconciliation).
-It admits only a dormant primary, retained legacy-receipt key and disabled paid endpoints/replay/
+It admits only a dormant primary, retained legacy-receipt key and disabled runtime/paid endpoints/
 transition authority. Pass a separately verified immutable diagnostic image without changing the
 ordinary migration image. Registration grants no restore or task-launch authority. Keep it null in
 ordinary full input baselines; enable only for the reviewed short diagnostic window and return it
