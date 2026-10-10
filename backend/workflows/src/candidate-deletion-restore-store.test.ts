@@ -56,6 +56,7 @@ function fixture(offset = 0) {
         status: "awaiting_upload",
       },
     ] as Row[],
+    coverLetters: [] as Row[],
     counts: Object.fromEntries(RESTORED_CANDIDATE_RIGHTS_OWNERS.map((owner) => [owner, 1])) as Row,
   };
 }
@@ -122,6 +123,8 @@ function database(
       output = structuredClone(value.operations);
     else if (query.startsWith("SELECT request_id")) output = structuredClone(value.ledgers);
     else if (query.startsWith("SELECT issuer")) output = structuredClone(value.identities);
+    else if (query.startsWith("SELECT id AS") && query.includes("FROM documents.cover_letters"))
+      output = structuredClone(value.coverLetters);
     else if (query.startsWith("SELECT id AS")) output = structuredClone(value.documents);
     else if (
       /^SELECT (applications|jobs|matching|billing|trust|documents|profile)\.delete_candidate_data/u.test(
@@ -225,6 +228,81 @@ function completedFixture(state: "completed" | "backup_expired" = "completed") {
 }
 
 describe("restore-only whole-set database preflight", () => {
+  it.each(["completed", "backup_expired"] as const)(
+    "preserves valid historical %s inventories with all current owners empty",
+    async (state) => {
+      const value = completedFixture(state);
+      const policy = ACCEPTED_CANDIDATE_DELETION_POLICIES[1];
+      if (!policy) throw new Error("SyntheticPolicyMissing");
+      value.ledgers[0] = {
+        ...value.ledgers[0],
+        ownerInventory: Object.fromEntries(
+          policy.ownerInventory.map((owner) => [owner, "completed"]),
+        ),
+      };
+      const db = database([value]);
+      const store = new PostgresCandidateDeletionRestoreStore(db.handle);
+      expect(
+        await store.reconcile([value.entry], await store.preflight([value.entry])),
+      ).toMatchObject({ restoredUsersAlreadyReconciled: 1, restoredUsersReconciled: 0 });
+      expect(db.writes()).toHaveLength(0);
+    },
+  );
+
+  it("inventories independent pending and ready cover letters in the original preflight", async () => {
+    const value = fixture();
+    const documentId = "019c2b89-79b2-7000-8000-000000000009";
+    value.coverLetters = [
+      {
+        documentId,
+        objectKey: `normalized/${documentId}/cover-letter.v1.json`,
+        objectVersion: null,
+        status: "pending",
+      },
+    ];
+    const db = database([value]);
+    const store = new PostgresCandidateDeletionRestoreStore(db.handle);
+    expect((await store.preflight([value.entry])).documentObjects[1]).toEqual({
+      kind: "cover_letter",
+      userId: value.entry.userId,
+      documentId,
+      objectKey: `normalized/${documentId}/cover-letter.v1.json`,
+    });
+    value.coverLetters[0] = {
+      ...value.coverLetters[0],
+      objectVersion: "ready-original",
+      status: "ready",
+    };
+    expect((await store.preflight([value.entry])).documentObjects[1]).toMatchObject({
+      objectVersion: "ready-original",
+    });
+    expect(db.writes()).toHaveLength(0);
+  });
+
+  it.each([
+    { objectKey: "normalized/foreign/cover-letter.v1.json" },
+    { status: "ready", objectVersion: null },
+    { status: "pending", objectVersion: "unexpected" },
+    { status: "invalid" },
+    { documentId: "invalid" },
+  ])("rejects malformed cover inventory before any writes %j", async (mutation) => {
+    const value = fixture();
+    const documentId = "019c2b89-79b2-7000-8000-000000000009";
+    value.coverLetters = [
+      {
+        documentId,
+        objectKey: `normalized/${documentId}/cover-letter.v1.json`,
+        objectVersion: null,
+        status: "pending",
+        ...mutation,
+      },
+    ];
+    const db = database([value]);
+    await expect(
+      new PostgresCandidateDeletionRestoreStore(db.handle).preflight([value.entry]),
+    ).rejects.toThrow("DocumentInventoryRejected");
+    expect(db.writes()).toHaveLength(0);
+  });
   it("brands only its own unchanged refusal without reading error properties or prototypes", async () => {
     const value = fixture();
     const db = database([value]);

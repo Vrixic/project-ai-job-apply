@@ -33,3 +33,8 @@ dormancy. This procedure does not establish accountable privacy or candidate acc
 
 The first source batch adds transactional preservation evidence; snapshot selection, primary
 replacement, fresh postrestore verification and managed acceptance remain pending.
+
+The next source batch adds an internal read-only full-data/terminal-condition verifier and fixes
+independent Profile/Documents recovery inventory and cover-letter namespace checks. Its aggregate
+output alone does not establish numeric invocation provenance, writer quiescence, physical source
+identity or cutover admission. Private runtime and promotion composition remain pending.

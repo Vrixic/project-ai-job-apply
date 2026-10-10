@@ -15,7 +15,7 @@ import {
   MAX_RESTORED_DELETION_MARKERS,
   validateHistoricalRecoveryEntries,
 } from "./candidate-deletion-restore-policy.js";
-import type { RestoredCandidateDocumentObjectRef } from "./candidate-deletion-restore-store.js";
+import type { RestoredCandidateObjectRef } from "./candidate-deletion-restore-store.js";
 import type { CandidateDeletionRecoveryEntry } from "./candidate-rights-recovery-ledger.js";
 
 interface ReadOnlyAwsSender {
@@ -660,7 +660,7 @@ export class AwsReadOnlyCandidateRestoreDocuments {
   }
 
   async inspectExpectedAbsentDocuments(
-    objects: readonly RestoredCandidateDocumentObjectRef[],
+    objects: readonly RestoredCandidateObjectRef[],
     signal?: AbortSignal,
   ): Promise<{
     sha256: string;
@@ -678,6 +678,37 @@ export class AwsReadOnlyCandidateRestoreDocuments {
       const refs = objects
         .map((value) => {
           const ref = record(value);
+          if (ref.kind === "cover_letter") {
+            exactKeys(ref, [
+              "kind",
+              "userId",
+              "documentId",
+              "objectKey",
+              ...("objectVersion" in ref ? ["objectVersion"] : []),
+            ]);
+            if (
+              typeof ref.userId !== "string" ||
+              !UUID.test(ref.userId) ||
+              typeof ref.documentId !== "string" ||
+              !UUID.test(ref.documentId) ||
+              documents.has(ref.documentId) ||
+              ref.objectKey !== `normalized/${ref.documentId}/cover-letter.v1.json` ||
+              ("objectVersion" in ref &&
+                (!opaque(ref.objectVersion) || ref.objectVersion === "null"))
+            )
+              rejected();
+            documents.add(ref.documentId);
+            namespaces.add(`normalized/${ref.documentId}/`);
+            if (keys.has(ref.objectKey as string)) rejected();
+            keys.add(ref.objectKey as string);
+            return {
+              kind: "cover_letter",
+              userId: ref.userId,
+              documentId: ref.documentId,
+              objectKey: ref.objectKey,
+              objectVersion: ref.objectVersion ?? null,
+            };
+          }
           const optionalKeys = [
             "sourceObjectVersion",
             "normalizedObjectKey",

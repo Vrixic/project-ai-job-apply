@@ -181,6 +181,14 @@ requires separately reviewed marker-creation IAM (`s3:DeleteObject`, absent from
 documents maintenance grant), provider creation prohibition, remote-dispatch quiescence and
 transient retention. No Terraform or guard edit, permission apply or provider activation is included.
 
+Recovery now inventories independent restricted answers and all Documents work roots, including
+pending/ready cover-letter namespaces. `candidate-deletion-reconciled-copy.ts` separately checks
+strict terminal conditions and exact D3-099 full-data equality inside a read-only transaction,
+with a fresh unchanged retained-marker horizon. It imports no replay mutation ports and never
+renews original work deadlines. It is an internal primitive; runtime publication, immutable
+invocation provenance, physical identity/quiescence and promotion admission remain unwired. See
+[D3-100 evidence](../../docs/product/delivery/evidence/d3-reconciled-copy-verification-2026-10-10.md).
+
 Account deletion's document-object activity removes recorded exact keys and every version and
 delete marker under the owned document IDs' `quarantine/<id>/` and `normalized/<id>/` prefixes.
 This includes older parser outputs absent from the Documents row's latest normalized key. All

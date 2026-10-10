@@ -30,6 +30,10 @@ connected browser journey passes; development, Docker and WSL are off with recov
 Dedicated primary promotion, managed replay and live connected acceptance remain internal work.
 [Evidence](evidence/d3-replay-data-preservation-2026-10-10.md).
 
+D3-100 is implementing complete independent recovery roots, cover-letter namespace absence and
+separate read-only reconciled-copy verification. Batch verification and promotion/runtime wiring
+remain pending. [Evidence](evidence/d3-reconciled-copy-verification-2026-10-10.md).
+
 Grounded preparation, packets/review, safe manual Apply, submission-safety controls and native runtime/test tooling are implemented.
 The 2026-10-09 browser safety batch passes a simulated connected search-to-confirmed-history journey;
 cover-letter opt-in/status/cancellation UI is locally tested behind a separate default-off flag.
