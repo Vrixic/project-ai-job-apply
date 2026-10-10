@@ -22,3 +22,7 @@ Contains the security architecture and evidence required to protect candidate id
 - [Vulnerability-management runbook](../../infrastructure/runbooks/security/vulnerability-management.md)
 
 This directory contains policy and sanitized evidence, never live secrets, tokens, or raw user data.
+
+Development recovery preservation source is tracked in [ADR-048](../adr/048-privacy-reconciled-development-recovery.md)
+and the [replay runbook](../../infrastructure/runbooks/restore/candidate-deletion-recovery-replay.md).
+Aggregate whole-row proof does not establish managed recovery or accountable privacy acceptance.

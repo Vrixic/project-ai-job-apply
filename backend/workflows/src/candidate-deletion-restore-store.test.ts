@@ -11,6 +11,7 @@ import {
   readCandidateDeletionRestoreStoreFailure,
 } from "./candidate-deletion-restore-store.js";
 import type { CandidateDeletionRecoveryEntry } from "./candidate-rights-recovery-ledger.js";
+import { PRESERVATION_RELATIONS } from "./candidate-deletion-restore-preservation.js";
 
 type Row = Record<string, unknown>;
 function fixture(offset = 0) {
@@ -59,7 +60,11 @@ function fixture(offset = 0) {
   };
 }
 
-function database(fixtures: ReturnType<typeof fixture>[]) {
+function database(
+  fixtures: ReturnType<typeof fixture>[],
+  changedAfterWrite = false,
+  commitFails = false,
+) {
   const queries: { query: string; values: string[] }[] = [];
   const unsafe = vi.fn((query: string, values: string[] = []) => {
     queries.push({ query, values });
@@ -72,6 +77,39 @@ function database(fixtures: ReturnType<typeof fixture>[]) {
     if (!value) throw new Error("Missing synthetic fixture");
     let output: Row[] = [];
     if (query.startsWith("SET LOCAL")) output = [];
+    else if (query.includes("AS settings"))
+      output = [
+        {
+          settings: [
+            "UTC",
+            "ISO, YMD",
+            "iso_8601",
+            "3",
+            "hex",
+            "off",
+            "UTF8",
+            "UTF8",
+            16,
+            "pg_catalog",
+          ],
+        },
+      ];
+    else if (query.includes("WITH tables AS"))
+      output = [{ relations: [...PRESERVATION_RELATIONS].sort(), visible: true }];
+    else if (query.startsWith("WITH row_hashes"))
+      output = [
+        {
+          rows: "1",
+          bytes: "40",
+          largest: "40",
+          sha: (changedAfterWrite &&
+          queries.some(({ query }) => /^SELECT \w+\.delete_candidate_data/u.test(query))
+            ? "c"
+            : "a"
+          ).repeat(64),
+          schema: "b".repeat(64),
+        },
+      ];
     else if (query.includes('AS "ownerCounts"')) output = [{ ownerCounts: { ...value.counts } }];
     else if (query.startsWith("SELECT id, account_state"))
       output = value.user ? [{ ...value.user }] : [];
@@ -101,7 +139,15 @@ function database(fixtures: ReturnType<typeof fixture>[]) {
   });
   const sql = { unsafe };
   const begin = vi.fn(
-    async (_options: string, run: (transaction: typeof sql) => Promise<unknown>) => run(sql),
+    async (_options: string, run: (transaction: typeof sql) => Promise<unknown>) => {
+      const result = await run(sql);
+      if (
+        commitFails &&
+        queries.some(({ query }) => /^SELECT \w+\.delete_candidate_data/u.test(query))
+      )
+        throw new Error("SyntheticCommitAcknowledgementFailed");
+      return result;
+    },
   );
   const handle = { client: { unsafe, begin } } as unknown as DatabaseHandle;
   return {
@@ -323,7 +369,7 @@ describe("restore-only whole-set database preflight", () => {
       const store = new PostgresCandidateDeletionRestoreStore(db.handle);
       const before = JSON.stringify(value);
       const preflight = await store.preflight([value.entry]);
-      expect(await store.reconcile([value.entry], preflight)).toEqual({
+      expect(await store.reconcile([value.entry], preflight)).toMatchObject({
         restoredUsersReconciled: 0,
         restoredUsersAbsent: 0,
         restoredUsersAlreadyReconciled: 1,
@@ -391,16 +437,43 @@ describe("restore-only whole-set database preflight", () => {
     expect(db.writes()).toHaveLength(0);
   });
 
+  it("rejects changed unrelated data without returning preservation evidence", async () => {
+    const value = fixture();
+    const db = database([value], true);
+    const store = new PostgresCandidateDeletionRestoreStore(db.handle);
+    const preflight = await store.preflight([value.entry]);
+    await expect(store.reconcile([value.entry], preflight)).rejects.toThrow(
+      "NondeletedDataChanged",
+    );
+    expect(db.queries.filter(({ query }) => query.startsWith("WITH row_hashes"))).toHaveLength(192);
+  });
+
+  it("never returns an attestation when COMMIT acknowledgement fails", async () => {
+    const value = fixture();
+    const db = database([value], false, true);
+    const store = new PostgresCandidateDeletionRestoreStore(db.handle);
+    const preflight = await store.preflight([value.entry]);
+    await expect(store.reconcile([value.entry], preflight)).rejects.toThrow(
+      "SyntheticCommitAcknowledgementFailed",
+    );
+    expect(db.queries.filter(({ query }) => query.startsWith("WITH row_hashes"))).toHaveLength(288);
+  });
+
   it("revalidates the whole set before invoking all eight owners and never receives cloud mutation ports", async () => {
     const values = [fixture(), fixture(10)];
     const db = database(values);
     const store = new PostgresCandidateDeletionRestoreStore(db.handle);
     const entries = values.map((value) => value.entry);
     const preflight = await store.preflight(entries);
-    expect(await store.reconcile(entries, preflight)).toEqual({
+    expect(await store.reconcile(entries, preflight)).toMatchObject({
       restoredUsersReconciled: 2,
       restoredUsersAbsent: 0,
       restoredUsersAlreadyReconciled: 0,
+      preservation: {
+        schemaVersion: 1,
+        unchanged: { relationCount: 96, rowCount: 96, byteCount: 3840 },
+        reconciled: { relationCount: 96, rowCount: 96, byteCount: 3840 },
+      },
     });
     const firstWrite = db.queries.findIndex(({ query }) =>
       query.startsWith("UPDATE identity.users"),
@@ -510,7 +583,7 @@ describe("restore-only whole-set database preflight", () => {
       restoredSubjectsPresent: 0,
       documentObjects: [],
     });
-    expect(await store.reconcile([first.entry], preflight)).toEqual({
+    expect(await store.reconcile([first.entry], preflight)).toMatchObject({
       restoredUsersReconciled: 0,
       restoredUsersAbsent: 1,
       restoredUsersAlreadyReconciled: 0,

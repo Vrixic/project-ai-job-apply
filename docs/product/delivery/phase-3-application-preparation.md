@@ -49,6 +49,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Quiescent privacy recovery (D3-096) | Default-off development-only PITR checks writer drain and exact-input zero drift while preserving source/target safeguards. All 98 focused synthetic cases and 43 repository stages pass. | Managed recovery/privacy replay and live acceptance remain. [Evidence](evidence/d3-dark-privacy-recovery-2026-10-10.md). |
 | Quiescent deletion replay (D3-097) | Default-off development replay binds the dark context/mode and recovery dependencies, using maintained writer-off PITR preflight. All 778 synthetic replay checks, 908 restore-role assertions and 43 repository stages pass; independent source review passes. | Managed replay and connected acceptance remain. [Evidence](evidence/d3-dark-deletion-replay-2026-10-10.md). |
 | Recovery bootstrap inputs (D3-098) | Complete: bounded observations and typed inputs pass focused tests, independent review and all 43 repository stages. | Managed replay and connected acceptance remain. [Evidence](evidence/d3-bootstrap-recovery-inputs-2026-10-10.md). |
+| Replay data preservation (D3-099) | In progress: fixed whole-row comparison surrounds deletion inside one transaction; committed aggregate evidence and bounded cancellation are implemented. | Real PostgreSQL regressions, final review and full repository checks are running. Dedicated promotion and live acceptance remain separate. [Evidence](evidence/d3-replay-data-preservation-2026-10-10.md). |
 
 ## Decisions and scope changes
 
@@ -238,3 +239,9 @@ in both PowerShell hosts, independent source review and all 43 repository stages
 dark Status passes. Managed replay, primary privacy recovery and connected acceptance remain pending;
 development RDS shutdown remains mandatory before handoff. Hosted checks could not start due to
 billing/spending limits. [Evidence](evidence/d3-bootstrap-recovery-inputs-2026-10-10.md).
+
+2026-10-10: D3-099 adds transactional whole-row preservation around deletion replay. The real
+PostgreSQL pass found and corrected the exact-marker pre-confirmation null-operation case.
+348 focused tests and 790 operator assertions pass; final PostgreSQL verification, independent
+review and full repository checks remain in progress. Promotion and connected acceptance remain
+internal work. [Evidence](evidence/d3-replay-data-preservation-2026-10-10.md).

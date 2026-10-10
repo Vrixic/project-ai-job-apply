@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import schema from "../schemas/candidate-deletion-restore.v1.schema.json" with { type: "json" };
+import type { RestoreDataDigest } from "./candidate-deletion-restore-preservation.js";
 
 const validator = new Ajv2020({ strict: true, allErrors: false });
 validator.addSchema(schema);
@@ -130,6 +131,7 @@ export type CandidateDeletionRestoreReplayResult = Omit<
   s3Writes: 0;
   recoveryLedgerWrites: 0;
   identityProviderCalls: 0;
+  preservation?: { schemaVersion: 1; unchanged: RestoreDataDigest; reconciled: RestoreDataDigest };
 };
 
 /** Historical dispatch bindings only; fresh execution retirement and PITR checks remain local. */

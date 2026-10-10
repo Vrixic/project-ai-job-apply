@@ -205,12 +205,26 @@ function Assert-DeletionReplayPreparation([object]$Preparation) {
   }
 }
 
+function Assert-DeletionReplayPreservation([object]$Evidence) {
+  Assert-D1RestoreExactObjectKeys $Evidence @('schemaVersion','unchanged','reconciled') 'DeletionReplayPreservation'
+  if (-not (Test-D1RestoreBoundedInteger $Evidence.schemaVersion) -or $Evidence.schemaVersion -ne 1) { throw 'DeletionReplayPreservationVersionRejected' }
+  foreach ($digest in @($Evidence.unchanged,$Evidence.reconciled)) {
+    Assert-D1RestoreExactObjectKeys $digest @('sha256','relationCount','rowCount','byteCount') 'DeletionReplayDataDigest'
+    if ($digest.sha256 -isnot [string] -or $digest.sha256 -cnotmatch '^[a-f0-9]{64}$' -or -not (Test-D1RestoreBoundedInteger $digest.relationCount) -or $digest.relationCount -ne 96 -or -not (Test-D1RestoreBoundedInteger $digest.rowCount) -or $digest.rowCount -gt 100000 -or -not (Test-D1RestoreBoundedInteger $digest.byteCount) -or $digest.byteCount -gt 67108864) { throw 'DeletionReplayDataDigestRejected' }
+  }
+  if ($Evidence.unchanged.rowCount -gt $Evidence.reconciled.rowCount -or $Evidence.unchanged.byteCount -gt $Evidence.reconciled.byteCount) { throw 'DeletionReplayPreservationScopeRejected' }
+}
+
 function Assert-DeletionReplayAggregate([object]$Response, [object]$Request, [object]$Config) {
   $keys = @('schemaVersion','action','outcome','runId','sourceSha','configurationSha256','functionVersion','expiresAt','markerSnapshotSha256','restoredPreflightSha256','inspectionSha256','markersValidated','historicalPolicyMarkers','currentPolicyMarkers','restoredSubjectsPresent','restoredSubjectsAbsent','documentKeysChecked','documentVersionsObserved')
   $counts = @('markersValidated','historicalPolicyMarkers','currentPolicyMarkers','restoredSubjectsPresent','restoredSubjectsAbsent','documentKeysChecked','documentVersionsObserved')
   if ($Request.action -ceq 'replay') {
     $keys += @('restoredUsersReconciled','restoredUsersAbsent','restoredUsersAlreadyReconciled','s3Writes','recoveryLedgerWrites','identityProviderCalls')
     $counts += @('restoredUsersReconciled','restoredUsersAbsent','restoredUsersAlreadyReconciled','s3Writes','recoveryLedgerWrites','identityProviderCalls')
+    if ($null -ne $Response.PSObject.Properties['preservation']) {
+      $keys += 'preservation'
+      Assert-DeletionReplayPreservation $Response.preservation
+    }
   }
   Assert-D1RestoreExactObjectKeys $Response $keys 'DeletionReplayAggregateResponse'
   if (-not (Test-D1RestoreBoundedInteger $Response.schemaVersion) -or $Response.schemaVersion -ne 1 -or $Response.action -cne $Request.action -or $Response.outcome -cne $(if ($Request.action -ceq 'replay') {'replayed'} else {'inspected'}) -or $Response.runId -cne $Config.runId -or $Response.configurationSha256 -cne $Request.configurationSha256 -or $Response.sourceSha -cne $Config.sourceSha -or $Response.functionVersion -cne $Request.functionVersion -or $Response.expiresAt -cne $Config.expiresAt) { throw 'DeletionReplayAggregateResponseRejected' }
