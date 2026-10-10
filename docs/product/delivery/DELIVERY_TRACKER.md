@@ -109,7 +109,10 @@ shutdown at `2026-10-10T18:47:12Z` verifies test runtimes off; all four encrypte
 are preserved. Recovery state 508 and its manifest have exact-version KMS/hash readback, with
 zero baseline resource/output changes or drift and unchanged 142 inputs. Docker/WSL are off;
 the PC stays on. Retained storage/security resources incur charges; staging was not accessed.
-Privacy replay coverage needs a native-withdrawal count regression before recovery/live release.
+Privacy replay coverage now includes all fifteen Applications tables, with eight real PostgreSQL
+cases, 234 focused tests, the maintained 96-relation recovery harness and all 43 repository stages
+passing. Managed privacy replay remains pending before recovery/live release.
+[Privacy replay inventory evidence](evidence/d3-privacy-replay-inventory-2026-10-10.md).
 Independent D1/admin acceptance remains deferred.
 [Managed reconciliation evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-transition-reconciliation-and-cleanup--2026-10-10).
 

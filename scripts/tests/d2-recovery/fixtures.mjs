@@ -110,6 +110,13 @@ function ports(client, profileClient) {
 
 export async function seedD2RecoveryFixtures(client, profileClient, reportStage = () => {}) {
   const store = ports(client, profileClient);
+  // PostgreSQL enforces future-date refusal. Use its clock for generated persistence events
+  // rather than assuming the host and Docker VM have identical subsecond clocks.
+  async function databaseNow() {
+    const [row] = await client`SELECT clock_timestamp() AS now`;
+    assert.ok(row?.now instanceof Date);
+    return row.now;
+  }
   const ownerUserId = uuidv7();
   const otherOwnerId = uuidv7();
   const reviewerId = uuidv7();
@@ -178,7 +185,7 @@ export async function seedD2RecoveryFixtures(client, profileClient, reportStage 
   async function prepared(provider, appeal = false) {
     const value = await contribution(provider);
     const { id, command } = value;
-    const started = new Date();
+    const started = await databaseNow();
     reportStage(`seed-${provider}-normalization`);
     await store.processing.recordNormalization({
       contributionId: id,
@@ -203,7 +210,7 @@ export async function seedD2RecoveryFixtures(client, profileClient, reportStage 
     await store.processing.recordIndependentVerification({
       contributionId: id,
       processingPolicyVersion,
-      occurredAt: new Date(),
+      occurredAt: await databaseNow(),
       evidence: {
         status: "verified",
         origin: "independent_provider_fetch",
@@ -227,7 +234,7 @@ export async function seedD2RecoveryFixtures(client, profileClient, reportStage 
       contributorUserId: ownerUserId,
       systemActorId,
       policy: { version: "synthetic-recovery-trust-v1", appealWindowMilliseconds: 86_400_000 },
-      occurredAt: new Date(),
+      occurredAt: await databaseNow(),
     });
     await store.trust.review(caseId, 1, {
       reviewerId,
@@ -235,20 +242,20 @@ export async function seedD2RecoveryFixtures(client, profileClient, reportStage 
       reasonCode: appeal ? "content_mismatch" : "independently_verified",
       evidenceDigestSha256: appeal ? digest(`${id}-review`) : digest(id),
       ...(!appeal ? { independentEvidenceDigestSha256: digest(id) } : {}),
-      occurredAt: new Date(),
+      occurredAt: await databaseNow(),
     });
     if (appeal) {
       await store.trust.appeal(caseId, 2, {
         contributorUserId: ownerUserId,
         evidenceDigestSha256: digest(`${id}-appeal`),
-        occurredAt: new Date(),
+        occurredAt: await databaseNow(),
       });
       await store.trust.resolveAppeal(caseId, 3, {
         reviewerId: appealReviewerId,
         outcome: "reversed",
         evidenceDigestSha256: digest(`${id}-reversal`),
         independentEvidenceDigestSha256: digest(id),
-        occurredAt: new Date(),
+        occurredAt: await databaseNow(),
       });
     }
     const decision = await store.signals.readLatestDecision({
@@ -261,10 +268,12 @@ export async function seedD2RecoveryFixtures(client, profileClient, reportStage 
       contributionId: id,
       decision,
       processingPolicyVersion,
-      occurredAt: new Date(),
+      occurredAt: await databaseNow(),
     });
     reportStage(`seed-${provider}-publication-lease`);
-    const operation = await store.processing.preparePublication(lease(id, provider, new Date()));
+    const operation = await store.processing.preparePublication(
+      lease(id, provider, await databaseNow()),
+    );
     return { ...value, caseId, operation };
   }
 
@@ -294,14 +303,14 @@ export async function seedD2RecoveryFixtures(client, profileClient, reportStage 
     },
   };
   reportStage("seed-private-capture");
-  const privateCapture = await store.captures.create(captureCommand, new Date());
+  const privateCapture = await store.captures.create(captureCommand, await databaseNow());
   const revoked = await prepared("greenhouse");
   reportStage("seed-revocation");
   await store.consents.revoke({
     consentId: revoked.consent.id,
     ownerUserId,
     idempotencyKey: `synthetic-recovery-revoke-${revoked.id}`,
-    occurredAt: new Date().toISOString(),
+    occurredAt: (await databaseNow()).toISOString(),
     traceId: "synthetic-recovery",
   });
   const cancelled = await contribution("greenhouse");

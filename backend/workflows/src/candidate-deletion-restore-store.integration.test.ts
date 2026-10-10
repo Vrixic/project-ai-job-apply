@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
@@ -151,6 +151,28 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
         (id, application_id, owner_user_id, seq, kind, to_status, occurred_at)
       VALUES (${uuidv7()}, ${applicationId}, ${userId}, 1, 'application_created', 'preparing', now())
     `;
+    // A paired synthetic encrypted archive exercises deletion, never live KMS or digest replay.
+    const legacyKey = uuidv7();
+    const ciphertext = randomBytes(80);
+    const ciphertextHash = createHash("sha256").update(ciphertext).digest("hex");
+    await database.client.begin(async (tx) => {
+      await tx`
+        INSERT INTO applications.command_receipts
+          (owner_user_id, idempotency_key, application_id, operation, request_hash,
+           request_hash_scheme, response_revision, created_at)
+        VALUES (${userId}, ${legacyKey}, ${applicationId}, 'archived_legacy', ${ciphertextHash},
+          'legacy-ciphertext-sha256.v1', 1, now())
+      `;
+      await tx`
+        INSERT INTO applications_restricted.legacy_receipts
+          (owner_user_id, idempotency_key, application_id, protection_id, original_operation,
+           metadata_sha256, encryption_key_arn, ciphertext)
+        VALUES (${userId}, ${legacyKey}, ${applicationId}, ${uuidv7()}, 'create_packet',
+          ${"a".repeat(64)}, 'arn:aws:kms:us-east-2:111122223333:key/11111111-1111-4111-8111-111111111111',
+          ${ciphertext})
+      `;
+    });
+    ciphertext.fill(0);
     const packets = new PostgresApplicationStore(applicationsSql, undefined, {
       definitions: defaultFieldDefinitions(),
       ...(restrictedPackets ? { restrictedPackets } : {}),
@@ -233,6 +255,18 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
         (SELECT count(*)::int FROM billing.entitlement_accounts WHERE user_id = ${userId}) AS billing,
         (SELECT count(*)::int FROM trust.contribution_cases WHERE contributor_user_id = ${userId}) AS trust,
         ((SELECT count(*)::int FROM applications.applications WHERE owner_user_id = ${userId}) +
+         (SELECT count(*)::int FROM applications.packets WHERE owner_user_id = ${userId}) +
+         (SELECT count(*)::int FROM applications.approvals WHERE owner_user_id = ${userId}) +
+         (SELECT count(*)::int FROM applications.attempts WHERE owner_user_id = ${userId}) +
+         (SELECT count(*)::int FROM applications.history WHERE owner_user_id = ${userId}) +
+         (SELECT count(*)::int FROM applications.command_receipts WHERE owner_user_id = ${userId}) +
+         (SELECT count(*)::int FROM applications.outbox WHERE owner_user_id = ${userId}) +
+         (SELECT count(*)::int FROM applications.packet_preparations WHERE owner_user_id = ${userId}) +
+         (SELECT count(*)::int FROM applications.preparation_outbox WHERE owner_user_id = ${userId}) +
+         (SELECT count(*)::int FROM applications.preparation_audit WHERE owner_user_id = ${userId}) +
+         (SELECT count(*)::int FROM applications.native_material_withdrawals WHERE owner_user_id = ${userId}) +
+         (SELECT count(*)::int FROM applications.native_material_cleanup_queue WHERE owner_user_id = ${userId}) +
+         (SELECT count(*)::int FROM applications_restricted.legacy_receipts WHERE owner_user_id = ${userId}) +
          (SELECT count(*)::int FROM applications_restricted.packet_values WHERE owner_user_id = ${userId}) +
          (SELECT count(*)::int FROM applications_restricted.packet_read_audit WHERE owner_user_id = ${userId})) AS applications
     `;
@@ -811,6 +845,52 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
           { accountState: string }[]
         >`SELECT account_state FROM identity.users WHERE id = ${first.entry.userId}`;
         expect(identity?.accountState).toBe("quarantined");
+      } finally {
+        await finishAndRemove(first.entry);
+        await finishAndRemove(second.entry);
+      }
+    },
+    60_000,
+  );
+
+  it.each([false, true])(
+    "reconciles completed deletion with only native withdrawal data remaining (cleanup queue: %s)",
+    async (withCleanupQueue) => {
+      const first = await seed(1);
+      const second = await seed(1);
+      try {
+        const otherBefore = await counts(second.entry.userId);
+        await store.reconcile([first.entry], await store.preflight([first.entry]));
+        expect(Object.values(await counts(first.entry.userId))).toEqual(Array(8).fill(0));
+        // Represent a restored completed ledger with this independent Applications root left over.
+        const withdrawalId = uuidv7();
+        await database.client`
+          INSERT INTO applications.native_material_withdrawals (id, owner_user_id, requested_at)
+          VALUES (${withdrawalId}, ${first.entry.userId}, ${first.entry.confirmedAt.toISOString()}::timestamptz)
+        `;
+        if (withCleanupQueue) {
+          const completedAt = first.entry.completedAt;
+          if (!completedAt) throw new Error("SyntheticCompletionMissing");
+          await database.client`
+            INSERT INTO applications.native_material_cleanup_queue
+              (request_id, owner_user_id, state, completed_at)
+            VALUES (${withdrawalId}, ${first.entry.userId}, 'native_tasks_settled',
+              ${completedAt.toISOString()}::timestamptz)
+          `;
+        }
+        expect((await counts(first.entry.userId)).applications).toBe(withCleanupQueue ? 2 : 1);
+        expect(await store.reconcile([first.entry], await store.preflight([first.entry]))).toEqual({
+          restoredUsersReconciled: 1,
+          restoredUsersAbsent: 0,
+          restoredUsersAlreadyReconciled: 0,
+        });
+        expect(Object.values(await counts(first.entry.userId))).toEqual(Array(8).fill(0));
+        expect(await counts(second.entry.userId)).toEqual(otherBefore);
+        expect(await store.reconcile([first.entry], await store.preflight([first.entry]))).toEqual({
+          restoredUsersReconciled: 0,
+          restoredUsersAbsent: 0,
+          restoredUsersAlreadyReconciled: 1,
+        });
       } finally {
         await finishAndRemove(first.entry);
         await finishAndRemove(second.entry);

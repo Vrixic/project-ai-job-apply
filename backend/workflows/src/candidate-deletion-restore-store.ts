@@ -277,6 +277,12 @@ const ownerCountsQuery = `SELECT jsonb_build_object(
     (SELECT count(*) FROM applications.history WHERE owner_user_id = $1::uuid) +
     (SELECT count(*) FROM applications.command_receipts WHERE owner_user_id = $1::uuid) +
     (SELECT count(*) FROM applications.outbox WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM applications.packet_preparations WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM applications.preparation_outbox WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM applications.preparation_audit WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM applications.native_material_withdrawals WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM applications.native_material_cleanup_queue WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM applications_restricted.legacy_receipts WHERE owner_user_id = $1::uuid) +
     (SELECT count(*) FROM applications_restricted.packet_values WHERE owner_user_id = $1::uuid) +
     (SELECT count(*) FROM applications_restricted.packet_read_audit WHERE owner_user_id = $1::uuid)
 ) AS "ownerCounts"`;

@@ -45,6 +45,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Restore verifier boundary recovery (D3-092) | Current 96-relation/79-migration verification replaces stale 93/74 expectations. Older evidence is rejected as current; focused PowerShell tests, independent review and all 43 repository stages pass. The isolated historical snapshot passes live read-only schema/checksum verification. | Durable-data/privacy reconciliation against the newest backup, compatible release and connected live acceptance remain. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-verifier-boundary-recovery--2026-10-09). |
 | Restore data comparison (D3-093) | Bounded SQL-side whole-row hashes, exact catalogs, explicit snapshot contracts and strict comparison are implemented. 93 unit tests, all 96 restored relation digests and 21 real PostgreSQL probes pass. Both isolated managed inventories pass independent original-task review; 84 of 88 shared relations match exactly, including all 80 relations of the other six owners. | All 12 Applications differences now reconcile with seven actual KMS original-digest proofs. Complete privacy replay before primary promotion/live release. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-snapshot-data-comparison--2026-10-10). |
 | Restore transition reconciliation (D3-094) | Fixed read-only three-to-fifteen Applications comparison, exact original/added catalogs, ledger/default accounting and seven original-digest proofs are implemented. Independent review, 65 focused tests and seven real PostgreSQL reconciliation probes pass with simulated KMS. The new immutable diagnostic is published and independently verified. Separate default-off timed decrypt-only task registration passes 22 Terraform cases, configuration validation and all 43 repository stages. | Managed read-only reconciliation and independent result review pass; temporary authority and both restores are removed. Privacy replay, primary recovery and the live journey remain. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-transition-reconciliation--2026-10-10). |
+| Privacy replay inventory (D3-095) | Restore reconciliation counts all fifteen Applications tables, including independent native withdrawals and their cleanup queue. Eight real PostgreSQL cases, 234 focused store/contract tests, the maintained 96-relation dump/restore harness and all 43 repository stages pass. | Managed privacy replay and primary recovery remain. [Evidence](evidence/d3-privacy-replay-inventory-2026-10-10.md). |
 
 ## Decisions and scope changes
 
@@ -210,3 +211,10 @@ off and the PC stays on. Privacy replay inspection identified an omitted indepen
 withdrawal root in reconciliation counts; its regression is the next internal batch. Independent
 D1/admin acceptance remains deferred. See the
 [managed result](evidence/d3-native-application-disposal-2026-10-07.md#managed-transition-reconciliation-and-cleanup--2026-10-10).
+
+2026-10-10: D3-095 fixes a restored completed deletion being skipped when only native withdrawal
+data remains. All fifteen Applications tables now participate in preflight/completion/post-delete
+counts. Real PostgreSQL regressions verify withdrawal/cleanup/archive deletion, owner isolation
+and idempotency; 234 focused tests, the maintained dump/restore harness and all 43 repository
+stages pass. Managed privacy replay remains pending. Independent D1/admin acceptance stays
+deferred. [Evidence](evidence/d3-privacy-replay-inventory-2026-10-10.md).
