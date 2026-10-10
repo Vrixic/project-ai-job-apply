@@ -44,6 +44,49 @@ packet hashing, saved-answer validation and attempt reconciliation remain author
    Neither a worker restart nor a timeout may retry the click. Candidate-attested manual outcomes
    remain distinct from provider confirmation.
 
+## Native transport proposal for the next batch
+
+Use Chrome's website-to-extension messaging with one exact configured first-party HTTPS origin
+and one configured installed extension ID. A separate default-off execution build adds that
+origin to `externally_connectable`; the existing manual handoff build remains unchanged. This
+does not add employer host access, accept arbitrary website senders or discover installed
+extensions. Missing API support falls back to existing candidate downloads/manual Apply.
+
+The candidate first selects the exact employer tab/application in the extension. Background memory
+holds only one pending scalar binding, including account fence, tab/document identity, canonical
+job URL, packet/approval and original material references. An explicit first-party “Send approved
+files to extension” action requests a one-use admission. Chrome sender origin, exact review URL,
+top-frame tab/document identity and protected extension owner reads must all agree. The extension
+returns a fresh nonce with at most a 60-second lease, bounded by all original material/approval
+deadlines. It binds the sender document as well as the employer destination; navigation invalidates
+the admission. A worker restart loses admission rather than restoring content from storage.
+
+The first-party workspace reads approved files through its existing in-memory native session,
+validates bytes/hash and the unchanged packet, then sends only the strict versioned file envelope
+and nonce to the configured extension. No native/web credential crosses that channel. The extension
+consumes admission once, repeats owning packet/material and sender/destination checks, independently
+validates bounded file bytes/hash/format and retains content only in private memory until its
+original expiry. No unsolicited, duplicated or late envelope can replace an admitted file. Failed
+or unknown transfer acknowledgement requires a new explicit transfer; it never implies an ATS
+submission or permits retrying a dispatched attempt.
+
+The first-party web runtime is a trusted producer of native bytes; exact Chrome sender checks are
+essential, since a file digest is integrity evidence and is not a server signature. A same-origin
+script compromise is an existing native-material confidentiality/integrity risk, not evidence
+that this transport is cryptographically independent of the workspace. Review CSP, strict sender
+validation, DOM isolation and installed-browser behavior before activation. Versioned cross-client
+envelopes belong to authoritative contracts with generated browser validators, not handwritten
+TypeScript casts. The initial transport source and composition passed independent review;
+regression/browser verification and exact-head review remain required for each implementation batch.
+Cancellation uses the exact admitted nonce even before a receipt exists, so a withdrawn or lost-ACK
+commit cannot retain bytes until its asynchronous check finishes. A completed transfer additionally
+supports exact-receipt discard. Both operations require the original Chrome sender document.
+
+Chrome API references: [website messaging](https://developer.chrome.com/docs/extensions/develop/concepts/messaging),
+[externally_connectable](https://developer.chrome.com/docs/extensions/reference/manifest/externally-connectable),
+[MessageSender](https://developer.chrome.com/docs/extensions/reference/api/runtime#type-MessageSender)
+and [document-targeted scripting](https://developer.chrome.com/docs/extensions/reference/api/scripting).
+
 ## Safety and lifecycle
 
 The adapter registry remains the action gate: default-off kill switch, accountable live-effect

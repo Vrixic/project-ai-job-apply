@@ -1,4 +1,5 @@
 import type { Application } from "@ai-job-apply/api-contracts";
+import { validateApplicationNativeTransferCommit } from "@ai-job-apply/api-contracts/browser-validators";
 import { createRoot } from "react-dom/client";
 import { NativeMaterialSession } from "../../../../frontend/web/lib/native-material-session";
 import "../../../../frontend/web/app/styles.css";
@@ -45,6 +46,7 @@ const approved = {
   createdAt: AT,
   updatedAt: AT,
   approval: {
+    id: "00000000-0000-7000-8000-000000000011",
     packetHash: HASH,
     approvedAt: AT,
     expiresAt: new Date(Date.now() + 86400000).toISOString(),
@@ -92,6 +94,64 @@ const review = {
 let current: Application | undefined;
 let coverLetterScenario = false;
 let nativeScenario = false;
+// Synthetic Chrome receiver for actual UI checks. No installed-extension acceptance or ATS effect.
+const transferCalls: string[] = [];
+let admittedTransfer: unknown;
+Object.defineProperty(window, "chrome", {
+  configurable: true,
+  value: {
+    runtime: {
+      sendMessage(target: string, message: { schema: string }, callback: (value: unknown) => void) {
+        if (target !== "a".repeat(32) || !current?.currentPacket || !current.approval) {
+          callback({ error: "unavailable" });
+          return;
+        }
+        transferCalls.push(message.schema);
+        if (message.schema === "application-native-transfer-begin.v1") {
+          const packet = current.currentPacket;
+          admittedTransfer = {
+            ...message,
+            schema: "application-native-transfer-admission.v1",
+            nonce: "c".repeat(64),
+            expiresAtMs: Math.min(
+              Date.now() + 30_000,
+              ...(packet.temporaryMaterials ?? []).map((material) => material.expiresAtMs),
+            ),
+            approvalId: current.approval.id,
+            revision: current.revision,
+            materials: packet.temporaryMaterials,
+          };
+          callback(admittedTransfer);
+        } else if (message.schema === "application-native-transfer-commit.v1") {
+          if (
+            !validateApplicationNativeTransferCommit(message) ||
+            JSON.stringify(message.admission) !== JSON.stringify(admittedTransfer)
+          ) {
+            callback({ error: "unavailable" });
+            return;
+          }
+          const admission = message.admission;
+          admittedTransfer = undefined;
+          callback({
+            schema: "application-native-transfer-receipt.v1",
+            nonce: admission.nonce,
+            applicationId: admission.applicationId,
+            packetId: admission.packetId,
+            packetHash: admission.packetHash,
+            expiresAtMs: Math.min(
+              Date.parse(current.approval.expiresAt),
+              ...admission.materials.map((material) => material.expiresAtMs),
+            ),
+          });
+        } else {
+          admittedTransfer = undefined;
+          callback({ ok: true });
+        }
+      },
+    },
+  },
+});
+Object.assign(window, { readD3TransferCalls: () => [...transferCalls] });
 let savedAnswerScenario = false;
 let preparationReads = 0;
 const PREPARATION = "00000000-0000-7000-8000-000000000020";
@@ -174,7 +234,9 @@ const syntheticFetch = (async (input: RequestInfo | URL, init: RequestInit = {})
       return respond({}, 403);
     if (url.includes("/file?")) {
       const format = new URL(url).searchParams.get("format");
-      const bytes = new TextEncoder().encode("Synthetic approved file");
+      const bytes = new TextEncoder().encode(
+        format === "pdf" ? "%PDF-Synthetic approved file" : "PKSynthetic approved file",
+      );
       const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))]
         .map((value) => value.toString(16).padStart(2, "0"))
         .join("");
@@ -188,7 +250,7 @@ const syntheticFetch = (async (input: RequestInfo | URL, init: RequestInit = {})
         sha256: hash,
         sizeBytes: bytes.length,
         contentSha256: HASH,
-        contentBase64: btoa("Synthetic approved file"),
+        contentBase64: btoa(new TextDecoder().decode(bytes)),
         temporaryMaterial: material,
       });
     }

@@ -36,6 +36,18 @@ export type ApplicationTemporaryMaterialAuthorization =
 export type ApplicationTemporaryMaterialLocation =
   components["schemas"]["ApplicationTemporaryMaterialLocation"];
 export type ApplicationTemporaryMaterial = components["schemas"]["ApplicationTemporaryMaterial"];
+export type ApplicationNativeTransferBegin =
+  components["schemas"]["ApplicationNativeTransferBegin"];
+export type ApplicationNativeTransferAdmission =
+  components["schemas"]["ApplicationNativeTransferAdmission"];
+export type ApplicationNativeTransferCommit =
+  components["schemas"]["ApplicationNativeTransferCommit"];
+export type ApplicationNativeTransferReceipt =
+  components["schemas"]["ApplicationNativeTransferReceipt"];
+export type ApplicationNativeTransferDiscard =
+  components["schemas"]["ApplicationNativeTransferDiscard"];
+export type ApplicationNativeTransferCancel =
+  components["schemas"]["ApplicationNativeTransferCancel"];
 export type CurrentUser = components["schemas"]["CurrentUser"];
 export type ProfileFact = components["schemas"]["ProfileFact"];
 export type ProfileFactCollection = components["schemas"]["ProfileFactCollection"];

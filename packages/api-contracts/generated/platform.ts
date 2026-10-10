@@ -2418,6 +2418,71 @@ export interface components {
             /** @description Exact original memory generation and fixed expiry on the native resume path. Do not persist or cache this response; discard platform copies at expiry, logout, cancellation or confirmed submission. */
             temporaryMaterial?: components["schemas"]["ApplicationTemporaryMaterial"];
         };
+        /** @description Default-off first-party website-to-extension transport only; no REST route, credentials or submission authority. */
+        ApplicationNativeTransferBegin: {
+            /** @constant */
+            schema: "application-native-transfer-begin.v1";
+            /** Format: uuid */
+            applicationId: string;
+            /** Format: uuid */
+            packetId: string;
+            packetHash: string;
+            /** @enum {string} */
+            format: "pdf" | "docx";
+        };
+        /** @description One-use transfer admission, at most 60 seconds and bounded by original material/approval deadlines. Runtime must bind Chrome sender and destination documents plus the current extension account. No token is carried. */
+        ApplicationNativeTransferAdmission: {
+            /** @constant */
+            schema: "application-native-transfer-admission.v1";
+            nonce: string;
+            expiresAtMs: number;
+            /** Format: uuid */
+            applicationId: string;
+            /** Format: uuid */
+            packetId: string;
+            packetHash: string;
+            /** Format: uuid */
+            approvalId: string;
+            revision: number;
+            /** @enum {string} */
+            format: "pdf" | "docx";
+            materials: components["schemas"]["ApplicationTemporaryMaterial"][];
+        };
+        /** @description Transient native file with mandatory original generation metadata. Validate the exact resume/cover-letter producer shape by material kind, decoded bytes/hash/format and matching approved packet before use. Never send through Gateway, persist, log or renew expiry. */
+        ApplicationNativeTransferFile: components["schemas"]["ApplicationResumeFile"] & {
+            temporaryMaterial: components["schemas"]["ApplicationTemporaryMaterial"];
+        };
+        /** @description Memory-only cross-client file transfer. Consume the exact admitted nonce before asynchronous validation; enforce aggregate serialized/decoded byte caps and one file per admitted material. A transfer ACK is not an ATS dispatch or confirmation. */
+        ApplicationNativeTransferCommit: {
+            /** @constant */
+            schema: "application-native-transfer-commit.v1";
+            admission: components["schemas"]["ApplicationNativeTransferAdmission"];
+            files: components["schemas"]["ApplicationNativeTransferFile"][];
+        };
+        /** @description Private memory-transfer acknowledgement only. Expiry is the original material/approval minimum, not a renewed file lifetime. No submission-state meaning. */
+        ApplicationNativeTransferReceipt: {
+            /** @constant */
+            schema: "application-native-transfer-receipt.v1";
+            nonce: string;
+            expiresAtMs: number;
+            /** Format: uuid */
+            applicationId: string;
+            /** Format: uuid */
+            packetId: string;
+            packetHash: string;
+        };
+        /** @description Withdraw the exact retained transfer from its original trusted sender document. Confers no read, replacement, file upload or submission authority. */
+        ApplicationNativeTransferDiscard: {
+            /** @constant */
+            schema: "application-native-transfer-discard.v1";
+            receipt: components["schemas"]["ApplicationNativeTransferReceipt"];
+        };
+        /** @description Withdraw an admitted or committing transfer using its exact original sender and nonce, including after a lost acknowledgement. No replacement or ATS authority. */
+        ApplicationNativeTransferCancel: {
+            /** @constant */
+            schema: "application-native-transfer-cancel.v1";
+            admission: components["schemas"]["ApplicationNativeTransferAdmission"];
+        };
         CreateApplicationRequest: {
             /** Format: uuid */
             jobId: string;

@@ -1,4 +1,6 @@
 export function safeActionErrorMessage(error: unknown, action: string): string {
+  if (action.startsWith("application_native_"))
+    return "Select the matching employer tab with a current approved review link. File transfer requires an enabled, accepted application adapter.";
   if (action === "application_form_capture")
     return "Open the exact active employer page and current application review link, then capture again. Challenges and unsupported forms must be completed manually.";
   if (action.startsWith("application_handoff_"))

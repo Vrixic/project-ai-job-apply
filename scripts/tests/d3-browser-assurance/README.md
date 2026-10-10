@@ -11,6 +11,12 @@ identity, or retains candidate data. This is local browser evidence only. It doe
 managed-OIDC, deployed Gateway/database, provider, legal, privacy, security, human accessibility,
 assistive-technology, or real-candidate acceptance.
 
+The same workspace journey exercises approved PDF/Word transfer and explicit withdrawal using
+production UI/client code with a synthetic Chrome receiver. Native/BFF/identity responses are
+simulated; this proves no installed extension, provider attachment or automated submission.
+Transport unit/composition tests independently cover exact source/destination documents, owning
+reads, single-use admission, lost acknowledgements, original expiry and immediate buffer disposal.
+
 `node scripts/tests/d3-browser-assurance/greenhouse.mjs` exercises the internal Greenhouse
 inspection/filling primitives in installed headless Chromium. All requests are intercepted locally
 with generated synthetic HTML and simulated approval/registry authority. It verifies synchronous

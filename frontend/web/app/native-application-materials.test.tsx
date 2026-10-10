@@ -6,7 +6,20 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { announceNativeMaterialSignOut } from "../lib/native-material-sign-out-signal";
 import { NativeApplicationMaterials } from "./native-application-materials";
 
-const mocks = vi.hoisted(() => ({ read: vi.fn(), hash: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  read: vi.fn(),
+  hash: vi.fn(),
+  transfer: vi.fn(),
+  discard: vi.fn(),
+  extensionId: vi.fn(),
+  messenger: { sendMessage: vi.fn() },
+}));
+vi.mock("../lib/native-extension-transfer", () => ({
+  nativeExtensionId: mocks.extensionId,
+  nativeExtensionMessenger: () => mocks.messenger,
+  transferApprovedNativeMaterials: mocks.transfer,
+  discardTransferredNativeMaterials: mocks.discard,
+}));
 vi.mock("../lib/native-material-client", () => ({ readNativeMaterial: mocks.read }));
 vi.mock("../lib/applications-client", () => ({ sha256OfBytes: mocks.hash }));
 vi.mock("../lib/native-material-session", () => ({
@@ -35,6 +48,7 @@ const onReady = vi.fn();
 const onUnavailable = vi.fn();
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.extensionId.mockReturnValue(undefined);
   vi.stubGlobal("React", React);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
@@ -78,6 +92,88 @@ beforeEach(() => {
   );
   mocks.hash.mockResolvedValue(HASH);
 });
+
+const transferReceipt = {
+  schema: "application-native-transfer-receipt.v1",
+  nonce: "c".repeat(64),
+  applicationId: "00000000-0000-7000-8000-000000000001",
+  packetId: "00000000-0000-7000-8000-000000000002",
+  packetHash: HASH,
+  expiresAtMs: 1,
+};
+function enableTransfer() {
+  mocks.extensionId.mockReturnValue("a".repeat(32));
+  application.approval = {
+    id: "00000000-0000-7000-8000-000000000004",
+    packetHash: HASH,
+    approvedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 1_800_000).toISOString(),
+    acknowledgedFieldKeys: [],
+  };
+  mocks.transfer.mockResolvedValue(transferReceipt);
+}
+
+async function withdrawBy(mode: string) {
+  if (mode === "disconnect") await click("Disconnect material access");
+  if (mode === "withdraw") await click("Withdraw extension file transfer");
+  if (mode === "revision") {
+    application = {
+      ...application,
+      revision: application.revision + 1,
+      currentAction: "review_and_approve",
+    };
+    await render();
+  }
+  if (mode === "unmount") await act(async () => root.render(null));
+  if (mode === "pagehide") await act(async () => window.dispatchEvent(new Event("pagehide")));
+  if (mode === "expiry") await act(async () => vi.advanceTimersByTimeAsync(600_001));
+  if (mode === "logout") {
+    const anchor = document.createElement("a");
+    anchor.href = new URL("/auth/logout", window.location.href).href;
+    anchor.addEventListener("click", (event) => event.preventDefault());
+    container.append(anchor);
+    await act(async () => anchor.click());
+  }
+}
+
+it.each(["disconnect", "withdraw", "revision", "unmount", "pagehide", "expiry", "logout"])(
+  "withdraws the exact completed extension receipt on %s",
+  async (mode) => {
+    if (mode === "expiry") vi.useFakeTimers();
+    enableTransfer();
+    await connect();
+    await click("Send approved PDF files to extension");
+    expect(container.textContent).toContain("No application has been submitted.");
+    await withdrawBy(mode);
+    expect(mocks.discard).toHaveBeenCalledWith(mocks.messenger, "a".repeat(32), transferReceipt);
+    expect(mocks.discard).toHaveBeenCalledTimes(1);
+  },
+);
+
+it.each(["disconnect", "withdraw", "revision", "unmount", "pagehide", "expiry", "logout"])(
+  "aborts pending transfer on %s and discards a late acknowledgement",
+  async (mode) => {
+    if (mode === "expiry") vi.useFakeTimers();
+    enableTransfer();
+    let done = (_receipt: unknown) => {};
+    mocks.transfer.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          done = resolve;
+        }),
+    );
+    await connect();
+    await click("Send approved PDF files to extension");
+    const signal = mocks.transfer.mock.calls[0]?.[0].signal as AbortSignal;
+    await withdrawBy(mode);
+    expect(signal.aborted).toBe(true);
+    await act(async () => done(transferReceipt));
+    expect(mocks.discard).toHaveBeenCalledWith(mocks.messenger, "a".repeat(32), transferReceipt);
+    expect(container.textContent).not.toContain(
+      "Approved files reached the selected extension tab.",
+    );
+  },
+);
 afterEach(() => {
   act(() => root.unmount());
   container.remove();

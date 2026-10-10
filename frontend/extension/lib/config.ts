@@ -11,10 +11,12 @@ declare const __UGC_CONTRIBUTION_POLICY_VERSION__: string;
 declare const __DEVELOPMENT_CONTRIBUTIONS__: boolean;
 declare const __DEVELOPMENT_CONTRIBUTION_PROVIDERS__: unknown;
 declare const __APPLICATION_HANDOFF_WEB_ORIGIN__: string;
+declare const __APPLICATION_EXECUTION_ENABLED__: boolean;
 
 const POLICY_VERSION = /^[a-z0-9][a-z0-9._-]{2,99}$/u;
 
 export interface ExtensionPublicConfiguration {
+  applicationExecutionEnabled: boolean;
   applicationHandoffWebOrigin?: string;
   apiOrigin?: string;
   apiConfigured: boolean;
@@ -30,6 +32,7 @@ export interface ExtensionPublicConfiguration {
 }
 
 export function extensionPublicConfiguration(values: {
+  applicationExecutionEnabled?: boolean;
   applicationHandoffWebOrigin?: string;
   apiOrigin?: string;
   audience: string;
@@ -62,6 +65,8 @@ export function extensionPublicConfiguration(values: {
       .slice(0, 5),
   );
   return {
+    applicationExecutionEnabled:
+      values.applicationExecutionEnabled === true && !!applicationHandoffWebOrigin,
     ...(applicationHandoffWebOrigin ? { applicationHandoffWebOrigin } : {}),
     apiConfigured: apiOrigin !== undefined,
     audience,
@@ -118,6 +123,8 @@ export function safeApiOrigin(value: string): string | undefined {
 }
 
 export const extensionConfiguration = extensionPublicConfiguration({
+  applicationExecutionEnabled:
+    typeof __APPLICATION_EXECUTION_ENABLED__ === "boolean" && __APPLICATION_EXECUTION_ENABLED__,
   applicationHandoffWebOrigin:
     typeof __APPLICATION_HANDOFF_WEB_ORIGIN__ === "string"
       ? __APPLICATION_HANDOFF_WEB_ORIGIN__

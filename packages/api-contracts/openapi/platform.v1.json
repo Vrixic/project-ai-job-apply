@@ -9962,6 +9962,116 @@
         },
         "additionalProperties": false
       },
+      "ApplicationNativeTransferBegin": {
+        "type": "object",
+        "required": ["schema", "applicationId", "packetId", "packetHash", "format"],
+        "properties": {
+          "schema": { "const": "application-native-transfer-begin.v1", "type": "string" },
+          "applicationId": { "type": "string", "format": "uuid" },
+          "packetId": { "type": "string", "format": "uuid" },
+          "packetHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "format": { "type": "string", "enum": ["pdf", "docx"] }
+        },
+        "additionalProperties": false,
+        "description": "Default-off first-party website-to-extension transport only; no REST route, credentials or submission authority."
+      },
+      "ApplicationNativeTransferAdmission": {
+        "type": "object",
+        "required": [
+          "schema",
+          "nonce",
+          "expiresAtMs",
+          "applicationId",
+          "packetId",
+          "packetHash",
+          "approvalId",
+          "revision",
+          "format",
+          "materials"
+        ],
+        "properties": {
+          "schema": { "const": "application-native-transfer-admission.v1", "type": "string" },
+          "nonce": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "expiresAtMs": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "applicationId": { "type": "string", "format": "uuid" },
+          "packetId": { "type": "string", "format": "uuid" },
+          "packetHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "approvalId": { "type": "string", "format": "uuid" },
+          "revision": { "type": "integer", "minimum": 1 },
+          "format": { "type": "string", "enum": ["pdf", "docx"] },
+          "materials": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "items": { "$ref": "#/components/schemas/ApplicationTemporaryMaterial" }
+          }
+        },
+        "additionalProperties": false,
+        "description": "One-use transfer admission, at most 60 seconds and bounded by original material/approval deadlines. Runtime must bind Chrome sender and destination documents plus the current extension account. No token is carried."
+      },
+      "ApplicationNativeTransferFile": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ApplicationResumeFile" },
+          {
+            "type": "object",
+            "required": ["temporaryMaterial"],
+            "properties": {
+              "temporaryMaterial": { "$ref": "#/components/schemas/ApplicationTemporaryMaterial" }
+            }
+          }
+        ],
+        "description": "Transient native file with mandatory original generation metadata. Validate the exact resume/cover-letter producer shape by material kind, decoded bytes/hash/format and matching approved packet before use. Never send through Gateway, persist, log or renew expiry."
+      },
+      "ApplicationNativeTransferCommit": {
+        "type": "object",
+        "required": ["schema", "admission", "files"],
+        "properties": {
+          "schema": { "const": "application-native-transfer-commit.v1", "type": "string" },
+          "admission": { "$ref": "#/components/schemas/ApplicationNativeTransferAdmission" },
+          "files": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "items": { "$ref": "#/components/schemas/ApplicationNativeTransferFile" }
+          }
+        },
+        "additionalProperties": false,
+        "description": "Memory-only cross-client file transfer. Consume the exact admitted nonce before asynchronous validation; enforce aggregate serialized/decoded byte caps and one file per admitted material. A transfer ACK is not an ATS dispatch or confirmation."
+      },
+      "ApplicationNativeTransferReceipt": {
+        "type": "object",
+        "required": ["schema", "nonce", "expiresAtMs", "applicationId", "packetId", "packetHash"],
+        "properties": {
+          "schema": { "const": "application-native-transfer-receipt.v1", "type": "string" },
+          "nonce": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "expiresAtMs": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "applicationId": { "type": "string", "format": "uuid" },
+          "packetId": { "type": "string", "format": "uuid" },
+          "packetHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        },
+        "additionalProperties": false,
+        "description": "Private memory-transfer acknowledgement only. Expiry is the original material/approval minimum, not a renewed file lifetime. No submission-state meaning."
+      },
+      "ApplicationNativeTransferDiscard": {
+        "type": "object",
+        "required": ["schema", "receipt"],
+        "properties": {
+          "schema": { "const": "application-native-transfer-discard.v1", "type": "string" },
+          "receipt": { "$ref": "#/components/schemas/ApplicationNativeTransferReceipt" }
+        },
+        "additionalProperties": false,
+        "description": "Withdraw the exact retained transfer from its original trusted sender document. Confers no read, replacement, file upload or submission authority."
+      },
+      "ApplicationNativeTransferCancel": {
+        "type": "object",
+        "required": ["schema", "admission"],
+        "properties": {
+          "schema": { "const": "application-native-transfer-cancel.v1", "type": "string" },
+          "admission": { "$ref": "#/components/schemas/ApplicationNativeTransferAdmission" }
+        },
+        "additionalProperties": false,
+        "description": "Withdraw an admitted or committing transfer using its exact original sender and nonce, including after a lost acknowledgement. No replacement or ATS authority."
+      },
       "CreateApplicationRequest": {
         "type": "object",
         "required": ["jobId"],

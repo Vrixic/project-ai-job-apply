@@ -4,6 +4,7 @@ import {
 } from "@ai-job-apply/api-contracts/browser-validators";
 import { extractGenericForm } from "@ai-job-apply/ats-sdk/extract";
 import { parseObservedApplicationForm } from "@ai-job-apply/ats-sdk/observed-form";
+import { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 import { safeActionErrorMessage } from "../lib/action-error";
 import {
   type ApprovedHandoff,
@@ -43,6 +44,7 @@ import { DevelopmentContributionRuntime } from "../lib/development-contributions
 import type { CaptureField, SanitizedJobCapture } from "../lib/job-capture";
 import { prepareContribution, sendJobIntent } from "../lib/job-intent-api";
 import { parseExtensionMessage } from "../lib/messages";
+import { installNativeTransferBackground } from "../lib/native-transfer-background";
 import { captureCurrentPublicJobPage } from "../lib/page-inspection";
 import {
   createPendingIntent,
@@ -278,6 +280,25 @@ async function applicationHandoff(
   }
 }
 let identityTransition: number | undefined;
+const nativeTransfer =
+  extensionConfiguration.applicationExecutionEnabled &&
+  extensionConfiguration.applicationHandoffWebOrigin &&
+  extensionConfiguration.apiOrigin
+    ? installNativeTransferBackground({
+        webOrigin: extensionConfiguration.applicationHandoffWebOrigin,
+        apiOrigin: extensionConfiguration.apiOrigin,
+        // Fixture acceptance and accountable live-effect approval remain default dark.
+        registry: new AdapterRegistry(),
+        async identity(signal) {
+          const generation = identityGeneration;
+          assertIdentityGeneration(generation);
+          const session = await authenticatedApiSession();
+          assertIdentityGeneration(generation);
+          if (signal.aborted) throw Error("NativeMaterialTransferUnavailable");
+          return session;
+        },
+      })
+    : undefined;
 let localMutationTail: Promise<void> = Promise.resolve();
 let pendingDispatch:
   | { generation: number; promise: Promise<ReturnType<typeof summarizeQueue>> }
@@ -994,6 +1015,7 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
     return false;
   }
   const identityAction = message.action === "login" || message.action === "logout";
+  if (identityAction || message.action === "application_native_clear") nativeTransfer?.clear();
   if (identityAction || message.action === "application_handoff_clear") clearHandoff();
   const generation = identityAction ? ++identityGeneration : identityGeneration;
   if (identityAction) identityTransition = generation;
@@ -1003,6 +1025,11 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
     let historyResult: SharedJobsState | undefined;
     try {
       await storageBoundaryStartup;
+      if (message.action === "application_native_select") {
+        if (!nativeTransfer) throw Error("NativeMaterialTransferUnavailable");
+        return await nativeTransfer.select(message.reviewLink);
+      }
+      if (message.action === "application_native_clear") return { ok: true };
       if (message.action === "application_form_capture")
         return await captureApplicationForm(message.reviewLink, generation);
       if (message.action === "application_handoff_clear") return { ok: true };
