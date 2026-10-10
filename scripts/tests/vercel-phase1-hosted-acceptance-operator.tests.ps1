@@ -173,6 +173,10 @@ try {
   [IO.File]::WriteAllText($vercelIgnorePath, $nonRecursiveIgnore)
   Assert-Rejected { Assert-ExactVercelIgnoreBoundary $vercelIgnorePath } "non-recursive Vercel frontend allowlist"
   $canonicalIgnore = Get-Content -LiteralPath (Join-Path $originalRepositoryRoot ".vercelignore") -Raw
+  foreach ($patchRule in @("!patches/node-forge@1.4.0.patch", "!patches/braces@3.0.3.patch")) {
+    [IO.File]::WriteAllText($vercelIgnorePath, $canonicalIgnore.Replace($patchRule, ""))
+    Assert-Rejected { Assert-ExactVercelIgnoreBoundary $vercelIgnorePath } "missing required security patch upload rule"
+  }
   foreach ($changedIgnore in @(
       $canonicalIgnore.Replace("!patches/image-size@1.2.1.patch", ""),
       $canonicalIgnore.Replace("!patches/image-size@1.2.1.patch", "!patches/**"),
@@ -191,18 +195,25 @@ try {
   $manifestPath = Join-Path $temporaryRoot "package.json"
   $lockPath = Join-Path $temporaryRoot "pnpm-lock.yaml"
   $null = New-Item -ItemType Directory -Path $patchDirectory
-  Copy-Item -LiteralPath (Join-Path $originalRepositoryRoot "patches/image-size@1.2.1.patch") -Destination $patchPath
+  $approvedPatchPaths = @("patches/image-size@1.2.1.patch", "patches/node-forge@1.4.0.patch", "patches/braces@3.0.3.patch")
+  foreach ($relative in $approvedPatchPaths) {
+    Copy-Item -LiteralPath (Join-Path $originalRepositoryRoot $relative) -Destination (Join-Path $temporaryRoot $relative)
+  }
   Copy-Item -LiteralPath (Join-Path $originalRepositoryRoot "package.json") -Destination $manifestPath
   Copy-Item -LiteralPath (Join-Path $originalRepositoryRoot "pnpm-lock.yaml") -Destination $lockPath
   $canonicalManifest = Get-Content -LiteralPath $manifestPath -Raw
   $canonicalLock = (Get-Content -LiteralPath $lockPath -Raw).Replace("`r`n", "`n")
   $trackedPatch = "patches/image-size@1.2.1.patch"
+  $trackedPatchOverrides = @{}
   function global:Invoke-GitText {
     param([string[]]$Arguments, [string]$Description)
-    if (($Arguments -join "|") -cne "ls-files|--error-unmatch|--|patches/image-size@1.2.1.patch") {
+    if ($Arguments.Count -ne 4 -or ($Arguments[0..2] -join "|") -cne "ls-files|--error-unmatch|--" -or
+        $Arguments[3] -cnotin $approvedPatchPaths) {
       throw "Unexpected Git operation in the generated dependency-patch fixture."
     }
-    return @($trackedPatch)
+    if ($trackedPatchOverrides.ContainsKey($Arguments[3])) { return @($trackedPatchOverrides[$Arguments[3]]) }
+    if ($Arguments[3] -ceq "patches/image-size@1.2.1.patch") { return @($trackedPatch) }
+    return @($Arguments[3])
   }
   Assert-DependencyPatchBoundary | Out-Null
   foreach ($wrongPath in @("patches/../private.patch", "patches/*.patch", "patches/other.patch", "D:/private.patch")) {
@@ -254,6 +265,35 @@ try {
   Assert-Rejected { Assert-DependencyPatchBoundary } "oversized patch lockfile"
   [IO.File]::WriteAllText($lockPath, $canonicalLock)
   Assert-DependencyPatchBoundary | Out-Null
+  foreach ($relative in $approvedPatchPaths) {
+    $dependency = [IO.Path]::GetFileNameWithoutExtension($relative)
+    $currentPatchPath = Join-Path $temporaryRoot $relative
+    foreach ($invalidTracking in @("", "patches/other.patch")) {
+      $trackedPatchOverrides[$relative] = $invalidTracking
+      Assert-Rejected { Assert-DependencyPatchBoundary } "untracked or differently tracked security patch $dependency"
+      $trackedPatchOverrides.Remove($relative)
+    }
+    $changedManifest = ConvertFrom-OperatorJson $canonicalManifest "The generated patch manifest"
+    $changedManifest.pnpm.patchedDependencies.PSObject.Properties.Remove($dependency)
+    [IO.File]::WriteAllText($manifestPath, ($changedManifest | ConvertTo-Json -Depth 20))
+    Assert-Rejected { Assert-DependencyPatchBoundary } "omitted required security patch $dependency"
+    [IO.File]::WriteAllText($manifestPath, $canonicalManifest)
+    Remove-Item -LiteralPath $currentPatchPath
+    Assert-Rejected { Assert-DependencyPatchBoundary } "omitted uploaded security patch $dependency"
+    [IO.File]::WriteAllText($currentPatchPath, "generated changed patch bytes")
+    Assert-Rejected { Assert-DependencyPatchBoundary } "changed security patch bytes $dependency"
+    Copy-Item -LiteralPath (Join-Path $originalRepositoryRoot $relative) -Destination $currentPatchPath -Force
+    $currentHash = Get-FileSha256 $currentPatchPath
+    foreach ($changedLock in @(
+        $canonicalLock.Replace($currentHash, ("a" * 64)),
+        $canonicalLock.Replace("path: $relative", "path: patches/other.patch")
+      )) {
+      [IO.File]::WriteAllText($lockPath, $changedLock)
+      Assert-Rejected { Assert-DependencyPatchBoundary } "changed security patch lock binding $dependency"
+    }
+    [IO.File]::WriteAllText($lockPath, $canonicalLock)
+    Assert-DependencyPatchBoundary | Out-Null
+  }
   Import-OperatorFunction "Invoke-GitText"
 
   $candidateProjectRoot = Join-Path $temporaryRoot "frontend\web\.vercel"
