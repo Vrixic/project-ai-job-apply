@@ -41,8 +41,9 @@ D3-092 fixes the stale restore-verifier boundary; all 43 repository stages and i
 pass. The isolated historical backup passes live read-only schema/checksum verification.
 Durable-data/privacy reconciliation and compatible live release remain internal work.
 D3-093 implements bounded whole-row comparison with 93 unit tests, all 96 restored relation
-digests and 21 real PostgreSQL probes passing. Managed snapshot comparison and explicit
-transition-aware reconciliation remain; no primary promotion or privacy acceptance is claimed.
+digests and 21 real PostgreSQL probes passing. Its current immutable image is published, scanned
+and independently verified; dormant task revision 66 is registered but unexecuted. Managed snapshot
+comparison and transition-aware reconciliation remain; no primary promotion or privacy acceptance is claimed.
 [Comparison evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-data-comparison--2026-10-10).
 [Recovery evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-verifier-boundary-recovery--2026-10-09).
 The D3-012 engineering review packet now links current evidence; existing development dispositions remain unchanged.
