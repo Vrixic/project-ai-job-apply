@@ -1,6 +1,6 @@
 # D3-100: Reconciled-copy verification and complete recovery inventory
 
-Started: 2026-10-10. Status: In progress; batch verification pending.
+Started: 2026-10-10. Status: Repository implementation verified; merge pending.
 
 Inspection and independent review found three omitted independent recovery roots: restricted
 answers, cover letters and native admission. A completed deletion could otherwise be skipped
@@ -25,7 +25,29 @@ fresh cutover admission, private runtime composition and the dedicated promotion
 required. Ordinary restore and disposable cleanup rules are unchanged. No cloud activation or
 candidate-facing behavior changes are included.
 
-The first focused pass reports 408 passing tests, including bundle isolation from replay mutation
-ports. Real PostgreSQL, full repository checks and final independent review are pending. These
-initial checks do not establish managed privacy recovery or live candidate/provider acceptance.
+Source `1a5b57253fe9a2ef580d46fd8109fa6bfdae4d01` passes 500 focused tests,
+17 real PostgreSQL 16.6 regressions and all 43 repository verification stages. The database probes
+cover the three independent roots, read-only enforcement, exact timestamp binding, historical
+completed inventories and nine corruption cases with rollback. Cloud transport, retained-marker
+provenance and KMS are simulated; this is not managed recovery acceptance. Independent review
+confirmed the exact committed source and PostgreSQL results; final delivery-record review follows.
+
+Private aggregate logs under `.tmp/d3-dark-primary-recovery-20261010/`:
+
+| Check | Log | SHA-256 |
+|---|---|---|
+| 500 focused tests | `reconciled-copy-focused-v2.log` | `b2ab1e47185bc65811ebd59206292b3f92fb7297f53d0eb9b2529eb951c82257` |
+| 17 PostgreSQL regressions | `reconciled-copy-postgres-v2.log` | `9ffa9bd353ea7ed58d555bf42b08fe0359d85732eb7645ed88557b275207fb30` |
+| 43 repository stages | `reconciled-copy-full-verification.log` | `59273cfcf7a97936df17e5f642b15d306621b1462de8c5fd8045a4ab42996012` |
+
+No AWS runtime was activated in this batch. The latest credential check still reports an expired
+development SSO token after the reported renewal, so fresh cloud readback is unavailable. The last
+independent development off proof is the D3-099 21:40 UTC dormancy closure; it is not a new readback.
+The isolated PostgreSQL container was removed, Docker Desktop is stopped and WSL has no running
+distributions. The PC remains on. Retained recovery/security resources still incur charges.
+
+The D3-099 simulated connected browser journey remains the latest browser evidence; this batch
+changes recovery behavior only. No live candidate, provider submission, sanitized primary
+promotion or accountable privacy acceptance is claimed. Greenhouse execution, private verification
+runtime/promotion wiring, managed recovery and compatible live release remain internal work.
 Independent D1/admin acceptance remains deferred.
