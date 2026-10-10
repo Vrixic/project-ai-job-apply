@@ -48,7 +48,7 @@ Twelve Applications differences require explicit transition reconciliation, incl
 original-request hashes. Privacy replay and primary recovery remain; no promotion or privacy acceptance is claimed.
 D3-094 adds explicit read-only transition reconciliation: all 43 repository stages, independent review, 65 focused tests and
 seven real PostgreSQL reconciliation probes pass with simulated KMS. Its new immutable image is published, scanned and independently verified;
-separate default-off timed decrypt-only task registration is implemented. Deployment and the managed proof, privacy replay and primary recovery remain open.
+separate default-off timed decrypt-only task registration passes 22 Terraform cases, configuration validation and all 43 repository stages. Deployment and the managed proof, privacy replay and primary recovery remain open.
 [Reconciliation evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-transition-reconciliation--2026-10-10).
 [Comparison evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-data-comparison--2026-10-10).
 [Recovery evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-verifier-boundary-recovery--2026-10-09).
