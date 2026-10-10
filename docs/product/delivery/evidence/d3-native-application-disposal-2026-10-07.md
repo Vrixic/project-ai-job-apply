@@ -2340,7 +2340,9 @@ All 24 Terraform cases pass (21 diagnostic, three legacy). The added retained-re
 zero public routes; the active-runtime case is refused by the existing endpoint dependency guard.
 Two preliminary fixture failures were corrected without weakening production validation. Thirteen
 private guard regressions verify actual booleans and canonical lowercase Terraform strings, including
-rejecting string truthiness and malformed values. Full repository checks are pending on the committed
-source. Both original isolated restores are available with backup retention zero; no authority apply,
+rejecting string truthiness and malformed values. All 43 repository stages pass on committed source; the log SHA-256 is `df674b3d04381487d5513a21cb4d0d778367dbd5cbc54eee61914e83599e0c3e`.
+All five hosted jobs never started because of billing/spending limits; they are not verification.
+[PR #626](https://github.com/Vrixic/project-ai-job-apply/pull/626) carries this correction.
+Both original isolated restores are available with backup retention zero; no authority apply,
 SQL execution, managed KMS proof, primary promotion or live journey is claimed by this correction.
 Independent D1/admin acceptance remains deferred.

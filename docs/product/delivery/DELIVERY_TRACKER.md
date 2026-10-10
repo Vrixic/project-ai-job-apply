@@ -90,8 +90,8 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 
 Work continues for D3 on 2026-10-10; D1/D3 are not complete. Independent D1 acceptance remains deferred.
 AWS access is sequential per the owner. Staging retains its 2026-10-09 dormant verification, with
-no subsequent mutation. Development is freshly verified dormant at 2026-10-10T15:48:59Z, state 506:
-the primary and both diagnostic restores are absent; paid network runtimes, application routes,
+no subsequent mutation. Development shutdown was verified at 2026-10-10T15:48:59Z, state 506:
+the primary and both previous diagnostic restores were absent; paid network runtimes, application routes,
 triggers, ECS/durable work and queued messages are off. Both retained backups pass isolated
 read-only data inventory. Strict comparison finds 84 identical shared relations and 12 Applications
 differences; transition-aware row/default/ledger accounting and seven encrypted original-request
@@ -103,10 +103,13 @@ resources incur charges.
 Docker/WSL are off; the PC remains on.
 [Current recovery and shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-snapshot-data-comparison--2026-10-10).
 
-D3 managed reconciliation preflight remains in progress: the diagnostic admission correction
+Current batch: two isolated temporary restores are active with backup retention zero and require
+cleanup before handoff; the primary remains absent, paid network runtimes are off and state 506
+is unchanged. D3 managed reconciliation preflight remains in progress: the diagnostic admission correction
 preserves historical Gateway replay permission with runtime off; 24 Terraform and 13 private
-boolean-guard cases pass. Full verification and managed execution are pending.
+boolean-guard cases and all 43 repository stages pass. Managed execution is pending.
 [Admission evidence](evidence/d3-native-application-disposal-2026-10-07.md#dormant-reconciliation-admission-correction--2026-10-10).
+
 ## Cross-delivery decisions and changes
 
 Applications history belongs to D3, the generic inbox to D5, and structured Profile replacement to D3.1.

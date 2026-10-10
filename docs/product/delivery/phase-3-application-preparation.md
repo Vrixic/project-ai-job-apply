@@ -197,5 +197,5 @@ Independent source review, 22 Terraform cases, module/development/staging valida
 2026-10-10: The managed reconciliation preflight exposed an unnecessary replay-permission
 restriction. Independent review supports preserving the retained Gateway release while requiring
 runtime off. The correction passes 24 Terraform cases and 13 private canonical-boolean regressions;
-full repository verification and managed execution remain pending. See the
+all 43 repository stages pass; managed execution remains pending. See the
 [dormant admission evidence](evidence/d3-native-application-disposal-2026-10-07.md#dormant-reconciliation-admission-correction--2026-10-10).
