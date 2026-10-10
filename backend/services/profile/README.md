@@ -98,3 +98,10 @@ DATABASE_URL is refused. It pins warm configuration, closes its dedicated expiry
 invocation and returns aggregate counts. Build the separate source-bound artifact with
 `pnpm --filter @ai-job-apply/profile-service build:lambda:audit-retention`. Reviewed invocation
 IAM, Secrets extension, scheduling and managed release remain required; nothing is activated.
+
+## Read-only restore candidate admission
+
+The internal `restore-candidate-admission` helper checks at most seven distinct active,
+unquarantined Identity owners inside the caller's read-only restore transaction. It grants no
+write lease or candidate action. The isolated diagnostic repeats the check after crypto and
+requires quiescent restores; see the [reconciliation boundary](../database-migrations/README.md#fixed-applications-transition-reconciliation).

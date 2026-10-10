@@ -62,6 +62,41 @@ The local recovery command below also compares all 96 relation hashes after rest
 21 synthetic PostgreSQL probes in a separate empty disposable database, including precision,
 duplicate/association changes, schema changes, RLS, budgets and the materialized query plan.
 
+## Fixed Applications transition reconciliation
+
+`application-restore-reconciliation-cli.js` is a separate, default-off read-only diagnostic for
+exactly the reviewed Applications three-to-fifteen migration transition. It compares two distinct,
+quiescent isolated restores; it never runs migrations, retries legacy transfer, replays rights,
+enables traffic or authorizes primary promotion.
+
+Both complete snapshot contracts and all six other owners must match. The diagnostic accounts for
+all original packet/outbox/ordinary-receipt columns, original ledger timestamps, added-column
+defaults, twelve atomic ledger additions within the reviewed transition interval, and all eight
+added table catalogs/counts. Seven archive/marker pairs must retain exact metadata and pass actual
+original-digest matching through the Applications-owned decrypt-only cipher. Identity owns a
+bounded read-only active/unquarantined check; this proves snapshot state and grants no write lease.
+No SQL transaction spans KMS. Receipt bindings and complete inventories are rechecked after all
+crypto settles. Output contains aggregates only; failures are fixed and captured buffers cleared.
+
+Explicit admission requires `RESTORE_APPLICATIONS_RECONCILIATION_ENABLED=true`, the older compressed
+manifest and SHA, `RESTORE_ORIGINAL_HOST`, `RESTORE_HOST`, `RESTORE_LEGACY_RECEIPT_KEY_ARN`, and
+`RESTORE_TRANSITION_STARTED_AT`/`RESTORE_TRANSITION_ENDED_AT`. The interval must be canonical UTC,
+positive and at most thirty minutes. The complete comparison refuses new work after 120 seconds;
+the receipt phase also has a 60-second limit. Each admitted SQL/KMS operation is awaited before
+refusal/cleanup; these are admission deadlines, not hard process-kill guarantees.
+
+Host guards and digests are not authenticated lineage. Before managed execution, separately review
+both snapshot/resource/host bindings, the new immutable image, full task override size and exact
+existing-key/purpose decrypt-only IAM. Current task revision 66 has no task role and the published
+inventory image predates this diagnostic. Do not reuse the transition's encrypt role. Managed
+reconciliation, privacy replay and primary recovery remain unverified.
+
+The maintained recovery harness exercises actual three-to-fifteen transfer in generated PostgreSQL
+copies and seven reconciliation probes, including original column/ledger changes, metadata,
+extra archive columns, identical owner quarantine and wrong original digest. KMS is simulated with
+authenticated local AES encryption; this is not live KMS evidence. The harness deletes only its
+owned disposable container and preserves its source fixture.
+
 ## Generated Phase 2 logical recovery regression
 
 Run `pnpm test:d2-recovery` with Docker already running and the local

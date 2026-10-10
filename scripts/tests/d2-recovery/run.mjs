@@ -18,6 +18,7 @@ import {
 import { createRestoreClient } from "../../../backend/services/database-migrations/dist/src/restore-verifier-runtime.js";
 import { createJobCatalogDatabase } from "../../../backend/services/jobs/dist/src/persistence/catalog.js";
 import { createDatabase } from "../../../backend/services/profile/dist/src/index.js";
+import { exerciseApplicationReconciliation } from "./application-reconciliation.mjs";
 import { assertOwnedContainer, image, label, ownedDatabasePort } from "./container-boundary.mjs";
 import { exerciseRestoreDataInventory } from "./data-inventory.mjs";
 import {
@@ -331,6 +332,15 @@ try {
   const probeClient = createRestoreClient(probeUrl.toString());
   clients.push(probeClient);
   const inventoryBehavior = await exerciseRestoreDataInventory(probeClient);
+  stage = "application-transition-reconciliation";
+  const applicationReconciliation = await exerciseApplicationReconciliation({
+    docker,
+    container: owned.id,
+    sourceUrl,
+    writeClient: createApplicationsDatabase,
+    readClient: createRestoreClient,
+    clients,
+  });
   stage = "restored-response-inventory-behavior";
   const responseBehavior = await exerciseRestoredResponseInventory(targetStore, responseFixtures);
   const materialBehavior = await exerciseRestoredTemporaryMaterialCompletion(
@@ -368,6 +378,7 @@ try {
     aggregateVerifierMatched: true,
     wholeRowDigestRelationsMatched: sourceInventory.relations.length,
     ...inventoryBehavior,
+    ...applicationReconciliation,
     sourceUnchanged: true,
     readOnlyWritesRejected: 2,
     ...responseBehavior,
@@ -391,7 +402,7 @@ try {
       : undefined;
   const location =
     typeof error?.stack === "string"
-      ? /((?:fixtures|response-inventory|temporary-packets|restricted-packets|native-launches|run)\.mjs:[0-9]+:[0-9]+)/u.exec(
+      ? /((?:application-reconciliation|fixtures|response-inventory|temporary-packets|restricted-packets|native-launches|run)\.mjs:[0-9]+:[0-9]+)/u.exec(
           error.stack,
         )?.[1]
       : undefined;

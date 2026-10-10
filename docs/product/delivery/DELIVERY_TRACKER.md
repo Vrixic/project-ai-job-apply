@@ -46,6 +46,10 @@ and independently verified. Both isolated managed inventories and their original
 review: 84 of 88 shared relations match exactly, including all 80 relations of the other six owners.
 Twelve Applications differences require explicit transition reconciliation, including seven encrypted
 original-request hashes. Privacy replay and primary recovery remain; no promotion or privacy acceptance is claimed.
+D3-094 adds explicit read-only transition reconciliation: all 43 repository stages, independent review, 65 focused tests and
+seven real PostgreSQL reconciliation probes pass with simulated KMS. Its immutable publication,
+managed decrypt-only proof, privacy replay and primary recovery remain open.
+[Reconciliation evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-transition-reconciliation--2026-10-10).
 [Comparison evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-data-comparison--2026-10-10).
 [Recovery evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-verifier-boundary-recovery--2026-10-09).
 The D3-012 engineering review packet now links current evidence; existing development dispositions remain unchanged.
