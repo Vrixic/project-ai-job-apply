@@ -1342,6 +1342,65 @@ function Assert-GatewayDocumentLambdaRefreshChanges {
   }
 }
 
+function Assert-GatewayDeferredNativeIdentityReads {
+  param([Parameter(Mandatory)][object]$Plan)
+  # These retained modules depend on the whole platform. A Gateway code update defers
+  # their no-input identity lookups even when every native resource stays unchanged.
+  $reads = @($Plan.resource_changes | Where-Object {
+      $_.mode -ceq "data" -and (@($_.change.actions) -join ",") -cne "no-op"
+    })
+  $seen = @{}
+  $modules = @{}
+  foreach ($read in $reads) {
+    Assert-ExactObjectKeys $read @("address", "module_address", "mode", "type", "name", "index",
+      "provider_name", "change", "action_reason") "native identity observation"
+    if ([string]$read.address -cnotmatch '^module\.(native_resume_source_access|native_resume_preparation)\["([a-z0-9][a-z0-9-]{0,63})"\]\.data\.(aws_caller_identity|aws_region)\.current\[0\]$') {
+      throw "The Gateway release contains an unrelated data observation."
+    }
+    $module = $Matches[1]; $key = $Matches[2]; $type = $Matches[3]
+    $moduleAddress = "module.$module[`"$key`"]"
+    if ($seen.ContainsKey([string]$read.address) -or $read.module_address -cne $moduleAddress -or
+        $read.type -cne $type -or $read.name -cne "current" -or
+        ($read.index -isnot [int] -and $read.index -isnot [long]) -or $read.index -ne 0 -or
+        $read.provider_name -cne "registry.terraform.io/hashicorp/aws" -or
+        $read.action_reason -cne "read_because_dependency_pending") {
+      throw "The deferred native identity observation is not exact."
+    }
+    $releases = Get-GatewayPlanVariableValue $Plan.variables "${module}_releases"
+    if ($releases -is [string]) { $releases = ConvertFrom-Json -InputObject $releases }
+    if ($releases -isnot [pscustomobject] -or
+        @($releases.PSObject.Properties | Where-Object Name -CEQ $key).Count -ne 1) {
+      throw "The deferred native identity observation has no retained release."
+    }
+    $change = $read.change
+    Assert-ExactObjectKeys $change @("actions", "before", "after", "after_unknown", "before_sensitive",
+      "after_sensitive") "native identity observation change"
+    if ((@($change.actions) -join ",") -cne "read" -or $null -ne $change.before -or
+        $change.after -isnot [pscustomobject] -or @($change.after.PSObject.Properties).Count -ne 0 -or
+        $change.before_sensitive -isnot [bool] -or $change.before_sensitive -or
+        $change.after_sensitive -isnot [pscustomobject] -or @($change.after_sensitive.PSObject.Properties).Count -ne 0 -or
+        $change.after_unknown -isnot [pscustomobject]) {
+      throw "The deferred native identity observation changed its no-input boundary."
+    }
+    $unknownKeys = if ($type -ceq "aws_caller_identity") { @("account_id", "arn", "id", "user_id") }
+      else { @("description", "endpoint", "id", "name", "region") }
+    Assert-ExactObjectKeys $change.after_unknown $unknownKeys "native identity unknowns"
+    foreach ($property in $change.after_unknown.PSObject.Properties) {
+      if ($property.Value -isnot [bool] -or -not $property.Value) {
+        throw "The deferred native identity observation has unexpected known values."
+      }
+    }
+    $seen[[string]$read.address] = $true
+    if (-not $modules.ContainsKey($moduleAddress)) { $modules[$moduleAddress] = @() }
+    $modules[$moduleAddress] += $type
+  }
+  foreach ($types in $modules.Values) {
+    if ((@($types | Sort-Object) -join "|") -cne "aws_caller_identity|aws_region") {
+      throw "A deferred native identity observation pair is incomplete."
+    }
+  }
+}
+
 function Assert-ExactGatewayReleasePlan {
   param(
     [Parameter(Mandatory)][object]$Plan,
@@ -1365,7 +1424,10 @@ function Assert-ExactGatewayReleasePlan {
       }
     }
   )
-  $changes = @($Plan.resource_changes | Where-Object { (@($_.change.actions) -join ",") -cne "no-op" })
+  Assert-GatewayDeferredNativeIdentityReads $Plan
+  $changes = @($Plan.resource_changes | Where-Object {
+      $_.mode -cne "data" -and (@($_.change.actions) -join ",") -cne "no-op"
+    })
   $expected = @(
     "module.platform.aws_lambda_alias.gateway[0]",
     "module.platform.aws_lambda_function.gateway[0]"

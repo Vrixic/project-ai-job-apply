@@ -125,6 +125,12 @@ values, then retain its exact SHA-256. The plan metadata preserves the reviewed 
 checksum/schema, document receipt checksum, stage/parser pin, and migration image so `Apply`
 rechecks the same handoff instead of accepting a later local substitution.
 
+Retained native resume source/preparation modules depend on the platform, so a Gateway update
+can defer their paired AWS caller-identity and region lookups. The guard accepts only those exact
+no-input read shapes for a release key in the retained input maps. It rejects unrelated or
+incomplete reads, resolved inputs, sensitivity changes and replacements; the two-resource
+managed-update boundary remains unchanged.
+
 ## Apply and verify
 
 ```powershell

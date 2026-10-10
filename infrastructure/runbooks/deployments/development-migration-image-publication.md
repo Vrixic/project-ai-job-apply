@@ -37,11 +37,11 @@ vulnerability scan, publish an image, or satisfy the publication/scan/recovery g
 
 The current package boundary is the Phase 3 manifest
 `d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1`: seven ordered owners
-(Profile, Jobs, Documents, Matching, Billing, Trust, and Applications), eleven schemas, 83 regular relations, and
-57 exact checksum-bound migrations. The smoke gate also requires the Trust and Applications runners and every
-Phase 2/3 migration file, including Jobs `0024_contribution_appeal_restoration`, Documents
-`0007_cover_letter_work_authorizations`, Trust `0005_development_test_removal`, Profile `0011_active_candidate_lease`,
-and Applications through `0005_preparation_dispatch`,
+(Profile, Jobs, Documents, Matching, Billing, Trust, and Applications), twelve schemas, 96 regular relations, and
+79 exact checksum-bound migrations. The smoke gate also requires the Trust and Applications runners and every
+Phase 2/3 migration file, including Jobs `0027`, Documents
+`0016`, Trust `0005_development_test_removal`, Profile `0011_active_candidate_lease`,
+and Applications through `0015`,
 before an image can be considered locally buildable.
 Every owner's exact SQL filenames must match the pinned inventory and the validated restore
 manifest, and every bundled SQL file must match its manifest SHA-256 checksum. Missing/extra
@@ -138,7 +138,7 @@ scans, version-1 and unsafe recovery states, receipt path traversal, and the abs
 ECS execution, and ECR deletion operations. It also rejects an older D1 manifest/package boundary
 instead of treating a previously valid receipt or image as current Phase 2 evidence.
 The same suite executes the publisher's exact embedded smoke in disposable local fixtures with
-the real runner/restore modules: the current 57 migrations pass, while every missing or
+the real runner/restore modules: the current 79 migrations pass, while every missing or
 byte-modified SQL file, extra file, unchanged-count filename/version substitution and mismatched
 manifest checksum fails. It makes no SQL connection or migration call. These fixture tests do
 not replace the hardened final-image smoke, deterministic build identity, audit or registry scan.

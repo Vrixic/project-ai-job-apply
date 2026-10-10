@@ -848,6 +848,90 @@ $plan = [pscustomobject]@{
   )
 }
 $null = Assert-ExactGatewayReleasePlan $plan $artifact; $passed++
+# Terraform defers these exact no-input reads when a retained native module depends
+# on the platform whose Gateway is being released. Keep the full native plan shape.
+$nativeReadPlan = Copy-Fixture $plan
+$nativeReadPlan | Add-Member -NotePropertyName variables -NotePropertyValue ([pscustomobject]@{
+    native_resume_source_access_releases = [pscustomobject]@{ value = [pscustomobject]@{ "resume-r1" = [pscustomobject]@{ enabled = $false } } }
+    native_resume_preparation_releases = [pscustomobject]@{ value = [pscustomobject]@{ "resume-r1" = [pscustomobject]@{ enabled = $false } } }
+  })
+foreach ($module in @("native_resume_source_access", "native_resume_preparation")) {
+  foreach ($type in @("aws_caller_identity", "aws_region")) {
+    $unknown = if ($type -ceq "aws_caller_identity") {
+      [pscustomobject]@{ account_id = $true; arn = $true; id = $true; user_id = $true }
+    } else { [pscustomobject]@{ description = $true; endpoint = $true; id = $true; name = $true; region = $true } }
+    $moduleAddress = "module.$module[`"resume-r1`"]"
+    $nativeReadPlan.resource_changes += [pscustomobject]@{
+      address = "$moduleAddress.data.$type.current[0]"; module_address = $moduleAddress
+      mode = "data"; type = $type; name = "current"; index = 0
+      provider_name = "registry.terraform.io/hashicorp/aws"; action_reason = "read_because_dependency_pending"
+      change = [pscustomobject]@{
+        actions = @("read"); before = $null; after = [pscustomobject]@{}; after_unknown = $unknown
+        before_sensitive = $false; after_sensitive = [pscustomobject]@{}
+      }
+    }
+  }
+}
+$nativeBefore = ConvertTo-GatewayCanonicalJson $nativeReadPlan
+$nativeChanges = @(Assert-ExactGatewayReleasePlan $nativeReadPlan $artifact)
+if ($nativeChanges.Count -ne 2 -or (ConvertTo-GatewayCanonicalJson $nativeReadPlan) -cne $nativeBefore) {
+  throw "The native observation exception changed evidence or expanded the Gateway release scope."
+}
+$passed++
+$nativeStringMaps = Copy-Fixture $nativeReadPlan
+foreach ($property in $nativeStringMaps.variables.PSObject.Properties) {
+  $property.Value.value = ConvertTo-GatewayCanonicalJson $property.Value.value
+}
+$null = Assert-ExactGatewayReleasePlan $nativeStringMaps $artifact; $passed++
+$oneNativePair = Copy-Fixture $nativeReadPlan
+$oneNativePair.resource_changes = @($oneNativePair.resource_changes | Where-Object {
+    $_.mode -ceq "managed" -or $_.module_address -ceq 'module.native_resume_source_access["resume-r1"]'
+  })
+$null = Assert-ExactGatewayReleasePlan $oneNativePair $artifact; $passed++
+$twoRetainedKeys = Copy-Fixture $nativeReadPlan
+$twoRetainedKeys.variables.native_resume_source_access_releases.value | Add-Member 'resume-r2' ([pscustomobject]@{ enabled = $false })
+foreach ($read in @($oneNativePair.resource_changes | Where-Object mode -CEQ 'data')) {
+  $secondRead = Copy-Fixture $read
+  $secondRead.address = $secondRead.address.Replace('resume-r1', 'resume-r2')
+  $secondRead.module_address = $secondRead.module_address.Replace('resume-r1', 'resume-r2')
+  $twoRetainedKeys.resource_changes += $secondRead
+}
+$null = Assert-ExactGatewayReleasePlan $twoRetainedKeys $artifact; $passed++
+foreach ($mutate in @(
+    { param($p) $p.resource_changes[2].address = 'module.unrelated.data.aws_caller_identity.current[0]' },
+    { param($p) $p.resource_changes[2].address = $p.resource_changes[2].address.Replace('resume-r1', 'unretained') },
+    { param($p) $p.resource_changes[2].module_address = 'module.unrelated' },
+    { param($p) $p.resource_changes[2].type = 'aws_secretsmanager_secret_version' },
+    { param($p) $p.resource_changes[2].name = 'other' },
+    { param($p) $p.resource_changes[2].index = 1 },
+    { param($p) $p.resource_changes[2].index = $false },
+    { param($p) $p.resource_changes[2].provider_name = 'unreviewed/provider' },
+    { param($p) $p.resource_changes[2].action_reason = 'read_because_config_unknown' },
+    { param($p) $p.resource_changes[2].change.actions = @('update') },
+    { param($p) $p.resource_changes[2].change.before = [pscustomobject]@{} },
+    { param($p) $p.resource_changes[2].change.after = [pscustomobject]@{ input = 'unreviewed' } },
+    { param($p) $p.resource_changes[2].change.after = @() },
+    { param($p) $p.resource_changes[2].change.before_sensitive = $true },
+    { param($p) $p.resource_changes[2].change.after_sensitive = [pscustomobject]@{ arn = $true } },
+    { param($p) $p.resource_changes[2].change.after_unknown.arn = $false },
+    { param($p) $p.resource_changes[2].change.after_unknown.arn = 'true' },
+    { param($p) $p.resource_changes[2].change.after_unknown.PSObject.Properties.Remove('arn') },
+    { param($p) $p.resource_changes[2].change.after_unknown | Add-Member extra $true },
+    { param($p) $p.resource_changes[2].change | Add-Member replace_paths @(@('arn')) },
+    { param($p) $p.resource_changes[2] | Add-Member extra 'unreviewed' },
+    { param($p) $p.resource_changes += (Copy-Fixture $p.resource_changes[2]) },
+    { param($p) $p.resource_changes = @($p.resource_changes | Where-Object type -CNE 'aws_region') },
+    { param($p) $p.variables.native_resume_source_access_releases.value.PSObject.Properties.Remove('resume-r1') },
+    { param($p) $p.variables.native_resume_source_access_releases.value = '{}' },
+    { param($p) $p.resource_changes[0].change.after.timeout = 60 },
+    { param($p) $p.output_changes.gateway_lambda_alias_arn.actions = @('update') },
+    { param($p) $extra = Copy-Fixture $p.resource_changes[0]; $extra.address = 'module.platform.aws_lambda_function.unrelated[0]'; $p.resource_changes += $extra }
+  )) {
+  $badNative = Copy-Fixture $nativeReadPlan
+  & $mutate $badNative
+  Assert-Rejected { Assert-ExactGatewayReleasePlan $badNative $artifact } `
+    "A substituted native observation or expanded Gateway release escaped the exact guard."
+}
 $historicalRelease = Copy-Fixture $plan; $historicalRelease.terraform_version = "1.9.8"
 Assert-Rejected { Assert-ExactGatewayReleasePlan $historicalRelease $artifact } "An actionable historical gateway plan was accepted."
 $null = Assert-ExactGatewayReleasePlan $historicalRelease $artifact -AllowHistorical; $passed++

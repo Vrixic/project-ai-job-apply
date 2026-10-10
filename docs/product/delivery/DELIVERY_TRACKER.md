@@ -31,6 +31,11 @@ Provider-neutral form plans reject conflicting claims/duplicate options and leav
 The owner-selected separate in-memory Auth0 PKCE path now supplies default-off native resume/cover-letter previews and approved PDF/DOCX downloads with local regression and synthetic Chromium evidence.
 The owner-approved separate SPA registration is configured and its saved grant/origin settings are inspected; live sign-in/native acceptance remains unverified. D3-086 adds default-off manual extension handoff with passing local regression/CSP/browser and full repository verification; focused installed acceptance remains open. D3-087 adds locally verified observed-form saved-answer selection and fresh form-confirmed manual Apply; repository checks, 95 PostgreSQL cases and synthetic Chromium journeys pass. Withdrawn-answer recovery (D3-088) is implemented and locally verified: full repository checks, 72 real PostgreSQL cases and three synthetic Chromium journeys pass. Compatible live release and provider adapter source remain. [Recovery evidence](evidence/d3-withdrawn-answer-recovery-2026-10-09.md). [Selection evidence](evidence/d3-observed-form-saved-answer-selection-2026-10-09.md). [Handoff evidence](evidence/d3-manual-extension-handoff-2026-10-09.md).
 Connected native/provider acceptance, ATS adapters/fixtures, all-copy expiry, rights/restore and accountable reviews remain.
+An owner-requested independent reviewer verified the current publications, restore bindings and baseline.
+The managed Gateway plan was refused before deployment; D3-089 repairs boolean comparison and
+deferred native identity-read handling. All 41 repository verification stages, focused regressions
+and three fresh synthetic Chromium journeys pass, with independent source review.
+[Release review evidence](evidence/d3-release-guard-recovery-2026-10-09.md).
 The D3-012 engineering review packet now links current evidence; existing development dispositions remain unchanged.
 [Implemented and remaining capabilities](phase-3-application-preparation.md).
 
@@ -65,9 +70,14 @@ The D3-012 engineering review packet now links current evidence; existing develo
 ## Current operating state
 
 Work resumed for D3 on 2026-10-09; D1/D3 are not complete. Independent D1 acceptance remains deferred.
-AWS access is sequential per the owner. The corrected lifecycle status command verifies dormant staging on 2026-10-09; staging does not need to remain signed in during development testing. Development's earlier dormant readback remains historical evidence; its next live session requires development sign-in. D3-085 fixes the optional-processor inventory check required by shutdown; it adds no independent D1 acceptance. No cloud runtime was started by these batches. Retained recovery/storage/security resources incur charges.
-Docker/WSL shutdown is recorded in the linked evidence; the PC remains on.
-[Current browser batch and shutdown evidence](evidence/d3-connected-candidate-journey-2026-10-09.md).
+AWS access is sequential per the owner. Staging retains its 2026-10-09 dormant verification, with
+no subsequent mutation. Development was temporarily restored for release review, then verified
+dormant at 2026-10-10T01:15Z (2026-10-09 locally), including removal of its database, restore-check
+instance and ten Interface endpoints. Fresh encrypted recovery snapshots, physical restore,
+zero-drift plan and versioned recovery archive pass. No Gateway release, migration or live native
+acceptance occurred. Retained recovery/storage/security resources incur charges.
+Docker/WSL are off; the PC remains on.
+[Current release review and shutdown evidence](evidence/d3-release-guard-recovery-2026-10-09.md).
 
 ## Cross-delivery decisions and changes
 
