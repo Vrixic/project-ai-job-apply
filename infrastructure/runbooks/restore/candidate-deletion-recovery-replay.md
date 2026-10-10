@@ -78,6 +78,17 @@ Remove only the generated test resource, then stop Docker/WSL when no next step 
 
 ## Guarded execution
 
+For quiescent privacy recovery, use PITR `-DarkRecovery` and pass `-DarkRecovery` to every
+replay action, including cleanup. The replay operator selects the separate development dark
+restore context and requires the maintained PITR `Status` checks: exact-input fresh zero drift,
+all application writers stopped, a protected available source and one verified isolated target.
+The preparation binds this mode and all three additional recovery operator/helper files.
+Legacy preparations without a mode remain steady-state only. Switching modes, stripping the
+dark mode or changing context/operator bytes refuses; no live route or writer is enabled.
+The separate role transition, artifact publication, explicit invocation, target restrictions and
+original 30-minute replay expiry remain required. This path is locally tested tooling, not
+managed privacy acceptance.
+
 Run `pnpm --filter @ai-job-apply/workflows replay:candidate-deletions -Help` for the exact command
 surface. The historical TypeScript CLI routes to this same operator; its direct-URL replay path
 and obsolete per-marker loop are removed.

@@ -173,8 +173,18 @@ function Get-DeletionReplayCleanupReadyAt([object]$InvocationJournal) {
   return ([datetimeoffset]::Parse($InvocationJournal.startedAt)).AddSeconds(330)
 }
 
+function Get-DeletionReplayBaselineMode([object]$Preparation) {
+  $property = $Preparation.PSObject.Properties['baselineMode']
+  if ($null -eq $property) { return 'steady-state' }
+  if ($property.Value -isnot [string] -or $property.Value -cnotin @('steady-state','dark-recovery')) { throw 'DeletionReplayBaselineModeInvalid' }
+  return $property.Value
+}
+
 function Assert-DeletionReplayPreparation([object]$Preparation) {
-  Assert-D1RestoreExactObjectKeys $Preparation @('schemaVersion','kind','runId','accountId','sourceSha','stateBucket','runtimePlanPath','runtimePlanSha256','configurationSha256','artifactBucket','artifactKey','artifactSha256','artifactBase64Sha256','roleBoundary','createRequest','fileBindings') 'DeletionReplayPreparation'
+  $mode = Get-DeletionReplayBaselineMode $Preparation
+  $keys = @('schemaVersion','kind','runId','accountId','sourceSha','stateBucket','runtimePlanPath','runtimePlanSha256','configurationSha256','artifactBucket','artifactKey','artifactSha256','artifactBase64Sha256','roleBoundary','createRequest','fileBindings')
+  if ($null -ne $Preparation.PSObject.Properties['baselineMode']) { $keys += 'baselineMode' }
+  Assert-D1RestoreExactObjectKeys $Preparation $keys 'DeletionReplayPreparation'
   $create = $Preparation.createRequest
   Assert-D1RestoreExactObjectKeys $create @('FunctionName','Runtime','Role','Handler','Description','Timeout','MemorySize','Publish','Architectures','Layers','VpcConfig','Environment','LoggingConfig','Tags') 'DeletionReplayCreateRequest'
   Assert-D1RestoreExactObjectKeys $create.VpcConfig @('SubnetIds','SecurityGroupIds') 'DeletionReplayVpcConfiguration'
@@ -187,7 +197,8 @@ function Assert-DeletionReplayPreparation([object]$Preparation) {
   $environment = $create.Environment.Variables
   $config = ConvertFrom-D1RestoreJson $environment.RESTORE_REPLAY_CONFIG_JSON
   if ($config.accountId -cne $Preparation.accountId -or $config.runId -cne $Preparation.runId -or $config.sourceSha -cne $Preparation.sourceSha -or $environment.RESTORE_REPLAY_CONFIG_SHA256 -cne $Preparation.configurationSha256 -or $environment.RELEASE_SHA -cne $Preparation.artifactSha256 -or $Preparation.artifactKey -cne "lambda/candidate-deletion-restore/$($Preparation.sourceSha)/$($Preparation.artifactSha256)/candidate-deletion-restore-lambda.zip" -or [Convert]::ToBase64String([Convert]::FromHexString($Preparation.artifactSha256)) -cne $Preparation.artifactBase64Sha256) { throw 'DeletionReplayPreparationArtifactBindingInvalid' }
-  if (@($Preparation.fileBindings).Count -ne 8) { throw 'DeletionReplayFileBindingInventoryInvalid' }
+  $expectedFiles = if ($mode -ceq 'dark-recovery') { 11 } else { 8 }
+  if (@($Preparation.fileBindings).Count -ne $expectedFiles) { throw 'DeletionReplayFileBindingInventoryInvalid' }
   foreach ($binding in @($Preparation.fileBindings)) {
     Assert-D1RestoreExactObjectKeys $binding @('path','sha256') 'DeletionReplayFileBinding'
     if ($binding.path -isnot [string] -or $binding.sha256 -cnotmatch '^[a-f0-9]{64}$') { throw 'DeletionReplayFileBindingInvalid' }

@@ -47,6 +47,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Restore transition reconciliation (D3-094) | Fixed read-only three-to-fifteen Applications comparison, exact original/added catalogs, ledger/default accounting and seven original-digest proofs are implemented. Independent review, 65 focused tests and seven real PostgreSQL reconciliation probes pass with simulated KMS. The new immutable diagnostic is published and independently verified. Separate default-off timed decrypt-only task registration passes 22 Terraform cases, configuration validation and all 43 repository stages. | Managed read-only reconciliation and independent result review pass; temporary authority and both restores are removed. Privacy replay, primary recovery and the live journey remain. [Evidence](evidence/d3-native-application-disposal-2026-10-07.md#restore-transition-reconciliation--2026-10-10). |
 | Privacy replay inventory (D3-095) | Restore reconciliation counts all fifteen Applications tables, including independent native withdrawals and their cleanup queue. Eight real PostgreSQL cases, 234 focused store/contract tests, the maintained 96-relation dump/restore harness and all 43 repository stages pass. | Managed privacy replay and primary recovery remain. [Evidence](evidence/d3-privacy-replay-inventory-2026-10-10.md). |
 | Quiescent privacy recovery (D3-096) | Default-off development-only PITR checks writer drain and exact-input zero drift while preserving source/target safeguards. All 98 focused synthetic cases and 43 repository stages pass. | Managed recovery/privacy replay and live acceptance remain. [Evidence](evidence/d3-dark-privacy-recovery-2026-10-10.md). |
+| Quiescent deletion replay (D3-097) | Default-off development replay binds the dark context/mode and recovery dependencies, using maintained writer-off PITR preflight. All 778 synthetic replay checks, 908 restore-role assertions and 43 repository stages pass; independent source review passes. | Managed replay and connected acceptance remain. [Evidence](evidence/d3-dark-deletion-replay-2026-10-10.md). |
 
 ## Decisions and scope changes
 
@@ -219,3 +220,9 @@ counts. Real PostgreSQL regressions verify withdrawal/cleanup/archive deletion, 
 and idempotency; 234 focused tests, the maintained dump/restore harness and all 43 repository
 stages pass. Managed privacy replay remains pending. Independent D1/admin acceptance stays
 deferred. [Evidence](evidence/d3-privacy-replay-inventory-2026-10-10.md).
+
+2026-10-10: D3-096 and D3-097 resolve live-runtime preflight dependencies in writer-off privacy
+recovery and replay. D3-096 passes 98 focused cases in both PowerShell hosts and all 43 repository
+stages. D3-097 passes 778 synthetic replay checks, 908 restore-role assertions and all 43 repository stages, recorded in its
+[evidence](evidence/d3-dark-deletion-replay-2026-10-10.md). Managed replay/recovery and connected
+acceptance remain separate. Independent D1/admin acceptance stays deferred.

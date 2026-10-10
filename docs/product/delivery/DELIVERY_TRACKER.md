@@ -120,6 +120,10 @@ D3-096 adds a default-off development-only quiescent PITR path; 98 focused synth
 cases and all 43 repository stages pass. Managed source/privacy recovery remains pending.
 [Quiescent recovery evidence](evidence/d3-dark-privacy-recovery-2026-10-10.md).
 
+D3-097 adds matching default-off writer-off replay preflight, exact mode/context and recovery-file
+bindings. All 778 synthetic replay checks, 908 restore-role assertions and all 43 repository stages pass; managed replay
+remains pending. [Replay evidence](evidence/d3-dark-deletion-replay-2026-10-10.md).
+
 ## Cross-delivery decisions and changes
 
 Applications history belongs to D3, the generic inbox to D5, and structured Profile replacement to D3.1.
