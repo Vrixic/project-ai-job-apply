@@ -2274,3 +2274,28 @@ still incur charges.
 The complete 43-stage repository verifier also passes, including formatting, lint, owner
 typechecks/builds/tests, Terraform validation, emitted capability isolation and Compose configuration.
 The compiled reconciliation CLI independently refuses default-off execution without SQL or cloud calls.
+
+### Reconciliation image publication — 2026-10-10
+
+[PR #623](https://github.com/Vrixic/project-ai-job-apply/pull/623) normally merged the verified
+D3-094 source as `26724c66133b4ae62872f484cd330ca8b7531096`. Both clean Linux/AMD64 exports
+match byte-for-byte; owner tests, dependency audit and hardened runtime smoke pass. The immutable
+platform digest is `sha256:8a4cc857dfa4be76e7c14b61d0b2e8190e9196e38c87e2c11d42a9ab9d75ee5c`;
+publication receipt SHA-256 is `2144b565aa949ac8f718475acf3bec3bacdb93a85cfcb97534b07467d98d52de`.
+Maintained and independent remote verification confirm the exact receipt/image and COMPLETE scan
+with zero High/Critical findings. The supplemental packaged reconciliation CLI/owning-helper smoke
+passes with network disabled, no SQL/KMS and default-off refusals. GitHub's four checks never
+started because of account billing/spending limits; the candidate Vercel preview succeeds.
+
+The original inactive transition task independently supplies its exact historical configuration,
+source/image and thirty-minute interval. Prospective distinct historical/latest restore requests
+pass static review but remain unsubmitted. Task 66 still uses the previous image and has no KMS
+task role. Separately reviewed, time-limited exact-key/purpose decrypt-only authority, dual-restore
+operator checks and actual managed reconciliation remain internal work. No migrations, restore,
+primary promotion, privacy replay or live journey acceptance ran in this publication batch.
+
+Development shutdown readback at `2026-10-10T17:01:42Z` confirms all test runtimes, paid network,
+routes, triggers, tasks, durable work and queued/scheduled work off. Independent preservation at
+`17:01:36Z` confirms all four encrypted source snapshots and state 506 unchanged. Docker/WSL are
+off and the PC remains on. Staging was not accessed; retained recovery/security/artifact storage
+still incurs charges. Independent D1/admin acceptance stays deferred.
