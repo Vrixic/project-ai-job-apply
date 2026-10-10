@@ -707,4 +707,94 @@ try{
   if([IO.Path]::GetDirectoryName($resolved) -cne $testRoot){throw 'Unsafe test cleanup'}
   Remove-Item -LiteralPath $resolved -Recurse -Force
 }
+# Bootstrap provider observations are separate from platform KMS/RDS observations.
+function New-BootstrapObservation {
+  $fixture=New-Fixture 'Bootstrap' $true
+  $plan=$fixture.Baseline
+  $child=Clone @{name='terraform-state-and-deploy';role='ai-job-apply-development-github-deploy';policy=(Policy @($retained));id='synthetic-child'}
+  $role=Clone @{name=$child.role;id=$child.role;arn="arn:aws:iam::${account}:role/$($child.role)";permissions_boundary='synthetic-boundary';inline_policy=@(@{name=$child.name;policy=$child.policy});tags=@{};tags_all=@{Environment='development'}}
+  $oldRole=Clone $role;$oldRole.inline_policy[0].policy=Policy @(@{Sid='OldSnapshot';Effect='Allow';Action='s3:GetObject';Resource='arn:aws:s3:::synthetic-old/object'})
+  $resources=@{ 'aws_iam_role.github_deploy'=$role;'aws_iam_role_policy.github_deploy'=$child }
+  $drift=@(Clone @{address='aws_iam_role.github_deploy';mode='managed';type='aws_iam_role';name='github_deploy';provider_name='registry.terraform.io/hashicorp/aws';change=@{actions=@('update');before=$oldRole;after=$role;after_unknown=@{};before_sensitive=@{inline_policy=@(@{})};after_sensitive=@{inline_policy=@(@{})}}})
+  foreach($name in @('native_material_control_boundary','native_preparation_boundary','native_preparation_durable_boundary','native_resume_control_boundary','native_resume_durable_boundary','native_resume_observer_boundary')){
+    $index=if($name -clike 'native_resume_*'){'1'}else{'r1'}
+    $address='aws_iam_policy.'+$name+'["'+$index+'"]'
+    $value=Clone @{name='ai-job-apply-development-synthetic-boundary';arn="arn:aws:iam::${account}:policy/ai-job-apply-development-synthetic-boundary";id="arn:aws:iam::${account}:policy/ai-job-apply-development-synthetic-boundary";policy=(Policy @($retained));tags=@{};tags_all=@{Environment='development'}}
+    $before=Clone $value;$before.tags=$null;$resources[$address]=$value
+    $drift+=@(Clone @{address=$address;mode='managed';type='aws_iam_policy';name=$name;index=$index;provider_name='registry.terraform.io/hashicorp/aws';change=@{actions=@('update');before=$before;after=$value;after_unknown=@{};before_sensitive=@{tags_all=@{}};after_sensitive=@{tags=@{};tags_all=@{}}}})
+  }
+  foreach($address in $resources.Keys){
+    $plan.planned_values.root_module.resources+=@(Clone @{address=$address;mode='managed';values=$resources[$address]})
+    $sensitivity=if($address -ceq 'aws_iam_role_policy.github_deploy'){@{}}else{($drift|Where-Object address -CEQ $address).change.after_sensitive}
+    $change=New-Change $address $resources[$address] $resources[$address] 'no-op'
+    $change.change|Add-Member before_sensitive (Clone $sensitivity)
+    $change.change|Add-Member after_sensitive (Clone $sensitivity)
+    $plan.resource_changes+=@($change)
+  }
+  $plan.resource_drift=$drift
+  $fixture.Plan.resource_drift=Clone $drift
+  $fixture.Plan.planned_values.root_module.resources=Clone $plan.planned_values.root_module.resources
+  $fixture.Plan.resource_changes+=@(Clone $plan.resource_changes)
+  return $fixture
+}
+$bootstrap=New-BootstrapObservation
+$original=ConvertTo-DeploymentCanonicalValue $bootstrap
+Assert-RestoreRolePlanEnvelope $bootstrap.Baseline -ZeroDrift -Stage Bootstrap
+$null=Assert-RestoreRoleTransitionPlan $bootstrap.Plan $bootstrap.Baseline 'Bootstrap' $true $account
+$reversed=Get-RestoreRoleBeforeRefreshResources $bootstrap.Baseline -Stage Bootstrap
+Assert-Test ($null -eq $reversed['aws_iam_policy.native_preparation_boundary["r1"]'].tags) 'bootstrap prior null tags reconstructed'
+Assert-Test ($reversed['aws_iam_role.github_deploy'].inline_policy[0].policy -ceq $bootstrap.Baseline.resource_drift[0].change.before.inline_policy[0].policy) 'bootstrap prior computed policy preserved'
+Assert-Test ((ConvertTo-DeploymentCanonicalValue $bootstrap) -ceq $original) 'bootstrap observation validation never mutates input'
+Reject {Assert-RestoreRolePlanEnvelope $bootstrap.Baseline -ZeroDrift} 'bootstrap observations cannot enter platform validation'
+foreach($mutation in @(
+  {$p.resource_drift+=@(Clone $p.resource_drift[0])},
+  {$p.resource_drift[0].change.after.inline_policy+=@(Clone $p.resource_drift[0].change.after.inline_policy[0])},
+  {$p.resource_drift[0].change.before.inline_policy=@()},
+  {$p.resource_drift[0].change.after.inline_policy[0].name='wrong'},
+  {$p.resource_drift[0].change.after.inline_policy[0].policy='{}'},
+  {$p.resource_drift[0].change.after.permissions_boundary='other'},
+  {$p.resource_drift[0].change.actions=@('delete')},
+  {$p.resource_drift[0].change.after_unknown=Clone @{arn=$true}},
+  {$p.resource_drift[0].change.after_sensitive=Clone @{inline_policy=@($true)}},
+  {$p.resource_drift[0].provider_name='untrusted'},
+  {$p.resource_drift[0]|Add-Member module_address 'module.platform'},
+  {$p.resource_drift[0].change|Add-Member replace_paths @('policy')},
+  {($p.resource_changes|Where-Object address -CEQ 'aws_iam_role_policy.github_deploy').change.actions=@('update')},
+  {($p.resource_changes|Where-Object address -CEQ 'aws_iam_role_policy.github_deploy').change.after.role='wrong'},
+  {$p.resource_changes=@($p.resource_changes|Where-Object address -CNE 'aws_iam_role_policy.github_deploy')},
+  {$p.resource_changes+=@(Clone ($p.resource_changes|Where-Object address -CEQ 'aws_iam_role_policy.github_deploy'))}
+)){
+  $p=Clone $bootstrap.Baseline;& $mutation
+  Reject {Assert-RestoreRolePlanEnvelope $p -ZeroDrift -Stage Bootstrap} 'bootstrap computed-policy observation rejects changed ownership, authority or metadata'
+}
+foreach($i in 1..6){
+  foreach($mutation in @(
+    {$p.resource_drift[$i].change.before.tags=Clone @{}},
+    {$p.resource_drift[$i].change.after.tags=Clone @{New='value'}},
+    {$p.resource_drift[$i].change.after.policy='{}'},
+    {$p.resource_drift[$i].change.after.tags_all=Clone @{Environment='production'}},
+    {$p.resource_drift[$i].change.after_sensitive.tags=$true},
+    {$p.resource_drift[$i].change.before_sensitive|Add-Member tags ([pscustomobject]@{})},
+    {$p.resource_drift[$i].name='github_deploy_boundary'},
+    {$p.resource_drift[$i].index='other'},
+    {$p.resource_drift[$i].change.after_unknown=Clone @{policy=$true}},
+    {$p.resource_drift[$i].change.after.arn="arn:aws:iam::999999999999:policy/ai-job-apply-development-synthetic-boundary"},
+    {$p.resource_drift[$i].change.actions=@('create','delete')},
+    {($p.resource_changes|Where-Object address -CEQ $p.resource_drift[$i].address).change.after.id='other'}
+  )){
+    $p=Clone $bootstrap.Baseline;& $mutation
+    Reject {Assert-RestoreRolePlanEnvelope $p -ZeroDrift -Stage Bootstrap} 'bootstrap tag observations reject unrelated values, ownership, identity or metadata'
+  }
+}
+foreach($badMask in @('false',0,'unknown',(Clone @{nested='false'}),(Clone @{nested=$null}))){
+  foreach($location in @('drift','observed','child')){
+    $p=Clone $bootstrap.Baseline
+    if($location -ceq 'drift'){$p.resource_drift[0].change.after_unknown=$badMask}
+    else{
+      $address=if($location -ceq 'child'){'aws_iam_role_policy.github_deploy'}else{'aws_iam_role.github_deploy'}
+      ($p.resource_changes|Where-Object address -CEQ $address).change.after_unknown=$badMask
+    }
+    Reject {Assert-RestoreRolePlanEnvelope $p -ZeroDrift -Stage Bootstrap} 'bootstrap unknown metadata refuses malformed scalars at every ownership layer'
+  }
+}
 Write-Output "Development deletion restore-role guards: $script:checks assertions passed (generated fixtures; no cloud calls)."

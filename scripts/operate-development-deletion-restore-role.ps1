@@ -138,7 +138,7 @@ function Get-RestoreRoleState {
 function Assert-RestoreRoleStateMatchesPlan([object]$Plan){
   $shown=ConvertFrom-Json -InputObject (Invoke-RestoreRoleTerraform @('show','-json')).Text -DateKind String
   $actual=Get-RestoreRoleResourceMap $shown.values.root_module
-  $expected=Get-RestoreRoleBeforeRefreshResources $Plan
+  $expected=Get-RestoreRoleBeforeRefreshResources $Plan -Stage $Stage
   if((ConvertTo-RestoreRoleCanonical $actual) -cne (ConvertTo-RestoreRoleCanonical $expected)){throw 'RestoreRoleBaselineDoesNotMatchState'}
 }
 function Get-RestoreRoleLiveBoundary {
@@ -242,7 +242,7 @@ try{
   }elseif($CleanupMode -cne 'None' -or $PriorVerificationPath -or $ReplayPreparationPath -or $RestoreContextPath -or $ReplayCleanupJournalPath){throw 'RestoreRoleUnexpectedCleanupInput'}
   Assert-RestoreRoleFileBindings $bindings
   $baseline=Read-DeploymentTerraformPlan -Path $baselinePath -TerraformDirectory $terraformDirectory
-  Assert-RestoreRolePlanEnvelope $baseline -ZeroDrift
+  Assert-RestoreRolePlanEnvelope $baseline -ZeroDrift -Stage $Stage
   $enable=$Transition -ceq 'Enable'
   $privateRoot=Join-Path $repository '.tmp/deletion-restore-role'
   if($Action -ceq 'Plan'){
@@ -325,7 +325,7 @@ try{
   $verified=Read-DeploymentTerraformPlan -Path $verifyPath -TerraformDirectory $terraformDirectory
   $verifyHash=Get-RestoreRoleHash $verifyPath
   $bindings+=@{path=$verifyPath;sha256=$verifyHash}
-  Assert-RestoreRolePlanEnvelope $verified -ZeroDrift
+  Assert-RestoreRolePlanEnvelope $verified -ZeroDrift -Stage $Stage
   if((ConvertTo-RestoreRoleCanonical $verified.variables) -cne (ConvertTo-RestoreRoleCanonical $plan.variables)){throw 'RestoreRoleVerificationInputsChanged'}
   Assert-RestoreRoleStateMatchesPlan $verified;Assert-RestoreRoleLive $verified $enable
   Assert-RestoreRoleSession;Assert-RestoreRoleStateIdentity (Get-RestoreRoleState) $applied.lineage ([long]$applied.serial)

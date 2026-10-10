@@ -75,8 +75,12 @@ separate operation. Keep the public runtime and all automatic writers disabled t
 .\scripts\operate-development-postgresql-restore.ps1 -Action Cleanup -DarkRecovery -Execute @restoreBoundary
 ```
 
-The operator uses the applied plan's complete current root inputs for fresh locked zero-change,
-zero-drift verification against the exact encrypted backend. It requires writer activation off,
+The operator uses the applied plan's complete current root inputs for fresh locked zero-change
+verification against the exact encrypted backend. It admits only the exact source database's
+empty metadata and forward backup clock, plus the reader role's computed policy matching its
+three unchanged owned child policies. These bounded refresh observations are not strict zero
+observed drift; unrelated drift, unsafe metadata and any proposed action still refuse.
+Complete typed inputs preserve null and empty values in either Windows shell. It requires writer activation off,
 zero public routes, enabled rules/mappings/schedules, ECS services or RUNNING/PENDING tasks,
 running durable executions and queued/in-flight/delayed work. It checks around each original
 read-only verifier and before restore/delete requests. It retains deployed candidate-rights
