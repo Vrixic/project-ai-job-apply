@@ -107,6 +107,30 @@ function replayResult() {
 }
 
 describe("cross-runtime restore contract fixture", () => {
+  it("accepts bounded committed preservation evidence and rejects partial or extra fields", () => {
+    const digest = { sha256: "a".repeat(64), relationCount: 96, rowCount: 12, byteCount: 240 };
+    const preservation = { schemaVersion: 1, unchanged: digest, reconciled: digest };
+    expect(validateRestoreReplayResult({ ...replayResult(), preservation })).toBe(true);
+    for (const mutation of [
+      { relationCount: 95 },
+      { rowCount: 100001 },
+      { byteCount: 67108865 },
+      { sha256: "invalid" },
+      { extra: true },
+    ]) {
+      expect(
+        validateRestoreReplayResult({
+          ...replayResult(),
+          preservation: { ...preservation, unchanged: { ...digest, ...mutation } },
+        }),
+      ).toBe(false);
+    }
+    expect(
+      validateRestoreReplayResult({ ...replayResult(), preservation: { unchanged: digest } }),
+    ).toBe(false);
+    expect(validateRestoreInspectionResult({ ...inspection(), preservation })).toBe(false);
+  });
+
   it("binds the generated fixture, actual policy catalog, canonical environment and request hashes", () => {
     expect(fixture.schemaVersion).toBe(1);
     expect(fixture.classification).toBe("generated-synthetic-no-live-identity");

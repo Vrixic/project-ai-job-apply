@@ -24,6 +24,12 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 
 ## D3 — High-quality application preparation
 
+D3-099 transactional replay preservation passes 348 focused tests, 790 operator assertions,
+11 real PostgreSQL regressions, independent review and all 43 repository stages. The simulated
+connected browser journey passes; development, Docker and WSL are off with recovery data retained.
+Dedicated primary promotion, managed replay and live connected acceptance remain internal work.
+[Evidence](evidence/d3-replay-data-preservation-2026-10-10.md).
+
 Grounded preparation, packets/review, safe manual Apply, submission-safety controls and native runtime/test tooling are implemented.
 The 2026-10-09 browser safety batch passes a simulated connected search-to-confirmed-history journey;
 cover-letter opt-in/status/cancellation UI is locally tested behind a separate default-off flag.

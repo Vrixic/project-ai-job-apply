@@ -39,6 +39,7 @@ import {
   RESTORED_CANDIDATE_RIGHTS_OWNERS,
 } from "./candidate-deletion-restore-policy.js";
 import { PostgresCandidateDeletionRestoreStore } from "./candidate-deletion-restore-store.js";
+import { digestRestoredData } from "./candidate-deletion-restore-preservation.js";
 import { PostgresCandidateRightsActivityStore } from "./candidate-rights-activities.js";
 import { AwsCandidateDocumentObjectStore } from "./candidate-rights-aws.js";
 import type { CandidateRightsActivityInputV1 } from "./candidate-rights-durable.js";
@@ -282,6 +283,137 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
     await database.client`DELETE FROM privacy.account_deletion_ledger WHERE request_id = ${entry.requestId}`;
     await database.client`DELETE FROM identity.users WHERE id = ${entry.userId}`;
   }
+
+  it("includes same-user unrelated requests, operations, keys, exports and nullable audit in preservation", async () => {
+    const target = await seed(1);
+    try {
+      await expect(
+        database.client.begin("isolation level serializable", async (tx) => {
+          const fingerprint = () =>
+            digestRestoredData(tx, [target.entry], {
+              deadline: Date.now() + 90_000,
+              rowCount: 0,
+              byteCount: 0,
+            });
+          let prior = await fingerprint();
+          const operationId = uuidv7();
+          const statements: Array<() => Promise<unknown>> = [
+            () =>
+              tx`INSERT INTO platform.operations (id,user_id,kind,state) VALUES (${operationId},${target.entry.userId},'candidate_data_export','queued')`,
+            () =>
+              tx`INSERT INTO profile.account_deletion_requests (id,user_id,policy_version,state,version) VALUES (${uuidv7()},${target.entry.userId},${target.entry.policyVersion},'requested',1)`,
+            () =>
+              tx`INSERT INTO platform.idempotency_keys (user_id,scope,key,request_hash,response) VALUES (${target.entry.userId},'synthetic.unrelated','synthetic','synthetic','{}'::jsonb)`,
+            () =>
+              tx`INSERT INTO profile.candidate_data_exports (id,user_id,operation_id,format,policy_version,state) VALUES (${uuidv7()},${target.entry.userId},${operationId},'candidate-data-export-v1',${target.entry.policyVersion},'queued')`,
+            () =>
+              tx`INSERT INTO platform.audit_events (id,user_id,action,resource_type,trace_id) VALUES (${uuidv7()},NULL,'synthetic.unrooted','synthetic','synthetic')`,
+            () =>
+              tx`INSERT INTO platform.audit_events (id,user_id,action,resource_type,trace_id) VALUES (${uuidv7()},${target.entry.userId},'profile.account-deletion.synthetic','synthetic','synthetic')`,
+            () =>
+              tx`INSERT INTO platform.outbox_events (id,type,source,subject,data_schema,data) VALUES (${uuidv7()},'synthetic','synthetic',${target.entry.userId},'synthetic','{}'::jsonb)`,
+          ];
+          for (const insert of statements) {
+            await insert();
+            const next = await fingerprint();
+            expect(next.rowCount).toBe(prior.rowCount + 1);
+            expect(next.sha256).not.toBe(prior.sha256);
+            prior = next;
+          }
+          throw new Error("SyntheticProjectionRollback");
+        }),
+      ).rejects.toThrow("SyntheticProjectionRollback");
+    } finally {
+      await finishAndRemove(target.entry);
+    }
+  }, 60_000);
+
+  it("rolls back all replay writes when an owner deletion changes an unrelated row", async () => {
+    const target = await seed(1);
+    const other = await seed(1);
+    let injected = false;
+    const [originalBilling] =
+      await database.client`SELECT effective_at FROM billing.entitlement_accounts WHERE user_id = ${other.entry.userId}`;
+    const tamperedHandle = {
+      ...database,
+      client: {
+        begin: (
+          _options: string,
+          run: (tx: Pick<DatabaseHandle["client"], "unsafe">) => Promise<unknown>,
+        ) =>
+          database.client.begin("isolation level serializable", async (tx) =>
+            run({
+              unsafe: ((query: string, values: string[] = []) => {
+                const pending = tx.unsafe(query, values);
+                return Object.assign(
+                  pending.then(async (rows) => {
+                    if (
+                      !injected &&
+                      query.startsWith("SELECT applications.delete_candidate_data")
+                    ) {
+                      injected = true;
+                      await tx`UPDATE billing.entitlement_accounts SET effective_at = effective_at - interval '1 second' WHERE user_id = ${other.entry.userId}`;
+                    }
+                    return rows;
+                  }),
+                  { cancel: () => pending.cancel() },
+                );
+              }) as DatabaseHandle["client"]["unsafe"],
+            }),
+          ),
+      },
+    } as unknown as DatabaseHandle;
+    try {
+      const before = await counts(target.entry.userId);
+      const tampered = new PostgresCandidateDeletionRestoreStore(tamperedHandle);
+      const preflight = await tampered.preflight([target.entry]);
+      await expect(tampered.reconcile([target.entry], preflight)).rejects.toThrow(
+        "NondeletedDataChanged",
+      );
+      expect(injected).toBe(true);
+      expect(await counts(target.entry.userId)).toEqual(before);
+      const [row] =
+        await database.client`SELECT effective_at FROM billing.entitlement_accounts WHERE user_id = ${other.entry.userId}`;
+      expect(row?.effectiveAt).toEqual(originalBilling?.effectiveAt);
+      const [user] =
+        await database.client`SELECT account_state FROM identity.users WHERE id = ${target.entry.userId}`;
+      expect(user?.accountState).toBe("active");
+      const requests =
+        await database.client`SELECT id FROM profile.account_deletion_requests WHERE user_id = ${target.entry.userId}`;
+      expect(requests).toHaveLength(0);
+    } finally {
+      await finishAndRemove(target.entry);
+      await finishAndRemove(other.entry);
+    }
+  }, 60_000);
+
+  it("preserves every unrelated whole row during replay and detects same-count value changes", async () => {
+    const target = await seed(1);
+    const other = await seed(1);
+    const fingerprint = () =>
+      database.client.begin("read only isolation level repeatable read", (tx) =>
+        digestRestoredData(tx, [target.entry], {
+          deadline: Date.now() + 90_000,
+          rowCount: 0,
+          byteCount: 0,
+        }),
+      );
+    try {
+      const before = await fingerprint();
+      const preflight = await store.preflight([target.entry]);
+      const result = await store.reconcile([target.entry], preflight);
+      expect(result.preservation?.unchanged).toEqual(before);
+      expect(await fingerprint()).toEqual(before);
+      expect(result.preservation?.reconciled.relationCount).toBe(96);
+      await database.client`UPDATE billing.entitlement_accounts SET effective_at = effective_at - interval '1 second' WHERE user_id = ${other.entry.userId}`;
+      const changed = await fingerprint();
+      expect(changed.rowCount).toBe(before.rowCount);
+      expect(changed.sha256).not.toBe(before.sha256);
+    } finally {
+      await finishAndRemove(target.entry);
+      await finishAndRemove(other.entry);
+    }
+  }, 60_000);
 
   it("persists confirmation across SQL rollback, retains quarantine on incomplete prefix purge, and retries completion", async () => {
     const userId = uuidv7();
@@ -581,7 +713,7 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
       expect(tags).toEqual([completedAt, completedAt]);
       const entry = { ...journaled, completedAt };
       const preflight = await store.preflight([entry]);
-      expect(await store.reconcile([entry], preflight)).toEqual({
+      expect(await store.reconcile([entry], preflight)).toMatchObject({
         restoredUsersReconciled: 0,
         restoredUsersAbsent: 0,
         restoredUsersAlreadyReconciled: 1,
@@ -811,7 +943,7 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
         ]);
         // No external adapter is provided to the store. The root orchestration proves
         // source object absence before invoking reconciliation; all fixture objects are synthetic.
-        expect(await store.reconcile([first.entry], preflight)).toEqual({
+        expect(await store.reconcile([first.entry], preflight)).toMatchObject({
           restoredUsersReconciled: 1,
           restoredUsersAbsent: 0,
           restoredUsersAlreadyReconciled: 0,
@@ -834,7 +966,7 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
         expect(new Date(String(completed?.requestedAt)).toISOString()).toBe(requestedAt);
         const after = await store.preflight([first.entry]);
         expect(after.documentObjects).toEqual([]);
-        expect(await store.reconcile([first.entry], after)).toEqual({
+        expect(await store.reconcile([first.entry], after)).toMatchObject({
           restoredUsersReconciled: 0,
           restoredUsersAbsent: 0,
           restoredUsersAlreadyReconciled: 1,
@@ -879,14 +1011,18 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
           `;
         }
         expect((await counts(first.entry.userId)).applications).toBe(withCleanupQueue ? 2 : 1);
-        expect(await store.reconcile([first.entry], await store.preflight([first.entry]))).toEqual({
+        expect(
+          await store.reconcile([first.entry], await store.preflight([first.entry])),
+        ).toMatchObject({
           restoredUsersReconciled: 1,
           restoredUsersAbsent: 0,
           restoredUsersAlreadyReconciled: 0,
         });
         expect(Object.values(await counts(first.entry.userId))).toEqual(Array(8).fill(0));
         expect(await counts(second.entry.userId)).toEqual(otherBefore);
-        expect(await store.reconcile([first.entry], await store.preflight([first.entry]))).toEqual({
+        expect(
+          await store.reconcile([first.entry], await store.preflight([first.entry])),
+        ).toMatchObject({
           restoredUsersReconciled: 0,
           restoredUsersAbsent: 0,
           restoredUsersAlreadyReconciled: 1,

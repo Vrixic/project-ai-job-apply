@@ -439,6 +439,22 @@
         },
         "identityProviderCalls": {
           "const": 0
+        },
+        "preservation": {
+          "required": ["schemaVersion", "unchanged", "reconciled"],
+          "additionalProperties": false,
+          "properties": {
+            "schemaVersion": {
+              "const": 1
+            },
+            "reconciled": {
+              "$ref": "#/$defs/dataDigest"
+            },
+            "unchanged": {
+              "$ref": "#/$defs/dataDigest"
+            }
+          },
+          "type": "object"
         }
       }
     },
@@ -823,6 +839,30 @@
           }
         }
       ]
+    },
+    "dataDigest": {
+      "required": ["sha256", "relationCount", "rowCount", "byteCount"],
+      "additionalProperties": false,
+      "properties": {
+        "byteCount": {
+          "minimum": 0,
+          "maximum": 67108864,
+          "type": "integer"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "rowCount": {
+          "minimum": 0,
+          "maximum": 100000,
+          "type": "integer"
+        },
+        "relationCount": {
+          "const": 96
+        }
+      },
+      "type": "object"
     }
   }
 }
