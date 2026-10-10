@@ -10,3 +10,9 @@ The runner never downloads a browser, contacts an employer, dispatches a submiss
 identity, or retains candidate data. This is local browser evidence only. It does not establish
 managed-OIDC, deployed Gateway/database, provider, legal, privacy, security, human accessibility,
 assistive-technology, or real-candidate acceptance.
+
+`node scripts/tests/d3-browser-assurance/greenhouse.mjs` exercises the internal Greenhouse
+inspection/filling primitives in installed headless Chromium. All requests are intercepted locally
+with generated synthetic HTML and simulated approval/registry authority. It verifies synchronous
+employer-handler changes, exact just-written values and native validation; there are no uploads,
+submission clicks or installed-extension/live-provider acceptance claims.

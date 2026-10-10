@@ -1,6 +1,11 @@
 # D3-100: Reconciled-copy verification and complete recovery inventory
 
-Started: 2026-10-10. Status: Repository implementation verified; merge pending.
+Started: 2026-10-10. Status: Complete for repository implementation.
+
+[PR #633](https://github.com/Vrixic/project-ai-job-apply/pull/633) merged as
+`287216a641619cc616c1b0e2e8bf7b9ed74d3e0f` after independent exact-head review of
+`20fd5f6524bc559b868622dcbae1bdefbfab4fdf`. Hosted quality CI did not start because of
+account billing/spending restrictions; the normal merge used no bypass. Local checks are below.
 
 Inspection and independent review found three omitted independent recovery roots: restricted
 answers, cover letters and native admission. A completed deletion could otherwise be skipped
@@ -30,7 +35,9 @@ Source `1a5b57253fe9a2ef580d46fd8109fa6bfdae4d01` passes 500 focused tests,
 cover the three independent roots, read-only enforcement, exact timestamp binding, historical
 completed inventories and nine corruption cases with rollback. Cloud transport, retained-marker
 provenance and KMS are simulated; this is not managed recovery acceptance. Independent review
-confirmed the exact committed source and PostgreSQL results; final delivery-record review follows.
+confirmed the exact committed source, PostgreSQL results and final delivery records. Its private
+receipt `independent-d3-100-head20fd5f65-final-review.json` has SHA-256
+`03a85ab8a428cad37dd4fe38d71e4a58440c0615f9b522bb36cda879320a89ee`.
 
 Private aggregate logs under `.tmp/d3-dark-primary-recovery-20261010/`:
 

@@ -32,10 +32,15 @@ Dedicated primary promotion, managed replay and live connected acceptance remain
 
 D3-100 complete independent recovery roots, cover-letter namespace absence and separate read-only
 reconciled-copy verification pass 500 focused tests, 17 real PostgreSQL regressions and all 43
-repository stages; final review/merge is pending. Greenhouse execution, private runtime/promotion
+repository stages and independent final review; PR #633 is merged. Greenhouse execution, private runtime/promotion
 wiring and managed/live acceptance remain unfinished. No cloud activation occurred in this batch;
 fresh development readback is unavailable because SSO still reports expired credentials.
 [Evidence](evidence/d3-reconciled-copy-verification-2026-10-10.md).
+
+D3-101 is implementing bounded Greenhouse DOM inspection and registry-gated ordinary field
+execution using the existing SDK. Native file transport, extension write authorization and
+submission/result wiring remain unfinished; proposed [ADR-049](../../adr/049-greenhouse-approved-application-execution.md)
+records the narrow batches. No live provider authority or activation is inferred.
 
 Grounded preparation, packets/review, safe manual Apply, submission-safety controls and native runtime/test tooling are implemented.
 The 2026-10-09 browser safety batch passes a simulated connected search-to-confirmed-history journey;

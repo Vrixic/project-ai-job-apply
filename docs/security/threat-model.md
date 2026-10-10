@@ -1,5 +1,14 @@
 # Phase 0 Threat Model
 
+2026-10-10 D3-101 internal source: Greenhouse DOM primitives use the existing action registry and
+SDK sensitive-field policy. Exact top-frame URL/document, form structure and stable control
+identities are rechecked before each event. Synchronous employer handlers that replace, hide,
+disable, invalidate or revert a control stop subsequent effects and require review. Approval
+reads have one fixed admission deadline and cancellation fence; partial effects never replay.
+These primitives are not wired into the extension UI and grant no upload/submission authority.
+Native file transport, write authorization, attempt-bound confirmation and accountable provider
+gates remain under [proposed ADR-049](../adr/049-greenhouse-approved-application-execution.md).
+
 Default-off observed-form selection (2026-10-09): forged imports are untrusted candidate inputs,
 not signed provider evidence. Refuse unknown/value-bearing fields, wrong application/job/destination,
 future/expired captures, challenges and oversized structures. Bracket extraction with owner/revision,

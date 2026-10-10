@@ -16,6 +16,14 @@
       "types": "./dist/observed-form.d.ts",
       "default": "./dist/observed-form.js"
     },
+    "./plan": {
+      "types": "./dist/plan.d.ts",
+      "default": "./dist/plan.js"
+    },
+    "./registry": {
+      "types": "./dist/registry.d.ts",
+      "default": "./dist/registry.js"
+    },
     "./mapping": {
       "types": "./dist/mapping.d.ts",
       "default": "./dist/mapping.js"
