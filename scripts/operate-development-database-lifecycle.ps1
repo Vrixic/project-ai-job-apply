@@ -68,7 +68,17 @@ function Assert-Drained {
     if (@($counts.Attributes.PSObject.Properties | Where-Object { [long]$_.Value -ne 0 }).Count) { throw 'Queue/DLQ work remains; never discard it for shutdown.' }
   }
 }
+function Assert-RestoreSnapshotSelection($Recovery) {
+  if ([string]::IsNullOrWhiteSpace([string]$Recovery.final_snapshot_identifier) -or
+      [string]$Recovery.restore_snapshot_identifier -cne [string]$Recovery.final_snapshot_identifier) {
+    throw 'Restore must select the exact final snapshot from the reviewed recovery inputs; historical snapshot selection requires separate recovery review.'
+  }
+}
 function Assert-PlanScope($Plan) {
+  if ($TargetMode -eq 'restore') {
+    $recovery = $Plan.variables.development_database_recovery.value
+    Assert-RestoreSnapshotSelection $recovery
+  }
   foreach ($resource in @($Plan.resource_changes | Where-Object { $_.mode -eq 'managed' -and ($_.change.actions -join ',') -ne 'no-op' })) {
     $actions = $resource.change.actions -join ','
     if ($TargetMode -eq 'dormant') {
@@ -81,7 +91,7 @@ function Assert-PlanScope($Plan) {
       }
     } elseif ($TargetMode -eq 'restore') {
       if ($resource.address -eq 'module.platform.aws_db_instance.postgres[0]' -and $actions -eq 'create') {
-        if (-not $resource.change.after.snapshot_identifier -or -not $resource.change.after.storage_encrypted -or $resource.change.after.publicly_accessible -or -not $resource.change.after.deletion_protection) { throw 'Restore must use the exact encrypted snapshot and protected private database.' }
+        if ($resource.change.after.snapshot_identifier -cne $recovery.restore_snapshot_identifier -or -not $resource.change.after.storage_encrypted -or $resource.change.after.publicly_accessible -or -not $resource.change.after.deletion_protection) { throw 'Restore must use the exact encrypted snapshot and protected private database.' }
       } elseif ($resource.address -eq 'module.platform.aws_secretsmanager_secret_version.database_url[0]' -and $actions -in @('delete,create','create,delete')) {
         if (-not $resource.change.after.secret_id -or $resource.change.before.secret_id -cne $resource.change.after.secret_id) { throw 'Restore may refresh only the existing database connection secret version.' }
       } elseif ($actions -ne 'update' -or $resource.address -notin @('module.platform.aws_iam_role_policy.public_job_lambda[0]','module.platform.aws_lambda_function.public_job_projection[0]','module.platform.aws_lambda_alias.public_job_projection[0]')) { throw 'Unexpected resource change in restore plan.' }
@@ -108,6 +118,7 @@ if ($Action -eq 'Plan') {
   $InputPath = Assert-PrivateArtifact $InputPath
   $inputs = Get-Content -LiteralPath $InputPath -Raw | ConvertFrom-Json
   if ($inputs.development_database_mode -cne $TargetMode) { throw 'Input mode mismatch.' }
+  if ($TargetMode -eq 'restore') { Assert-RestoreSnapshotSelection $inputs.development_database_recovery }
   Assert-Drained
   & terraform "-chdir=$root" plan -input=false -lock-timeout=30s "-var-file=$InputPath" "-out=$PlanPath" -no-color > "$PlanPath.log" 2>&1
   if ($LASTEXITCODE -ne 0) { throw 'Plan failed; inspect the private log.' }
