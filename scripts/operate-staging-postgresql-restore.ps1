@@ -13,10 +13,14 @@ param(
   [string]$RuntimePlanPath = "",
   [switch]$Execute,
   [switch]$AllowUnverifiedCleanup,
+  [switch]$DarkRecovery,
   [switch]$Help
 )
 
 $ErrorActionPreference = "Stop"
+if ($DarkRecovery -and $Environment -cne "development") {
+  throw "Dark recovery is restricted to development."
+}
 . (Join-Path $PSScriptRoot "lib/terraform-toolchain.ps1")
 
 if ([string]::IsNullOrWhiteSpace($AwsProfile)) {
@@ -52,6 +56,10 @@ RuntimePlanPath below the ignored $Environment `.terraform` directory for steady
 All state-changing actions require -Execute. AllowUnverifiedCleanup is an emergency cleanup gate
 for an exact failed disposable target; it never weakens target identity, tag, network, or source
 guards.
+
+Development-only -DarkRecovery substitutes exact-input zero drift and fresh writer-off checks
+for live HTTP/trigger/alarm health. Pass it consistently on every action of that exercise;
+legacy contexts are steady-state only. Source, backup, verifier and target guards still apply.
 "@
   exit 0
 }
@@ -63,6 +71,7 @@ if ($Region -ne "us-east-2") {
 $environmentDirectory = (Resolve-Path "infrastructure/terraform/environments/$Environment").Path
 $terraformDataDirectory = Join-Path $environmentDirectory ".terraform"
 $contextPath = Join-Path $terraformDataDirectory "applydash-$Environment-restore-context.json"
+if ($DarkRecovery) { $contextPath = Join-Path $terraformDataDirectory "applydash-development-dark-restore-context.json" }
 $sourceIdentifier = "ai-job-apply-$Environment"
 $targetPrefix = "ai-job-apply-$Environment-restore-"
 $expectedBackupRetentionDays = if ($Environment -ceq "development") { 35 } else { 7 }
@@ -70,6 +79,7 @@ $applicationLogGroup = "/ai-job-apply/$Environment/application"
 $runtimeInspector = Join-Path $PSScriptRoot "inspect-staging-workload-and-cost.ps1"
 $repositoryRoot = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot "lib/staging-postgresql-restore-verifier.ps1")
+. (Join-Path $PSScriptRoot "lib/development-postgresql-dark-recovery.ps1")
 $restoreManifestBoundary = Get-D1RestoreManifestBoundary $repositoryRoot
 
 $env:AWS_PROFILE = $AwsProfile
@@ -316,6 +326,7 @@ function Get-DisposableTargets {
 }
 
 function Assert-ApplicationBaseline {
+  if ($DarkRecovery) { return Assert-D1RestoreDarkBaseline }
   if ($ExpectedAccountId -notmatch "^[0-9]{12}$" -or [string]::IsNullOrWhiteSpace($StateBucket) -or
       [string]::IsNullOrWhiteSpace($RuntimePlanPath)) {
     throw "The exact $Environment account, state bucket, and applied runtime plan are required."
@@ -414,6 +425,7 @@ function Assert-ApplicationBaseline {
 }
 
 function Assert-TerraformNoDrift {
+  if ($DarkRecovery) { $null = Assert-D1RestoreDarkBaseline; return }
   $resultJson = & $runtimeInspector -Environment $Environment -Action Status `
     -ExpectedAccountId $ExpectedAccountId -StateBucket $StateBucket `
     -RuntimePlanPath $RuntimePlanPath -AwsProfile $AwsProfile -Region $Region 2>$null
@@ -551,6 +563,7 @@ function Invoke-DatabaseVerifier {
   } | ConvertTo-Json -Depth 5 -Compress
 
   Assert-CurrentAwsCaller
+  if ($DarkRecovery) { Assert-D1RestoreDarkWritersStopped }
   $result = Invoke-AwsJson @(
     "ecs",
     "run-task",
@@ -690,6 +703,8 @@ function Invoke-DatabaseVerifier {
 function Save-RestoreContext {
   param([object]$Context)
 
+  Assert-D1RestoreRecoveryMode $Context $Environment ([bool]$DarkRecovery)
+
   if (-not (Test-Path -LiteralPath $terraformDataDirectory)) {
     throw "The $Environment Terraform backend must already be initialized."
   }
@@ -703,7 +718,9 @@ function Get-RestoreContext {
   ) {
     throw "The ignored $Environment restore context is absent. Run Start first."
   }
-  return Read-D1RestoreContextFile $contextPath $restoreManifestBoundary
+  $context = Read-D1RestoreContextFile $contextPath $restoreManifestBoundary
+  Assert-D1RestoreRecoveryMode $context $Environment ([bool]$DarkRecovery)
+  return $context
 }
 
 function Get-TargetDatabase {
@@ -869,8 +886,12 @@ function Invoke-StartRestore {
   $null = Assert-ApplicationBaseline
   Assert-TerraformNoDrift
   $runtime = Get-MigrationRuntime
-  $sourceVerification = Invoke-DatabaseVerifier `
-    $runtime "source" ([string]$source.Endpoint.Address)
+  try {
+    $sourceVerification = Invoke-DatabaseVerifier `
+      $runtime "source" ([string]$source.Endpoint.Address)
+  } finally {
+    if ($DarkRecovery) { Assert-D1RestoreDarkWritersStopped }
+  }
 
   $requestTime = [DateTime]::UtcNow
   $startedAt = $requestTime.ToString("yyyy-MM-ddTHH:mm:ssZ")
@@ -879,6 +900,7 @@ function Invoke-StartRestore {
   $request = New-RestoreRequest $source $targetIdentifier $startedAt
   $requestJson = $request | ConvertTo-Json -Depth 8 -Compress
   $context = [pscustomobject][ordered]@{
+    baseline_mode              = if ($DarkRecovery) { "dark-recovery" } else { "steady-state" }
     source_identifier          = $sourceIdentifier
     target_identifier          = $targetIdentifier
     started_at                 = $startedAt
@@ -928,6 +950,7 @@ function Invoke-StartRestore {
     throw "A disposable $Environment restore target appeared during restore preparation."
   }
   Assert-CurrentAwsCaller
+  if ($DarkRecovery) { Assert-D1RestoreDarkWritersStopped }
   Save-RestoreContext $context
   try {
     $null = Invoke-AwsJson @(
@@ -971,6 +994,7 @@ function Invoke-StartRestore {
   return [pscustomobject]@{
     Environment                = $Environment
     SourceManifestId           = [string]$context.source_manifest_id
+    BaselineMode               = [string]$context.baseline_mode
     SourceManifestSha256       = [string]$context.source_manifest_sha256
     SourceOwners               = [int]$context.source_owner_count
     SourceRelations            = [int]$context.source_relation_count
@@ -988,6 +1012,7 @@ function Invoke-StartRestore {
 function Invoke-VerifyRestore {
   Assert-ExecutionAuthorized "Restore verification"
   $context = Get-RestoreContext
+  if ($DarkRecovery) { $null = Assert-D1RestoreDarkBaseline }
   $source = Get-SourceDatabase
   Assert-SourceBoundary $source
   Assert-SourceContextBoundary $source $context
@@ -1001,8 +1026,12 @@ function Invoke-VerifyRestore {
   Save-RestoreContext $context
   $runtime = Get-MigrationRuntime
   Assert-D1RestoreRuntimeContext $runtime $context
-  $verification = Invoke-DatabaseVerifier `
-    $runtime "target" ([string]$target.Endpoint.Address)
+  try {
+    $verification = Invoke-DatabaseVerifier `
+      $runtime "target" ([string]$target.Endpoint.Address)
+  } finally {
+    if ($DarkRecovery) { Assert-D1RestoreDarkWritersStopped }
+  }
   if (
     [string]$verification.ManifestId -cne [string]$context.source_manifest_id -or
     [string]$verification.ManifestSha256 -cne [string]$context.source_manifest_sha256 -or
@@ -1031,6 +1060,7 @@ function Invoke-VerifyRestore {
   return [pscustomobject]@{
     Environment               = $Environment
     TargetManifestId          = [string]$verification.ManifestId
+    BaselineMode              = if ($DarkRecovery) { "dark-recovery" } else { "steady-state" }
     TargetManifestSha256      = [string]$verification.ManifestSha256
     TargetOwners              = [int]$verification.OwnerCount
     TargetRelations           = [int]$verification.RelationCount
@@ -1045,6 +1075,7 @@ function Invoke-VerifyRestore {
 function Invoke-CleanupRestore {
   Assert-ExecutionAuthorized "Restore cleanup"
   $context = Get-RestoreContext
+  if ($DarkRecovery) { Assert-D1RestoreDarkWritersStopped }
   if (-not [bool]$context.verified -and -not $AllowUnverifiedCleanup) {
     throw "Cleanup requires a verified target or the explicit -AllowUnverifiedCleanup emergency gate."
   }
@@ -1066,6 +1097,7 @@ function Invoke-CleanupRestore {
     if ($null -ne $finalDeleteTarget) {
       Assert-TargetBoundary $source $finalDeleteTarget $context `
         (-not $AllowUnverifiedCleanup)
+      if ($DarkRecovery) { Assert-D1RestoreDarkWritersStopped }
       $null = Invoke-AwsJson @(
         "rds",
         "delete-db-instance",
@@ -1143,6 +1175,7 @@ function Invoke-CleanupRestore {
   return [pscustomobject]@{
     Environment             = $Environment
     TargetDeleted           = $true
+    BaselineMode            = if ($DarkRecovery) { "dark-recovery" } else { "steady-state" }
     RemainingRestoreTargets = 0
     RemainingSnapshots      = 0
     RemainingTargetBackups  = 0
@@ -1170,6 +1203,7 @@ switch ($Action) {
     [pscustomobject]@{
       Environment               = $Environment
       SourceAvailable           = $true
+      BaselineMode              = if ($DarkRecovery) { "dark-recovery" } else { "steady-state" }
       SourcePrivate             = $true
       SourceEncrypted           = $true
       SourceDeletionProtected   = $true

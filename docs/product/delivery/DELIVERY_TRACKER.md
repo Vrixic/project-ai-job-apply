@@ -116,6 +116,10 @@ passing. Managed privacy replay remains pending before recovery/live release.
 Independent D1/admin acceptance remains deferred.
 [Managed reconciliation evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-transition-reconciliation-and-cleanup--2026-10-10).
 
+D3-096 adds a default-off development-only quiescent PITR path; 98 focused synthetic safety
+cases and all 43 repository stages pass. Managed source/privacy recovery remains pending.
+[Quiescent recovery evidence](evidence/d3-dark-privacy-recovery-2026-10-10.md).
+
 ## Cross-delivery decisions and changes
 
 Applications history belongs to D3, the generic inbox to D5, and structured Profile replacement to D3.1.

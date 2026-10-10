@@ -9,6 +9,8 @@ $developmentOperatorPath = Join-Path $repositoryRoot `
 $inspectorPath = Join-Path $repositoryRoot "scripts\inspect-staging-workload-and-cost.ps1"
 $packagePath = Join-Path $repositoryRoot "package.json"
 . $helperPath
+. (Join-Path $repositoryRoot 'scripts/lib/development-postgresql-dark-recovery.ps1')
+$DarkRecovery = $false
 $helperSource = Get-Content -LiteralPath $helperPath -Raw
 
 $package = Get-Content -LiteralPath $packagePath -Raw | ConvertFrom-D1RestoreJson
@@ -993,3 +995,4 @@ if ($LASTEXITCODE -ne 0 -or ($helpOutput -join "`n") -notmatch "Status is read-o
 
 Write-Host "Staging PostgreSQL restore verifier guard tests passed."
 & (Join-Path $PSScriptRoot "workload-inspector.tests.ps1")
+& (Join-Path $PSScriptRoot "development-postgresql-dark-recovery.tests.ps1")
