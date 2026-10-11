@@ -1278,6 +1278,7 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
               },
             };
           if (!(command instanceof RunTaskCommand)) throw Error("UnexpectedSyntheticEcsCommand");
+          expect(command.input).not.toHaveProperty("propagateTags");
           runs++;
           if (launchBehavior === "lost_ack") throw Error("SyntheticLostRunTaskAck");
           expect(
