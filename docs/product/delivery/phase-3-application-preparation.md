@@ -94,6 +94,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Native launch rejection (D3-109) | Original request digest, definitive SDK rejection capture, immutable terminal SQL and disposal/fresh-epoch guards are implemented and locally tested. Six reproducible native Lambda artifacts are published; revision-2 RPCs are staged disabled. | Consequential source/plan reviews and local migration packaging smoke pass. Migration/worker publication, compatible activation and live acceptance remain. Historical unknown claims remain unresolved. [Evidence](evidence/d3-native-launch-rejection-2026-10-11.md). |
 | Native download approval expiry (D3-110) | Exact approval/material deadlines gate downloads before reads and after hashing; expiry aborts pending files and withdraws transfers while preserving previews. 52 focused tests, web typecheck, simulated Chromium journey and consequential review pass. | Compatible hosted release and live acceptance remain. [Evidence](evidence/d3-native-download-approval-expiry-2026-10-11.md). |
 | Retained native deployment policy (D3-111) | Compact serialized deployment grant/boundary preserves authorization and both original revisions; 25 bootstrap Terraform test runs and validation pass. | Consequential review and managed application are recorded separately; live acceptance remains. [Evidence](evidence/d3-retained-native-deployment-policy-2026-10-11.md). |
+| Primary manifest fingerprint (D3-112) | Primary context/admission/schema verification binds current 80-migration source and rejects the old fingerprint. 311 focused tests, 841 PowerShell checks and component typecheck pass. | Fresh executor and managed replay precede candidate traffic; live acceptance remains. [Evidence](evidence/d3-primary-manifest-fingerprint-2026-10-11.md). |
 
 ## Decisions and scope changes
 
@@ -367,3 +368,9 @@ both retained resume revisions, preserving authorization. 25 bootstrap test runs
 Image scans/publication pass; development is temporarily restored writer-off and Docker/WSL are off.
 Managed activation/live acceptance and final shutdown remain. Independent D1/admin acceptance is deferred.
 [Evidence](evidence/d3-retained-native-deployment-policy-2026-10-11.md).
+
+2026-10-11: D3-112 binds primary deletion recovery to the current 80-migration fingerprint and
+rejects the old label. 311 focused tests, 841 PowerShell checks, component typecheck and consequential
+review pass. Migration 0017 and paused compatible Gateway/cleanup deployment pass; basic replay,
+native acceptance and final shutdown remain. Independent D1/admin acceptance stays deferred.
+[Evidence](evidence/d3-primary-manifest-fingerprint-2026-10-11.md).

@@ -11,7 +11,7 @@ All 25 bootstrap component Terraform test runs, configuration validation, change
 and diff checks pass. Regressions cover two retained revisions alongside the existing preparation,
 material and primary deletion safeguards, identical emitted grant/boundary, unchanged statements,
 state-grant subsumption and exact original role/boundary restrictions. Consequential source review passes; managed
-application are recorded separately; local mocked tests do not establish effective managed IAM.
+application is recorded separately; local mocked tests do not establish effective managed IAM.
 
 The enabled r2 worker image and current migration image are published with complete ECR scans and
 zero High/Critical findings. Worker smoke passes 24 actual isolated assertions; two clean migration
