@@ -203,7 +203,6 @@ export function createNativeTaskLaunch(options: {
             clientToken: fixed.allocationId,
             enableExecuteCommand: false,
             enableECSManagedTags: false,
-            propagateTags: "NONE",
             networkConfiguration: {
               awsvpcConfiguration: {
                 subnets: [...config.subnets],

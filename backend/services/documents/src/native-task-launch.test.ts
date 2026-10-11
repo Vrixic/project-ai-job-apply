@@ -9,6 +9,8 @@ import type {
   NativeMaterialLaunchScope,
 } from "./native-material-registry.js";
 import type { NativeTaskAllocation } from "./native-task-allocation.js";
+import type { NativeResumeGenerationRecord } from "./native-resume-generation-store.js";
+import { createNativeResumeTaskLaunch } from "./native-resume-task-launch.js";
 import {
   createNativeTaskLaunch,
   type NativeTaskLaunchConfiguration,
@@ -207,8 +209,8 @@ describe("private one-attempt native ECS launch", () => {
       platformVersion: "1.4.0",
       enableExecuteCommand: false,
       enableECSManagedTags: false,
-      propagateTags: "NONE",
     });
+    expect(request).not.toHaveProperty("propagateTags");
     expect(Object.keys(request.overrides ?? {})).toEqual(["containerOverrides"]);
     expect(request.overrides?.containerOverrides?.[0]?.environment).toHaveLength(7);
     expect(request.overrides?.containerOverrides?.[0]?.command).toBeUndefined();
@@ -220,6 +222,85 @@ describe("private one-attempt native ECS launch", () => {
     const first = await launch.launch(scope);
     await expect(launch.launch(scope)).resolves.toEqual(first);
     expect(f.send.mock.calls.filter(([c]) => c instanceof RunTaskCommand)).toHaveLength(1);
+  });
+  it("launches a native resume without specifying tag propagation", async () => {
+    const f = fixture();
+    let record: NativeResumeGenerationRecord = {
+      reservation: {
+        identity: {
+          generationId: scope.generationId,
+          ownerUserId: scope.ownerUserId,
+          applicationId: scope.applicationId,
+          version: 1,
+          baseDocumentId: id("7"),
+          baseVersion: 1,
+          baseSha256: "a".repeat(64),
+          jobContextSha256: "b".repeat(64),
+        },
+        application: {
+          ownerUserId: scope.ownerUserId,
+          applicationId: scope.applicationId,
+          canonicalJobId: id("8"),
+          expectedRevision: 1,
+          packetId: id("9"),
+          packetHash: "c".repeat(64),
+          jobRevision: "synthetic",
+        },
+        normalizedSha256: "d".repeat(64),
+        previousEpochId: null,
+        deployment: f.record.deployment,
+      },
+      allocationId: scope.allocationId,
+      epochId: scope.epochId,
+      state: "pending",
+      allocation: null,
+      configurationSha256: null,
+      reference: null,
+      ready: false,
+    };
+    const send = vi.fn(
+      async (command: DescribeTaskDefinitionCommand | DescribeTasksCommand | RunTaskCommand) => {
+        if (command instanceof DescribeTaskDefinitionCommand) {
+          const result = definition();
+          required(result.taskDefinition.containerDefinitions[0]).command = [
+            "native-resume/main.mjs",
+          ];
+          return result;
+        }
+        if (!(command instanceof RunTaskCommand)) throw Error("UnexpectedSyntheticEcsCommand");
+        // The live regional API rejected explicit NONE. Omission is the documented no-propagation default.
+        if (Object.hasOwn(command.input, "propagateTags"))
+          throw Error("Invalid value for propagateTags");
+        const result = task();
+        required(result.tasks[0]).overrides = command.input.overrides as NonNullable<
+          (typeof result.tasks)[0]
+        >["overrides"];
+        return result;
+      },
+    );
+    const launcher = createNativeResumeTaskLaunch({
+      ...f.options,
+      testClient: { send },
+      registry: {
+        claimLaunch: vi.fn(async (_scope, configurationSha256) => {
+          record = { ...record, configurationSha256 };
+          return { claimed: true, record };
+        }),
+        readLaunch: vi.fn(async () => record),
+        bindTask: vi.fn(async (_scope, _sha, originalTaskArn) => {
+          record = {
+            ...record,
+            state: "bound",
+            allocation: { ...scope, ...record.reservation.deployment, taskArn: originalTaskArn },
+          };
+          return record;
+        }),
+      },
+    });
+    await expect(launcher.launch(scope)).resolves.toMatchObject({ taskArn });
+    expect(send.mock.calls.filter(([command]) => command instanceof RunTaskCommand)).toHaveLength(
+      1,
+    );
   });
   it.each(["lostRunAck", "failedCapture", "lostClaimAck"])(
     "%s remains pending and never reissues RunTask",
