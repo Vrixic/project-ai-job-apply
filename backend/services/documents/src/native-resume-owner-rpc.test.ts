@@ -115,7 +115,8 @@ function fixture() {
     return {
       StatusCode: 200,
       ExecutedVersion: "7",
-      Payload: new TextEncoder().encode(nativeOwnerJson(result)),
+      // Lambda serializes the handler's object without sorting its property keys.
+      Payload: new TextEncoder().encode(JSON.stringify(result)),
     };
   });
   const client = createNativeResumeOwnerRpcClient({
@@ -329,31 +330,38 @@ describe("native resume authenticated scalar RPC", () => {
     });
     await expect(f.client.bootstrap()).rejects.toThrow("NativeResumeOwnerUnavailable");
   });
-  it.each(["version", "logs", "function_error", "status", "oversized", "noncanonical"])(
-    "refuses %s transport responses without retry",
-    async (kind) => {
-      const f = fixture();
-      f.send.mockImplementation(async (command) => {
-        if (!(command.input.Payload instanceof Uint8Array))
-          throw Error("SyntheticRpcPayloadUnavailable");
-        const input = JSON.parse(new TextDecoder().decode(command.input.Payload));
-        const output = await f.handler(input, { invokedFunctionArn: target });
-        return {
-          StatusCode: kind === "status" ? 202 : 200,
-          ExecutedVersion: kind === "version" ? "8" : "7",
-          ...(kind === "logs" ? { LogResult: "synthetic" } : {}),
-          ...(kind === "function_error" ? { FunctionError: "synthetic" } : {}),
-          Payload: new TextEncoder().encode(
-            kind === "oversized"
-              ? " ".repeat(16385)
-              : (kind === "noncanonical" ? " " : "") + nativeOwnerJson(output),
-          ),
-        };
-      });
-      await expect(f.client.bootstrap()).rejects.toThrow("NativeResumeOwnerUnavailable");
-      expect(f.send).toHaveBeenCalledTimes(1);
-    },
-  );
+  it.each([
+    "version",
+    "logs",
+    "function_error",
+    "status",
+    "oversized",
+    "noncanonical",
+    "duplicate_key",
+  ])("refuses %s transport responses without retry", async (kind) => {
+    const f = fixture();
+    f.send.mockImplementation(async (command) => {
+      if (!(command.input.Payload instanceof Uint8Array))
+        throw Error("SyntheticRpcPayloadUnavailable");
+      const input = JSON.parse(new TextDecoder().decode(command.input.Payload));
+      const output = await f.handler(input, { invokedFunctionArn: target });
+      return {
+        StatusCode: kind === "status" ? 202 : 200,
+        ExecutedVersion: kind === "version" ? "8" : "7",
+        ...(kind === "logs" ? { LogResult: "synthetic" } : {}),
+        ...(kind === "function_error" ? { FunctionError: "synthetic" } : {}),
+        Payload: new TextEncoder().encode(
+          kind === "oversized"
+            ? " ".repeat(16385)
+            : kind === "duplicate_key"
+              ? JSON.stringify(output).replace("{", '{"schemaVersion":1,')
+              : (kind === "noncanonical" ? " " : "") + JSON.stringify(output),
+        ),
+      };
+    });
+    await expect(f.client.bootstrap()).rejects.toThrow("NativeResumeOwnerUnavailable");
+    expect(f.send).toHaveBeenCalledTimes(1);
+  });
   it("keeps an aborted unknown send active until the original promise settles", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const f = fixture();
