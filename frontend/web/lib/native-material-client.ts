@@ -21,7 +21,25 @@ export type NativeMaterialValue =
   | ApplicationResumeFile
   | ApplicationCoverLetterFile;
 
-const unavailable = () => Error("MaterialReadUnavailable");
+type ReadPhase = "packet" | "location" | "transport" | "content";
+class MaterialReadUnavailable extends Error {
+  constructor(readonly phase: ReadPhase) {
+    super("MaterialReadUnavailable");
+  }
+}
+const unavailable = (phase: ReadPhase = "content") => new MaterialReadUnavailable(phase);
+
+export function nativeMaterialReadFailureCopy(error: unknown): string {
+  if (error instanceof MaterialReadUnavailable) {
+    if (error.phase === "packet")
+      return "This packet could not be verified. Refresh the application before trying again.";
+    if (error.phase === "location")
+      return "Material availability could not be verified. Refresh the application before trying again.";
+    if (error.phase === "transport")
+      return "The material connection could not be verified. Sign in with the same account and try again.";
+  }
+  return "Materials could not be verified. Prepare a new packet and review it again.";
+}
 const MAX_BYTES = 512 * 1024;
 
 async function json(response: Response, signal: AbortSignal): Promise<unknown> {
@@ -96,6 +114,7 @@ export async function readNativeMaterial(
   if (options.signal?.aborted) controller.abort();
   options.signal?.addEventListener("abort", abort, { once: true });
   const route = original.material.kind === "tailored_resume" ? "resume" : "cover-letter";
+  let phase: ReadPhase = "packet";
   try {
     const work = async () => {
       if (!current()) throw unavailable();
@@ -133,13 +152,16 @@ export async function readNativeMaterial(
           throw unavailable();
         return result;
       };
+      phase = "location";
       const before = await location();
       const url = new URL(
         `/v1/applications/${original.applicationId}/${route}${format === "preview" ? "" : `/file?format=${format}`}`,
         before.origin,
       );
+      phase = "transport";
       const response = await session.read(url, controller.signal, send);
       const value = await json(response, controller.signal);
+      phase = "content";
       const schema =
         original.material.kind === "tailored_resume"
           ? format === "preview"
@@ -164,6 +186,7 @@ export async function readNativeMaterial(
                 : "application/vnd.openxmlformats-officedocument.wordprocessingml.document")))
       )
         throw unavailable();
+      phase = "location";
       if ((await location()).origin !== before.origin) throw unavailable();
       if (!current()) throw unavailable();
       return result;
@@ -174,7 +197,7 @@ export async function readNativeMaterial(
     });
     return await Promise.race([work(), aborted]);
   } catch {
-    throw unavailable();
+    throw unavailable(phase);
   } finally {
     controller.abort();
     clearTimeout(timer);

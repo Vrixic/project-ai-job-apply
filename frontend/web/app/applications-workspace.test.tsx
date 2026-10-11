@@ -185,6 +185,100 @@ describe("ApplicationsWorkspace", () => {
     expect(send.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
   });
 
+  it("admits one explicit replacement despite a double click", async () => {
+    nativeUi();
+    let finish!: (response: Response) => void;
+    const send = vi.fn<typeof fetch>(async (_url, options) =>
+      options?.method === "POST"
+        ? new Promise<Response>((resolve) => {
+            finish = resolve;
+          })
+        : respond(reviewable()),
+    );
+    await mount(send, undefined, false, APP);
+    expect(container.textContent).toContain("requires fresh review and approval");
+    const button = Array.from(container.querySelectorAll("button")).find(
+      (element) => element.textContent === "Prepare a new packet",
+    );
+    if (!button) throw Error("Missing explicit preparation action");
+    await act(async () => {
+      button.click();
+      button.click();
+    });
+    expect(send.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
+    expect(button.disabled).toBe(true);
+    await act(async () => {
+      finish(respond(reviewable(3), 201));
+    });
+    expect(container.textContent).toContain("Confirm before approving");
+    expect(container.textContent).not.toContain("Your application is approved and ready");
+  });
+
+  it("retries an ambiguous explicit preparation with the same revision and key", async () => {
+    nativeUi();
+    const send = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(respond(reviewable()))
+      .mockRejectedValueOnce(Error("Lost response"))
+      .mockResolvedValueOnce(respond(reviewable(3), 201));
+    await mount(send, undefined, false, APP);
+    await click("Prepare a new packet");
+    await click("Prepare a new packet");
+    const writes = send.mock.calls.filter(([, options]) => options?.method === "POST");
+    expect(writes).toHaveLength(2);
+    expect(writes[0]?.[0]).toBe(`/api/platform/applications/${APP}/packets`);
+    expect(writes[0]?.[1]?.body).toBe(writes[1]?.[1]?.body);
+    expect(JSON.parse(String(writes[0]?.[1]?.body))).toEqual({ expectedRevision: 2 });
+    expect(writes[0]?.[1]?.headers).toEqual(writes[1]?.[1]?.headers);
+  });
+
+  it("refreshes a revision conflict before a new explicit preparation", async () => {
+    nativeUi();
+    const send = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(respond(reviewable()))
+      .mockResolvedValueOnce(respond({ code: "application_revision_conflict" }, 409))
+      .mockResolvedValueOnce(respond(reviewable(4)))
+      .mockResolvedValueOnce(respond(reviewable(5), 201));
+    await mount(send, undefined, false, APP);
+    await click("Prepare a new packet");
+    await click("Prepare a new packet");
+    const writes = send.mock.calls.filter(([, options]) => options?.method === "POST");
+    expect(writes.map(([, options]) => JSON.parse(String(options?.body)))).toEqual([
+      { expectedRevision: 2 },
+      { expectedRevision: 4 },
+    ]);
+    expect(writes[0]?.[1]?.headers).not.toEqual(writes[1]?.[1]?.headers);
+  });
+
+  it("refuses a late old-generation read after replacing the packet", async () => {
+    nativeUi();
+    const stale = reviewable(3);
+    if (!stale.currentPacket) throw Error("Missing synthetic packet");
+    stale.currentPacket.temporaryMaterials = [
+      {
+        schemaVersion: 1,
+        kind: "tailored_resume",
+        generationId: "00000000-0000-7000-8000-000000000020",
+        version: 1,
+        contentSha256: HASH,
+        completedAtMs: Date.now(),
+        expiresAtMs: Date.now() + 1_800_000,
+      },
+    ];
+    const send = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(respond(reviewable()))
+      .mockResolvedValueOnce(respond(reviewable(4), 201))
+      .mockResolvedValueOnce(respond(stale));
+    await mount(send, undefined, false, APP);
+    await click("Prepare a new packet");
+    await click("Check generated resume");
+    expect(container.textContent).toContain("We could not check the generated resume.");
+    expect(container.textContent).not.toContain("Sign in to view generated materials");
+    expect(send.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
+  });
+
   it("refreshes extension confirmation on return and notifies application history", async () => {
     const current = application({
       status: "submitting",
