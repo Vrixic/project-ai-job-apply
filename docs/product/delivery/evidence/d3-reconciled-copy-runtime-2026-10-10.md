@@ -61,3 +61,11 @@ work. The next operator batch also needs a closed private result contract and st
 validation; the current aggregate must not be treated as promotion authority. No runtime or
 cloud permission was activated. This batch does not establish candidate,
 provider, privacy or D3 acceptance. Independent D1 and hosted admin acceptance stay deferred.
+
+[PR #635](https://github.com/Vrixic/project-ai-job-apply/pull/635) carries the verified runtime.
+Independent exact-source review approves commit `ace23cc5eafed94ea37eedc471046ca11f6f6073`
+for normal source merge; private receipt `independent-d3-102-headace23cc5-final-review.json`
+has SHA-256 `e52405e2da6f8d0ffe4c09518539be149c0be7cd2b174fa768fbd84dee1343f4`.
+GitHub quality, catalog, dependency-audit and Semgrep jobs did not start because of account
+billing/spending restrictions. Their failure statuses are not executed check evidence or authority
+to bypass repository protection. Local validation is recorded above.

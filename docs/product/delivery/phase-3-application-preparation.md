@@ -264,3 +264,10 @@ assertions, 11 real PostgreSQL cases, independent review and all 43 repository s
 connected Chromium acceptance also passes; live identity/provider/submission acceptance remains
 open. Development is independently verified dormant with versioned recovery inputs; Docker/WSL
 are off and the PC is on. [Evidence](evidence/d3-replay-data-preservation-2026-10-10.md).
+
+2026-10-10: D3-102 private runtime implementation passes 207 focused tests, packaged default-off
+refusal, independent exact-source review and all 43 repository stages. The simulated connected
+Chromium journey passes. Development, Docker and WSL are verified off; the PC remains on.
+Guarded operator/result/provenance, managed recovery/promotion and live acceptance remain internal
+work; independent D1/admin acceptance stays deferred. Hosted jobs could not start due to account
+billing/spending limits. [Evidence](evidence/d3-reconciled-copy-runtime-2026-10-10.md).
