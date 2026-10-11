@@ -53,7 +53,7 @@ complete shutdown or zero cost.
 
 The staging dormant lifecycle deletes its synthetic database and cannot be reused for development
 data. Use the dedicated development database lifecycle with an available encrypted safety snapshot, a
-verified private restore, and a separately reviewed final-snapshot deletion plan. Preserve all data
+separately reviewed final-snapshot deletion plan. A restore rehearsal is optional. Preserve all data
 and report retained snapshot/storage costs. Until those checks pass, keep the database protected
 and report shutdown incomplete.
 

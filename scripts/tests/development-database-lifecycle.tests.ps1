@@ -3,7 +3,7 @@ $operator = Join-Path $PSScriptRoot '../operate-development-database-lifecycle.p
 $tokens = $null; $parseErrors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile($operator, [ref]$tokens, [ref]$parseErrors)
 if ($parseErrors.Count) { throw 'Operator must parse without errors.' }
-foreach ($functionName in @('Assert-RestoreSnapshotSelection','Assert-PlanScope')) {
+foreach ($functionName in @('Assert-RestoreSnapshotSelection','Assert-SafetySnapshot','Assert-PlanScope')) {
   $definition = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $functionName }, $true)
   . ([scriptblock]::Create($definition.Extent.Text))
 }
@@ -70,4 +70,16 @@ Check 'snapshot preparation preserves historical restore snapshot' { Assert-Plan
 $TargetMode = 'dormant'
 $stale.resource_changes = @([pscustomobject]@{mode='managed';address='module.platform.aws_db_instance.postgres[0]';change=[pscustomobject]@{actions=@('delete');before=$safe;after=$null}})
 Check 'dormancy preserves historical restore snapshot' { Assert-PlanScope $stale }
+$database = 'ai-job-apply-development'
+$ExpectedAccountId = '111122223333'
+$snapshot = [pscustomobject]@{DbiResourceId='db-current';DBSnapshotIdentifier='exact-safety';Status='available';Encrypted=$true;DBInstanceIdentifier=$database;KmsKeyId='arn:aws:kms:us-east-2:111122223333:key/test'}
+$source = [pscustomobject]@{DBInstanceIdentifier=$database;DbiResourceId='db-current';KmsKeyId=$snapshot.KmsKeyId}
+Check 'encrypted available exact-source safety backup needs no restore rehearsal' { Assert-SafetySnapshot $snapshot 'exact-safety' $source }
+foreach ($mutation in @(@('DbiResourceId','db-old'),@('DBSnapshotIdentifier','other'),@('Status','creating'),@('Encrypted',$false),@('DBInstanceIdentifier','other'),@('KmsKeyId','arn:aws:kms:us-east-2:999900001111:key/test'))) {
+  $changed = $snapshot | ConvertTo-Json | ConvertFrom-Json
+  $changed.($mutation[0]) = $mutation[1]
+  Check "unsafe backup refuses $($mutation[0])" { Assert-SafetySnapshot $changed 'exact-safety' $source } $true
+}
+Check 'missing backup refuses' { Assert-SafetySnapshot $null 'exact-safety' $source } $true
+Check 'missing physical source refuses' { Assert-SafetySnapshot $snapshot 'exact-safety' $null } $true
 "Passed $script:checks lifecycle plan safety checks; AWS was not called."

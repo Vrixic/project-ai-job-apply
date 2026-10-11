@@ -1,5 +1,14 @@
 # D3 — High-Quality Application Preparation
 
+D3-103 removes formal recovery-proof gates, preserving backups and deletion safeguards. 337 focused tests, 34 lifecycle assertions, component typecheck, 16 PostgreSQL cases and the simulated connected journey pass; consequential review passes. [Evidence](evidence/d3-recovery-safeguards-simplification-2026-10-10.md).
+
+Owner revision (2026-10-10): formal recovery-proof gates and full-repository check requirements
+are removed. Keep backups, migration/target checks, transactional completed-deletion safeguards,
+truthfulness, sensitive-answer review, submission safety and material expiry. Verify changed
+components and the connected journey. Historical proof records remain historical; optional
+reconciled-copy operators and physical restore rehearsals are not D3 dependencies. Independent
+D1/admin acceptance stays deferred.
+
 Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 2026-10-10.
 
 ## Task register
@@ -49,17 +58,16 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Quiescent privacy recovery (D3-096) | Default-off development-only PITR checks writer drain and exact-input zero drift while preserving source/target safeguards. All 98 focused synthetic cases and 43 repository stages pass. | Managed recovery/privacy replay and live acceptance remain. [Evidence](evidence/d3-dark-privacy-recovery-2026-10-10.md). |
 | Quiescent deletion replay (D3-097) | Default-off development replay binds the dark context/mode and recovery dependencies, using maintained writer-off PITR preflight. All 778 synthetic replay checks, 908 restore-role assertions and 43 repository stages pass; independent source review passes. | Managed replay and connected acceptance remain. [Evidence](evidence/d3-dark-deletion-replay-2026-10-10.md). |
 | Recovery bootstrap inputs (D3-098) | Complete: bounded observations and typed inputs pass focused tests, independent review and all 43 repository stages. | Managed replay and connected acceptance remain. [Evidence](evidence/d3-bootstrap-recovery-inputs-2026-10-10.md). |
-| Replay data preservation (D3-099) | Complete for repository implementation: 348 focused tests, 790 operator assertions, 11 real PostgreSQL regressions, independent review and all 43 repository stages pass. | Dedicated promotion, managed replay and live acceptance remain separate. [Evidence](evidence/d3-replay-data-preservation-2026-10-10.md). |
-| Reconciled-copy verification (D3-100) | Complete for repository implementation: PR #633 merged after 500 focused tests, 17 real PostgreSQL regressions, independent final review and all 43 repository stages. | Private runtime/promotion wiring, managed replay and live acceptance. [Evidence](evidence/d3-reconciled-copy-verification-2026-10-10.md). |
+| Replay data preservation (D3-099) | Complete for repository implementation: 348 focused tests, 790 operator assertions, 11 real PostgreSQL regressions, independent review and all 43 repository stages pass. | Formal promotion-proof gate removed; managed completed-deletion reconciliation and live acceptance remain. [Evidence](evidence/d3-replay-data-preservation-2026-10-10.md). |
+| Reconciled-copy verification (D3-100) | Complete for repository implementation: PR #633 merged after 500 focused tests, 17 real PostgreSQL regressions, independent final review and all 43 repository stages. | Optional diagnostic runtime; managed completed-deletion reconciliation and live acceptance remain. [Evidence](evidence/d3-reconciled-copy-verification-2026-10-10.md). |
 | Greenhouse execution bridge (D3-101) | Locally verified: connected attachment/one-shot attempt/result, 104 focused extension and 36 workspace regressions, 23 synthetic browser cases and the simulated manual journey pass. All 43 repository stages pass, including 680 extension and 912 web tests. [PR #634](https://github.com/Vrixic/project-ai-job-apply/pull/634). | Installed/native/provider journey, managed recovery, live grants and external acceptance gates remain. |
-| Private reconciled-copy runtime (D3-102) | Complete for repository runtime implementation: separate fresh admission, schema/SQL/document continuity, strict promoted-primary resolver and bounded cancellation/close. 207 focused tests, packaged refusal smoke and all 43 repository stages pass. | Guarded operator/result contract, original invocation metadata, immutable publication, managed recovery/promotion and live acceptance remain. [Evidence](evidence/d3-reconciled-copy-runtime-2026-10-10.md). |
+| Private reconciled-copy runtime (D3-102) | Complete for repository runtime implementation: separate fresh admission, schema/SQL/document continuity, strict promoted-primary resolver and bounded cancellation/close. 207 focused tests, packaged refusal smoke and all 43 repository stages pass. | Formal operator/proof gates removed by owner; basic managed restore/deletion reconciliation and live acceptance remain. [Evidence](evidence/d3-reconciled-copy-runtime-2026-10-10.md). |
 
 ## Decisions and scope changes
 
 2026-10-10: D3-102 completes the private read-only runtime source and local verification only.
-Fresh admission never extends original replay or generated-material deadlines. The next operator
-batch must preserve original numeric invocation metadata and validate a closed result before any
-managed verification or promotion. Independent D1/admin acceptance stays deferred.
+Fresh admission never extends original replay or generated-material deadlines. That planned formal operator batch was subsequently removed by the owner;
+basic restoration and completed-deletion safeguards remain. Independent D1/admin acceptance stays deferred.
 
 2026-10-10: D3-100 addresses independently confirmed recovery inventory omissions before primary
 promotion. Valid historical completed inventories remain compatible when all current owners are
