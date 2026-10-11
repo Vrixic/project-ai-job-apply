@@ -65,15 +65,31 @@ beforeEach(() => {
   };
   application = {
     id: "00000000-0000-7000-8000-000000000001",
+    canonicalJobId: "00000000-0000-7000-8000-000000000005",
+    status: "approved",
     revision: 3,
     currentAction: "ready_to_submit",
+    attempts: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    approval: {
+      id: "00000000-0000-7000-8000-000000000004",
+      packetHash: HASH,
+      approvedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 1_800_000).toISOString(),
+      acknowledgedFieldKeys: [],
+    },
     currentPacket: {
       id: "00000000-0000-7000-8000-000000000002",
+      version: 1,
       packetHash: HASH,
+      jobRevision: HASH,
+      fields: [],
       artifactHashes: { resume: HASH },
       temporaryMaterials: [material],
+      createdAt: new Date().toISOString(),
     },
-  } as Application;
+  };
   mocks.read.mockImplementation(async (_session, _binding, format) =>
     format === "preview"
       ? {
@@ -111,6 +127,12 @@ function enableTransfer() {
     acknowledgedFieldKeys: [],
   };
   mocks.transfer.mockResolvedValue(transferReceipt);
+}
+
+function expireApprovalIn(milliseconds: number) {
+  const approval = application.approval;
+  if (!approval) throw Error("Synthetic approval missing");
+  approval.expiresAt = new Date(Date.now() + milliseconds).toISOString();
 }
 
 async function withdrawBy(mode: string) {
@@ -250,6 +272,59 @@ it("does not deliver a held file after approval is reopened", async () => {
   await act(async () => resolve(HASH));
   expect(createObjectURL).not.toHaveBeenCalled();
   expect(container.textContent).not.toContain("Approved material downloaded.");
+});
+
+it.each(["PDF", "Word (DOCX)"])(
+  "refuses a stale download click after approval expires for %s",
+  async (label) => {
+    vi.useFakeTimers();
+    expireApprovalIn(1000);
+    await connect();
+    mocks.read.mockClear();
+    // A suspended tab can receive a click before its expiry timer runs.
+    vi.setSystemTime(Date.now() + 1000);
+    await click(`Download resume ${label}`);
+    expect(mocks.read).not.toHaveBeenCalled();
+    expect(mocks.hash).not.toHaveBeenCalled();
+  },
+);
+
+it("wipes a held download at approval expiry while retaining the material for fresh review", async () => {
+  vi.useFakeTimers();
+  expireApprovalIn(1000);
+  await connect();
+  let resolve!: (hash: string) => void;
+  mocks.hash.mockImplementation(
+    () =>
+      new Promise<string>((done) => {
+        resolve = done;
+      }),
+  );
+  const createObjectURL = vi.fn();
+  vi.stubGlobal("URL", { createObjectURL, revokeObjectURL: vi.fn() });
+  await click("Download resume PDF");
+  const bytes = mocks.hash.mock.calls[0]?.[0] as Uint8Array;
+  expect(Array.from(bytes)).not.toEqual([0, 0, 0, 0]);
+  await act(async () => vi.advanceTimersByTimeAsync(1000));
+  expect(Array.from(bytes)).toEqual([0, 0, 0, 0]);
+  expect(container.textContent).toContain("Synthetic native preview");
+  expect(container.textContent).not.toContain("Download resume PDF");
+  expect(container.textContent).toContain("Approval expired. Choose Edit again");
+  await act(async () => resolve(HASH));
+  expect(createObjectURL).not.toHaveBeenCalled();
+});
+
+it("withdraws an acknowledged extension transfer when its approval expires", async () => {
+  vi.useFakeTimers();
+  enableTransfer();
+  expireApprovalIn(1000);
+  await connect();
+  await click("Send approved PDF files to extension");
+  expect(mocks.discard).not.toHaveBeenCalled();
+  await act(async () => vi.advanceTimersByTimeAsync(1000));
+  expect(mocks.discard).toHaveBeenCalledWith(mocks.messenger, "a".repeat(32), transferReceipt);
+  expect(container.textContent).not.toContain("Send approved PDF files to extension");
+  expect(container.textContent).toContain("Synthetic native preview");
 });
 
 it("a preview completed after disconnect cannot restore availability", async () => {

@@ -24,15 +24,15 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 
 ## D3 — High-quality application preparation
 
-D3-108/109 fixes are merged. Candidate sign-in, search, synthetic upload processing and grounded
+D3-108–110 fixes are merged. Candidate sign-in, search, synthetic upload processing and grounded
 fact confirmation pass. The corrected default-off native worker and migration image build and pass
 isolated smoke checks; all six reproducible native Lambda artifacts are published. Revision-2 RPCs
 are staged disabled with zero resource/output drift. No live material or submission is accepted.
-Docker's Secrets Engine startup fails again after a normal restart, blocking the remaining enabled
-worker and migration image publication. The historical rejected claim also needs owning recovery.
+Docker is repaired again and the next enabled worker/migration publication batch is in progress.
+The historical rejected claim needs owning recovery for that application, not a fresh r2 journey.
 Live AI retention policy and authorized ATS QA/fixtures remain unavailable. D3 is In progress;
-independent D1/admin acceptance stays deferred. AWS test runtimes, Docker and WSL are off;
-encrypted backups/current recovery inputs are retained and the PC remains on.
+independent D1/admin acceptance stays deferred. AWS test runtimes are off; encrypted backups/current
+recovery inputs are retained. Docker is in use for publication and must be off with WSL at handoff.
 [Current evidence](evidence/d3-native-launch-rejection-2026-10-11.md).
 
 D3-106 handles standard S3 URL encoding and authenticates retired deletion markers without skipping
@@ -148,8 +148,9 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 
 2026-10-11: See [D3-108 live-test and shutdown evidence](evidence/d3-native-live-admission-fixes-2026-10-11.md).
 Candidate sign-in is complete; full live generation/submission acceptance remains open.
-[D3-109](evidence/d3-native-launch-rejection-2026-10-11.md) adds locally verified definitive launch-rejection settlement. Corrected local worker/migration smoke and six immutable native Lambda publications pass; revision-2 RPCs are staged disabled. Historical claims and live acceptance remain unresolved. Docker's recurring restart failure blocks the remaining image publication.
-Development shutdown is freshly verified at 2026-10-11T18:49:53Z; staging was verified dormant at 2026-10-11T18:01:49Z and was not changed. Docker/WSL are verified off after the test batch and failed restart. The PC remains on.
+[D3-109](evidence/d3-native-launch-rejection-2026-10-11.md) adds locally verified definitive launch-rejection settlement. Corrected local worker/migration smoke and six immutable native Lambda publications pass; revision-2 RPCs are staged disabled. Historical claims and live acceptance remain unresolved. Docker is repaired again; remaining image publication resumes.
+Development shutdown is freshly verified at 2026-10-11T18:49:53Z; staging was verified dormant at 2026-10-11T18:01:49Z and was not changed. Docker/WSL were verified off after that batch. The owner repaired Docker again; it is active for the next publication batch. The PC remains on.
+[D3-110](evidence/d3-native-download-approval-expiry-2026-10-11.md) closes stale approved-download expiry with 52 focused tests, web typecheck, the simulated connected Chromium journey and consequential review. Hosted/live acceptance remains.
 The records below describe earlier sessions.
 
 Work continues for D3 on 2026-10-10; D1/D3 are not complete. Independent D1 acceptance remains deferred.
