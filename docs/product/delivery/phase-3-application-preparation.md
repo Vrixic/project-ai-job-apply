@@ -1,10 +1,13 @@
 # D3 — High-Quality Application Preparation
 
-D3-107 installs compatible immutable Gateway version 90 with exact code and unweighted-alias
-readback and consequential review. Development runtimes, Docker and WSL are verified off; encrypted
-recovery snapshots/inputs are retained. Live native configuration/journey remain internal work;
-the owner confirms no qualifying AI-provider retention policy exists, so live AI cover letters
-stay disabled. [Evidence](evidence/d3-compatible-gateway-offline-release-2026-10-10.md).
+D3-108 merges the live-tested profile/launch/status fixes and the native STS/RPC fixes.
+Candidate sign-in, search, synthetic upload processing and grounded fact confirmation pass.
+Native preparations still fail before generated material: the corrected RPC worker image cannot
+be built because Docker Secrets Engine startup fails. The rejected original launch also needs an
+explicit owning ledger recovery transition. Live AI covers and ATS submission remain disabled
+behind provider-retention policy and authorized QA/fixture dependencies. D3 is not accepted.
+Development, Docker and WSL are verified off; encrypted backups and recovery inputs are retained.
+[Current evidence](evidence/d3-native-live-admission-fixes-2026-10-11.md).
 
 D3-106 handles standard S3 URL encoding and authenticates retired deletion markers without skipping
 their deletion authority. 257 focused tests, managed primary replay and consequential review pass.
@@ -84,7 +87,8 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Primary deletion replay (D3-104) | Explicit writer-off primary mode implemented and locally verified; managed restore and replay pass under D3-106. | Compatible release and live acceptance remain. [Evidence](evidence/d3-primary-deletion-recovery-2026-10-10.md). |
 | Primary operational guards (D3-105) | Bounded backup-status/endpoint-tag observations, primary permission cleanup and basic writer/account/backend checks are verified. | Current runtime and live acceptance remain separate. [Evidence](evidence/d3-primary-recovery-operational-guards-2026-10-10.md). |
 | Retained deletion markers (D3-106) | 257 focused tests, component typecheck/build, simulated journey and consequential review pass. Managed replay passes: two already-reconciled subjects, no new deletion or external writes. | Live native/provider acceptance remains. [Evidence](evidence/d3-retired-deletion-markers-2026-10-10.md). |
-| Compatible release (D3-107) | Gateway version 90, shutdown/recovery preservation and protected native candidate host are verified. 154 focused client tests and component typechecks pass; unpacked extension built with provider registry disabled. | Human host sign-in/development SSO renewal, installed ID/grants and live native journey remain. [Evidence](evidence/d3-compatible-gateway-offline-release-2026-10-10.md). |
+| Compatible release (D3-107) | Gateway version 90, shutdown/recovery preservation and protected native candidate host are verified. 154 focused client tests and component typechecks pass; unpacked extension built with provider registry disabled. | Host/candidate sign-in completed under D3-108; installed ID/grants and full live native journey remain. [Evidence](evidence/d3-compatible-gateway-offline-release-2026-10-10.md). |
+| Native live admission (D3-108) | Profile, launch, status refresh, exact STS identity and RPC serialization fixes merged with targeted tests/typechecks and consequential review. Live synthetic sign-in/search/upload/fact confirmation pass. | Corrected worker image build blocked by Docker startup; explicit rejected-launch ledger recovery and full connected acceptance remain. AI retention policy and authorized ATS QA/fixtures unavailable. [Evidence](evidence/d3-native-live-admission-fixes-2026-10-11.md). |
 
 ## Decisions and scope changes
 
@@ -319,3 +323,9 @@ Chromium journey passes. Development, Docker and WSL are verified off; the PC re
 Guarded operator/result/provenance, managed recovery/promotion and live acceptance remain internal
 work; independent D1/admin acceptance stays deferred. Hosted jobs could not start due to account
 billing/spending limits. [Evidence](evidence/d3-reconciled-copy-runtime-2026-10-10.md).
+
+2026-10-11: D3-108 fixes failures found in the synthetic live journey through PRs #643–#647.
+Targeted regressions/typechecks and consequential review pass. Native image rebuild is blocked
+by Docker startup; no generated material or submission was accepted. Original unresolved failures
+are retained without relaunch or guessed settlement. Independent D1/admin acceptance stays deferred.
+[Evidence](evidence/d3-native-live-admission-fixes-2026-10-11.md).
