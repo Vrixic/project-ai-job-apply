@@ -2692,4 +2692,139 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
     ])
       expect(encoded).not.toContain(forbidden);
   });
+  it("settles only a digested original rejection and preserves its claim without inventing a task", async () => {
+    const s = store(),
+      r = await s.reserve(input),
+      original = scope(r),
+      request = "a".repeat(64),
+      requestId = uuidv7();
+    await s.claimLaunch(original, config, request);
+    const before =
+      await sql`SELECT launch_claimed_at,configuration_sha256,launch_request_sha256 FROM documents.native_resume_generations WHERE id=${input.identity.generationId}`;
+    await s.recordLaunchRejection(original, config, request, requestId);
+    await s.recordLaunchRejection(original, config, request, requestId);
+    const after =
+      await sql`SELECT launch_claimed_at,configuration_sha256,launch_request_sha256 FROM documents.native_resume_generations WHERE id=${input.identity.generationId}`;
+    expect(after).toEqual(before);
+    expect(await s.readLaunch(original, config)).toMatchObject({
+      state: "launch_rejected",
+      allocation: null,
+      reference: null,
+      ready: false,
+    });
+    await expect(s.claimLaunch(original, config, request)).rejects.toThrow();
+    await expect(s.bindTask(original, config, task)).rejects.toThrow();
+    await expect(s.recordLaunchRejection(original, config, request, uuidv7())).rejects.toThrow();
+    for (const change of ["claim", "request", "receipt", "state"] as const) {
+      await expect(
+        sql.begin(async (tx) => {
+          if (change === "claim")
+            await tx`UPDATE documents.native_resume_generations SET launch_claimed_at=clock_timestamp() WHERE id=${input.identity.generationId}`;
+          if (change === "request")
+            await tx`UPDATE documents.native_resume_generations SET launch_request_sha256=${"f".repeat(64)} WHERE id=${input.identity.generationId}`;
+          if (change === "receipt")
+            await tx`UPDATE documents.native_resume_generations SET launch_rejection_request_id=${uuidv7()} WHERE id=${input.identity.generationId}`;
+          if (change === "state")
+            await tx`UPDATE documents.native_resume_generations SET state='pending' WHERE id=${input.identity.generationId}`;
+        }),
+      ).rejects.toThrow();
+    }
+  });
+  it("refuses legacy unknown claims and mismatched original rejection evidence", async () => {
+    const s = store(),
+      r = await s.reserve(input),
+      original = scope(r),
+      request = "a".repeat(64);
+    await s.claimLaunch(original, config);
+    await expect(s.recordLaunchRejection(original, config, request, uuidv7())).rejects.toThrow();
+    await expect(
+      sql`UPDATE documents.native_resume_generations SET launch_request_sha256=${request} WHERE id=${input.identity.generationId}`,
+    ).rejects.toThrow();
+    expect(await s.readLaunch(original, config)).toMatchObject({
+      state: "pending",
+      allocation: null,
+    });
+  });
+  it("rejects wrong owner, epoch, configuration and pre-dispatch digest", async () => {
+    const s = store(),
+      r = await s.reserve(input),
+      original = scope(r),
+      request = "a".repeat(64);
+    await s.claimLaunch(original, config, request);
+    for (const bad of [
+      { ...original, ownerUserId: uuidv7() },
+      { ...original, epochId: uuidv7() },
+      { ...original, allocationId: uuidv7() },
+    ])
+      await expect(s.recordLaunchRejection(bad, config, request, uuidv7())).rejects.toThrow();
+    await expect(
+      s.recordLaunchRejection(original, "e".repeat(64), request, uuidv7()),
+    ).rejects.toThrow();
+    await expect(
+      s.recordLaunchRejection(original, config, "e".repeat(64), uuidv7()),
+    ).rejects.toThrow();
+    expect(await s.readLaunch(original, config)).toMatchObject({ state: "pending" });
+  });
+  it("serializes rejection against original-task binding with exactly one terminal decision", async () => {
+    const s = store(),
+      r = await s.reserve(input),
+      original = scope(r),
+      request = "a".repeat(64);
+    await s.claimLaunch(original, config, request);
+    const results = await Promise.allSettled([
+      s.recordLaunchRejection(original, config, request, uuidv7()),
+      s.bindTask(original, config, task),
+    ]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const row = await s.readLaunch(original, config);
+    expect(["bound", "launch_rejected"]).toContain(row.state);
+    expect(row.allocation === null).toBe(row.state === "launch_rejected");
+  });
+  it("records negative settlement after sealing/quarantine and disposes without a stopped-task receipt", async () => {
+    const s = store(),
+      r = await s.reserve(input),
+      original = scope(r),
+      request = "a".repeat(64);
+    await s.claimLaunch(original, config, request);
+    await s.seal(original.ownerUserId, original.applicationId);
+    await sql`UPDATE documents.resume_documents SET security_hold=true WHERE id=${input.identity.baseDocumentId}`;
+    await s.recordLaunchRejection(original, config, request, uuidv7());
+    const registry = new PostgresNativeApplicationDisposalStore(sql, () => true),
+      retire = vi.fn(async () => {
+        throw Error("UnexpectedTaskAccess");
+      });
+    const disposer = createNativeMaterialDisposal({
+      registry,
+      enabled: () => true,
+      testRetire: retire,
+    });
+    expect(await disposer.discardApplication(original.ownerUserId, original.applicationId)).toBe(
+      "discarded",
+    );
+    expect(retire).not.toHaveBeenCalled();
+    expect(
+      await new PostgresNativeMaterialRegistry(sql, () => true).confirmApplicationDisposed(
+        original.ownerUserId,
+        original.applicationId,
+        original.epochId,
+      ),
+    ).toBe(true);
+    await sql`DELETE FROM documents.native_resume_generations WHERE id=${input.identity.generationId}`;
+    await expect(s.recordLaunchRejection(original, config, request, uuidv7())).rejects.toThrow();
+  });
+  it("requires an explicit sealed fresh epoch before new work after rejection", async () => {
+    const s = store(),
+      r = await s.reserve(input),
+      original = scope(r),
+      request = "a".repeat(64);
+    await s.claimLaunch(original, config, request);
+    await s.recordLaunchRejection(original, config, request, uuidv7());
+    const next = { ...input, identity: { ...input.identity, generationId: uuidv7(), version: 2 } };
+    await expect(s.reserve(next)).rejects.toThrow();
+    await s.seal(original.ownerUserId, original.applicationId);
+    const fresh = await s.reserve({ ...next, previousEpochId: r.epochId });
+    expect(fresh.epochId).not.toBe(r.epochId);
+    expect(fresh.allocationId).not.toBe(r.allocationId);
+    expect(fresh.configurationSha256).toBeNull();
+  });
 });

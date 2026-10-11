@@ -88,7 +88,8 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Primary operational guards (D3-105) | Bounded backup-status/endpoint-tag observations, primary permission cleanup and basic writer/account/backend checks are verified. | Current runtime and live acceptance remain separate. [Evidence](evidence/d3-primary-recovery-operational-guards-2026-10-10.md). |
 | Retained deletion markers (D3-106) | 257 focused tests, component typecheck/build, simulated journey and consequential review pass. Managed replay passes: two already-reconciled subjects, no new deletion or external writes. | Live native/provider acceptance remains. [Evidence](evidence/d3-retired-deletion-markers-2026-10-10.md). |
 | Compatible release (D3-107) | Gateway version 90, shutdown/recovery preservation and protected native candidate host are verified. 154 focused client tests and component typechecks pass; unpacked extension built with provider registry disabled. | Host/candidate sign-in completed under D3-108; installed ID/grants and full live native journey remain. [Evidence](evidence/d3-compatible-gateway-offline-release-2026-10-10.md). |
-| Native live admission (D3-108) | Profile, launch, status refresh, exact STS identity and RPC serialization fixes merged with targeted tests/typechecks and consequential review. Live synthetic sign-in/search/upload/fact confirmation pass. | Corrected worker image build blocked by Docker startup; explicit rejected-launch ledger recovery and full connected acceptance remain. AI retention policy and authorized ATS QA/fixtures unavailable. [Evidence](evidence/d3-native-live-admission-fixes-2026-10-11.md). |
+| Native live admission (D3-108) | Profile, launch, status refresh, exact STS identity and RPC serialization fixes merged with targeted tests/typechecks and consequential review. Live synthetic sign-in/search/upload/fact confirmation pass. | Docker startup is repaired; corrected worker build/publication and full connected acceptance remain. D3-109 covers future definitive rejection settlement; the historical claim remains unresolved. AI retention policy and authorized ATS QA/fixtures unavailable. [Evidence](evidence/d3-native-live-admission-fixes-2026-10-11.md). |
+| Native launch rejection (D3-109) | Original request digest, definitive SDK rejection capture, immutable terminal SQL and disposal/fresh-epoch guards are implemented and locally tested. | Consequential review passes; compatible immutable publication and live acceptance remain. Historical unknown claims remain unresolved. [Evidence](evidence/d3-native-launch-rejection-2026-10-11.md). |
 
 ## Decisions and scope changes
 
@@ -335,3 +336,8 @@ are retained without relaunch or guessed settlement. Independent D1/admin accept
 messages. Development shutdown remains verified; Docker/WSL are off and the PC remains on.
 D3 remains In progress; independent D1/admin acceptance stays deferred.
 [Evidence](evidence/d3-native-live-admission-fixes-2026-10-11.md).
+
+2026-10-11: D3-109 adds distinct original-launch rejection settlement without task-death fiction
+or retry. Targeted tests/typechecks, real PostgreSQL ledger tests and the simulated connected
+Chromium journey pass. Docker startup is repaired; immutable release and live acceptance remain.
+[Evidence](evidence/d3-native-launch-rejection-2026-10-11.md).

@@ -334,6 +334,15 @@ $modern61 = [ordered]@{}
 foreach ($owner in $modern60.Keys) { $modern61[$owner] = @($modern60[$owner]) }
 $modern61.documents += '0016_native_application_disposal'
 Assert-D2RuntimeMigrationInventory $modern61; $passed++
+$modern62 = [ordered]@{}
+foreach ($owner in $modern61.Keys) { $modern62[$owner] = @($modern61[$owner]) }
+$modern62.documents += '0017_native_resume_launch_rejection'
+Assert-D2RuntimeMigrationInventory $modern62; $passed++
+$unsupportedRejectionInventory = [ordered]@{}
+foreach ($owner in $modern62.Keys) { $unsupportedRejectionInventory[$owner] = @($modern62[$owner]) }
+$unsupportedRejectionInventory.documents = @($modern62.documents | Where-Object { $_ -cne '0016_native_application_disposal' })
+Assert-Rejected { Assert-D2RuntimeMigrationInventory $unsupportedRejectionInventory } 'Missing prerequisite for rejection migration was accepted.'
+
 foreach ($mutation in @(
     { param($x) $x.documents[-1] = '0014_unknown_resume' },
     { param($x) $x.documents = @($x.documents | Where-Object { $_ -cne '0013_native_material_ready' }) },

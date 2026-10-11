@@ -536,7 +536,7 @@ export class PostgresNativeMaterialRegistry {
           AND NOT EXISTS (SELECT 1 FROM documents.native_material_allocations a
             WHERE a.user_id = h.user_id AND a.application_id = h.application_id AND a.state NOT IN ('retired','abandoned'))
           AND NOT EXISTS (SELECT 1 FROM documents.native_resume_generations r
-            WHERE r.user_id=h.user_id AND r.application_id=h.application_id AND r.state NOT IN ('retired','abandoned'))) AS complete
+            WHERE r.user_id=h.user_id AND r.application_id=h.application_id AND r.state NOT IN ('retired','abandoned','launch_rejected'))) AS complete
           FROM documents.native_material_admission h WHERE user_id = ${owner} AND application_id = ${app} FOR UPDATE`;
         this.check();
         return result?.complete === true;

@@ -800,3 +800,15 @@ Claimed unknown launches remain unresolved; bound allocations require positive o
 retirement. Migration 0016 is required. Gateway composes this after its owner-scoped terminal
 application mutation, behind a separate default-off switch and retained-deployment allowlist.
 See [local evidence](../../../docs/product/delivery/evidence/d3-native-application-disposal-2026-10-07.md).
+
+Native resume launch rejection is a distinct terminal `launch_rejected` state under migration
+0017. The private original launcher hashes its exact RunTask request before the sole durable
+claim/send. Only a real SDK InvalidParameterException with HTTP 400, one attempt, zero retry delay
+and an AWS request ID reaches negative settlement. The owner preserves the claim/configuration,
+checks the original scope/request digest and serializes against task binding. Timeouts, generic
+errors, retries, response failures and legacy claims without a request digest remain unresolved.
+A rejection grants no task-death receipt, content, approval or relaunch authority. Disposal may
+finish without inventing a task; new work requires an explicitly sealed fresh epoch.
+Apply 0017 before publishing compatible preparation/observer/cleanup owners, then pin the numeric
+controls together before activation. Earlier claims cannot be backfilled through this transition;
+historical failures require separate exact original-request evidence and owning recovery work.

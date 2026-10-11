@@ -1,6 +1,7 @@
 import {
   DescribeTaskDefinitionCommand,
   DescribeTasksCommand,
+  InvalidParameterException,
   RunTaskCommand,
 } from "@aws-sdk/client-ecs";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -8,9 +9,9 @@ import type {
   NativeMaterialLaunchRecord,
   NativeMaterialLaunchScope,
 } from "./native-material-registry.js";
-import type { NativeTaskAllocation } from "./native-task-allocation.js";
 import type { NativeResumeGenerationRecord } from "./native-resume-generation-store.js";
 import { createNativeResumeTaskLaunch } from "./native-resume-task-launch.js";
+import type { NativeTaskAllocation } from "./native-task-allocation.js";
 import {
   createNativeTaskLaunch,
   type NativeTaskLaunchConfiguration,
@@ -223,7 +224,16 @@ describe("private one-attempt native ECS launch", () => {
     await expect(launch.launch(scope)).resolves.toEqual(first);
     expect(f.send.mock.calls.filter(([c]) => c instanceof RunTaskCommand)).toHaveLength(1);
   });
-  it("launches a native resume without specifying tag propagation", async () => {
+  it.each([
+    "success",
+    "definitive",
+    "timeout",
+    "generic",
+    "retry",
+    "unknown attempts",
+    "unknown request",
+    "server error",
+  ])("native resume original launch: %s", async (outcome) => {
     const f = fixture();
     let record: NativeResumeGenerationRecord = {
       reservation: {
@@ -271,6 +281,27 @@ describe("private one-attempt native ECS launch", () => {
         // The live regional API rejected explicit NONE. Omission is the documented no-propagation default.
         if (Object.hasOwn(command.input, "propagateTags"))
           throw Error("Invalid value for propagateTags");
+        if (outcome !== "success") {
+          if (outcome === "timeout")
+            throw Object.assign(Error("synthetic timeout"), { name: "TimeoutError" });
+          const metadata = {
+            httpStatusCode: outcome === "server error" ? 500 : 400,
+            ...(outcome === "unknown attempts" ? {} : { attempts: outcome === "retry" ? 2 : 1 }),
+            totalRetryDelay: 0,
+            ...(outcome === "unknown request"
+              ? {}
+              : { requestId: "11111111-2222-4333-8444-555555555555" }),
+          };
+          if (outcome === "generic")
+            throw Object.assign(Error("synthetic"), {
+              name: "InvalidParameterException",
+              $metadata: metadata,
+            });
+          throw new InvalidParameterException({
+            message: "synthetic private rejection",
+            $metadata: metadata,
+          });
+        }
         const result = task();
         required(result.tasks[0]).overrides = command.input.overrides as NonNullable<
           (typeof result.tasks)[0]
@@ -278,13 +309,16 @@ describe("private one-attempt native ECS launch", () => {
         return result;
       },
     );
+    const rejected = vi.fn();
     const launcher = createNativeResumeTaskLaunch({
       ...f.options,
       testClient: { send },
       registry: {
+        recordLaunchRejection: rejected,
         claimLaunch: vi.fn(async (_scope, configurationSha256) => {
+          const claimed = record.configurationSha256 === null;
           record = { ...record, configurationSha256 };
-          return { claimed: true, record };
+          return { claimed, record };
         }),
         readLaunch: vi.fn(async () => record),
         bindTask: vi.fn(async (_scope, _sha, originalTaskArn) => {
@@ -297,7 +331,21 @@ describe("private one-attempt native ECS launch", () => {
         }),
       },
     });
-    await expect(launcher.launch(scope)).resolves.toMatchObject({ taskArn });
+    if (outcome === "success")
+      await expect(launcher.launch(scope)).resolves.toMatchObject({ taskArn });
+    else await expect(launcher.launch(scope)).rejects.toThrow(/^NativeTaskLaunchUnavailable$/);
+    if (outcome === "definitive")
+      expect(rejected).toHaveBeenCalledWith(
+        scope,
+        launcher.configurationSha256,
+        expect.stringMatching(/^[a-f0-9]{64}$/u),
+        "11111111-2222-4333-8444-555555555555",
+      );
+    else expect(rejected).not.toHaveBeenCalled();
+    // Even when rejection persistence loses its ACK, the original claimed generation never relaunches.
+    if (outcome !== "success") {
+      await expect(launcher.launch(scope)).rejects.toThrow(/^NativeTaskLaunchUnavailable$/);
+    }
     expect(send.mock.calls.filter(([command]) => command instanceof RunTaskCommand)).toHaveLength(
       1,
     );

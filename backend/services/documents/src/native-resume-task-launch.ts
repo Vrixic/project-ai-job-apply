@@ -17,6 +17,7 @@ import {
   DescribeTaskDefinitionCommand,
   DescribeTasksCommand,
   ECSClient,
+  InvalidParameterException,
   RunTaskCommand,
 } from "@aws-sdk/client-ecs";
 import type {
@@ -31,7 +32,7 @@ import {
 
 type Registry = Pick<
   PostgresNativeResumeGenerationStore,
-  "claimLaunch" | "readLaunch" | "bindTask"
+  "claimLaunch" | "readLaunch" | "bindTask" | "recordLaunchRejection"
 >;
 interface TaskClient {
   send(
@@ -172,7 +173,31 @@ export function createNativeResumeTaskLaunch(options: {
         );
         permitted();
         validateNativeTaskDefinition(definition, config, "native-resume/main.mjs");
-        const claim = await registry.claimLaunch(fixed, configSha);
+        const command = new RunTaskCommand({
+          cluster: config.clusterArn,
+          taskDefinition: config.taskDefinitionArn,
+          launchType: "FARGATE",
+          platformVersion: "1.4.0",
+          count: 1,
+          startedBy: fixed.allocationId,
+          clientToken: fixed.allocationId,
+          enableExecuteCommand: false,
+          enableECSManagedTags: false,
+          networkConfiguration: {
+            awsvpcConfiguration: {
+              subnets: [...config.subnets],
+              securityGroups: [...config.securityGroups],
+              assignPublicIp: config.assignPublicIp,
+            },
+          },
+          overrides: {
+            containerOverrides: [
+              { name: config.containerName, environment: originalEnvironment(fixed, configSha) },
+            ],
+          },
+        });
+        const requestSha = createHash("sha256").update(JSON.stringify(command.input)).digest("hex");
+        const claim = await registry.claimLaunch(fixed, configSha, requestSha);
         permitted();
         if (typeof claim?.claimed !== "boolean") throw unavailable();
         record = structuredClone(claim.record);
@@ -182,34 +207,28 @@ export function createNativeResumeTaskLaunch(options: {
           return record.allocation;
         }
         if (record.state !== "pending" || record.allocation !== null) throw unavailable();
-        const response = await send(
-          new RunTaskCommand({
-            cluster: config.clusterArn,
-            taskDefinition: config.taskDefinitionArn,
-            launchType: "FARGATE",
-            platformVersion: "1.4.0",
-            count: 1,
-            startedBy: fixed.allocationId,
-            clientToken: fixed.allocationId,
-            enableExecuteCommand: false,
-            enableECSManagedTags: false,
-            networkConfiguration: {
-              awsvpcConfiguration: {
-                subnets: [...config.subnets],
-                securityGroups: [...config.securityGroups],
-                assignPublicIp: config.assignPublicIp,
-              },
-            },
-            overrides: {
-              containerOverrides: [
-                {
-                  name: config.containerName,
-                  environment: originalEnvironment(fixed, configSha),
-                },
-              ],
-            },
-          }),
-        );
+        let response: unknown;
+        try {
+          response = await send(command);
+        } catch (error) {
+          // This branch is reachable only by the sole successful original claim above.
+          // No retry, timeout, generic error, response failures or historical task absence qualifies.
+          if (
+            error instanceof InvalidParameterException &&
+            error.$metadata.httpStatusCode === 400 &&
+            error.$metadata.attempts === 1 &&
+            error.$metadata.totalRetryDelay === 0 &&
+            typeof error.$metadata.requestId === "string" &&
+            /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(error.$metadata.requestId)
+          )
+            await registry.recordLaunchRejection(
+              fixed,
+              configSha,
+              requestSha,
+              error.$metadata.requestId,
+            );
+          throw unavailable();
+        }
         // An actually fulfilled late launch must be captured even after timeout/withdrawal.
         // The owning registry keeps capture authority independent of new-launch activation.
         const allocation = nativeLaunchedTask(
