@@ -24,17 +24,14 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 
 ## D3 — High-quality application preparation
 
-D3-107 installs compatible immutable Gateway version 90 with exact code and unweighted-alias
-readback and consequential review. Development runtimes, Docker and WSL are verified off; encrypted
-recovery snapshots/inputs are retained. Live native configuration/journey remain internal work;
-the owner confirms no qualifying AI-provider retention policy exists, so live AI cover letters
-stay disabled. [Evidence](evidence/d3-compatible-gateway-offline-release-2026-10-10.md).
-
-2026-10-11: The native candidate build is deployed to the exact stable HTTPS host with authentication
-protection tightened to all deployments. Public settings, build/source/alias and 154 focused web/
-extension tests plus component typechecks pass. The unpacked extension is built; provider controls
-remain disabled. Human Vercel sign-in and expired development SSO renewal precede live native testing.
-[Release evidence](evidence/d3-compatible-gateway-offline-release-2026-10-10.md#candidate-host-and-unpacked-client--2026-10-11).
+D3-108 merges the live-tested profile/launch/status fixes and the native STS/RPC fixes.
+Candidate sign-in, search, synthetic upload processing and grounded fact confirmation pass.
+Native preparations still fail before generated material: the corrected RPC worker image cannot
+be built because Docker Secrets Engine startup fails. The rejected original launch also needs an
+explicit owning ledger recovery transition. Live AI covers and ATS submission remain disabled
+behind provider-retention policy and authorized QA/fixture dependencies. D3 is not accepted.
+Development, Docker and WSL are verified off; encrypted backups and recovery inputs are retained.
+[Current evidence](evidence/d3-native-live-admission-fixes-2026-10-11.md).
 
 D3-106 handles standard S3 URL encoding and authenticates retired deletion markers without skipping
 their deletion authority. 257 focused tests, managed primary replay and consequential review pass.
@@ -146,6 +143,11 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 [Phase 7 tasks](phase-7-quality-and-expansion.md).
 
 ## Current operating state
+
+2026-10-11: See [D3-108 live-test and shutdown evidence](evidence/d3-native-live-admission-fixes-2026-10-11.md).
+Candidate sign-in is complete; full live generation/submission acceptance remains open.
+Development shutdown is verified at 2026-10-11T17:26:54Z; staging was not mutated and fresh verification awaits SSO.
+The records below describe earlier sessions.
 
 Work continues for D3 on 2026-10-10; D1/D3 are not complete. Independent D1 acceptance remains deferred.
 AWS access is sequential per the owner. Staging retains its 2026-10-09 dormant verification, with
