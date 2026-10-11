@@ -114,7 +114,13 @@ export async function resolveRestoredDatabaseUrl(
   signal: AbortSignal,
   fetcher: typeof fetch = fetch,
 ): Promise<string> {
-  return resolveBoundDatabaseUrl(configuration, environment, signal, fetcher, false);
+  return resolveBoundDatabaseUrl(
+    configuration,
+    environment,
+    signal,
+    fetcher,
+    configuration.recoveryMode === "primary_recovery",
+  );
 }
 
 /** Separate read-only recovery path; it cannot weaken the original isolated replay guard. */

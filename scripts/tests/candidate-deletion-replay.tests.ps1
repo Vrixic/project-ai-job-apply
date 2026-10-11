@@ -6,6 +6,7 @@ $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 . (Join-Path $root 'scripts/lib/terraform-toolchain.ps1')
 $fixture = ConvertFrom-D1RestoreJson ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'fixtures/candidate-deletion-restore-contract.v1.json')))
 $now = [datetimeoffset]$fixture.now
+$PrimaryRecovery = $false
 $script:checks = 0
 function Assert([bool]$Condition, [string]$Label) { if (-not $Condition) { throw "Synthetic test failed: $Label" }; $script:checks++ }
 function Reject([scriptblock]$Run, [string]$Label) { $rejected = $false; try { $null = & $Run } catch { $rejected = $true }; Assert $rejected $Label }

@@ -75,8 +75,11 @@ function Write-DeletionReplayPrivateJson([string]$Path, [object]$Value, [switch]
 }
 
 function Get-DeletionReplayConfigJson([object]$Config, [datetimeoffset]$Now = [datetimeoffset]::UtcNow, [switch]$AllowExpired) {
-  Assert-D1RestoreExactObjectKeys $Config $script:DeletionReplayConfigKeys 'DeletionReplayConfig'
-  foreach ($key in $script:DeletionReplayConfigKeys) {
+  $keys = @($script:DeletionReplayConfigKeys)
+  $primary = $null -ne $Config.PSObject.Properties['recoveryMode']
+  if ($primary) { $keys += 'recoveryMode'; if ($Config.recoveryMode -cne 'primary_recovery') { throw 'DeletionReplayModeInvalid' } }
+  Assert-D1RestoreExactObjectKeys $Config $keys 'DeletionReplayConfig'
+  foreach ($key in $keys) {
     if ($key -in @('schemaVersion','databasePort')) {
       if (-not (Test-D1RestoreBoundedInteger $Config.$key)) { throw 'DeletionReplayConfigNumberInvalid' }
     } elseif ($Config.$key -isnot [string] -or $Config.$key.Length -gt 512) { throw 'DeletionReplayConfigStringInvalid' }
@@ -86,14 +89,14 @@ function Get-DeletionReplayConfigJson([object]$Config, [datetimeoffset]$Now = [d
     if ($Config.$key -cnotmatch '^[a-f0-9]{64}$') { throw 'DeletionReplayConfigDigestInvalid' }
   }
   if ($Config.acceptedPolicyCatalogSha256 -cne '571ee233eac79d81e988840c0bd2271f27fedebe2c9c0a46d5c623625d131b1a') { throw 'DeletionReplayPolicyCatalogMismatch' }
-  if ($Config.sourceIdentifier -cne 'ai-job-apply-development' -or $Config.targetIdentifier -cnotmatch '^ai-job-apply-development-restore-[0-9]{14}$' -or $Config.sourceDbiResourceId -cnotmatch '^db-[A-Z0-9]{8,63}$' -or $Config.targetDbiResourceId -cnotmatch '^db-[A-Z0-9]{8,63}$' -or $Config.sourceDbiResourceId -ceq $Config.targetDbiResourceId -or $Config.sourceBoundarySha256 -ceq $Config.targetBoundarySha256 -or $Config.restoreManifestSha256 -cne 'd5c2b6d9f7204ef87c4798b2dbced4c96c1d2c3258dd6b06945a64ae17396fc5') { throw 'DeletionReplayDatabaseIdentityInvalid' }
-  if ($Config.sourceHostname -cnotmatch '^ai-job-apply-development\.[a-z0-9]+\.us-east-2\.rds\.amazonaws\.com$' -or $Config.targetHostname -cnotmatch ('^' + [regex]::Escape($Config.targetIdentifier) + '\.[a-z0-9]+\.us-east-2\.rds\.amazonaws\.com$') -or $Config.sourceHostname -ceq $Config.targetHostname -or $Config.databasePort -ne 5432 -or $Config.databaseName -cne 'ai_job_apply') { throw 'DeletionReplayDatabaseEndpointInvalid' }
+  if ($Config.sourceIdentifier -cne 'ai-job-apply-development' -or $(if ($primary) { $Config.targetIdentifier -cne 'ai-job-apply-development' } else { $Config.targetIdentifier -cnotmatch '^ai-job-apply-development-restore-[0-9]{14}$' }) -or $Config.sourceDbiResourceId -cnotmatch '^db-[A-Z0-9]{8,63}$' -or $Config.targetDbiResourceId -cnotmatch '^db-[A-Z0-9]{8,63}$' -or $(if ($primary) { $Config.sourceDbiResourceId -cne $Config.targetDbiResourceId -or $Config.sourceBoundarySha256 -cne $Config.targetBoundarySha256 } else { $Config.sourceDbiResourceId -ceq $Config.targetDbiResourceId -or $Config.sourceBoundarySha256 -ceq $Config.targetBoundarySha256 }) -or $Config.restoreManifestSha256 -cne 'd5c2b6d9f7204ef87c4798b2dbced4c96c1d2c3258dd6b06945a64ae17396fc5') { throw 'DeletionReplayDatabaseIdentityInvalid' }
+  if ($Config.sourceHostname -cnotmatch '^ai-job-apply-development\.[a-z0-9]+\.us-east-2\.rds\.amazonaws\.com$' -or $Config.targetHostname -cnotmatch ('^' + [regex]::Escape($Config.targetIdentifier) + '\.[a-z0-9]+\.us-east-2\.rds\.amazonaws\.com$') -or $(if ($primary) { $Config.sourceHostname -cne $Config.targetHostname } else { $Config.sourceHostname -ceq $Config.targetHostname }) -or $Config.databasePort -ne 5432 -or $Config.databaseName -cne 'ai_job_apply') { throw 'DeletionReplayDatabaseEndpointInvalid' }
   foreach ($key in @('issuedAt','expiresAt')) { if ($Config.$key -cnotmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$') { throw 'DeletionReplayClockInvalid' } }
   $issued = [datetimeoffset]::ParseExact($Config.issuedAt,"yyyy-MM-dd'T'HH:mm:ss.fff'Z'",[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal)
   $expires = [datetimeoffset]::ParseExact($Config.expiresAt,"yyyy-MM-dd'T'HH:mm:ss.fff'Z'",[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal)
   if ($expires -le $issued -or ($expires - $issued).TotalSeconds -gt 1800 -or $issued -gt $Now -or (-not $AllowExpired -and $expires -lt $Now.AddSeconds(300))) { throw 'DeletionReplayClockExpiredOrInsufficient' }
   $ordered = [ordered]@{}
-  foreach ($key in $script:DeletionReplayConfigKeys) {
+  foreach ($key in $keys) {
     if ([string]$Config.$key -match '[^\x20-\x7e]') { throw 'DeletionReplayNonAsciiConfig' }
     $ordered[$key] = $Config.$key
   }
@@ -176,7 +179,7 @@ function Get-DeletionReplayCleanupReadyAt([object]$InvocationJournal) {
 function Get-DeletionReplayBaselineMode([object]$Preparation) {
   $property = $Preparation.PSObject.Properties['baselineMode']
   if ($null -eq $property) { return 'steady-state' }
-  if ($property.Value -isnot [string] -or $property.Value -cnotin @('steady-state','dark-recovery')) { throw 'DeletionReplayBaselineModeInvalid' }
+  if ($property.Value -isnot [string] -or $property.Value -cnotin @('steady-state','dark-recovery','primary-recovery')) { throw 'DeletionReplayBaselineModeInvalid' }
   return $property.Value
 }
 
@@ -197,7 +200,8 @@ function Assert-DeletionReplayPreparation([object]$Preparation) {
   $environment = $create.Environment.Variables
   $config = ConvertFrom-D1RestoreJson $environment.RESTORE_REPLAY_CONFIG_JSON
   if ($config.accountId -cne $Preparation.accountId -or $config.runId -cne $Preparation.runId -or $config.sourceSha -cne $Preparation.sourceSha -or $environment.RESTORE_REPLAY_CONFIG_SHA256 -cne $Preparation.configurationSha256 -or $environment.RELEASE_SHA -cne $Preparation.artifactSha256 -or $Preparation.artifactKey -cne "lambda/candidate-deletion-restore/$($Preparation.sourceSha)/$($Preparation.artifactSha256)/candidate-deletion-restore-lambda.zip" -or [Convert]::ToBase64String([Convert]::FromHexString($Preparation.artifactSha256)) -cne $Preparation.artifactBase64Sha256) { throw 'DeletionReplayPreparationArtifactBindingInvalid' }
-  $expectedFiles = if ($mode -ceq 'dark-recovery') { 11 } else { 8 }
+  if (($mode -ceq 'primary-recovery') -ne ($null -ne $config.PSObject.Properties['recoveryMode'])) { throw 'DeletionReplayPreparationModeChanged' }
+  $expectedFiles = if ($mode -in @('dark-recovery','primary-recovery')) { 11 } else { 8 }
   if (@($Preparation.fileBindings).Count -ne $expectedFiles) { throw 'DeletionReplayFileBindingInventoryInvalid' }
   foreach ($binding in @($Preparation.fileBindings)) {
     Assert-D1RestoreExactObjectKeys $binding @('path','sha256') 'DeletionReplayFileBinding'

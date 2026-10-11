@@ -210,3 +210,20 @@ until the separate temporary-Lambda and PITR cleanup steps actually succeed.
 Complete normal schema/integrity, workflow, alarm, RTO/RPO and accountable recovery acceptance
 before any traffic is considered. Backup-window expiry still requires actual recoverability and
 manual/cross-account backup inventory evidence; elapsed time alone is insufficient.
+
+## Restored-primary recovery
+
+Use `-PrimaryRecovery` on every action to reconcile retained completed-deletion markers directly on
+the restored canonical development database with traffic and writers off. It conflicts with
+`-DarkRecovery`; omitting/changing the mode of a prepared packet refuses before AWS operations.
+Prepare also requires `-PrimarySafetySnapshotId` for an available encrypted snapshot of the live
+physical database, plus the existing exact current no-action plan, clean source artifact and policy
+catalog parameters. No PITR context or physical-restore proof is required. Each preparation writes
+its own private basic target/backup metadata and preserves original 30-minute admission.
+
+Keep the primary private, encrypted, protected and covered by 35-day backups. Inspect and Replay
+check current schema/migrations read-only and retain existing subject/operation/marker/document and
+transactional owner deletion safeguards. Neither action enables candidate traffic. An ambiguous
+result requires explicit inspection; never automatically replay. Clean up the temporary Lambda
+before changing its bound primary, safety snapshot, role or network. Do not use PITR cleanup on the
+canonical primary; finish with the data-preserving development dormancy lifecycle.

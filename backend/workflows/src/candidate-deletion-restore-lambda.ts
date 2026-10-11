@@ -1,3 +1,4 @@
+import { verifyDeletionRecoverySchema } from "./candidate-deletion-restore-schema.js";
 import { createDatabase } from "@ai-job-apply/profile-service";
 import {
   diagnoseHistoricalCompletion,
@@ -143,6 +144,15 @@ const defaults: CandidateDeletionRestoreDependencies = {
     if (signal.aborted) rejected();
     // A new single-connection pool per invocation. Never use the live cached pool.
     const database = createDatabase(restoredUrl, { maxConnections: 1 });
+    try {
+      if (config.recoveryMode === "primary_recovery") {
+        await verifyDeletionRecoverySchema(database, signal);
+        if (signal.aborted) rejected();
+      }
+    } catch {
+      await database.client.end({ timeout: 5 });
+      rejected();
+    }
     return {
       store: new PostgresCandidateDeletionRestoreStore(database),
       collectCompletionEvidence: (target, signal) =>

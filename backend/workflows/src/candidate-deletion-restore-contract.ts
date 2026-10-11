@@ -66,6 +66,7 @@ const RESOURCE_ID = /^db-[A-Z0-9]{8,63}$/u;
 
 export interface CandidateDeletionRestoreConfiguration {
   schemaVersion: 1;
+  recoveryMode?: "primary_recovery";
   runId: string;
   accountId: string;
   region: "us-east-2";
@@ -274,9 +275,10 @@ function canonicalSqlDate(value: unknown): value is string {
 export function serializeRestoreConfiguration(
   config: CandidateDeletionRestoreConfiguration,
 ): string {
-  return JSON.stringify(
-    Object.fromEntries(RESTORE_CONFIGURATION_KEYS.map((key) => [key, config[key]])),
-  );
+  return JSON.stringify({
+    ...Object.fromEntries(RESTORE_CONFIGURATION_KEYS.map((key) => [key, config[key]])),
+    ...(config.recoveryMode === undefined ? {} : { recoveryMode: config.recoveryMode }),
+  });
 }
 
 export function validateRestoreConfiguration(
@@ -290,7 +292,12 @@ export function validateRestoreConfiguration(
   if (
     !configurationSchema(value) ||
     !isRestoreRecord(value) ||
-    !exactKeys(value, RESTORE_CONFIGURATION_KEYS)
+    !exactKeys(
+      value,
+      Object.hasOwn(value, "recoveryMode")
+        ? [...RESTORE_CONFIGURATION_KEYS, "recoveryMode"]
+        : RESTORE_CONFIGURATION_KEYS,
+    )
   )
     return reject();
   if (
@@ -306,6 +313,7 @@ export function validateRestoreConfiguration(
     )
   )
     return reject();
+  const primary = value.recoveryMode === "primary_recovery";
   const hashes = [
     "restoreContextSha256",
     "sourceBoundarySha256",
@@ -332,10 +340,16 @@ export function validateRestoreConfiguration(
     !RESOURCE_ID.test(value.sourceDbiResourceId) ||
     typeof value.targetDbiResourceId !== "string" ||
     !RESOURCE_ID.test(value.targetDbiResourceId) ||
-    value.targetDbiResourceId === value.sourceDbiResourceId ||
-    value.targetBoundarySha256 === value.sourceBoundarySha256 ||
+    (primary
+      ? value.targetDbiResourceId !== value.sourceDbiResourceId ||
+        value.targetBoundarySha256 !== value.sourceBoundarySha256 ||
+        value.targetHostname !== value.sourceHostname
+      : value.targetDbiResourceId === value.sourceDbiResourceId ||
+        value.targetBoundarySha256 === value.sourceBoundarySha256) ||
     typeof value.targetIdentifier !== "string" ||
-    !/^ai-job-apply-development-restore-[0-9]{14}$/u.test(value.targetIdentifier) ||
+    (primary
+      ? value.targetIdentifier !== "ai-job-apply-development"
+      : !/^ai-job-apply-development-restore-[0-9]{14}$/u.test(value.targetIdentifier)) ||
     typeof value.sourceHostname !== "string" ||
     typeof value.targetHostname !== "string" ||
     !canonicalDate(value.issuedAt) ||

@@ -18,8 +18,11 @@ param(
   [ValidatePattern('^[a-f0-9]{64}$')][string]$ReviewedCleanupDisabledSha256 = '',
   [switch]$Execute,
   [switch]$DarkRecovery,
+  [switch]$PrimaryRecovery,
+  [string]$PrimarySafetySnapshotId = '',
   [switch]$Help
 )
+if ($PrimaryRecovery -and $DarkRecovery) { throw 'DeletionReplayConflictingRecoveryModes' }
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -29,6 +32,9 @@ Development restore-only deletion replay: Prepare / Create / Inspect / Replay / 
 Prepare is read-only in AWS and writes a private review packet. It requires a clean source-bound
 Lambda artifact, the reviewed current no-drift runtime plan, and verified current-schema PITR
 context. It cannot create or enable the separately reviewed default-off IAM role.
+Use -PrimaryRecovery on every action to reconcile the exact writer-off restored development primary.
+Prepare additionally requires -PrimarySafetySnapshotId for its available encrypted physical-source backup.
+Primary mode checks current schema during invocation and needs no PITR context or proof rehearsal.
 Use -DarkRecovery on every action for a writer-off PITR context. It uses the maintained
 development recovery Status checks and binds that mode and its operator files in the packet.
 Create requires -Execute and the packet checksum. Inspect invokes only the numeric version and
@@ -54,6 +60,7 @@ $terraformPrivate = Join-Path $terraformRoot '.terraform'
 $privateRoot = Join-Path $terraformPrivate 'development-candidate-deletion-replay'
 $restoreContextPath = Join-Path $terraformPrivate 'applydash-development-restore-context.json'
 if ($DarkRecovery) { $restoreContextPath = Join-Path $terraformPrivate 'applydash-development-dark-restore-context.json' }
+if ($PrimaryRecovery) { $restoreContextPath = Join-Path $privateRoot 'primary-context.json' }
 $artifactRoot = Join-Path $root 'backend/workflows/dist/lambda'
 $zipPath = Join-Path $artifactRoot 'candidate-deletion-restore-lambda.zip'
 $manifestPath = Join-Path $artifactRoot 'candidate-deletion-restore-lambda.manifest.json'
@@ -102,20 +109,77 @@ function Read-ReplayPlan([string]$Path, [string]$Sha256) {
 
 function Assert-ReplayRecoveryMode([object]$Preparation, [object]$Context) {
   $mode = Get-DeletionReplayBaselineMode $Preparation
-  if (($mode -ceq 'dark-recovery') -ne [bool]$DarkRecovery) { throw 'DeletionReplayBaselineModeChanged' }
-  if ($null -ne $Context) { Assert-D1RestoreRecoveryMode $Context 'development' ([bool]$DarkRecovery) }
+  if (($mode -ceq 'dark-recovery') -ne [bool]$DarkRecovery -or ($mode -ceq 'primary-recovery') -ne [bool]$PrimaryRecovery) { throw 'DeletionReplayBaselineModeChanged' }
+  if ($null -ne $Context -and -not $PrimaryRecovery) { Assert-D1RestoreRecoveryMode $Context 'development' ([bool]$DarkRecovery) }
 }
 
 function Get-ReplayBoundFiles([string]$PlanPath) {
   $files = @($PSCommandPath,$guardPath,(Join-Path $PSScriptRoot 'lib/staging-postgresql-restore-verifier.ps1'),$restoreContextPath,[IO.Path]::GetFullPath($PlanPath),$manifestPath,$zipPath,$sbomPath)
-  if ($DarkRecovery) {
+  if ($DarkRecovery -or $PrimaryRecovery) {
     $files += @('operate-development-postgresql-restore.ps1','operate-staging-postgresql-restore.ps1','lib/development-postgresql-dark-recovery.ps1') | ForEach-Object { Join-Path $PSScriptRoot $_ }
   }
   return $files
 }
 
+function Assert-ReplayPrimaryBaseline([object]$Preparation) {
+  # Reuse the maintained exact-input, encrypted-backend and writer-drain checks;
+  # no PITR context, restore rehearsal or whole-data attestation is involved.
+  $Environment = 'development'; $Region = 'us-east-2'
+  $ExpectedAccountId = $Preparation.accountId; $StateBucket = $Preparation.stateBucket
+  $RuntimePlanPath = $Preparation.runtimePlanPath
+  $environmentDirectory = $terraformRoot; $terraformDataDirectory = $terraformPrivate
+  $env:AWS_PROFILE = $AwsProfile; $env:AWS_REGION = $Region; $env:AWS_DEFAULT_REGION = $Region
+  function Assert-CurrentAwsCaller { Assert-D1RestoreAwsCallerBoundary (Invoke-ReplayAws @('sts','get-caller-identity')) $ExpectedAccountId }
+  function Invoke-AwsJson([string[]]$Arguments) { Invoke-ReplayAws $Arguments }
+  $null = Assert-D1RestoreDarkBaseline
+}
+
+function Assert-ReplayPrimaryDatabase([object]$Database, [object]$Snapshot, [string]$SnapshotId) {
+  if ($Database.DBInstanceIdentifier -cne 'ai-job-apply-development' -or
+      $Database.DBInstanceArn -cne "arn:aws:rds:us-east-2:$ExpectedAccountId`:db:ai-job-apply-development" -or
+      $Database.DbiResourceId -cnotmatch '^db-[A-Z0-9]{8,63}$' -or
+      $Database.DBInstanceStatus -cne 'available' -or $Database.PubliclyAccessible -isnot [bool] -or $Database.PubliclyAccessible -or
+      $Database.StorageEncrypted -isnot [bool] -or -not $Database.StorageEncrypted -or
+      $Database.DeletionProtection -isnot [bool] -or -not $Database.DeletionProtection -or
+      -not (Test-D1RestoreBoundedInteger $Database.BackupRetentionPeriod) -or $Database.BackupRetentionPeriod -ne 35 -or $Database.MultiAZ -isnot [bool] -or $Database.MultiAZ -or
+      $Database.DBName -cnotin @('ai_job_apply','',$null) -or -not (Test-D1RestoreBoundedInteger $Database.Endpoint.Port) -or $Database.Endpoint.Port -ne 5432 -or
+      $Database.Endpoint.Address -cnotmatch '^ai-job-apply-development\.[a-z0-9]+\.us-east-2\.rds\.amazonaws\.com$' -or
+      $Database.KmsKeyId -cnotmatch "^arn:aws:kms:us-east-2:$ExpectedAccountId`:key/[a-f0-9-]{36}$" -or
+      $SnapshotId -cnotmatch '^ai-job-apply-development-[a-z0-9-]+$' -or
+      $Snapshot.DBSnapshotIdentifier -cne $SnapshotId -or $Snapshot.Status -cne 'available' -or
+      $Snapshot.Encrypted -isnot [bool] -or -not $Snapshot.Encrypted -or
+      $Snapshot.DBInstanceIdentifier -cne $Database.DBInstanceIdentifier -or
+      $Snapshot.DbiResourceId -cne $Database.DbiResourceId -or $Snapshot.KmsKeyId -cne $Database.KmsKeyId) {
+    throw 'DeletionReplayPrimaryDatabaseOrBackupInvalid'
+  }
+}
+
+function New-ReplayPrimaryContext {
+  $source = @((Invoke-ReplayAws @('rds','describe-db-instances','--db-instance-identifier','ai-job-apply-development')).DBInstances)
+  $snapshots = @((Invoke-ReplayAws @('rds','describe-db-snapshots','--db-snapshot-identifier',$PrimarySafetySnapshotId)).DBSnapshots)
+  if ($source.Count -ne 1 -or $snapshots.Count -ne 1) { throw 'DeletionReplayPrimaryIdentityAmbiguous' }
+  Assert-ReplayPrimaryDatabase $source[0] $snapshots[0] $PrimarySafetySnapshotId
+  $boundary = Get-DeletionReplaySha (Get-DeletionReplayRdsBoundaryJson $source[0])
+  return [pscustomobject][ordered]@{
+    baseline_mode='primary-recovery'; source_identifier='ai-job-apply-development'; target_identifier='ai-job-apply-development'
+    source_dbi_resource_id=$source[0].DbiResourceId; target_dbi_resource_id=$source[0].DbiResourceId
+    source_boundary_sha256=$boundary; target_boundary_sha256=$boundary
+    source_manifest_sha256='d5c2b6d9f7204ef87c4798b2dbced4c96c1d2c3258dd6b06945a64ae17396fc5'
+    safety_snapshot_identifier=$PrimarySafetySnapshotId
+  }
+}
+
+function Read-ReplayContext {
+  if (-not $PrimaryRecovery) { return Read-D1RestoreContextFile $restoreContextPath (Get-D1RestoreManifestBoundary $root) }
+  $context = ConvertFrom-D1RestoreJson ([IO.File]::ReadAllText($restoreContextPath))
+  Assert-D1RestoreExactObjectKeys $context @('baseline_mode','source_identifier','target_identifier','source_dbi_resource_id','target_dbi_resource_id','source_boundary_sha256','target_boundary_sha256','source_manifest_sha256','safety_snapshot_identifier') 'DeletionReplayPrimaryContext'
+  if ($context.baseline_mode -cne 'primary-recovery' -or $context.source_identifier -cne 'ai-job-apply-development' -or $context.target_identifier -cne $context.source_identifier -or $context.source_dbi_resource_id -cne $context.target_dbi_resource_id -or $context.source_boundary_sha256 -cne $context.target_boundary_sha256) { throw 'DeletionReplayPrimaryContextInvalid' }
+  return $context
+}
+
 function Assert-ReplayNoDrift([object]$Preparation) {
   Assert-ReplayRecoveryMode $Preparation $null
+  if ($PrimaryRecovery) { Assert-ReplayPrimaryBaseline $Preparation; return }
   if ($DarkRecovery) {
     $raw = @(& (Join-Path $PSScriptRoot 'operate-development-postgresql-restore.ps1') -Action Status -DarkRecovery -ExpectedAccountId $Preparation.accountId -StateBucket $Preparation.stateBucket -RuntimePlanPath $Preparation.runtimePlanPath -AwsProfile $AwsProfile -Region us-east-2 2>$null)
     if ($LASTEXITCODE -ne 0) { throw 'DeletionReplayRuntimeDriftCheckFailed' }
@@ -168,6 +232,14 @@ function Get-ReplayRoleBoundary([object]$Plan, [string]$AccountId) {
 }
 
 function Get-ReplayDatabases([object]$Context) {
+  if ($PrimaryRecovery) {
+    $source = @((Invoke-ReplayAws @('rds','describe-db-instances','--db-instance-identifier','ai-job-apply-development')).DBInstances)
+    $snapshot = @((Invoke-ReplayAws @('rds','describe-db-snapshots','--db-snapshot-identifier',$Context.safety_snapshot_identifier)).DBSnapshots)
+    if ($source.Count -ne 1 -or $snapshot.Count -ne 1) { throw 'DeletionReplayPrimaryIdentityAmbiguous' }
+    Assert-ReplayPrimaryDatabase $source[0] $snapshot[0] $Context.safety_snapshot_identifier
+    if ($source[0].DbiResourceId -cne $Context.source_dbi_resource_id -or (Get-DeletionReplaySha (Get-DeletionReplayRdsBoundaryJson $source[0])) -cne $Context.source_boundary_sha256) { throw 'DeletionReplayPrimaryIdentityChanged' }
+    return @{source=$source[0];target=$source[0]}
+  }
   $source = @((Invoke-ReplayAws @('rds','describe-db-instances','--db-instance-identifier',$Context.source_identifier)).DBInstances)
   $target = @((Invoke-ReplayAws @('rds','describe-db-instances','--db-instance-identifier',$Context.target_identifier)).DBInstances)
   if ($source.Count -ne 1 -or $target.Count -ne 1) { throw 'DeletionReplayRdsIdentityAmbiguous' }
@@ -193,8 +265,7 @@ function Assert-ReplayCurrentBoundary([object]$Preparation, [switch]$Cleanup) {
   $caller = Invoke-ReplayAws @('sts','get-caller-identity')
   Assert-D1RestoreAwsCallerBoundary $caller $Preparation.accountId
   if (-not $Cleanup -and ((Invoke-ReplayGit @('rev-parse','HEAD')) -cne $Preparation.sourceSha -or (Invoke-ReplayGit @('status','--porcelain')) -cne '')) { throw 'DeletionReplaySourceChanged' }
-  $boundary = Get-D1RestoreManifestBoundary $root
-  $context = Read-D1RestoreContextFile $restoreContextPath $boundary
+  $context = Read-ReplayContext
   Assert-ReplayRecoveryMode $Preparation $context
   $null = Get-ReplayDatabases $context
   $plan = Read-ReplayPlan $Preparation.runtimePlanPath $Preparation.runtimePlanSha256
@@ -288,13 +359,21 @@ try {
     if ($ExpectedAccountId -cnotmatch '^[0-9]{12}$' -or $SourceSha -cnotmatch '^[a-f0-9]{40}$' -or $StateBucket -cnotmatch '^ai-job-apply-development-[a-z0-9-]+$' -or $AcceptedPolicyCatalogSha256 -cnotmatch '^[a-f0-9]{64}$') { throw 'DeletionReplayPreparationInputsMissing' }
     if ((Invoke-ReplayGit @('rev-parse','HEAD')) -cne $SourceSha -or (Invoke-ReplayGit @('status','--porcelain')) -cne '') { throw 'DeletionReplayCleanExactSourceRequired' }
     Assert-D1RestoreAwsCallerBoundary (Invoke-ReplayAws @('sts','get-caller-identity')) $ExpectedAccountId
+    if ($PrimaryRecovery) {
+      if ($PrimarySafetySnapshotId -cnotmatch '^ai-job-apply-development-[a-z0-9-]+$') { throw 'DeletionReplayPrimaryBackupRequired' }
+      # Context is basic target/backup metadata, not a physical-restore proof.
+      # A new run gets its own immutable context so older cleanup remains possible.
+      $restoreContextPath = Join-Path $privateRoot ("primary-" + [guid]::NewGuid().ToString('N') + '.json')
+      Write-DeletionReplayPrivateJson $restoreContextPath (New-ReplayPrimaryContext)
+      $ReviewedRestoreContextSha256 = Get-D1RestoreFileSha256 $restoreContextPath
+    }
     Assert-DeletionReplayHash $restoreContextPath $ReviewedRestoreContextSha256
     Assert-DeletionReplayHash $manifestPath $ReviewedArtifactManifestSha256
     $plan = Read-ReplayPlan $RuntimePlanPath $ReviewedRuntimePlanSha256
     $manifest = ConvertFrom-D1RestoreJson ([IO.File]::ReadAllText($manifestPath))
     Assert-DeletionReplayArtifact $manifest $SourceSha $zipPath $sbomPath
-    $context = Read-D1RestoreContextFile $restoreContextPath (Get-D1RestoreManifestBoundary $root)
-    Assert-D1RestoreRecoveryMode $context 'development' ([bool]$DarkRecovery)
+    $context = Read-ReplayContext
+    if (-not $PrimaryRecovery) { Assert-D1RestoreRecoveryMode $context 'development' ([bool]$DarkRecovery) }
     $databases = Get-ReplayDatabases $context
     $roleBoundary = Get-ReplayRoleBoundary $plan $ExpectedAccountId
     $activity = Get-ReplayPlanResource $plan 'module.platform.aws_lambda_function.profile_readiness_activity[0]'
@@ -305,9 +384,10 @@ try {
       schemaVersion=1;runId=$runId;accountId=$ExpectedAccountId;region='us-east-2';sourceSha=$SourceSha;restoreContextSha256=$ReviewedRestoreContextSha256
       sourceIdentifier=$context.source_identifier;sourceDbiResourceId=$context.source_dbi_resource_id;sourceBoundarySha256=$context.source_boundary_sha256;sourceHostname=$databases.source.Endpoint.Address
       targetIdentifier=$context.target_identifier;targetDbiResourceId=$context.target_dbi_resource_id;targetBoundarySha256=$context.target_boundary_sha256;targetHostname=$databases.target.Endpoint.Address
-      databaseName=$databases.target.DBName;databasePort=[int]$databases.target.Endpoint.Port;restoreManifestSha256=$context.source_manifest_sha256;acceptedPolicyCatalogSha256=$AcceptedPolicyCatalogSha256
+      databaseName=$(if ($PrimaryRecovery) { 'ai_job_apply' } else { $databases.target.DBName });databasePort=[int]$databases.target.Endpoint.Port;restoreManifestSha256=$context.source_manifest_sha256;acceptedPolicyCatalogSha256=$AcceptedPolicyCatalogSha256
       issuedAt=$now.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");expiresAt=$now.AddMinutes(30).ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")
     }
+    if ($PrimaryRecovery) { $configuration | Add-Member -NotePropertyName recoveryMode -NotePropertyValue 'primary_recovery' }
     $activityEnvironment = $activity.environment[0].variables
     $environment = [pscustomobject][ordered]@{
       NODE_ENV='production';RELEASE_SHA=$manifest.artifactSha256;DATABASE_SECRET_ID=$activityEnvironment.DATABASE_SECRET_ID
@@ -328,7 +408,7 @@ try {
     }
     $files = @(Get-ReplayBoundFiles $RuntimePlanPath)
     $preparation = [ordered]@{schemaVersion=1;kind='candidate-deletion-restore-preparation';runId=$runId;accountId=$ExpectedAccountId;sourceSha=$SourceSha;stateBucket=$StateBucket;runtimePlanPath=[IO.Path]::GetFullPath($RuntimePlanPath);runtimePlanSha256=$ReviewedRuntimePlanSha256;configurationSha256=$environment.RESTORE_REPLAY_CONFIG_SHA256;artifactBucket=$artifactBucket;artifactKey=$key;artifactSha256=$manifest.artifactSha256;artifactBase64Sha256=$manifest.artifactBase64Sha256;roleBoundary=$roleBoundary;createRequest=$create;fileBindings=@($files | ForEach-Object { [ordered]@{path=$_;sha256=(Get-D1RestoreFileSha256 $_)} })}
-    $preparation.baselineMode = if ($DarkRecovery) { 'dark-recovery' } else { 'steady-state' }
+    $preparation.baselineMode = if ($PrimaryRecovery) { 'primary-recovery' } elseif ($DarkRecovery) { 'dark-recovery' } else { 'steady-state' }
     Assert-ReplayNoDrift ([pscustomobject]$preparation)
     foreach ($binding in $preparation.fileBindings) { Assert-DeletionReplayHash $binding.path $binding.sha256 }
     Write-DeletionReplayPrivateJson $PreparationPath $preparation
@@ -340,6 +420,12 @@ try {
   Assert-DeletionReplayHash $PreparationPath $ReviewedPreparationSha256
   $preparation = ConvertFrom-D1RestoreJson ([IO.File]::ReadAllText($PreparationPath))
   if ($preparation.schemaVersion -ne 1 -or $preparation.kind -cne 'candidate-deletion-restore-preparation' -or $preparation.runId -cnotmatch '^[a-f0-9]{32}$' -or $preparation.createRequest.FunctionName -cne "ai-job-apply-development-replay-$($preparation.runId)" -or (Split-Path (Split-Path $PreparationPath -Parent) -Leaf) -cne $preparation.runId) { throw 'DeletionReplayPreparationInvalid' }
+  Assert-ReplayRecoveryMode $preparation $null
+  if ($PrimaryRecovery) {
+    $contexts = @($preparation.fileBindings.path | Where-Object { (Split-Path $_ -Leaf) -cmatch '^primary-[a-f0-9]{32}\.json$' })
+    if ($contexts.Count -ne 1) { throw 'DeletionReplayPrimaryContextMissing' }
+    $restoreContextPath = Resolve-DeletionReplayPrivatePath $contexts[0] $privateRoot -MustExist
+  }
   $ExpectedAccountId = $preparation.accountId
   $runDirectory = Split-Path $PreparationPath -Parent
   $createdPath = Join-Path $runDirectory 'created.json'

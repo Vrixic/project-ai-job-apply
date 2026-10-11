@@ -24,6 +24,8 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 
 ## D3 — High-quality application preparation
 
+D3-104 adds explicit writer-off primary deletion replay, preserving isolated defaults and basic backup/deletion safeguards. 466 focused tests, 816 operator assertions, 17 PostgreSQL cases, component typecheck/build, packaged refusal and simulated connected journey pass. Managed restore/replay and live acceptance remain. [Evidence](evidence/d3-primary-deletion-recovery-2026-10-10.md).
+
 D3-103 removes formal recovery-proof gates, preserving backups and deletion safeguards. 337 focused tests, 34 lifecycle assertions, component typecheck, 16 PostgreSQL cases and the simulated connected journey pass; consequential review passes. [Evidence](evidence/d3-recovery-safeguards-simplification-2026-10-10.md).
 
 Owner revision (2026-10-10): formal database recovery-proof gates are removed. Retain encrypted
