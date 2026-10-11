@@ -29,3 +29,30 @@ The owner confirms no qualifying provider retention policy exists. Live AI cover
 remains externally blocked and disabled under ADR-038. Authorized provider fixtures and acceptance
 also remain open; synthetic fixtures do not establish provider acceptance. Independent D1/admin
 acceptance remains deferred.
+
+## Candidate host and unpacked client — 2026-10-11
+
+The four public native UI/SPA/base-host settings are now configured on the existing candidate
+production project; individual exact-public-key readback passes without reading server secrets.
+The component build from clean merged `09c33dfd` is Ready in `iad1`, deployment
+`dpl_EMvsz2K6ojZ8uAvsXKNxRsEKqdJm`. Initial deployment skipped automatic aliases.
+
+Actual unauthenticated readback found that the old Standard Protection setting left the stable
+candidate origin public. The same project's authentication protection is tightened to `all`,
+accepted on its existing Hobby plan without requesting a purchase or changing domain bindings.
+Only `https://ai-job-apply-candidate.vercel.app` is then assigned to the exact new deployment.
+Fresh stable-alias inspection and unauthenticated HTTP 302 to Vercel sign-in pass. This preserves
+the existing exact Auth0 origin; no wildcard, new credential or authentication bypass is added.
+Browser inspection confirms Vercel sign-in; live candidate/native acceptance awaits human sign-in.
+
+48 focused native-web tests and the web typecheck pass. The existing unpacked extension builds
+against the exact stable HTTPS origin; 106 focused settings/handoff/execution-API tests and its
+typecheck pass. Generated manifest checks confirm the exact website listener and no employer
+host grants. The generated accepted-provider profile list is empty. Installed ID/grant/refusal
+checks remain; successful transfer and ATS effects still require the existing provider registry
+gate. Independent consequential review confirms this distinction; no provider gate is waived.
+
+Development SSO subsequently expired before runtime testing. No AWS runtime was reactivated
+after the recorded shutdown. Docker/WSL remain off and the PC stays on. Human Vercel sign-in and
+development SSO renewal are requested; live resume generation/expiry and the connected journey
+remain unverified. No full repository checks or independent D1/admin acceptance run.
