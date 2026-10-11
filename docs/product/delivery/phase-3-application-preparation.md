@@ -38,6 +38,8 @@ Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 20
 
 D3-113 started 2026-10-11; source verification passes. Managed native generation succeeds; preview verification is under diagnosis and approval remains blocked.
 
+D3-114 started 2026-10-11: native API scope admission is corrected and passes focused Terraform/controller tests and consequential review. Managed verification remains. [Evidence](evidence/d3-native-api-scope-admission-2026-10-11.md).
+
 Implemented means merged source; deployment and live acceptance are stated separately.
 
 | Capability / task IDs | Implemented | Remaining |
