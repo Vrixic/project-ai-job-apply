@@ -185,6 +185,51 @@ describe("ApplicationsWorkspace", () => {
     expect(send.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
   });
 
+  it.each(["expired", "expires while open"])(
+    "offers explicit replacement when native material %s",
+    async (mode) => {
+      nativeUi();
+      vi.useFakeTimers();
+      try {
+        const current = reviewable();
+        if (!current.currentPacket) throw Error("Missing packet");
+        const expiresAtMs = Date.now() + (mode === "expired" ? -1 : 1000);
+        current.currentPacket.temporaryMaterials = [
+          {
+            schemaVersion: 1,
+            kind: "tailored_resume",
+            generationId: "00000000-0000-7000-8000-000000000020",
+            version: 1,
+            contentSha256: HASH,
+            completedAtMs: expiresAtMs - 1_800_000,
+            expiresAtMs,
+          },
+        ];
+        const send = vi
+          .fn<typeof fetch>()
+          .mockResolvedValueOnce(respond(current))
+          .mockResolvedValueOnce(respond(reviewable(3), 201));
+        await mount(send, undefined, false, APP);
+        if (mode !== "expired") {
+          expect(container.textContent).not.toContain("Prepare a new packet");
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(1001);
+          });
+        }
+        expect(container.textContent).toContain("requires fresh review and approval");
+        expect(container.textContent).not.toContain("Check generated resume");
+        expect(send).toHaveBeenCalledTimes(1);
+        await click("Prepare a new packet");
+        const writes = send.mock.calls.filter(([, options]) => options?.method === "POST");
+        expect(writes).toHaveLength(1);
+        expect(JSON.parse(String(writes[0]?.[1]?.body))).toEqual({ expectedRevision: 2 });
+        expect(container.textContent).not.toContain("Your application is approved and ready");
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it("admits one explicit replacement despite a double click", async () => {
     nativeUi();
     let finish!: (response: Response) => void;

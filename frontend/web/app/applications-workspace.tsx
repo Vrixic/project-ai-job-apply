@@ -10,7 +10,7 @@ import {
 } from "@ai-job-apply/api-contracts";
 import { validateApplication } from "@ai-job-apply/api-contracts/browser-validators";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { sameMaterial } from "../lib/application-material-lifetime";
+import { materialDeadline, sameMaterial } from "../lib/application-material-lifetime";
 import {
   preparationFailureCopy,
   prepareApplicationPacket,
@@ -34,6 +34,7 @@ import {
   type SavedApplicationAnswerSelection,
   SavedApplicationAnswers,
 } from "./saved-application-answers";
+import { useMaterialExpiry } from "./use-material-expiry";
 
 type Entries = Readonly<Record<string, string | boolean>>;
 const coverLetterUiEnabled = process.env.NEXT_PUBLIC_COVER_LETTER_PREPARATION_UI === "enabled";
@@ -88,6 +89,10 @@ function JobApplicationWorkspace({
   const [nativeConfiguration] = useState(nativeMaterialConfiguration);
   const [createKey] = useState(() => `web-create-${crypto.randomUUID()}`);
   const [application, setApplication] = useState<Application>();
+  const materials = application?.currentPacket?.temporaryMaterials ?? [];
+  const materialsExpired = useMaterialExpiry(
+    materials.length ? Math.min(...materials.map(materialDeadline)) : undefined,
+  );
   const [entries, setEntries] = useState<Entries>({});
   useEffect(() => {
     if (application?.packetAvailability === "withheld") setEntries({});
@@ -598,17 +603,21 @@ function JobApplicationWorkspace({
           ) : null}
           {!preparation &&
           nativeConfiguration &&
-          !application.currentPacket?.temporaryMaterials?.length &&
+          (!materials.length || materialsExpired) &&
           application.currentPacket &&
           application.status === "review_required" ? (
             <section aria-label="Generated resume availability">
-              <p>
-                Check whether a generated resume is available. This does not start another
-                preparation.
-              </p>
-              <button type="button" disabled={busy} onClick={() => void checkGeneratedResume()}>
-                Check generated resume
-              </button>
+              {!materials.length ? (
+                <>
+                  <p>
+                    Check whether a generated resume is available. This does not start another
+                    preparation.
+                  </p>
+                  <button type="button" disabled={busy} onClick={() => void checkGeneratedResume()}>
+                    Check generated resume
+                  </button>
+                </>
+              ) : null}
               <p>
                 Preparing again replaces the current packet and requires fresh review and approval.
               </p>
