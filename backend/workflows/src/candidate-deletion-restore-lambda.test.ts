@@ -1181,8 +1181,9 @@ describe("private read-only completion diagnosis handler branch", () => {
   });
 });
 
-it("keeps Inspect and single-attempt Replay bound to explicit primary recovery", async () => {
+it("keeps Inspect and Replay bound to explicit primary recovery", async () => {
   const h = harness();
+  const open = vi.spyOn(h.dependencies, "openStore");
   const config = {
     ...fixture.configuration,
     recoveryMode: "primary_recovery",
@@ -1209,7 +1210,7 @@ it("keeps Inspect and single-attempt Replay bound to explicit primary recovery",
     outcome: "replayed",
     restoredUsersReconciled: 1,
   });
-  expect(h.openStore.mock.calls[0]?.[0]).toMatchObject({
+  expect(open.mock.calls[0]?.[0]).toMatchObject({
     recoveryMode: "primary_recovery",
     targetIdentifier: "ai-job-apply-development",
   });
