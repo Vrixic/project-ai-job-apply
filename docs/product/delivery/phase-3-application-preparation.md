@@ -329,3 +329,9 @@ Targeted regressions/typechecks and consequential review pass. Native image rebu
 by Docker startup; no generated material or submission was accepted. Original unresolved failures
 are retained without relaunch or guessed settlement. Independent D1/admin acceptance stays deferred.
 [Evidence](evidence/d3-native-live-admission-fixes-2026-10-11.md).
+
+2026-10-11: Sequential staging SSO renewal permits fresh read-only shutdown verification at
+18:01:49Z. Lifecycle and supplemental inventory confirm dormant with no running work or queued
+messages. Development shutdown remains verified; Docker/WSL are off and the PC remains on.
+D3 remains In progress; independent D1/admin acceptance stays deferred.
+[Evidence](evidence/d3-native-live-admission-fixes-2026-10-11.md).
