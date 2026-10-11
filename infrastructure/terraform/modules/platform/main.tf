@@ -3021,6 +3021,44 @@ resource "aws_vpc_endpoint" "lambda" {
 data "aws_iam_policy_document" "document_sts_endpoint" {
   count = local.document_complete_dark_enabled ? 1 : 0
 
+  dynamic "statement" {
+    for_each = var.native_resume_task_rpc_bindings
+    content {
+      sid       = "OriginalResumeTaskIdentity${statement.key}"
+      effect    = "Allow"
+      actions   = ["sts:GetCallerIdentity"]
+      resources = ["*"]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-native-resume-r${statement.key}-task"]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = local.material_task_roles
+    content {
+      sid       = "OriginalMaterialTaskIdentity${statement.key}"
+      effect    = "Allow"
+      actions   = ["sts:GetCallerIdentity"]
+      resources = ["*"]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = [statement.value]
+      }
+    }
+  }
+
   statement {
     sid       = "CoordinatorAssumesExactDocumentObjectRoleOnly"
     effect    = "Allow"
