@@ -87,7 +87,21 @@ export function NativeApplicationMaterials({
   const deadline = materials.length ? Math.min(...materials.map(materialDeadline)) : 0;
   const expired = useMaterialExpiry(deadline);
   const credentialExpired = useMaterialExpiry(credentialDeadline);
+  const approvalDeadline = application.approval ? Date.parse(application.approval.expiresAt) : 0;
+  const approvalExpired = useMaterialExpiry(approvalDeadline);
+  const approved =
+    application.currentAction === "ready_to_submit" &&
+    application.approval?.packetHash === packet?.packetHash &&
+    Number.isFinite(approvalDeadline) &&
+    !approvalExpired;
   const materialKey = JSON.stringify(materials);
+
+  useEffect(() => {
+    if (approvalExpired) {
+      pendingDownload.current?.abort();
+      withdrawTransfer();
+    }
+  }, [approvalExpired, withdrawTransfer]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: changing approval revision cancels the old file without discarding the packet's unchanged previews.
   useEffect(
@@ -254,7 +268,8 @@ export function NativeApplicationMaterials({
       busy ||
       working ||
       !session.ready ||
-      application.currentAction !== "ready_to_submit" ||
+      !approved ||
+      Date.now() >= approvalDeadline ||
       Date.now() >= deadline
     )
       return;
@@ -307,14 +322,8 @@ export function NativeApplicationMaterials({
   }
 
   async function download(material: ApplicationTemporaryMaterial, format: "pdf" | "docx") {
-    if (
-      !packet ||
-      busy ||
-      working ||
-      application.currentAction !== "ready_to_submit" ||
-      !session.ready ||
-      Date.now() >= deadline
-    )
+    const downloadDeadline = Math.min(deadline, approvalDeadline);
+    if (!packet || busy || working || !approved || !session.ready || Date.now() >= downloadDeadline)
       return;
     const controller = new AbortController();
     pending.current = controller;
@@ -351,7 +360,7 @@ export function NativeApplicationMaterials({
         !session.ready ||
         currentApproval.current.revision !== application.revision ||
         currentApproval.current.action !== "ready_to_submit" ||
-        Date.now() >= deadline ||
+        Date.now() >= downloadDeadline ||
         bytes.length !== value.sizeBytes ||
         hash !== value.sha256
       )
@@ -464,7 +473,7 @@ export function NativeApplicationMaterials({
                         ),
                       )
                     : null}
-                  {application.currentAction === "ready_to_submit"
+                  {approved
                     ? (["pdf", "docx"] as const).map((format) => (
                         <button
                           key={format}
@@ -487,7 +496,13 @@ export function NativeApplicationMaterials({
         </>
       )}
       {message && !expired ? <p role="status">{message}</p> : null}
-      {extensionId && connected && !expired && application.currentAction === "ready_to_submit" ? (
+      {!expired && application.currentAction === "ready_to_submit" && approvalExpired ? (
+        <p role="status">
+          Approval expired. Choose Edit again to review and approve before downloading or sending
+          files.
+        </p>
+      ) : null}
+      {extensionId && connected && !expired && approved ? (
         <div>
           <p>Select the matching employer tab in the extension before sending approved files.</p>
           {(["pdf", "docx"] as const).map((format) => (
