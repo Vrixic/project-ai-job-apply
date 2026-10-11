@@ -11,6 +11,16 @@ runbooks. Restore and verify the development database and enable only the requir
 release, routes and networking. This command does not start cloud resources. Keep AWS dormant
 while preparing the test driver; do not sign in early and let the token expire during a restore.
 
+When the image pins numeric owner/source RPC versions, publish their enabled configuration with
+new launches, dispatch scheduling and candidate preparation intake off. Verify the actual pinned
+versions, code and deployment bindings before separately enabling intake and launches. A planned
+version number is not evidence that the recipient exists. Keep dispatch scheduling off until all
+recipient, IAM and qualified invoke-permission updates have settled; enable it with a separate
+rule-only plan. If source import is needed, verify the processor's exact numeric parser recipient
+and code hash, rather than the parser alias, before enabling scan-event delivery. Include active
+observation, route and cleanup maintenance, and any global-runtime recovery rules, in the final
+shutdown drain.
+
 Build the existing packages and start from the repository root:
 
 ```powershell

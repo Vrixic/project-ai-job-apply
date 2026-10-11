@@ -1162,8 +1162,9 @@ export class PostgresProfileStore implements ProfileStore {
       if (current.version !== input.expectedVersion) {
         throw new ProfileFactVersionConflictError();
       }
+      type SupportingSpan = NonNullable<ProfileFact["evidence"]>["supportingSpans"][number];
       const evidenceRows = await transaction<
-        NonNullable<ProfileFact["evidence"]>["supportingSpans"]
+        Array<Omit<SupportingSpan, "page"> & { page: number | null }>
       >`
         SELECT document_id AS "documentId", document_version AS "documentVersion",
           parser_version AS "parserVersion", block_index AS "blockIndex",
@@ -1173,7 +1174,14 @@ export class PostgresProfileStore implements ProfileStore {
         ORDER BY ordinal
       `;
       const currentEvidence: ProfileFact["evidence"] =
-        evidenceRows.length > 0 ? { supportingSpans: evidenceRows } : undefined;
+        evidenceRows.length > 0
+          ? {
+              supportingSpans: evidenceRows.map(({ page, ...span }) => ({
+                ...span,
+                ...(page === null ? {} : { page }),
+              })),
+            }
+          : undefined;
 
       const version = current.version + 1;
       const updatedAt = new Date();
