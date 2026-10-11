@@ -146,6 +146,12 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 
 ## Current operating state
 
+2026-10-11: [D3-112](evidence/d3-primary-manifest-fingerprint-2026-10-11.md) corrects the primary
+deletion check's stale manifest fingerprint with targeted regressions. Migration 0017 and paused
+Gateway/cleanup deployment pass; candidate traffic stays off pending basic replay and native testing.
+Development shutdown remains required before handoff. Docker/WSL are off; independent D1/admin
+acceptance stays deferred.
+
 2026-10-11: [D3-111](evidence/d3-retained-native-deployment-policy-2026-10-11.md) fixes the retained-r2
 deployment policy size limit with unchanged authorization and 25 bootstrap test runs. Enabled worker
 and migration images/scans and compatible Gateway/cleanup publication pass. Development is temporarily

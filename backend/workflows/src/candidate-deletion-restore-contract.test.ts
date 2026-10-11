@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   type CandidateDeletionRestoreConfiguration,
   type CandidateDeletionRestoreInspection,
+  CURRENT_PRIMARY_RESTORE_MANIFEST_SHA256,
   CURRENT_RESTORE_MANIFEST_SHA256,
   calculateRestoreConfigurationSha256,
   loadRestoreEnvironment,
@@ -164,11 +165,22 @@ describe("cross-runtime restore contract fixture", () => {
     ).toEqual(fixture.replay);
   });
 
-  it("binds the compiled restore manifest identity to exact current source bytes", () => {
+  it("binds primary recovery to current 80-migration source while retaining the isolated fixture", () => {
     const bytes = readFileSync(
       new URL("../../services/database-migrations/restore-manifest.v1.json", import.meta.url),
     );
-    expect(createHash("sha256").update(bytes).digest("hex")).toBe(CURRENT_RESTORE_MANIFEST_SHA256);
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(
+      CURRENT_PRIMARY_RESTORE_MANIFEST_SHA256,
+    );
+    const manifest = JSON.parse(bytes.toString("utf8"));
+    expect(
+      manifest.contributors.flatMap((owner: { migrations: unknown[] }) => owner.migrations),
+    ).toHaveLength(80);
+    expect(
+      manifest.contributors
+        .find((owner: { owner: string }) => owner.owner === "documents")
+        .migrations.at(-1).version,
+    ).toBe("0017_native_resume_launch_rejection");
     expect(fixture.configuration.restoreManifestSha256).toBe(CURRENT_RESTORE_MANIFEST_SHA256);
   });
 
@@ -1250,6 +1262,7 @@ describe("explicit development primary deletion recovery", () => {
   function primary() {
     return configuration({
       recoveryMode: "primary_recovery",
+      restoreManifestSha256: CURRENT_PRIMARY_RESTORE_MANIFEST_SHA256,
       targetIdentifier: fixture.configuration.sourceIdentifier,
       targetHostname: fixture.configuration.sourceHostname,
       targetDbiResourceId: fixture.configuration.sourceDbiResourceId,
@@ -1270,6 +1283,7 @@ describe("explicit development primary deletion recovery", () => {
   });
   it.each([
     { recoveryMode: "isolated" },
+    { restoreManifestSha256: CURRENT_RESTORE_MANIFEST_SHA256 },
     { targetIdentifier: fixture.configuration.targetIdentifier },
     { targetHostname: fixture.configuration.targetHostname },
     { targetDbiResourceId: fixture.configuration.targetDbiResourceId },

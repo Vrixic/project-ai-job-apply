@@ -52,8 +52,11 @@ export const RESTORE_ENVIRONMENT_KEYS = [
   "RESTORE_REPLAY_CONFIG_SHA256",
 ] as const;
 
+/** Retained isolated recovery configuration; primary recovery uses the current schema below. */
 export const CURRENT_RESTORE_MANIFEST_SHA256 =
   "d5c2b6d9f7204ef87c4798b2dbced4c96c1d2c3258dd6b06945a64ae17396fc5";
+export const CURRENT_PRIMARY_RESTORE_MANIFEST_SHA256 =
+  "628f97f00161092aa0bc74ac43ec1a7710dd68ab074724f95de528e779590adb";
 export const RESTORE_MAXIMUM_LIFETIME_MS = 30 * 60_000;
 export const RESTORE_INVOCATION_BUDGET_MS = 300_000;
 export const RESTORE_RESULT_RESERVE_MS = 10_000;
@@ -334,7 +337,8 @@ export function validateRestoreConfiguration(
     value.databaseName !== "ai_job_apply" ||
     value.databasePort !== 5432 ||
     hashes.some((key) => typeof value[key] !== "string" || !SHA.test(value[key] as string)) ||
-    value.restoreManifestSha256 !== CURRENT_RESTORE_MANIFEST_SHA256 ||
+    value.restoreManifestSha256 !==
+      (primary ? CURRENT_PRIMARY_RESTORE_MANIFEST_SHA256 : CURRENT_RESTORE_MANIFEST_SHA256) ||
     value.acceptedPolicyCatalogSha256 !== acceptedPolicyCatalogSha256 ||
     typeof value.sourceDbiResourceId !== "string" ||
     !RESOURCE_ID.test(value.sourceDbiResourceId) ||

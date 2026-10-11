@@ -9,9 +9,19 @@ function Reject([scriptblock]$Run, [string]$Name) { $failed=$false; try { $null=
 function Clone($Value) { ConvertFrom-D1RestoreJson (ConvertTo-Json $Value -Depth 50) }
 $config = Clone $fixture.configuration
 $config | Add-Member recoveryMode 'primary_recovery'
+$manifestPath=Join-Path $PSScriptRoot '../../backend/services/database-migrations/restore-manifest.v1.json'
+$currentManifestHash=(Get-FileHash $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$manifest=ConvertFrom-D1RestoreJson ([IO.File]::ReadAllText($manifestPath))
+Assert (@($manifest.contributors | ForEach-Object { $_.migrations }).Count -eq 80) 'primary checks current 80 migrations'
+Assert (($manifest.contributors | Where-Object owner -CEQ documents).migrations[-1].version -ceq '0017_native_resume_launch_rejection') 'native rejection migration included'
+$config.restoreManifestSha256=$currentManifestHash
 foreach ($part in @('Identifier','Hostname','DbiResourceId','BoundarySha256')) { $config."target$part" = $config."source$part" }
 $encoded = Get-DeletionReplayConfigJson $config ([datetimeoffset]$fixture.now)
 Assert ($encoded.EndsWith(',"recoveryMode":"primary_recovery"}')) 'mode is canonically hashed after original keys'
+$changed=Clone $config; $changed.restoreManifestSha256=$fixture.configuration.restoreManifestSha256
+Reject { Get-DeletionReplayConfigJson $changed ([datetimeoffset]$fixture.now) } 'primary rejects historical 79-migration fingerprint'
+$operatorText=[IO.File]::ReadAllText((Join-Path $PSScriptRoot '../operate-development-candidate-deletion-replay.ps1'))
+Assert ($operatorText.Contains("source_manifest_sha256='$currentManifestHash'")) 'primary context producer binds same exact source bytes as admission'
 foreach ($part in @('Identifier','Hostname','DbiResourceId','BoundarySha256')) {
   $changed=Clone $config; $changed."target$part"=$fixture.configuration."target$part"
   Reject { Get-DeletionReplayConfigJson $changed ([datetimeoffset]$fixture.now) } "primary target substitution $part"

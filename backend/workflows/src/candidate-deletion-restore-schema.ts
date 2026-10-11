@@ -7,7 +7,7 @@ import {
   verifyRestoreDatabase,
 } from "@ai-job-apply/database-migrations/restore-verifier";
 import type { DatabaseHandle } from "@ai-job-apply/profile-service";
-import { CURRENT_RESTORE_MANIFEST_SHA256 } from "./candidate-deletion-restore-contract.js";
+import { CURRENT_PRIMARY_RESTORE_MANIFEST_SHA256 } from "./candidate-deletion-restore-contract.js";
 
 /** Current migrations/catalog only; no whole-row recovery proof or database mutation. */
 export async function verifyDeletionRecoverySchema(
@@ -55,7 +55,7 @@ export async function verifyDeletionRecoverySchema(
   };
   await verifyRestoreDatabase(client, {
     manifest: parseRestoreManifest(manifest),
-    sha256: CURRENT_RESTORE_MANIFEST_SHA256,
+    sha256: CURRENT_PRIMARY_RESTORE_MANIFEST_SHA256,
   });
   active();
 }

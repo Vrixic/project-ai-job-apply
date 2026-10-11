@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HistoricalCompletionEvidence } from "./candidate-deletion-completion-diagnosis.js";
 import type { HistoricalCompletionEvidenceTarget } from "./candidate-deletion-completion-evidence.js";
 import {
+  CURRENT_PRIMARY_RESTORE_MANIFEST_SHA256,
   calculateRestoreConfigurationSha256,
   serializeRestoreConfiguration,
   validateRestoreCompletionDiagnosisResult,
@@ -1187,6 +1188,7 @@ it("keeps Inspect and Replay bound to explicit primary recovery", async () => {
   const config = {
     ...fixture.configuration,
     recoveryMode: "primary_recovery",
+    restoreManifestSha256: CURRENT_PRIMARY_RESTORE_MANIFEST_SHA256,
     targetIdentifier: fixture.configuration.sourceIdentifier,
     targetHostname: fixture.configuration.sourceHostname,
     targetDbiResourceId: fixture.configuration.sourceDbiResourceId,
