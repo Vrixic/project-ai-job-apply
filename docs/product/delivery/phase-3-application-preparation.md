@@ -1,5 +1,7 @@
 # D3 — High-Quality Application Preparation
 
+D3-103 removes formal recovery-proof gates, preserving backups and deletion safeguards. 337 focused tests, 34 lifecycle assertions, component typecheck, 16 PostgreSQL cases and the simulated connected journey pass; consequential review passes. [Evidence](evidence/d3-recovery-safeguards-simplification-2026-10-10.md).
+
 Owner revision (2026-10-10): formal recovery-proof gates and full-repository check requirements
 are removed. Keep backups, migration/target checks, transactional completed-deletion safeguards,
 truthfulness, sensitive-answer review, submission safety and material expiry. Verify changed
