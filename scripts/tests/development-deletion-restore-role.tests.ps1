@@ -126,6 +126,41 @@ $bad=Clone $b;$bad.resource_drift[0].change.after.id='other'
 Reject {Get-RestoreRoleBeforeRefreshResources $bad} 'RDS identity cannot drift'
 $bad=Clone $b;$bad.planned_values.root_module.resources[-1].values.latest_restorable_time='2026-09-09T10:00:02Z'
 Reject {Get-RestoreRoleBeforeRefreshResources $bad} 'accepted drift after must equal complete plan-owned resource'
+$backup=Clone $b
+$backup.resource_drift[0].change.before|Add-Member -NotePropertyName status -NotePropertyValue 'backing-up'
+$backup.resource_drift[0].change.after|Add-Member -NotePropertyName status -NotePropertyValue 'available'
+$backup.planned_values.root_module.resources[-1].values|Add-Member -NotePropertyName status -NotePropertyValue 'available'
+foreach($clock in @('2026-09-09T10:00:00Z','2026-09-09T10:00:01Z')){
+  $backup.resource_drift[0].change.after.latest_restorable_time=$clock
+  $backup.planned_values.root_module.resources[-1].values.latest_restorable_time=$clock
+  $null=Get-RestoreRoleBeforeRefreshResources $backup
+  Assert-Test $true 'completed RDS backup permits equal or forward restore clock'
+}
+foreach($status in @('creating','modifying','deleting','stopped')){
+  $bad=Clone $backup;$bad.resource_drift[0].change.after.status=$status;$bad.planned_values.root_module.resources[-1].values.status=$status
+  Reject {Get-RestoreRoleBeforeRefreshResources $bad} 'only completed backup status transition is admitted'
+}
+$bad=Clone $backup;$bad.resource_drift[0].change.after.latest_restorable_time='2026-09-09T09:59:59Z';$bad.planned_values.root_module.resources[-1].values.latest_restorable_time='2026-09-09T09:59:59Z'
+Reject {Get-RestoreRoleBeforeRefreshResources $bad} 'completed backup cannot hide restore-clock regression'
+$bad=Clone $backup;$bad.resource_drift[0].change.after.id='wrong';$bad.planned_values.root_module.resources[-1].values.id='wrong'
+Reject {Get-RestoreRoleBeforeRefreshResources $bad} 'completed backup cannot hide changed database identity'
+foreach($address in @('module.platform.aws_vpc_endpoint.lambda[0]','module.platform.aws_vpc_endpoint.migration_ecr_api[0]','module.platform.aws_vpc_endpoint.migration_ecr_dkr[0]','module.platform.aws_vpc_endpoint.migration_logs[0]','module.platform.aws_vpc_endpoint.native_preparation_kms[0]','module.platform.aws_vpc_endpoint.native_resume_api["ec2"]','module.platform.aws_vpc_endpoint.native_resume_api["ecs"]','module.platform.aws_vpc_endpoint.secretsmanager[0]','module.platform.aws_vpc_endpoint.sqs[0]')){
+  $endpoint=Clone $fixture.Baseline
+  $left=Clone @{id='vpce-synthetic';vpc_id='vpc-synthetic';policy='unchanged';tags=$null}
+  $right=Clone $left;$right.tags=Clone @{}
+  $endpoint.planned_values.root_module.resources=@($endpoint.planned_values.root_module.resources|Where-Object address -CNE $address)+@(Clone @{address=$address;mode='managed';values=$right})
+  $endpoint.resource_drift=@(Clone @{address=$address;mode='managed';type='aws_vpc_endpoint';change=@{actions=@('update');before=$left;after=$right;after_unknown=@{};before_sensitive=@{};after_sensitive=@{tags=@{}}}})
+  $null=Get-RestoreRoleBeforeRefreshResources $endpoint
+  Assert-Test $true 'exact owned private endpoint permits only null-to-empty post-create tags'
+  foreach($field in @('id','vpc_id','policy')){
+    $bad=Clone $endpoint;$bad.resource_drift[0].change.after.$field='wrong';$bad.planned_values.root_module.resources[-1].values.$field='wrong'
+    Reject {Get-RestoreRoleBeforeRefreshResources $bad} 'endpoint normalization cannot hide identity or policy changes'
+  }
+  $bad=Clone $endpoint;$bad.resource_drift[0].change.after.tags=Clone @{Added='wrong'};$bad.planned_values.root_module.resources[-1].values.tags=Clone @{Added='wrong'}
+  Reject {Get-RestoreRoleBeforeRefreshResources $bad} 'endpoint normalization cannot change actual tags'
+  $bad=Clone $endpoint;$bad.planned_values.root_module.resources[-1].values.id='different'
+  Reject {Get-RestoreRoleBeforeRefreshResources $bad} 'endpoint observation must equal complete plan-owned resource'
+}
 $p=Clone $fixture.Plan;$p.resource_changes[1].change.after.role=$null;$p.resource_changes[1].change.after_unknown=Clone @{role=$true;id=$true}
 $null=Assert-RestoreRoleTransitionPlan $p $fixture.Baseline 'Platform' $true $account
 Assert-Test $true 'exact new computed role ID is allowed only until live readback'
@@ -603,6 +638,32 @@ foreach($name in @('sourceIdentifier','sourceDbiResourceId','sourceBoundarySha25
 Reject {Assert-RestoreRoleCleanupEvidence $prep $config $context $journal ('d'*64) ('c'*64) $account ($now.AddSeconds(-1))} 'cleanup drain incomplete'
 $bad=Clone $journal;$bad.preparationSha256='wrong'
 Reject {Assert-RestoreRoleCleanupEvidence $prep $config $context $bad ('d'*64) ('c'*64) $account $now} 'journal preparation substitution'
+
+$primaryPrep=Clone $prep;$primaryPrep|Add-Member -NotePropertyName baselineMode -NotePropertyValue 'primary-recovery'
+$primaryConfig=Clone $config
+$primaryConfig.targetIdentifier=$primaryConfig.sourceIdentifier
+$primaryConfig.targetDbiResourceId=$primaryConfig.sourceDbiResourceId
+$primaryConfig.targetBoundarySha256=$primaryConfig.sourceBoundarySha256
+$primaryConfig|Add-Member -NotePropertyName recoveryMode -NotePropertyValue 'primary_recovery'
+$primaryConfig|Add-Member -NotePropertyName sourceHostname -NotePropertyValue 'same-private-host'
+$primaryConfig|Add-Member -NotePropertyName targetHostname -NotePropertyValue 'same-private-host'
+$primaryContext=Clone @{baseline_mode='primary-recovery';source_identifier=$primaryConfig.sourceIdentifier;target_identifier=$primaryConfig.targetIdentifier;source_dbi_resource_id=$primaryConfig.sourceDbiResourceId;target_dbi_resource_id=$primaryConfig.targetDbiResourceId;source_boundary_sha256=$primaryConfig.sourceBoundarySha256;target_boundary_sha256=$primaryConfig.targetBoundarySha256}
+Assert-RestoreRoleCleanupEvidence $primaryPrep $primaryConfig $primaryContext $journal ('d'*64) ('c'*64) $account $now -PrimaryRecovery
+Assert-Test $true 'primary cleanup uses actual backup context without fabricated PITR proof'
+foreach($name in @('recoveryMode','sourceIdentifier','sourceDbiResourceId','sourceBoundarySha256','targetIdentifier','targetDbiResourceId','targetBoundarySha256','targetHostname','restoreContextSha256','accountId')){
+  $bad=Clone $primaryConfig;$bad.$name='wrong'
+  Reject {Assert-RestoreRoleCleanupEvidence $primaryPrep $bad $primaryContext $journal ('d'*64) ('c'*64) $account $now -PrimaryRecovery} 'primary cleanup exact mode and physical target'
+}
+$bad=Clone $primaryConfig;$bad.PSObject.Properties.Remove('recoveryMode')
+Reject {Assert-RestoreRoleCleanupEvidence $primaryPrep $bad $primaryContext $journal ('d'*64) ('c'*64) $account $now -PrimaryRecovery} 'primary mode cannot be omitted'
+$bad=Clone $primaryPrep;$bad.baselineMode='dark-recovery'
+Reject {Assert-RestoreRoleCleanupEvidence $bad $primaryConfig $primaryContext $journal ('d'*64) ('c'*64) $account $now -PrimaryRecovery} 'primary preparation mode cannot be substituted'
+$bad=Clone $primaryPrep;$bad.roleBoundary.roleArn='wrong'
+Reject {Assert-RestoreRoleCleanupEvidence $bad $primaryConfig $primaryContext $journal ('d'*64) ('c'*64) $account $now -PrimaryRecovery} 'primary cleanup role exact'
+$bad=Clone $journal;$bad.status='pending'
+Reject {Assert-RestoreRoleCleanupEvidence $primaryPrep $primaryConfig $primaryContext $bad ('d'*64) ('c'*64) $account $now -PrimaryRecovery} 'primary cleanup journal must have started'
+Reject {Assert-RestoreRoleCleanupEvidence $primaryPrep $primaryConfig $primaryContext $journal ('d'*64) ('c'*64) $account ($now.AddSeconds(-1)) -PrimaryRecovery} 'primary cleanup preserves invocation drain'
+Reject {Assert-RestoreRoleCleanupEvidence $primaryPrep $primaryConfig $primaryContext $journal ('d'*64) ('c'*64) $account $now} 'primary evidence cannot pass isolated cleanup'
 
 # Extract only the read-only deactivation function; its AWS command seam is always mocked.
 $operator=Join-Path $PSScriptRoot '../operate-development-deletion-restore-role.ps1'

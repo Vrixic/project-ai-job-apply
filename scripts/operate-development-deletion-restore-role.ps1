@@ -17,7 +17,7 @@ param(
   [ValidatePattern('^$|^[a-f0-9]{64}$')][string]$ReviewedPlanSha256='',
   [ValidatePattern('^$|^[a-f0-9]{64}$')][string]$ReviewedMetadataSha256='',
   [ValidatePattern('^$|^[a-f0-9]{64}$')][string]$ReviewedAppliedReceiptSha256='',
-  [ValidateSet('None','UnusedRole','CompletedDrill')][string]$CleanupMode='None',
+  [ValidateSet('None','UnusedRole','CompletedDrill','CompletedPrimaryRecovery')][string]$CleanupMode='None',
   [string]$PriorVerificationPath='',
   [ValidatePattern('^$|^[a-f0-9]{64}$')][string]$ReviewedPriorVerificationSha256='',
   [string]$ReplayPreparationPath='',
@@ -199,13 +199,13 @@ function Assert-RestoreRoleDeactivation {
   if($functions.Count -gt 2000 -or @($functions|Where-Object {$_.Role -ceq "arn:aws:iam::${ExpectedAccountId}:role/$roleName" -or $_.FunctionName -cmatch '^ai-job-apply-development-replay-[a-f0-9]{32}$'}).Count -ne 0){throw 'RestoreRoleExecutorStillPresent'}
   $databases=@((Invoke-RestoreRoleAws @('rds','describe-db-instances')).DBInstances)
   if($databases.Count -gt 1000 -or @($databases|Where-Object {$_.DBInstanceIdentifier -clike 'ai-job-apply-development-restore-*'}).Count -ne 0){throw 'RestoreRoleDisposableRestoreStillPresent'}
-  if($Stage -ceq 'Platform' -and $CleanupMode -ceq 'CompletedDrill'){
+  if($Stage -ceq 'Platform' -and $CleanupMode -cin @('CompletedDrill','CompletedPrimaryRecovery')){
     $prep=ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($ReplayPreparationPath)) -DateKind String
     $context=ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($RestoreContextPath)) -DateKind String
     $journal=ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($ReplayCleanupJournalPath)) -DateKind String
     Assert-DeletionReplayPreparation $prep
     $config=Assert-DeletionReplayEnvironment $prep.createRequest.Environment.Variables -AllowExpired
-    Assert-RestoreRoleCleanupEvidence $prep $config $context $journal $ReviewedReplayPreparationSha256 $ReviewedRestoreContextSha256 $ExpectedAccountId
+    Assert-RestoreRoleCleanupEvidence $prep $config $context $journal $ReviewedReplayPreparationSha256 $ReviewedRestoreContextSha256 $ExpectedAccountId -PrimaryRecovery:($CleanupMode -ceq 'CompletedPrimaryRecovery')
   }
 }
 
@@ -233,7 +233,7 @@ try{
     Assert-RestoreRoleFileBindings $bindings
     $prior=ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($PriorVerificationPath)) -DateKind String
     if($prior.schemaVersion -ne 1 -or $prior.kind -cne 'development-deletion-restore-role-verification' -or $prior.accountId -cne $ExpectedAccountId -or $prior.stateBucket -cne $StateBucket){throw 'RestoreRolePriorVerificationRejected'}
-    if($Stage -ceq 'Platform' -and $CleanupMode -ceq 'CompletedDrill'){
+    if($Stage -ceq 'Platform' -and $CleanupMode -cin @('CompletedDrill','CompletedPrimaryRecovery')){
       $ReplayPreparationPath=Resolve-RestoreRolePath $ReplayPreparationPath;$RestoreContextPath=Resolve-RestoreRolePath $RestoreContextPath
       $bindings+=@{path=$ReplayPreparationPath;sha256=$ReviewedReplayPreparationSha256};$bindings+=@{path=$RestoreContextPath;sha256=$ReviewedRestoreContextSha256}
       $ReplayCleanupJournalPath=Resolve-RestoreRolePath $ReplayCleanupJournalPath
