@@ -92,7 +92,7 @@ resource "aws_iam_policy" "native_preparation_boundary" {
   ) })
   lifecycle {
     precondition {
-      condition     = length(jsonencode(local.github_deploy_policy)) <= 6144
+      condition     = length(local.github_deploy_policy_json) <= 6144
       error_message = "Combined deployment ceiling exceeds IAM size; do not remove retained releases to fit. Review composition before adding releases."
     }
     postcondition {
@@ -126,7 +126,7 @@ resource "aws_iam_policy" "native_preparation_durable_boundary" {
   ] : merge(s, { Condition = merge(try(s.Condition, {}), { ArnEquals = { "aws:PrincipalArn" = [local.preparation_actors["${each.key}/durable"].principal] } }) })] })
   lifecycle {
     precondition {
-      condition     = length(jsonencode(local.github_deploy_policy)) <= 6144
+      condition     = length(local.github_deploy_policy_json) <= 6144
       error_message = "Combined deployment ceiling exceeds IAM size; retain unresolved original releases."
     }
     postcondition {

@@ -33,6 +33,11 @@ The deployment boundary also permits same-account AWS Budgets and CUR 2.0 Data E
 Apply bootstrap-policy changes from an isolated environment-specific bootstrap workspace before
 expecting the GitHub deployment role to plan or apply new billing controls.
 
+The deployment grant and boundary serialize the same compact document: optional statement labels
+are omitted, as are the two state grants already covered by unconditional platform S3/KMS authority.
+Annotated source remains available for review. All other actions, resources and conditions are
+preserved; retained resume revisions keep separate role/boundary grants and the 6,144-character limit.
+
 The workload boundary permits `rds-db:connect` only for the exact database username
 `ai_job_apply_public_job_reader`; the environment platform policy further narrows that maximum to
 its exact RDS resource ID. A separately reviewed bootstrap apply must land this boundary revision

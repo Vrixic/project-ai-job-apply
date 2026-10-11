@@ -56,7 +56,7 @@ including bootstrap-only activation; it is not a substitute for actual drill cle
 An ambiguous or partially applied plan requires inspection and separately reviewed recovery,
 not a blind retry or a fabricated successful verification receipt.
 
-The complete current manifest is seven migration contributors, twelve schemas, 79 migrations and
+The complete current manifest is seven migration contributors, twelve schemas, 80 migrations and
 96 relations. All eight current candidate-data owners are reconciled. Historical D1/D2 completed
 markers retain their original version/digest and retention values, using the compiled catalog in
 [candidate-deletion-restore-policy.ts](../../../backend/workflows/src/candidate-deletion-restore-policy.ts).

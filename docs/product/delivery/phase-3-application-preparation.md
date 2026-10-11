@@ -4,11 +4,11 @@ D3-108–110 fixes are merged. Candidate sign-in, search, synthetic upload proce
 fact confirmation pass. The corrected default-off native worker and migration image build and pass
 isolated smoke checks; all six reproducible native Lambda artifacts are published. Revision-2 RPCs
 are staged disabled with zero resource/output drift. No live material or submission is accepted.
-Docker is repaired again and the next enabled worker/migration publication batch is in progress.
+Enabled worker/migration publication and scans pass; compatible Gateway/cleanup archives are published.
 The historical rejected claim needs owning recovery for that application, not a fresh r2 journey.
 Live AI retention policy and authorized ATS QA/fixtures remain unavailable. D3 is In progress;
-independent D1/admin acceptance stays deferred. AWS test runtimes are off; encrypted backups/current
-recovery inputs are retained. Docker is in use for publication and must be off with WSL at handoff.
+independent D1/admin acceptance stays deferred. Development is temporarily restored with writers off
+for the next test batch; data-preserving shutdown remains required. Docker/WSL are off; the PC stays on.
 [Current evidence](evidence/d3-native-launch-rejection-2026-10-11.md).
 
 D3-106 handles standard S3 URL encoding and authenticates retired deletion markers without skipping
@@ -93,6 +93,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Native live admission (D3-108) | Profile, launch, status refresh, exact STS identity and RPC serialization fixes merged with targeted tests/typechecks and consequential review. Live synthetic sign-in/search/upload/fact confirmation pass; corrected default-off worker image smoke passes. | Docker is repaired again; enabled worker image publication and full connected acceptance remain. D3-109 covers future definitive rejection settlement; the historical claim remains unresolved. AI retention policy and authorized ATS QA/fixtures unavailable. [Evidence](evidence/d3-native-live-admission-fixes-2026-10-11.md). |
 | Native launch rejection (D3-109) | Original request digest, definitive SDK rejection capture, immutable terminal SQL and disposal/fresh-epoch guards are implemented and locally tested. Six reproducible native Lambda artifacts are published; revision-2 RPCs are staged disabled. | Consequential source/plan reviews and local migration packaging smoke pass. Migration/worker publication, compatible activation and live acceptance remain. Historical unknown claims remain unresolved. [Evidence](evidence/d3-native-launch-rejection-2026-10-11.md). |
 | Native download approval expiry (D3-110) | Exact approval/material deadlines gate downloads before reads and after hashing; expiry aborts pending files and withdraws transfers while preserving previews. 52 focused tests, web typecheck, simulated Chromium journey and consequential review pass. | Compatible hosted release and live acceptance remain. [Evidence](evidence/d3-native-download-approval-expiry-2026-10-11.md). |
+| Retained native deployment policy (D3-111) | Compact serialized deployment grant/boundary preserves authorization and both original revisions; 25 bootstrap Terraform test runs and validation pass. | Consequential review and managed application are recorded separately; live acceptance remains. [Evidence](evidence/d3-retained-native-deployment-policy-2026-10-11.md). |
 
 ## Decisions and scope changes
 
@@ -360,3 +361,9 @@ at the Secrets Engine socket; remaining image publication has not run. Developme
 verified off at 18:49:53Z; staging remains unchanged since its 18:01:49Z verification. Docker/WSL
 are off and the PC stays on. D3 remains In progress; independent D1/admin acceptance is deferred.
 [Evidence](evidence/d3-native-launch-rejection-2026-10-11.md).
+
+2026-10-11: D3-111 compacts only the serialized deployment grant/boundary to 5,913 characters for
+both retained resume revisions, preserving authorization. 25 bootstrap test runs and validation pass.
+Image scans/publication pass; development is temporarily restored writer-off and Docker/WSL are off.
+Managed activation/live acceptance and final shutdown remain. Independent D1/admin acceptance is deferred.
+[Evidence](evidence/d3-retained-native-deployment-policy-2026-10-11.md).
