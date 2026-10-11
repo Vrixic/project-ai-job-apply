@@ -146,7 +146,8 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 
 2026-10-11: See [D3-108 live-test and shutdown evidence](evidence/d3-native-live-admission-fixes-2026-10-11.md).
 Candidate sign-in is complete; full live generation/submission acceptance remains open.
-Development shutdown is verified at 2026-10-11T17:26:54Z; fresh read-only staging verification confirms dormant at 2026-10-11T18:01:49Z. Docker/WSL are off; the PC remains on.
+[D3-109](evidence/d3-native-launch-rejection-2026-10-11.md) adds locally verified definitive launch-rejection settlement; historical claims remain unresolved. Docker startup is repaired; corrected immutable release and live acceptance remain.
+Development shutdown is verified at 2026-10-11T17:26:54Z; fresh read-only staging verification confirms dormant at 2026-10-11T18:01:49Z. Docker/WSL were verified off at that checkpoint; Docker has since restarted for the current test batch. The PC remains on.
 The records below describe earlier sessions.
 
 Work continues for D3 on 2026-10-10; D1/D3 are not complete. Independent D1 acceptance remains deferred.

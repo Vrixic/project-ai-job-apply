@@ -151,6 +151,7 @@ export function createNativeResumeTaskObserverRuntime(
       readLaunch: registry.readLaunch.bind(registry),
       bindTask: registry.bindTask.bind(registry),
       claimLaunch: denied,
+      recordLaunchRejection: denied,
     },
     configuration: config.task,
     enabled,

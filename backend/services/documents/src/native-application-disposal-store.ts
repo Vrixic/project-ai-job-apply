@@ -58,7 +58,7 @@ export class PostgresNativeApplicationDisposalStore {
           AND (extract(epoch FROM created_at)*1000000)::bigint <= ${throughMicros}::bigint
         UNION
         SELECT application_id FROM documents.native_resume_generations
-        WHERE user_id=${owner} AND state NOT IN ('retired','abandoned')
+        WHERE user_id=${owner} AND state NOT IN ('retired','abandoned','launch_rejected')
           AND (extract(epoch FROM created_at)*1000000)::bigint <= ${throughMicros}::bigint
       ) pending WHERE (${afterApplicationId}::uuid IS NULL OR application_id > ${afterApplicationId}::uuid) ORDER BY application_id LIMIT ${limit}`;
     if (!this.enabled()) throw unavailable();
@@ -93,7 +93,7 @@ export class PostgresNativeApplicationDisposalStore {
               AND (extract(epoch FROM created_at)*1000000)::bigint <= ${throughMicros}::bigint
             UNION ALL
             SELECT epoch_id FROM documents.native_resume_generations
-            WHERE user_id=${owner} AND application_id=${application} AND state NOT IN ('retired','abandoned')
+            WHERE user_id=${owner} AND application_id=${application} AND state NOT IN ('retired','abandoned','launch_rejected')
               AND (extract(epoch FROM created_at)*1000000)::bigint <= ${throughMicros}::bigint`;
           if (!pending) return null;
         }
@@ -128,7 +128,7 @@ export class PostgresNativeApplicationDisposalStore {
           FROM documents.native_material_allocations WHERE user_id=${owner} AND application_id=${application} AND state NOT IN ('retired','abandoned')
           UNION ALL
           SELECT allocation_id,id AS generation_id,epoch_id,state,task_arn,cluster_arn,task_definition_arn,container_name
-          FROM documents.native_resume_generations WHERE user_id=${owner} AND application_id=${application} AND state NOT IN ('retired','abandoned')`;
+          FROM documents.native_resume_generations WHERE user_id=${owner} AND application_id=${application} AND state NOT IN ('retired','abandoned','launch_rejected')`;
         this.check(owner, application);
         return {
           epochId: head.epoch_id,

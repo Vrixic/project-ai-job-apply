@@ -38,7 +38,7 @@ export interface NativeResumeGenerationRecord {
   reservation: Readonly<NativeResumeReservation>;
   allocationId: string;
   epochId: string;
-  state: "pending" | "bound" | "retired" | "abandoned";
+  state: "pending" | "bound" | "retired" | "abandoned" | "launch_rejected";
   allocation: Readonly<NativeTaskAllocation> | null;
   configurationSha256: string | null;
   reference: Readonly<TemporaryMaterialReference> | null;
@@ -91,6 +91,8 @@ type Row = Record<string, unknown> & {
   task_arn: string | null;
   configuration_sha256: string | null;
   launch_claimed_at: Date | null;
+  launch_request_sha256: string | null;
+  launch_rejection_request_id: string | null;
   content_sha256: string | null;
   completed_at_ms: string | null;
   expires_at_ms: string | null;
@@ -365,7 +367,12 @@ export class PostgresNativeResumeGenerationStore {
     const [fresh] = await tx<
       Row[]
     >`SELECT * FROM documents.native_resume_generations WHERE id=${row.id} AND (expires_at_ms IS NULL OR expires_at_ms > floor(extract(epoch FROM clock_timestamp())*1000)::bigint) FOR UPDATE`;
-    if (!head || !base || !fresh || ["retired", "abandoned"].includes(fresh.state))
+    if (
+      !head ||
+      !base ||
+      !fresh ||
+      ["retired", "abandoned", "launch_rejected"].includes(fresh.state)
+    )
       throw unavailable();
     return fresh;
   }
@@ -483,25 +490,73 @@ export class PostgresNativeResumeGenerationStore {
       });
     });
   }
-  async claimLaunch(input: NativeResumeGenerationScope, configurationSha256: string) {
+  async claimLaunch(
+    input: NativeResumeGenerationScope,
+    configurationSha256: string,
+    requestSha256?: string,
+  ) {
     return this.guarded(async () => {
       const scope = this.scope(input);
       if (typeof configurationSha256 !== "string" || !hash.test(configurationSha256))
         throw unavailable();
+      if (requestSha256 !== undefined && !hash.test(requestSha256)) throw unavailable();
       return this.sql.begin(async (tx) => {
         let row = await this.row(tx, scope);
         row = await this.active(tx, row, true);
         if (row.launch_claimed_at) {
-          if (row.configuration_sha256 !== configurationSha256) throw unavailable();
+          if (
+            row.configuration_sha256 !== configurationSha256 ||
+            (requestSha256 !== undefined && row.launch_request_sha256 !== requestSha256)
+          )
+            throw unavailable();
           return { claimed: false, record: record(row) };
         }
         if (row.state !== "pending") throw unavailable();
         const [claimed] = await tx<
           Row[]
-        >`UPDATE documents.native_resume_generations SET launch_claimed_at=clock_timestamp(),configuration_sha256=${configurationSha256} WHERE id=${row.id} RETURNING *`;
+        >`UPDATE documents.native_resume_generations SET launch_claimed_at=clock_timestamp(),configuration_sha256=${configurationSha256},launch_request_sha256=${requestSha256 ?? null} WHERE id=${row.id} RETURNING *`;
         this.check();
         if (!claimed) throw unavailable();
         return { claimed: true, record: record(claimed) };
+      });
+    });
+  }
+  /** Trusted original one-send launcher only. This records a definitive rejection, never
+   * task death. Unknown ACKs and legacy claims without a pre-dispatch request digest stay pending. */
+  async recordLaunchRejection(
+    input: NativeResumeGenerationScope,
+    configurationSha256: string,
+    requestSha256: string,
+    requestId: string,
+  ): Promise<void> {
+    return this.guarded(async () => {
+      const scope = this.scope(input);
+      if (
+        !hash.test(configurationSha256) ||
+        !hash.test(requestSha256) ||
+        typeof requestId !== "string" ||
+        !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(requestId)
+      )
+        throw unavailable();
+      await this.sql.begin(async (tx) => {
+        await this.lock(tx, scope.ownerUserId, scope.applicationId);
+        const row = await this.row(tx, scope);
+        if (
+          !row.launch_claimed_at ||
+          row.configuration_sha256 !== configurationSha256 ||
+          row.launch_request_sha256 !== requestSha256 ||
+          row.task_arn !== null ||
+          row.content_sha256 !== null
+        )
+          throw unavailable();
+        if (row.state === "launch_rejected") {
+          if (row.launch_rejection_request_id !== requestId) throw unavailable();
+          return;
+        }
+        if (row.state !== "pending") throw unavailable();
+        await tx`UPDATE documents.native_resume_generations SET state='launch_rejected',
+          launch_rejection_request_id=${requestId},launch_rejected_at=clock_timestamp() WHERE id=${row.id}`;
+        this.check();
       });
     });
   }
@@ -636,7 +691,7 @@ export class PostgresNativeResumeGenerationStore {
         if (
           !row.launch_claimed_at ||
           row.configuration_sha256 !== configurationSha256 ||
-          row.state === "retired"
+          ["retired", "abandoned", "launch_rejected"].includes(row.state)
         )
           throw unavailable();
         if (row.task_arn !== null) {
