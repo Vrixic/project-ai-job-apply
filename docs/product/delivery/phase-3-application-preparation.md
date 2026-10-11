@@ -27,7 +27,7 @@ components and the connected journey. Historical proof records remain historical
 reconciled-copy operators and physical restore rehearsals are not D3 dependencies. Independent
 D1/admin acceptance stays deferred.
 
-Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 2026-10-10.
+Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 2026-10-11.
 
 ## Task register
 
@@ -84,9 +84,15 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Primary deletion replay (D3-104) | Explicit writer-off primary mode implemented and locally verified; managed restore and replay pass under D3-106. | Compatible release and live acceptance remain. [Evidence](evidence/d3-primary-deletion-recovery-2026-10-10.md). |
 | Primary operational guards (D3-105) | Bounded backup-status/endpoint-tag observations, primary permission cleanup and basic writer/account/backend checks are verified. | Current runtime and live acceptance remain separate. [Evidence](evidence/d3-primary-recovery-operational-guards-2026-10-10.md). |
 | Retained deletion markers (D3-106) | 257 focused tests, component typecheck/build, simulated journey and consequential review pass. Managed replay passes: two already-reconciled subjects, no new deletion or external writes. | Live native/provider acceptance remains. [Evidence](evidence/d3-retired-deletion-markers-2026-10-10.md). |
-| Compatible offline release (D3-107) | Gateway version 90 matches the verified artifact; unweighted alias, actual shutdown and encrypted recovery archival pass independent review. | Current native HTTPS configuration and installed/live journey remain. [Evidence](evidence/d3-compatible-gateway-offline-release-2026-10-10.md). |
+| Compatible release (D3-107) | Gateway version 90, shutdown/recovery preservation and protected native candidate host are verified. 154 focused client tests and component typechecks pass; unpacked extension built with provider registry disabled. | Human host sign-in/development SSO renewal, installed ID/grants and live native journey remain. [Evidence](evidence/d3-compatible-gateway-offline-release-2026-10-10.md). |
 
 ## Decisions and scope changes
+
+2026-10-11: Native public settings and component build are deployed on the existing exact HTTPS
+candidate origin. All-deployment authentication protection, stable alias/source and focused client
+checks pass. Installed/native/provider acceptance is still open; successful extension transfer
+requires the existing provider registry gate. No AWS runtime is reactivated after shutdown while
+human host sign-in and development SSO renewal are pending.
 
 2026-10-10: D3-107 installs the existing compatible Gateway artifact with runtime disabled.
 Development shutdown and exact encrypted recovery archival pass. No live journey or independent

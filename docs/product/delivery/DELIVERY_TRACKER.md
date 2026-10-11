@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-10-10. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
+Last updated: 2026-10-11. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
 
 ## Summary
 
@@ -29,6 +29,12 @@ readback and consequential review. Development runtimes, Docker and WSL are veri
 recovery snapshots/inputs are retained. Live native configuration/journey remain internal work;
 the owner confirms no qualifying AI-provider retention policy exists, so live AI cover letters
 stay disabled. [Evidence](evidence/d3-compatible-gateway-offline-release-2026-10-10.md).
+
+2026-10-11: The native candidate build is deployed to the exact stable HTTPS host with authentication
+protection tightened to all deployments. Public settings, build/source/alias and 154 focused web/
+extension tests plus component typechecks pass. The unpacked extension is built; provider controls
+remain disabled. Human Vercel sign-in and expired development SSO renewal precede live native testing.
+[Release evidence](evidence/d3-compatible-gateway-offline-release-2026-10-10.md#candidate-host-and-unpacked-client--2026-10-11).
 
 D3-106 handles standard S3 URL encoding and authenticates retired deletion markers without skipping
 their deletion authority. 257 focused tests, managed primary replay and consequential review pass.
