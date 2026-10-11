@@ -118,11 +118,13 @@ class Deadline {
   private readonly controller = new AbortController();
   private readonly timer: ReturnType<typeof setTimeout>;
   private readonly onAbort = () => this.controller.abort();
+  private readonly expiresAt: number;
 
   constructor(
     timeoutMs: number,
     private readonly external?: AbortSignal,
   ) {
+    this.expiresAt = Date.now() + timeoutMs;
     this.timer = setTimeout(this.onAbort, timeoutMs);
     external?.addEventListener("abort", this.onAbort, { once: true });
     if (external?.aborted) this.onAbort();
@@ -147,7 +149,7 @@ class Deadline {
   }
 
   assertActive(): void {
-    if (this.controller.signal.aborted) rejected();
+    if (this.controller.signal.aborted || Date.now() >= this.expiresAt) rejected();
   }
 
   async send(sender: ReadOnlyAwsSender, command: unknown): Promise<Record<string, unknown>> {
@@ -187,11 +189,12 @@ async function* versionPages(
   options: ReadOnlyBucketOptions,
   prefix: string,
   deadline: Deadline,
+  maximumPages = MAX_PAGES,
 ): AsyncGenerator<{ versions: unknown[]; deletions: unknown[] }> {
   let keyMarker: string | undefined;
   let versionMarker: string | undefined;
   const cursors = new Set<string>();
-  for (let page = 0; page < MAX_PAGES; page += 1) {
+  for (let page = 0; page < maximumPages; page += 1) {
     const output = await deadline.send(
       sender,
       new ListObjectVersionsCommand({
@@ -657,6 +660,95 @@ export class AwsReadOnlyCandidateRestoreDocuments {
     this.timeoutMs = validateOptions(options);
     this.options = Object.freeze({ ...options });
     this.s3 = options.s3 ?? new S3Client({});
+  }
+
+  /**
+   * Conservative continuity evidence after replay has removed SQL document references.
+   * This covers every version and delete marker in both owned namespaces, not only
+   * currently registered documents. The caller must bind issuance to the original
+   * replay configuration and keep writers quiescent throughout verification.
+   */
+  async inspectReplayDocumentContinuity(
+    originalIssuedAt: string,
+    signal?: AbortSignal,
+  ): Promise<{ readonly sha256: string; readonly versionsObserved: number }> {
+    const deadline = new Deadline(this.timeoutMs, signal);
+    try {
+      deadline.assertActive();
+      const cutoff = storedDate(originalIssuedAt).getTime();
+      if (cutoff <= 0 || cutoff > Date.now()) rejected();
+      const observations: Array<{
+        kind: "version" | "deletion";
+        key: string;
+        versionId: string;
+        lastModified: string;
+        isLatest: boolean;
+      }> = [];
+      const identities = new Set<string>();
+      for (const prefix of ["quarantine/", "normalized/"]) {
+        // At most 10,000 observations overall and 101 pages per namespace.
+        // An empty truncated page or repeated cursor is rejected by versionPages.
+        for await (const page of versionPages(
+          this.s3,
+          this.options,
+          prefix,
+          deadline,
+          Math.ceil(MAX_DOCUMENTS / PAGE_SIZE) + 1,
+        )) {
+          for (const [kind, values] of [
+            ["version", page.versions],
+            ["deletion", page.deletions],
+          ] as const) {
+            for (const raw of values) {
+              const item = record(raw);
+              if (
+                !opaque(item.Key) ||
+                !item.Key.startsWith(prefix) ||
+                !opaque(item.VersionId) ||
+                item.VersionId === "null" ||
+                typeof item.IsLatest !== "boolean"
+              )
+                rejected();
+              const lastModified = date(item.LastModified);
+              // Equality is deliberately rejected: S3 timestamps cannot establish
+              // ordering within their precision at the replay issuance boundary.
+              if (Date.parse(lastModified) >= cutoff) rejected();
+              const identity = JSON.stringify([item.Key, item.VersionId]);
+              if (identities.has(identity)) rejected();
+              identities.add(identity);
+              observations.push({
+                kind,
+                key: item.Key,
+                versionId: item.VersionId,
+                lastModified,
+                isLatest: item.IsLatest,
+              });
+              if (observations.length > MAX_DOCUMENTS) rejected();
+            }
+          }
+        }
+      }
+      observations.sort((left, right) => {
+        const a = JSON.stringify([left.key, left.versionId]);
+        const b = JSON.stringify([right.key, right.versionId]);
+        return a < b ? -1 : a > b ? 1 : 0;
+      });
+      deadline.assertActive();
+      return Object.freeze({
+        sha256: hash({
+          format: "candidate-deletion-replay-document-continuity-v1",
+          bucket: this.options.bucketName,
+          owner: this.options.expectedBucketOwner,
+          originalIssuedAt,
+          observations,
+        }),
+        versionsObserved: observations.length,
+      });
+    } catch {
+      return rejected();
+    } finally {
+      deadline.close();
+    }
   }
 
   async inspectExpectedAbsentDocuments(

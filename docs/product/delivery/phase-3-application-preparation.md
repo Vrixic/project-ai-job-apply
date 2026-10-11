@@ -52,8 +52,14 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Replay data preservation (D3-099) | Complete for repository implementation: 348 focused tests, 790 operator assertions, 11 real PostgreSQL regressions, independent review and all 43 repository stages pass. | Dedicated promotion, managed replay and live acceptance remain separate. [Evidence](evidence/d3-replay-data-preservation-2026-10-10.md). |
 | Reconciled-copy verification (D3-100) | Complete for repository implementation: PR #633 merged after 500 focused tests, 17 real PostgreSQL regressions, independent final review and all 43 repository stages. | Private runtime/promotion wiring, managed replay and live acceptance. [Evidence](evidence/d3-reconciled-copy-verification-2026-10-10.md). |
 | Greenhouse execution bridge (D3-101) | Locally verified: connected attachment/one-shot attempt/result, 104 focused extension and 36 workspace regressions, 23 synthetic browser cases and the simulated manual journey pass. All 43 repository stages pass, including 680 extension and 912 web tests. [PR #634](https://github.com/Vrixic/project-ai-job-apply/pull/634). | Installed/native/provider journey, managed recovery, live grants and external acceptance gates remain. |
+| Private reconciled-copy runtime (D3-102) | Complete for repository runtime implementation: separate fresh admission, schema/SQL/document continuity, strict promoted-primary resolver and bounded cancellation/close. 207 focused tests, packaged refusal smoke and all 43 repository stages pass. | Guarded operator/result contract, original invocation metadata, immutable publication, managed recovery/promotion and live acceptance remain. [Evidence](evidence/d3-reconciled-copy-runtime-2026-10-10.md). |
 
 ## Decisions and scope changes
+
+2026-10-10: D3-102 completes the private read-only runtime source and local verification only.
+Fresh admission never extends original replay or generated-material deadlines. The next operator
+batch must preserve original numeric invocation metadata and validate a closed result before any
+managed verification or promotion. Independent D1/admin acceptance stays deferred.
 
 2026-10-10: D3-100 addresses independently confirmed recovery inventory omissions before primary
 promotion. Valid historical completed inventories remain compatible when all current owners are
@@ -258,3 +264,10 @@ assertions, 11 real PostgreSQL cases, independent review and all 43 repository s
 connected Chromium acceptance also passes; live identity/provider/submission acceptance remains
 open. Development is independently verified dormant with versioned recovery inputs; Docker/WSL
 are off and the PC is on. [Evidence](evidence/d3-replay-data-preservation-2026-10-10.md).
+
+2026-10-10: D3-102 private runtime implementation passes 207 focused tests, packaged default-off
+refusal, independent exact-source review and all 43 repository stages. The simulated connected
+Chromium journey passes. Development, Docker and WSL are verified off; the PC remains on.
+Guarded operator/result/provenance, managed recovery/promotion and live acceptance remain internal
+work; independent D1/admin acceptance stays deferred. Hosted jobs could not start due to account
+billing/spending limits. [Evidence](evidence/d3-reconciled-copy-runtime-2026-10-10.md).

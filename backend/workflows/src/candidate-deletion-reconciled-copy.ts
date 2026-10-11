@@ -1,7 +1,11 @@
 import type { DatabaseHandle } from "@ai-job-apply/profile-service";
-import type { AwsReadOnlyCandidateDeletionRestoreLedger } from "./candidate-deletion-restore-aws.js";
+import type {
+  AwsReadOnlyCandidateDeletionRestoreLedger,
+  AwsReadOnlyCandidateRestoreDocuments,
+} from "./candidate-deletion-restore-aws.js";
 import {
   type CandidateDeletionRestoreReplayResult,
+  RESTORE_MAXIMUM_LIFETIME_MS,
   restoreInspectionSha256,
   validateRestoreReplayResult,
 } from "./candidate-deletion-restore-contract.js";
@@ -24,9 +28,119 @@ export interface ReconciledCopyVerification {
   readonly reconciled: RestoreDataDigest;
 }
 
+type DocumentContinuityReader = Pick<
+  AwsReadOnlyCandidateRestoreDocuments,
+  "inspectReplayDocumentContinuity"
+>;
+
 function rejected(): never {
   // No raw SQL/SDK failure or candidate identifier escapes this read-only boundary.
   throw new Error("CandidateDeletionReconciledCopyRejected");
+}
+
+/**
+ * Read-only composition for a later verification of a reconciled copy. Original
+ * issuance is historical evidence, never a fresh admission or replay deadline.
+ * The operator still owns numeric replay provenance, issuance/receipt binding,
+ * physical target identity and writer quiescence. No provider/local-copy claim.
+ */
+export async function verifyReconciledCandidateDeletionCopyWithDocumentContinuity(
+  database: DatabaseHandle,
+  ledger: Ledger,
+  documents: DocumentContinuityReader,
+  originalReceipt: unknown,
+  originalIssuedAt: string,
+  externalSignal?: AbortSignal,
+): Promise<ReconciledCopyVerification & { readonly documentContinuitySha256: string }> {
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  const deadline = Date.now() + 90_000;
+  const timer = setTimeout(onAbort, 90_000);
+  externalSignal?.addEventListener("abort", onAbort, { once: true });
+  if (externalSignal?.aborted) onAbort();
+  const signal = controller.signal;
+  let abortWait: (() => void) | undefined;
+  const active = () => {
+    if (signal.aborted || Date.now() >= deadline) rejected();
+  };
+  try {
+    active();
+    const encodedReceipt = JSON.stringify(originalReceipt);
+    if (typeof encodedReceipt !== "string" || Buffer.byteLength(encodedReceipt, "utf8") > 16_384)
+      rejected();
+    const receipt = JSON.parse(encodedReceipt) as CandidateDeletionRestoreReplayResult;
+    const issued = Date.parse(originalIssuedAt);
+    if (
+      !validateRestoreReplayResult(receipt) ||
+      !receipt.preservation ||
+      !Number.isFinite(issued) ||
+      issued <= 0 ||
+      new Date(issued).toISOString() !== originalIssuedAt ||
+      issued > Date.now() ||
+      !Number.isFinite(Date.parse(receipt.expiresAt)) ||
+      new Date(receipt.expiresAt).toISOString() !== receipt.expiresAt ||
+      Date.parse(receipt.expiresAt) <= issued ||
+      Date.parse(receipt.expiresAt) - issued > RESTORE_MAXIMUM_LIFETIME_MS
+    )
+      rejected();
+    async function continuity() {
+      const result = await documents.inspectReplayDocumentContinuity(originalIssuedAt, signal);
+      active();
+      if (
+        !result ||
+        Object.keys(result).sort().join(",") !== "sha256,versionsObserved" ||
+        !/^[a-f0-9]{64}$/u.test(result.sha256) ||
+        !Number.isSafeInteger(result.versionsObserved) ||
+        result.versionsObserved < 0 ||
+        result.versionsObserved > 10_000
+      )
+        rejected();
+      return { sha256: result.sha256, versionsObserved: result.versionsObserved };
+    }
+    async function verify() {
+      const before = await continuity();
+      const verified = await verifyReconciledCandidateDeletionCopy(
+        database,
+        ledger,
+        receipt,
+        signal,
+      );
+      active();
+      const after = await continuity();
+      if (before.sha256 !== after.sha256 || before.versionsObserved !== after.versionsObserved)
+        rejected();
+      active();
+      // A completed deletion can advance the marker horizon during the final
+      // document listing. Never return the primitive's earlier horizon as fresh.
+      const snapshot = await ledger.inspectCompletedMarkers(new Date(), signal);
+      active();
+      if (
+        snapshot.sha256 !== receipt.markerSnapshotSha256 ||
+        snapshot.entries.length !== receipt.markersValidated ||
+        snapshot.historicalPolicyMarkers !== receipt.historicalPolicyMarkers ||
+        snapshot.currentPolicyMarkers !== receipt.currentPolicyMarkers
+      )
+        rejected();
+      await ledger.assertUnchanged(snapshot, new Date(), signal);
+      active();
+      return Object.freeze({ ...verified, documentContinuitySha256: before.sha256 });
+    }
+    return await Promise.race([
+      verify(),
+      new Promise<never>((_, reject) => {
+        abortWait = () => reject(new Error("CandidateDeletionReconciledCopyRejected"));
+        signal.addEventListener("abort", abortWait, { once: true });
+        if (signal.aborted) abortWait();
+      }),
+    ]);
+  } catch {
+    return rejected();
+  } finally {
+    clearTimeout(timer);
+    if (abortWait) signal.removeEventListener("abort", abortWait);
+    externalSignal?.removeEventListener("abort", onAbort);
+    controller.abort();
+  }
 }
 
 /**

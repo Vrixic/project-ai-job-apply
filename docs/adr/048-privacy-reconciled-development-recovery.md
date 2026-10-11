@@ -38,3 +38,9 @@ The next source batch adds an internal read-only full-data/terminal-condition ve
 independent Profile/Documents recovery inventory and cover-letter namespace checks. Its aggregate
 output alone does not establish numeric invocation provenance, writer quiescence, physical source
 identity or cutover admission. Private runtime and promotion composition remain pending.
+
+The private runtime source now composes fresh, separate admission, current schema verification,
+read-only SQL, document-version continuity and a final marker-horizon check. It closes the database
+before returning aggregate evidence. Source tests and local artifact smoke do not authorize
+cutover: the guarded operator, immutable publication, physical restore and managed promotion
+evidence remain pending. See [D3-102](../product/delivery/evidence/d3-reconciled-copy-runtime-2026-10-10.md).

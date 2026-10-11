@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai-job-apply.internal/operations/candidate-deletion-reconciled-copy.v1.json",
+  "title": "Private read-only development reconciled-copy verification",
+  "description": "Numeric IAM invocation only. Original replay provenance, physical identity and writer quiescence are reviewed operator evidence, not independently authenticated by this runtime.",
+  "$ref": "#/$defs/request",
+  "$defs": {
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "runId",
+        "accountId",
+        "region",
+        "sourceSha",
+        "mode",
+        "targetIdentifier",
+        "targetDbiResourceId",
+        "targetHostname",
+        "targetBoundarySha256",
+        "operatorEvidenceSha256",
+        "originalReceiptSha256",
+        "originalInvocationSha256",
+        "originalConfigurationSha256",
+        "originalIssuedAt",
+        "issuedAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "runId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        },
+        "accountId": {
+          "type": "string",
+          "pattern": "^[0-9]{12}$"
+        },
+        "region": {
+          "const": "us-east-2"
+        },
+        "sourceSha": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "mode": {
+          "enum": ["reconciled_isolated", "promoted_primary"]
+        },
+        "targetIdentifier": {
+          "type": "string",
+          "pattern": "^ai-job-apply-development(?:-restore-[0-9]{14})?$"
+        },
+        "targetDbiResourceId": {
+          "type": "string",
+          "pattern": "^db-[A-Z0-9]{8,63}$"
+        },
+        "targetHostname": {
+          "type": "string",
+          "maxLength": 253,
+          "pattern": "^[a-z0-9-]+\\.[a-z0-9]+\\.us-east-2\\.rds\\.amazonaws\\.com$"
+        },
+        "targetBoundarySha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "operatorEvidenceSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "originalReceiptSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "originalInvocationSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "originalConfigurationSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "originalIssuedAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        },
+        "issuedAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        },
+        "expiresAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "action",
+        "runId",
+        "configurationSha256",
+        "functionVersion",
+        "originalReceipt"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "verify"
+        },
+        "runId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        },
+        "configurationSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "functionVersion": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,9}$"
+        },
+        "originalReceipt": {
+          "$ref": "https://schemas.ai-job-apply.internal/operations/candidate-deletion-restore.v1.json#/$defs/replayResult"
+        }
+      }
+    }
+  }
+}
