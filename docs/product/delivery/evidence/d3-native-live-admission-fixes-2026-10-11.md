@@ -63,5 +63,9 @@ deliveries) were archived with encrypted version/checksum readback before acknow
 queue purge or application settlement occurred. Original unresolved recovery remains open.
 Private plans, reviews, histories and readbacks are under `.tmp/d3-primary-recovery-20261010/`.
 
-Staging was not started or mutated in this batch. Its existing SSO token is unavailable; fresh
-shutdown verification is pending separate sign-in. Its prior shutdown record remains historical.
+Staging account `908203540025`, `us-east-2`, was freshly verified dormant at
+`2026-10-11T18:01:49Z` after sequential SSO renewal. Read-only lifecycle and supplemental
+inventory checks show zero project databases, active NAT gateways, public IPs, paid interface
+endpoints, public routes, enabled rules/mappings, ECS tasks, running durable executions and queued
+messages. No staging resources were started or mutated. Retained storage/security resources
+continue to incur charges. This closes the shutdown-verification gap, not D3 acceptance.

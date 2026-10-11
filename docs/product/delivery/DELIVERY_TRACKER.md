@@ -146,7 +146,7 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 
 2026-10-11: See [D3-108 live-test and shutdown evidence](evidence/d3-native-live-admission-fixes-2026-10-11.md).
 Candidate sign-in is complete; full live generation/submission acceptance remains open.
-Development shutdown is verified at 2026-10-11T17:26:54Z; staging was not mutated and fresh verification awaits SSO.
+Development shutdown is verified at 2026-10-11T17:26:54Z; fresh read-only staging verification confirms dormant at 2026-10-11T18:01:49Z. Docker/WSL are off; the PC remains on.
 The records below describe earlier sessions.
 
 Work continues for D3 on 2026-10-10; D1/D3 are not complete. Independent D1 acceptance remains deferred.
