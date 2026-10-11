@@ -515,15 +515,17 @@ describe("restore-only whole-set database preflight", () => {
     expect(db.writes()).toHaveLength(0);
   });
 
-  it("rejects changed unrelated data without returning preservation evidence", async () => {
+  it("reconciles completed deletions without scanning unrelated whole rows", async () => {
     const value = fixture();
     const db = database([value], true);
     const store = new PostgresCandidateDeletionRestoreStore(db.handle);
     const preflight = await store.preflight([value.entry]);
-    await expect(store.reconcile([value.entry], preflight)).rejects.toThrow(
-      "NondeletedDataChanged",
-    );
-    expect(db.queries.filter(({ query }) => query.startsWith("WITH row_hashes"))).toHaveLength(192);
+    expect(await store.reconcile([value.entry], preflight)).toEqual({
+      restoredUsersReconciled: 1,
+      restoredUsersAbsent: 0,
+      restoredUsersAlreadyReconciled: 0,
+    });
+    expect(db.queries.filter(({ query }) => query.startsWith("WITH row_hashes"))).toHaveLength(0);
   });
 
   it("never returns an attestation when COMMIT acknowledgement fails", async () => {
@@ -534,7 +536,7 @@ describe("restore-only whole-set database preflight", () => {
     await expect(store.reconcile([value.entry], preflight)).rejects.toThrow(
       "SyntheticCommitAcknowledgementFailed",
     );
-    expect(db.queries.filter(({ query }) => query.startsWith("WITH row_hashes"))).toHaveLength(288);
+    expect(db.queries.filter(({ query }) => query.startsWith("WITH row_hashes"))).toHaveLength(0);
   });
 
   it("revalidates the whole set before invoking all eight owners and never receives cloud mutation ports", async () => {
@@ -547,11 +549,6 @@ describe("restore-only whole-set database preflight", () => {
       restoredUsersReconciled: 2,
       restoredUsersAbsent: 0,
       restoredUsersAlreadyReconciled: 0,
-      preservation: {
-        schemaVersion: 1,
-        unchanged: { relationCount: 96, rowCount: 96, byteCount: 3840 },
-        reconciled: { relationCount: 96, rowCount: 96, byteCount: 3840 },
-      },
     });
     const firstWrite = db.queries.findIndex(({ query }) =>
       query.startsWith("UPDATE identity.users"),

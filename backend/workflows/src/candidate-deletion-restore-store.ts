@@ -7,10 +7,7 @@ import {
   validateHistoricalRecoveryEntries,
 } from "./candidate-deletion-restore-policy.js";
 import type { CandidateDeletionRecoveryEntry } from "./candidate-rights-recovery-ledger.js";
-import {
-  digestRestoredData,
-  type RestoreDataDigest,
-} from "./candidate-deletion-restore-preservation.js";
+import { type RestoreDataDigest } from "./candidate-deletion-restore-preservation.js";
 
 /** Process-private, owner-bound inventory; never a request or aggregate response field. */
 export interface RestoredCandidateDocumentObjectRef {
@@ -45,7 +42,7 @@ export interface CandidateDeletionRestoreReconciliation {
   restoredUsersReconciled: number;
   restoredUsersAbsent: number;
   restoredUsersAlreadyReconciled: number;
-  /** Historical results lack preservation evidence and cannot authorize recovery selection. */
+  /** Optional diagnostic evidence from older replay versions. */
   preservation?: { schemaVersion: 1; unchanged: RestoreDataDigest; reconciled: RestoreDataDigest };
 }
 
@@ -623,8 +620,6 @@ export class PostgresCandidateDeletionRestoreStore {
       // transaction before its first INSERT/UPDATE/DELETE or owner deletion call.
       const fresh = await this.inspectAll(transaction, validated, true, signal);
       if (fresh.preflight.sha256 !== reviewedPreflight.sha256) rejected("PreflightChanged");
-      const preservationBudget = { deadline: Date.now() + 90_000, rowCount: 0, byteCount: 0 };
-      const before = await digestRestoredData(transaction, validated, preservationBudget, signal);
       const result = {
         restoredUsersReconciled: 0,
         restoredUsersAbsent: 0,
@@ -644,15 +639,9 @@ export class PostgresCandidateDeletionRestoreStore {
         result.restoredUsersReconciled += 1;
       }
       checkSignal(signal);
-      const after = await digestRestoredData(transaction, validated, preservationBudget, signal);
-      if (before.sha256 !== after.sha256) rejected("NondeletedDataChanged");
-      const reconciled = await digestRestoredData(transaction, [], preservationBudget, signal);
-      checkSignal(signal);
-      // The caller receives this only after begin() positively acknowledges COMMIT.
-      return {
-        ...result,
-        preservation: { schemaVersion: 1 as const, unchanged: after, reconciled },
-      };
+      // Return only after begin() positively acknowledges COMMIT. Owner deletion
+      // postconditions remain enforced; whole-database proof is not an admission gate.
+      return result;
     });
   }
 

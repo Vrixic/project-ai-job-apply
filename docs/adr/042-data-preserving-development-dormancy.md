@@ -24,10 +24,10 @@ durable executions or ECS tasks. Retain all feature storage, credentials, encryp
 network/security definitions, immutable artifacts and recovery journals. Capture only non-secret
 connection metadata in private lifecycle inputs to preserve retained configuration while RDS is absent.
 
-Create a current encrypted safety snapshot and restore it into an isolated private temporary RDS
-instance. Verify AWS reports that restored engine available with the original encryption key.
-This proves physical restore readiness, not application-level data correctness or candidate-rights
-replay acceptance. Preserve the existing logical restore/privacy requirements for activation.
+Owner revision (2026-10-10): create a current encrypted safety snapshot, verify availability and
+bind its physical source ID/KMS key to the live database. A private physical restore rehearsal and
+formal recovery-proof receipt are optional diagnostics, not dormancy or D3 gates. Preserve basic
+migration and completed-deletion reconciliation checks before serving a restored database.
 
 Use a separately reviewed preparation plan to remove deletion protection without deleting RDS.
 The dormant plan may then delete only that database, with a unique final snapshot and automated

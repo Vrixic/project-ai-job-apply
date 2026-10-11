@@ -64,24 +64,18 @@ This catalog is provenance validation, not a renewed contribution or candidate a
 
 ## Build and local checks
 
-Current replay source compares SQL-side whole-row digests across all 96 manifest relations before
-and after deletion, outside fixed authorized deletion projections. Only the exact marker's
-request/operation is exempt; a pre-confirmation requested row may have its constrained null
-operation. Other same-user durable records, deletion audits, exports and shared outbox rows remain
-covered. All three passes share a 90-second, 100,000-row and 64-MiB work budget. Failure rolls back;
-preservation evidence is returned only after PostgreSQL acknowledges commit. No row payloads are
-returned. Historical receipts without this optional evidence remain readable but cannot authorize
-future recovery selection. Publish the matching operator and immutable runtime together: older
-strict consumers reject the new field. Snapshot selection and primary promotion are still pending
-under [ADR-048](../../../docs/adr/048-privacy-reconciled-development-recovery.md); ordinary PITR
-cleanup and restore guards remain unchanged. This does not renew any original expiry.
+Owner revision (2026-10-10): formal whole-row preservation and reconciled-copy proof are no longer
+recovery admission gates. Replay retains transactional preflight, exact subject/operation binding,
+owner deletion functions, document absence checks and terminal postconditions. Existing full-data
+verification tools are optional diagnostics. See [ADR-048](../../../docs/adr/048-privacy-reconciled-development-recovery.md).
 
 Use PowerShell 7.4 or newer and the pinned repository dependencies:
 
 ```powershell
 pnpm --filter @ai-job-apply/workflows build:lambda:deletion-restore
 pnpm test:deletion-restore
-pnpm --filter @ai-job-apply/workflows test
+pnpm --filter @ai-job-apply/workflows exec vitest run src/candidate-deletion-restore-store.test.ts src/candidate-deletion-restore-contract.test.ts src/candidate-deletion-restore-lambda.test.ts
+pnpm --filter @ai-job-apply/workflows typecheck
 ```
 
 A local artifact is not publishable provenance. For actual execution, build twice from the exact

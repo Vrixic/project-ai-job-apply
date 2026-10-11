@@ -13,18 +13,11 @@ synthetic database disposal procedure for development. Never apply an old binary
    database address, port, database name and resource ID in `development_database_recovery`.
    Choose a unique `ai-job-apply-development-shutdown-<UTC timestamp>` final snapshot name.
 3. Establish a resource-change-free baseline with `development_database_mode=retained`.
-4. If stopped, temporarily start the database for this explicitly authorized recovery test.
-   Keep all application traffic and background work off. Wait for `available`, then create an
-   encrypted manual safety snapshot named `<final snapshot name>-safety`.
-5. Wait for the snapshot to be available. Restore it as exactly
-   `ai-job-apply-development-restorecheck` in the existing private DB subnet group and data security
-   group, Single-AZ, no public access, no automatic backup retention, no deletion protection.
-   Refuse a pre-existing instance at that name. Preserve KMS, engine and storage encryption.
-6. Verify the restored instance is available and private, and its encryption key matches the
-   snapshot. Record the actual AWS restore call and aggregate readback in private evidence.
-   Write a `.tmp/restore-proof.json` containing `Account`, `SourceDatabase`, `SnapshotId`,
-   `RestoreInstanceId`, and `RestoreResourceId`. This is physical restore evidence, not SQL or
-   application/privacy replay acceptance.
+4. If stopped, temporarily start the database only to capture its safety backup. Keep application
+   traffic and background work off. Wait for `available`, then create an encrypted manual safety
+   snapshot named `<final snapshot name>-safety`.
+5. Wait for that exact snapshot to be available and verify its source database, account, region
+   and KMS key. A physical restore rehearsal and restore-proof receipt are not required.
 
 ## Review and apply
 
@@ -45,19 +38,14 @@ Preparation may update only database deletion protection and backup/final snapsh
 After preparation, generate a fresh plan with mode `dormant` and otherwise identical inputs. Review
 exactly one deletion: `module.platform.aws_db_instance.postgres[0]`. The before-state must require
 a final snapshot, preserve automated backups, and have deletion protection off. Apply with the
-same interface plus `-RestoreProofPath ABSOLUTE_PRIVATE_RESTORE_PROOF`. The operator rechecks the
-live safety snapshot and temporary restore instance before applying.
+the same interface. The operator rechecks the live exact-source encrypted safety snapshot before
+applying; no `-RestoreProofPath` is required.
 
-Wait for original database absence and the final encrypted snapshot's `available` state. Then
-delete only the exact temporary restorecheck database, skipping its redundant final snapshot and
-automated backups. Keep the source safety/final snapshots and original automated backups.
-Verify both instances absent, no NAT/EIPs/interface endpoints, no application routes/consumers/
-rules or running tasks, and an exact-input zero-drift plan. Record retained costs and blockers.
-Archive the exact dormant input file and restore proof under `lifecycle/development/` in the
-versioned Terraform state bucket with explicit `aws:kms` encryption using its existing state key.
-Read back the uploaded version and compare SHA-256 before recording the version IDs privately.
-This preserves recovery configuration beyond the lifetime of the operator's checkout. Never
-commit these complete environment inputs or the state to Git.
+Wait for original database absence and the final encrypted snapshot's `available` state. Keep
+source safety/final snapshots and automated backups. Verify no NAT/EIPs/interface endpoints,
+application routes/consumers/rules or running tasks. Archive complete current dormant inputs
+privately in the encrypted versioned state bucket; never commit environment inputs or state.
+Record retained storage costs and any shutdown blockers.
 
 ## Reactivation
 
@@ -79,7 +67,7 @@ Restore with runtime off. The new RDS resource ID can require IAM policy changes
 hostname stays the same. Validate credentials, schema, migrations, candidate deletion/recovery
 replay and readiness before separately enabling a bounded test session. Keep the restore snapshot
 input unchanged in subsequent plans to avoid replacement. For the next shutdown use a **new** final
-snapshot name, a fresh safety snapshot and a fresh physical restore check.
+snapshot name and a fresh encrypted safety snapshot.
 
 ## Failure handling
 

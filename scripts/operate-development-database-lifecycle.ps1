@@ -7,8 +7,7 @@ param(
   [string]$AwsProfile = 'ai-job-apply-development-admin',
   [string]$InputPath,
   [string]$PlanPath,
-  [string]$ReviewedPlanSha256,
-  [string]$RestoreProofPath
+  [string]$ReviewedPlanSha256
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -72,6 +71,11 @@ function Assert-RestoreSnapshotSelection($Recovery) {
   if ([string]::IsNullOrWhiteSpace([string]$Recovery.final_snapshot_identifier) -or
       [string]$Recovery.restore_snapshot_identifier -cne [string]$Recovery.final_snapshot_identifier) {
     throw 'Restore must select the exact final snapshot from the reviewed recovery inputs; historical snapshot selection requires separate recovery review.'
+  }
+}
+function Assert-SafetySnapshot($Snapshot, [string]$SnapshotId, $Source) {
+  if (-not $Source -or $Source.DBInstanceIdentifier -cne $database -or -not $Source.DbiResourceId -or -not $Snapshot -or $Snapshot.DbiResourceId -cne $Source.DbiResourceId -or $Snapshot.KmsKeyId -cne $Source.KmsKeyId -or $Snapshot.DBSnapshotIdentifier -cne $SnapshotId -or $Snapshot.Status -cne 'available' -or -not $Snapshot.Encrypted -or $Snapshot.DBInstanceIdentifier -cne $database -or -not $Snapshot.KmsKeyId.StartsWith("arn:aws:kms:us-east-2:$ExpectedAccountId`:key/")) {
+    throw 'An available encrypted safety snapshot of the exact development database is required before deletion.'
   }
 }
 function Assert-PlanScope($Plan) {
@@ -140,12 +144,9 @@ if ($TargetMode -eq 'restore') {
   if ($snapshot.Status -ne 'available' -or -not $snapshot.Encrypted -or $snapshot.DBInstanceIdentifier -ne $database -or -not $snapshot.KmsKeyId.StartsWith("arn:aws:kms:us-east-2:$ExpectedAccountId`:key/")) { throw 'Restore snapshot is unavailable or outside the exact encrypted development boundary.' }
 }
 if ($TargetMode -eq 'dormant') {
-  $proof = Get-Content -LiteralPath (Assert-PrivateArtifact $RestoreProofPath) -Raw | ConvertFrom-Json
   $recovery = $plan.variables.development_database_recovery.value
-  if ($proof.SourceDatabase -ne $database -or $proof.SnapshotId -ne ($recovery.final_snapshot_identifier + '-safety') -or $proof.RestoreInstanceId -ne ($database + '-restorecheck') -or $proof.Account -ne $ExpectedAccountId) { throw 'Wrong restore evidence.' }
-  $snapshot = (Read-Aws @('rds','describe-db-snapshots','--db-snapshot-identifier',$proof.SnapshotId)).DBSnapshots[0]
-  $restored = (Read-Aws @('rds','describe-db-instances','--db-instance-identifier',$proof.RestoreInstanceId)).DBInstances[0]
-  if ($snapshot.Status -ne 'available' -or -not $snapshot.Encrypted -or $snapshot.DBInstanceIdentifier -ne $database -or $restored.DBInstanceStatus -ne 'available' -or -not $restored.StorageEncrypted -or $restored.PubliclyAccessible -or $restored.KmsKeyId -ne $snapshot.KmsKeyId -or $restored.DbiResourceId -ne $proof.RestoreResourceId) { throw 'Live snapshot/restore verification failed.' }
+  $source = (Read-Aws @('rds','describe-db-instances','--db-instance-identifier',$database)).DBInstances[0]
+  Assert-SafetySnapshot (Read-Aws @('rds','describe-db-snapshots','--db-snapshot-identifier',($recovery.final_snapshot_identifier + '-safety'))).DBSnapshots[0] ($recovery.final_snapshot_identifier + '-safety') $source
 }
 & terraform "-chdir=$root" apply -input=false -lock-timeout=30s -no-color $PlanPath > "$PlanPath.apply.log" 2>&1
 if ($LASTEXITCODE -ne 0) { throw 'Apply failed; inspect the private log and replan from actual state. Do not replay.' }
