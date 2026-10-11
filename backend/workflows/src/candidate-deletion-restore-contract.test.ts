@@ -1245,3 +1245,39 @@ describe("private completion diagnosis transport", () => {
     ).toBe(false);
   });
 });
+
+describe("explicit development primary deletion recovery", () => {
+  function primary() {
+    return configuration({
+      recoveryMode: "primary_recovery",
+      targetIdentifier: fixture.configuration.sourceIdentifier,
+      targetHostname: fixture.configuration.sourceHostname,
+      targetDbiResourceId: fixture.configuration.sourceDbiResourceId,
+      targetBoundarySha256: fixture.configuration.sourceBoundarySha256,
+    });
+  }
+  it("admits only explicit same-primary metadata and binds the mode to environment hash", () => {
+    const config = primary();
+    expect(validateRestoreConfiguration(config, catalogSha256, now)).toEqual(config);
+    const env = environment({ RESTORE_REPLAY_CONFIG_JSON: serializeRestoreConfiguration(config) });
+    expect(loadRestoreEnvironment(env, catalogSha256, now).configuration).toEqual(config);
+    expect(env.RESTORE_REPLAY_CONFIG_SHA256).not.toBe(fixture.configurationSha256);
+    const omitted = { ...config };
+    delete omitted.recoveryMode;
+    expect(() => validateRestoreConfiguration(omitted, catalogSha256, now)).toThrow(
+      configurationError,
+    );
+  });
+  it.each([
+    { recoveryMode: "isolated" },
+    { targetIdentifier: fixture.configuration.targetIdentifier },
+    { targetHostname: fixture.configuration.targetHostname },
+    { targetDbiResourceId: fixture.configuration.targetDbiResourceId },
+    { targetBoundarySha256: fixture.configuration.targetBoundarySha256 },
+    { expiresAt: "2026-09-08T21:00:00.000Z" },
+  ])("refuses primary substitution or renewed admission %j", (mutation) => {
+    expect(() =>
+      validateRestoreConfiguration({ ...primary(), ...mutation }, catalogSha256, now),
+    ).toThrow(configurationError);
+  });
+});

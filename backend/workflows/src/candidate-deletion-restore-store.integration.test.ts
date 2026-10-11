@@ -39,6 +39,7 @@ import {
   RESTORED_CANDIDATE_RIGHTS_OWNERS,
 } from "./candidate-deletion-restore-policy.js";
 import { PostgresCandidateDeletionRestoreStore } from "./candidate-deletion-restore-store.js";
+import { verifyDeletionRecoverySchema } from "./candidate-deletion-restore-schema.js";
 import { digestRestoredData } from "./candidate-deletion-restore-preservation.js";
 import { AwsReadOnlyCandidateRestoreDocuments } from "./candidate-deletion-restore-aws.js";
 import { verifyReconciledCandidateDeletionCopy } from "./candidate-deletion-reconciled-copy.js";
@@ -388,6 +389,17 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
     },
     60_000,
   );
+
+  it("checks current schema read-only before primary recovery and refuses aborted work", async () => {
+    await expect(
+      verifyDeletionRecoverySchema(database, new AbortController().signal),
+    ).resolves.toBeUndefined();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(verifyDeletionRecoverySchema(database, controller.signal)).rejects.toThrow(
+      "CandidateDeletionRestoreSchemaRejected",
+    );
+  });
 
   it("verifies exact reconciled data read-only and refuses same-count changes and microsecond terminal conflicts", async () => {
     const target = await seed(1);

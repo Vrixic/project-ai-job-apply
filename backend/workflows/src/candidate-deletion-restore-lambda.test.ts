@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HistoricalCompletionEvidence } from "./candidate-deletion-completion-diagnosis.js";
 import type { HistoricalCompletionEvidenceTarget } from "./candidate-deletion-completion-evidence.js";
 import {
+  calculateRestoreConfigurationSha256,
+  serializeRestoreConfiguration,
   validateRestoreCompletionDiagnosisResult,
   validateRestoreInspectionResult,
   validateRestoreReplayResult,
@@ -1177,4 +1179,41 @@ describe("private read-only completion diagnosis handler branch", () => {
     expect(h.store.preflight).toHaveBeenCalledOnce();
     expect(h.store.reconcile).not.toHaveBeenCalled();
   });
+});
+
+it("keeps Inspect and Replay bound to explicit primary recovery", async () => {
+  const h = harness();
+  const open = vi.spyOn(h.dependencies, "openStore");
+  const config = {
+    ...fixture.configuration,
+    recoveryMode: "primary_recovery",
+    targetIdentifier: fixture.configuration.sourceIdentifier,
+    targetHostname: fixture.configuration.sourceHostname,
+    targetDbiResourceId: fixture.configuration.sourceDbiResourceId,
+    targetBoundarySha256: fixture.configuration.sourceBoundarySha256,
+  };
+  h.environment.RESTORE_REPLAY_CONFIG_JSON = serializeRestoreConfiguration(config);
+  const sha = calculateRestoreConfigurationSha256(h.environment);
+  h.environment.RESTORE_REPLAY_CONFIG_SHA256 = sha;
+  const inspected = await h.run({ ...fixture.inspect, configurationSha256: sha }, h.context);
+  expect(inspected.action).toBe("inspect");
+  const result = await h.run(
+    {
+      ...fixture.replay,
+      configurationSha256: sha,
+      reviewedInspectionSha256: (inspected as { inspectionSha256: string }).inspectionSha256,
+    },
+    h.context,
+  );
+  expect(result).toMatchObject({
+    action: "replay",
+    outcome: "replayed",
+    restoredUsersReconciled: 1,
+  });
+  expect(open.mock.calls[0]?.[0]).toMatchObject({
+    recoveryMode: "primary_recovery",
+    targetIdentifier: "ai-job-apply-development",
+  });
+  expect(h.store.reconcile).toHaveBeenCalledOnce();
+  expect(h.close).toHaveBeenCalledTimes(2);
 });

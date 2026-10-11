@@ -71,7 +71,7 @@
         },
         "targetIdentifier": {
           "type": "string",
-          "pattern": "^ai-job-apply-development-restore-[0-9]{14}$"
+          "pattern": "^ai-job-apply-development(?:-restore-[0-9]{14})?$"
         },
         "targetDbiResourceId": {
           "type": "string",
@@ -107,8 +107,38 @@
         "expiresAt": {
           "type": "string",
           "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        },
+        "recoveryMode": {
+          "const": "primary_recovery"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["recoveryMode"],
+            "properties": {
+              "recoveryMode": {
+                "const": "primary_recovery"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "targetIdentifier": {
+                "const": "ai-job-apply-development"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "targetIdentifier": {
+                "pattern": "^ai-job-apply-development-restore-[0-9]{14}$",
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
     },
     "request": {
       "oneOf": [
@@ -677,20 +707,38 @@
               "oneOf": [
                 {
                   "properties": {
-                    "attemptCount": { "const": 1 },
-                    "bindingSha256": { "type": "array", "minItems": 1, "maxItems": 1 }
+                    "attemptCount": {
+                      "const": 1
+                    },
+                    "bindingSha256": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 1
+                    }
                   }
                 },
                 {
                   "properties": {
-                    "attemptCount": { "const": 2 },
-                    "bindingSha256": { "type": "array", "minItems": 2, "maxItems": 2 }
+                    "attemptCount": {
+                      "const": 2
+                    },
+                    "bindingSha256": {
+                      "type": "array",
+                      "minItems": 2,
+                      "maxItems": 2
+                    }
                   }
                 },
                 {
                   "properties": {
-                    "attemptCount": { "const": 3 },
-                    "bindingSha256": { "type": "array", "minItems": 3, "maxItems": 3 }
+                    "attemptCount": {
+                      "const": 3
+                    },
+                    "bindingSha256": {
+                      "type": "array",
+                      "minItems": 3,
+                      "maxItems": 3
+                    }
                   }
                 }
               ]

@@ -493,3 +493,22 @@ describe("restore-only database secret resolver", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 });
+
+it("resolves the canonical secret in memory only with explicit primary recovery", async () => {
+  const primary = {
+    ...configuration,
+    recoveryMode: "primary_recovery" as const,
+    targetIdentifier: configuration.sourceIdentifier,
+    targetHostname: configuration.sourceHostname,
+  };
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ SecretString: secret }));
+  expect(
+    new URL(await resolveRestoredDatabaseUrl(primary, environment, signal(), fetcher)).hostname,
+  ).toBe(configuration.sourceHostname);
+  const omitted: CandidateDeletionRestoreConfiguration = { ...primary };
+  delete omitted.recoveryMode;
+  await expect(resolveRestoredDatabaseUrl(omitted, environment, signal(), fetcher)).rejects.toThrow(
+    error,
+  );
+  expect(fetcher).toHaveBeenCalledOnce();
+});
