@@ -76,6 +76,7 @@ afterEach(() => {
   act(() => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.useRealTimers();
 });
 
@@ -111,6 +112,79 @@ async function mount(
 }
 
 describe("ApplicationsWorkspace", () => {
+  function nativeUi() {
+    vi.stubEnv("NEXT_PUBLIC_NATIVE_MATERIAL_UI", "enabled");
+    vi.stubEnv("NEXT_PUBLIC_NATIVE_AUTH0_DOMAIN", "synthetic.auth0.com");
+    vi.stubEnv("NEXT_PUBLIC_NATIVE_AUTH0_CLIENT_ID", "synthetic-client");
+    vi.stubEnv("NEXT_PUBLIC_NATIVE_MATERIAL_BASE_HOST", "materials.example.test");
+  }
+
+  it("discovers a background-generated resume with one read and no new preparation", async () => {
+    nativeUi();
+    const ready = reviewable(3);
+    if (!ready.currentPacket) throw Error("Missing synthetic packet");
+    ready.currentPacket.temporaryMaterials = [
+      {
+        schemaVersion: 1,
+        kind: "tailored_resume",
+        generationId: "00000000-0000-7000-8000-000000000020",
+        version: 1,
+        contentSha256: HASH,
+        completedAtMs: Date.now(),
+        expiresAtMs: Date.now() + 1_800_000,
+      },
+    ];
+    const send = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(respond(reviewable()))
+      .mockResolvedValueOnce(respond(ready));
+    await mount(send, undefined, false, APP);
+    expect(container.textContent).not.toContain("Resume tailoring");
+    await click("Check generated resume");
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1]?.[0]).toBe(`/api/platform/applications/${APP}`);
+    expect(send.mock.calls[1]?.[1]).toMatchObject({ method: "GET", cache: "no-store" });
+    expect(send.mock.calls[1]?.[1]).not.toHaveProperty("body");
+    expect(container.textContent).toContain("Sign in to view generated materials");
+    expect(container.textContent).not.toContain("Check generated resume");
+    expect(container.textContent).not.toContain("Open application page");
+  });
+
+  it.each(["wrong-job", "wrong-id", "older", "malformed", "unavailable"])(
+    "refuses %s generated-resume refresh without starting work",
+    async (kind) => {
+      nativeUi();
+      const next = reviewable(kind === "older" ? 1 : 3);
+      if (kind === "wrong-job") next.canonicalJobId = "00000000-0000-7000-8000-000000000099";
+      if (kind === "wrong-id") next.id = "00000000-0000-7000-8000-000000000099";
+      const send = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(respond(reviewable()))
+        .mockResolvedValueOnce(
+          respond(kind === "malformed" ? { id: APP } : next, kind === "unavailable" ? 503 : 200),
+        );
+      await mount(send, undefined, false, APP);
+      await click("Check generated resume");
+      expect(container.textContent).toContain("We could not check the generated resume.");
+      expect(container.textContent).toContain("Check generated resume");
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+    },
+  );
+
+  it("keeps an unavailable generated resume retry read-only", async () => {
+    nativeUi();
+    const send = vi.fn<typeof fetch>().mockImplementation(async () => respond(reviewable()));
+    await mount(send, undefined, false, APP);
+    await click("Check generated resume");
+    expect(container.textContent).toContain(
+      "No generated resume is available in the current packet.",
+    );
+    await click("Check generated resume");
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(send.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+
   it("refreshes extension confirmation on return and notifies application history", async () => {
     const current = application({
       status: "submitting",

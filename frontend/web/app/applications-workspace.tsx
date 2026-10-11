@@ -241,6 +241,48 @@ function JobApplicationWorkspace({
       acceptApplication(latest.application);
   }
 
+  async function checkGeneratedResume() {
+    if (!application || busy) return;
+    setBusy(true);
+    setNotice(undefined);
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    lifetime.current.signal.addEventListener("abort", abort, { once: true });
+    const timeout = setTimeout(abort, 10_000);
+    try {
+      const result = await applicationsCall("GET", `/api/platform/applications/${application.id}`, {
+        ...options,
+        signal: controller.signal,
+      });
+      if (lifetime.current.signal.aborted) return;
+      if (
+        controller.signal.aborted ||
+        !result.ok ||
+        !validateApplication(result.application) ||
+        result.application.id !== application.id ||
+        result.application.canonicalJobId !== jobId ||
+        result.application.revision < application.revision
+      ) {
+        setNotice(
+          "We could not check the generated resume. Check again; no new preparation was requested.",
+        );
+        return;
+      }
+      acceptApplication(result.application);
+      setNotice(
+        result.application.currentPacket?.temporaryMaterials?.some(
+          (material) => material.kind === "tailored_resume",
+        )
+          ? "The current packet has a generated resume. Sign in to review its availability and exact content."
+          : "No generated resume is available in the current packet. No new preparation was requested.",
+      );
+    } finally {
+      clearTimeout(timeout);
+      lifetime.current.signal.removeEventListener("abort", abort);
+      if (!lifetime.current.signal.aborted) setBusy(false);
+    }
+  }
+
   /** Applies a result to state; a failure sets the fixed copy and throws so the panel shows it too. */
   async function settle(result: ApplicationsCallResult, id?: string): Promise<Application> {
     if (lifetime.current.signal.aborted) throw new Error("Workspace closed");
@@ -552,7 +594,22 @@ function JobApplicationWorkspace({
             />
           ) : null}
           {!preparation &&
-          !(nativeConfiguration && application.currentPacket?.temporaryMaterials?.length) &&
+          nativeConfiguration &&
+          !application.currentPacket?.temporaryMaterials?.length &&
+          application.currentPacket &&
+          application.status === "review_required" ? (
+            <section aria-label="Generated resume availability">
+              <p>
+                Check whether a generated resume is available. This does not start another
+                preparation.
+              </p>
+              <button type="button" disabled={busy} onClick={() => void checkGeneratedResume()}>
+                Check generated resume
+              </button>
+            </section>
+          ) : null}
+          {!preparation &&
+          !nativeConfiguration &&
           !busy &&
           application.currentPacket &&
           application.status !== "applied" &&
