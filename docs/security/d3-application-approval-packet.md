@@ -6,7 +6,7 @@
 - Task: D3-012. Release gates: LR-D3-01 (application preparation) and LR-D3-02 (application
   submission) in the [legal review register](../product/foundation/legal-review-register.md).
 - Prepared: 2026-09-18. Owner positions recorded 2026-09-19. Engineering inventory refreshed
-  2026-10-09 against merged source `d7a8a85b` and the linked delivery evidence.
+  2026-10-10 against merged source `8e663f9f` and the linked delivery evidence.
 - Live ATS effects, automated form actions, and any real AI provider stay disabled until every
   disposition here is recorded. Foundational counsel review is separately deferred to D6-016
   ([ADR-019](../adr/019-defer-foundational-counsel-review-to-public-launch.md)).
@@ -36,7 +36,7 @@ They are not a legal, security, or privacy disposition, and every reviewer recor
 | 5 | The record must show who submitted: when the platform's adapter did not submit, the candidate did. | Attempts already carry the adapter and version, and history separates adapter attempts from candidate takeover and candidate attestation (`taken_over`, `user_attested_submitted`). Whether an explicit submitter field is needed is an engineering follow-up under D3-008; reviewers assess the evidence kinds. |
 | 6 | The engineering defaults below are accepted. | Product owner acknowledgement recorded; reviewers may still add conditions. |
 
-## Current engineering inventory (2026-10-09)
+## Current engineering inventory (2026-10-10)
 
 Local tests use synthetic candidates and simulated external transports unless the linked evidence
 explicitly records managed or human acceptance. Historical SQL/managed evidence is dated; it is
@@ -68,18 +68,24 @@ not a fresh live run of the current connected journey. Current verification and 
   ADR-038 requires no candidate prompts/generated content retained beyond 30 minutes, including
   diagnostic/abuse/cache copies. The earlier development amendment explicitly records longer
   possible provider retention; `store:false`, cancellation or response deletion cannot close this gate.
-- No provider adapter exists (D3-013 fixtures are missing); no live form, submission, or
-  confirmation detection has been exercised.
+  On October 10 the owner confirmed that no qualifying provider/account policy exists. Live AI
+  cover-letter testing remains externally blocked and disabled; independent native resume work continues.
+- The default-off Greenhouse execution bridge is implemented and locally verified, including
+  approved attachment, one-shot dispatch and result handling ([D3-101 evidence](../product/delivery/evidence/d3-greenhouse-bridge-implementation-2026-10-10.md)).
+  Accepted provider-derived D3-013 fixtures and exact-variant source-policy/QA approval remain
+  missing; no live form, submission or confirmation detection is claimed.
 - Saved-answer storage/backend reuse and D3-087 observed-form selection/review source exist;
   compatible current release and live correction/expiry/reuse acceptance remain. Do not infer context
   or question hashes from a job description or silently select the newest answer version.
-- The owner selected separate in-memory Auth0 popup PKCE ([ADR-044](../adr/044-browser-native-material-identity.md)). Default-off browser-native resume/cover-letter previews and approved downloads now have local source and synthetic Chromium evidence. The existing SPA registration/public configuration, native HTTPS/CORS and exact-owner live acceptance remain unverified. No confidential web token is returned and generated content does not cross the BFF.
+- The owner selected separate in-memory Auth0 popup PKCE ([ADR-044](../adr/044-browser-native-material-identity.md)). Default-off browser-native resume/cover-letter previews and approved downloads have local source and synthetic Chromium evidence. The separate SPA registration is configured and its saved grant/origin settings were inspected. Live sign-in, native HTTPS/CORS and exact-owner acceptance remain unverified. No confidential web token is returned and generated content does not cross the BFF.
 - D3-086 manual extension handoff and D3-087 explicit question capture are locally verified and
-  default off. The automated executor and accepted form/confirmation adapter remain unfinished;
-  no installed-extension application submission is claimed.
-- Candidate export/deletion/restore and native withdrawal have local and partial managed evidence;
-  fresh current-release document-inclusive rights/restore, backup aging, original-writer drain,
-  all-copy disposal and accountable review remain. Use the [current phase register](../product/delivery/phase-3-application-preparation.md)
+  default off. D3-101 implements the bounded automated execution path; provider fidelity,
+  installed-extension operation and live submission acceptance remain unverified.
+- Candidate export/deletion/restore and native withdrawal have local and partial managed evidence.
+  Current primary completed-deletion replay passes with two already-reconciled subjects and no new
+  deletion or external writes. Current-release rights/native-withdrawal acceptance, original-writer
+  drain and material disposal remain. Formal database recovery-proof gates were removed by the owner;
+  encrypted backups and basic data-loss/deletion safeguards remain. Use the [current phase register](../product/delivery/phase-3-application-preparation.md)
   and [managed release record](../product/delivery/evidence/d3-native-application-disposal-2026-10-07.md)
   for exact dated scope; test infrastructure is dormant, not a live accepted release.
 - Accessibility was checked by automated jsdom axe rules and a real-Chromium keyboard run of the real
@@ -104,7 +110,7 @@ not a fresh live run of the current connected journey. Current verification and 
 1. Does the implemented separate-key vault/packet/replay boundary, effective IAM, just-in-time
    owner reads and rights/restore behavior satisfy ADR-010 for the exact reviewed release?
    Local encryption tests or legacy receipt archival alone do not prove that complete boundary.
-2. The planned extension executor would report results from the candidate's own browser. Is candidate-reported
+2. The implemented extension executor reports results from the candidate's own browser. Is candidate-reported
    confirmation acceptable as evidence, given it is treated as candidate-observed, not provider truth?
 3. Generated text reaches an employer under the candidate's name. What disclosure and review UX
    satisfies the AI-disclosure requirement?

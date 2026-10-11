@@ -2,8 +2,9 @@
 
 The retained development snapshot restored successfully to the canonical private, encrypted,
 deletion-protected database with 35-day backups. Its new encrypted safety snapshot is available.
-The reviewed temporary bootstrap allowance and private endpoints are deployed; candidate traffic
-and background writers remain off. Completed-deletion replay and live native acceptance are pending.
+The reviewed temporary bootstrap allowance and private endpoints supported the bounded recovery;
+candidate traffic and background writers remained off. Completed-deletion replay subsequently
+passes under [D3-106](d3-retired-deletion-markers-2026-10-10.md); live native acceptance remains pending.
 
 Actual role preparation stopped before mutation on provider metadata observations. The guards now
 accept only `backing-up` to `available` with an equal/advancing restore clock and exact owned private
@@ -34,3 +35,7 @@ review and the simulated connected journey. No formal recovery sweep or full-rep
 The role wrapper assumes an older endpoint layout. The actual scoped role, policy and three
 endpoint permissions were therefore applied through independently reviewed exact Terraform plan,
 followed by live IAM and no-action readback. No specialized verification receipt was fabricated.
+
+Both temporary executors, restore role, temporary boundary allowances and paid interface endpoints
+are now removed through reviewed plans. Canonical database dormancy preserves available encrypted
+safety/final snapshots. [Final readback and release evidence](d3-compatible-gateway-offline-release-2026-10-10.md).
