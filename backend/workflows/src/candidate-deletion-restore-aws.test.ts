@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
+import { ListObjectVersionsCommand, S3Client } from "@aws-sdk/client-s3";
 import { describe, expect, it, vi } from "vitest";
 import {
   AwsReadOnlyCandidateDeletionRestoreLedger,
@@ -8,8 +9,8 @@ import {
 } from "./candidate-deletion-restore-aws.js";
 import { ACCEPTED_CANDIDATE_DELETION_POLICIES } from "./candidate-deletion-restore-policy.js";
 import type {
-  RestoredCandidateDocumentObjectRef,
   RestoredCandidateCoverLetterObjectRef,
+  RestoredCandidateDocumentObjectRef,
 } from "./candidate-deletion-restore-store.js";
 
 const bucketName = "synthetic-restore-ledger";
@@ -184,6 +185,152 @@ function setup(fixtures = [fixture()], timeoutMs?: number) {
 }
 
 describe("restore-only completed ledger version snapshots", () => {
+  it("decodes actual pinned SDK URL key fields once, preserving opaque version IDs", async () => {
+    const state = setup();
+    const entry = fixture();
+    const listed = new S3Client({
+      region: "us-east-2",
+      credentials: { accessKeyId: "synthetic", secretAccessKey: "synthetic" },
+      requestHandler: {
+        handle: async () => ({
+          response: {
+            statusCode: 200,
+            headers: {},
+            body: Buffer.from(
+              `<ListVersionsResult><Name>${bucketName}</Name><Prefix>candidate-deletion-recovery%2F</Prefix><MaxKeys>100</MaxKeys><IsTruncated>false</IsTruncated><EncodingType>url</EncodingType><Version><Key>${encodeURIComponent(entry.key)}</Key><VersionId>${entry.versionId}</VersionId><IsLatest>true</IsLatest><LastModified>${confirmedAt.toISOString()}</LastModified><ETag>&quot;synthetic-etag&quot;</ETag><Size>${entry.bytes().length}</Size><StorageClass>STANDARD</StorageClass></Version></ListVersionsResult>`,
+            ),
+          },
+        }),
+      },
+    });
+    state.overrides.ListObjectVersionsCommand = async (_output, input) => {
+      expect(input.EncodingType).toBe("url");
+      return listed.send(
+        new ListObjectVersionsCommand({
+          Bucket: bucketName,
+          Prefix: prefix,
+          MaxKeys: 100,
+          EncodingType: "url",
+        }),
+      );
+    };
+    expect((await state.ledger.inspectCompletedMarkers(now)).entries).toHaveLength(1);
+    expect(
+      state.send.mock.calls.some(
+        ([command]) => (command as Command).input.VersionId === entry.versionId,
+      ),
+    ).toBe(true);
+    listed.destroy();
+  });
+
+  function retiredPage(input: Row, entry = fixture()): Row {
+    return {
+      ...page(input, [{ ...entry.version(), IsLatest: false }]),
+      DeleteMarkers: [
+        {
+          Key: entry.key,
+          VersionId: "retired+/=",
+          IsLatest: true,
+          LastModified: new Date("2026-10-07T12:00:00.000Z"),
+          Owner: { ID: "f".repeat(64) },
+        },
+      ],
+    };
+  }
+  const afterRetirement = new Date("2026-10-08T12:00:00.000Z");
+
+  it("authenticates and includes a retired body instead of ignoring its completed deletion", async () => {
+    const state = setup();
+    state.overrides.ListObjectVersionsCommand = (_output, input) => retiredPage(input);
+    const snapshot = await state.ledger.inspectCompletedMarkers(afterRetirement);
+    expect(snapshot.entries).toHaveLength(1);
+    expect(snapshot.entries[0]?.userId).toBe(fixture().userId);
+    expect(state.decrypt).toHaveBeenCalled();
+    await expect(state.ledger.assertUnchanged(snapshot, afterRetirement)).resolves.toBeUndefined();
+    await expect(state.ledger.inspectCompletionEvidence(snapshot, afterRetirement)).rejects.toThrow(
+      error,
+    );
+    state.overrides.ListObjectVersionsCommand = (_output, input) => {
+      const output = retiredPage(input);
+      const retirement = (output.DeleteMarkers as Row[])[0];
+      if (!retirement) throw new Error("Synthetic retirement missing");
+      retirement.VersionId = "different-retirement";
+      return output;
+    };
+    await expect(state.ledger.assertUnchanged(snapshot, afterRetirement)).rejects.toThrow(error);
+  });
+
+  it("pairs a tombstone and retained body across pages without decoding version IDs", async () => {
+    const state = setup();
+    state.overrides.ListObjectVersionsCommand = (_output, input) => {
+      const complete = retiredPage(input);
+      if (input.KeyMarker) return { ...complete, DeleteMarkers: [] };
+      return {
+        ...complete,
+        Versions: [],
+        IsTruncated: true,
+        NextKeyMarker: encodeURIComponent(fixture().key),
+        NextVersionIdMarker: "retired+/=",
+        EncodingType: "url",
+        Prefix: encodeURIComponent(prefix),
+      };
+    };
+    expect((await state.ledger.inspectCompletedMarkers(afterRetirement)).entries).toHaveLength(1);
+  });
+
+  it.each([
+    ["missing body", (o: Row) => ({ ...o, Versions: [] })],
+    ["current body", (o: Row) => ({ ...o, Versions: [fixture().version()] })],
+    [
+      "duplicate tombstone",
+      (o: Row) => ({
+        ...o,
+        DeleteMarkers: [...(o.DeleteMarkers as Row[]), ...(o.DeleteMarkers as Row[])],
+      }),
+    ],
+    [
+      "noncurrent tombstone",
+      (o: Row) => ({
+        ...o,
+        DeleteMarkers: [{ ...(o.DeleteMarkers as Row[])[0], IsLatest: false }],
+      }),
+    ],
+    [
+      "before retention",
+      (o: Row) => ({
+        ...o,
+        DeleteMarkers: [{ ...(o.DeleteMarkers as Row[])[0], LastModified: now }],
+      }),
+    ],
+    [
+      "future retirement",
+      (o: Row) => ({
+        ...o,
+        DeleteMarkers: [
+          { ...(o.DeleteMarkers as Row[])[0], LastModified: new Date("2026-11-01T00:00:00.000Z") },
+        ],
+      }),
+    ],
+    [
+      "wrong owner",
+      (o: Row) => ({
+        ...o,
+        DeleteMarkers: [{ ...(o.DeleteMarkers as Row[])[0], Owner: { ID: "a".repeat(64) } }],
+      }),
+    ],
+    [
+      "same version ID",
+      (o: Row) => ({
+        ...o,
+        DeleteMarkers: [{ ...(o.DeleteMarkers as Row[])[0], VersionId: fixture().versionId }],
+      }),
+    ],
+  ])("rejects ambiguous or premature retirement: %s", async (_name, alter) => {
+    const state = setup();
+    state.overrides.ListObjectVersionsCommand = (_output, input) => alter(retiredPage(input));
+    await expect(state.ledger.inspectCompletedMarkers(afterRetirement)).rejects.toThrow(error);
+  });
+
   it("validates all retained versions and both exact policy identities, without cloud writes", async () => {
     const state = setup([fixture(2), fixture(1, true)]);
     const snapshot = await state.ledger.inspectCompletedMarkers(now);
@@ -329,7 +476,21 @@ describe("restore-only completed ledger version snapshots", () => {
       "ListObjectVersionsCommand",
       (o) => ({ ...o, IsTruncated: true, NextKeyMarker: fixture().key, NextVersionIdMarker: 42 }),
     ],
-    ["unrequested encoding", "ListObjectVersionsCommand", (o) => ({ ...o, EncodingType: "url" })],
+    [
+      "unsupported encoding",
+      "ListObjectVersionsCommand",
+      (o) => ({ ...o, EncodingType: "unknown" }),
+    ],
+    [
+      "malformed URL encoding",
+      "ListObjectVersionsCommand",
+      (o) => ({ ...o, EncodingType: "url", Prefix: "%zz" }),
+    ],
+    [
+      "double URL encoding",
+      "ListObjectVersionsCommand",
+      (o) => ({ ...o, EncodingType: "url", Prefix: "candidate-deletion-recovery%252F" }),
+    ],
     [
       "hidden common prefixes",
       "ListObjectVersionsCommand",

@@ -24,6 +24,10 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 
 ## D3 — High-quality application preparation
 
+D3-106 handles standard S3 URL encoding and authenticates retired deletion markers without skipping
+their deletion authority. 257 focused tests and consequential review pass; managed replay and live
+acceptance remain. [Evidence](evidence/d3-retired-deletion-markers-2026-10-10.md).
+
 D3-105 fixes backup-status/endpoint-tag observations found during managed primary recovery and adds
 explicit primary replay permission cleanup. Restoration and its encrypted safety backup are complete;
 primary basic safety/live writer checks pass without the isolated drift-proof sweep. Deletion replay
