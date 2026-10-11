@@ -47,4 +47,66 @@ $PrimaryRecovery=$false
 Reject { Assert-ReplayRecoveryMode ([pscustomobject]@{baselineMode='primary-recovery'}) $null } 'missing switch refuses before AWS'
 $PrimaryRecovery=$true
 Reject { Assert-ReplayRecoveryMode ([pscustomobject]@{baselineMode='dark-recovery'}) $null } 'isolated packet cannot become primary'
+# Exercise the primary-only composition with the real saved-plan and writer-input guards.
+. (Join-Path $PSScriptRoot '../lib/development-postgresql-dark-recovery.ps1')
+foreach ($name in @('Read-ReplayPlan','Assert-ReplayPrimaryBaseline')) {
+  $node=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq $name},$true)
+  . ([scriptblock]::Create($node.Extent.Text))
+}
+$terraformRoot='synthetic-development';$terraformPrivate='synthetic-private';$AwsProfile='synthetic'
+$script:hash='a'*64;$script:caller=$ExpectedAccountId;$script:liveWriter=$false;$script:drainChecks=0;$script:backendChecks=0
+$script:backendAccount=$ExpectedAccountId;$script:sse='aws:kms'
+$script:writerValues=[ordered]@{candidate_deletion_restore_role_enabled=$true;development_database_mode='restore';database_backup_retention_days=35;d2_community_runtime=@{enabled=$false};gateway_native_materials=$null;legacy_receipt_transition=$null;application_restore_reconciliation=$null}
+$writerFlags=@('serverless_runtime_enabled','ingestion_runtime_enabled','document_scan_mapping_enabled','document_scan_event_rule_enabled','job_retention_enabled','job_retention_schedule_enabled','privileged_audit_retention_enabled','privileged_audit_retention_schedule_enabled','native_cleanup_enabled','native_cleanup_schedule_enabled')
+foreach($name in $writerFlags){$script:writerValues[$name]=$false}
+foreach($name in @('native_resume_source_access_releases','native_preparation_releases','native_material_control_releases','native_resume_preparation_releases')){$script:writerValues[$name]=@{}}
+$script:actions=@('no-op')
+function Resolve-DeletionReplayPrivatePath { param($Path,$Root,[switch]$MustExist) return $Path }
+function Assert-DeletionReplayHash { param($Path,$Sha) if($Sha -cne $script:hash){throw 'ChangedSavedHash'} }
+function Get-DeploymentTerraformVersion { '1.16.2' }
+function Read-DeploymentTerraformPlan {
+  param($Path,$TerraformDirectory)
+  $variables=[ordered]@{};foreach($name in $script:writerValues.Keys){$variables[$name]=@{value=$script:writerValues[$name]}}
+  Clone @{terraform_version='1.16.2';variables=$variables;resource_changes=@(@{change=@{actions=$script:actions}})}
+}
+function Invoke-ReplayAws {
+  param($Arguments)
+  switch($Arguments[0]){
+    'sts' { Clone @{Account=$script:caller;Arn="arn:aws:sts::$script:caller`:assumed-role/Synthetic/Session"} }
+    's3api' { Clone @{ServerSideEncryptionConfiguration=@{Rules=@(@{ApplyServerSideEncryptionByDefault=@{SSEAlgorithm=$script:sse;KMSMasterKeyID="arn:aws:kms:us-east-2:$script:backendAccount`:key/11111111-1111-1111-1111-111111111111"}})}} }
+    default { throw 'UnexpectedAwsCall' }
+  }
+}
+function Assert-DeploymentTerraformBackend {
+  param($TerraformDirectory,$DataDirectory,$ExpectedBucket,$ExpectedKey,$ExpectedRegion,$ExpectedKmsKeyArn)
+  Assert ($ExpectedBucket -ceq 'synthetic-state' -and $ExpectedKey -ceq 'platform.tfstate' -and $ExpectedRegion -ceq 'us-east-2') 'exact backend binding retained'
+  $script:backendChecks++
+}
+function Assert-D1RestoreDarkWritersStopped { $script:drainChecks++;if($script:liveWriter){throw 'LiveWriterPresent'} }
+function Assert-D1RestoreDarkBaseline { throw 'FormalRecoverySweepMustNotRunForPrimary' }
+$preparation=[pscustomobject]@{accountId=$ExpectedAccountId;stateBucket='synthetic-state';runtimePlanPath='synthetic-plan';runtimePlanSha256=$script:hash}
+Assert-ReplayPrimaryBaseline $preparation
+Assert ($script:drainChecks -eq 1 -and $script:backendChecks -eq 1) 'primary uses actual writer and backend checks without isolated proof sweep'
+$script:caller='999999999999'
+Reject { Assert-ReplayPrimaryBaseline $preparation } 'wrong AWS account rejected'
+$script:caller=$ExpectedAccountId
+$bad=Clone $preparation;$bad.runtimePlanSha256='b'*64
+Reject { Assert-ReplayPrimaryBaseline $bad } 'changed saved plan hash rejected'
+$script:actions=@('update')
+Reject { Assert-ReplayPrimaryBaseline $preparation } 'nonzero saved plan rejected'
+$script:actions=@('no-op')
+foreach($name in $writerFlags){
+  $script:writerValues[$name]='true'
+  Reject { Assert-ReplayPrimaryBaseline $preparation } "writer gate rejected $name"
+  $script:writerValues[$name]='false'
+}
+Assert-ReplayPrimaryBaseline $preparation
+Assert $true 'equivalent canonical false strings retain writer exclusion'
+$script:backendAccount='999999999999'
+Reject { Assert-ReplayPrimaryBaseline $preparation } 'foreign backend KMS key rejected'
+$script:backendAccount=$ExpectedAccountId;$script:sse='AES256'
+Reject { Assert-ReplayPrimaryBaseline $preparation } 'backend must retain exact KMS encryption'
+$script:sse='aws:kms'
+$script:liveWriter=$true
+Reject { Assert-ReplayPrimaryBaseline $preparation } 'fresh live writer drain failure refuses admission'
 [pscustomobject]@{suite='development-primary-deletion-recovery';checksPassed=$script:checks;cloudCalls=0} | ConvertTo-Json -Compress

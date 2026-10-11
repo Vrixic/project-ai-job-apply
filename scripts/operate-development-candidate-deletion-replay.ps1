@@ -122,16 +122,30 @@ function Get-ReplayBoundFiles([string]$PlanPath) {
 }
 
 function Assert-ReplayPrimaryBaseline([object]$Preparation) {
-  # Reuse the maintained exact-input, encrypted-backend and writer-drain checks;
-  # no PITR context, restore rehearsal or whole-data attestation is involved.
-  $Environment = 'development'; $Region = 'us-east-2'
+  # Primary recovery needs target/backup safety and fresh writer exclusion, not
+  # the isolated recovery path's whole-Terraform observed-drift proof sweep.
+  $Region = 'us-east-2'
   $ExpectedAccountId = $Preparation.accountId; $StateBucket = $Preparation.stateBucket
-  $RuntimePlanPath = $Preparation.runtimePlanPath
-  $environmentDirectory = $terraformRoot; $terraformDataDirectory = $terraformPrivate
   $env:AWS_PROFILE = $AwsProfile; $env:AWS_REGION = $Region; $env:AWS_DEFAULT_REGION = $Region
-  function Assert-CurrentAwsCaller { Assert-D1RestoreAwsCallerBoundary (Invoke-ReplayAws @('sts','get-caller-identity')) $ExpectedAccountId }
   function Invoke-AwsJson([string[]]$Arguments) { Invoke-ReplayAws $Arguments }
-  $null = Assert-D1RestoreDarkBaseline
+  Assert-D1RestoreAwsCallerBoundary (Invoke-ReplayAws @('sts','get-caller-identity')) $ExpectedAccountId
+  $plan = Read-ReplayPlan $Preparation.runtimePlanPath $Preparation.runtimePlanSha256
+  $values = [pscustomobject]@{}
+  foreach ($property in $plan.variables.PSObject.Properties) {
+    Assert-D1RestoreExactObjectKeys $property.Value @('value') 'Primary recovery input binding'
+    $values | Add-Member -NotePropertyName $property.Name -NotePropertyValue $property.Value.value
+  }
+  Assert-D1RestoreDarkWriterInputs $values
+  $encryption = Invoke-ReplayAws @('s3api','get-bucket-encryption','--bucket',$StateBucket,'--expected-bucket-owner',$ExpectedAccountId)
+  $rules = @($encryption.ServerSideEncryptionConfiguration.Rules)
+  if ($rules.Count -ne 1 -or $rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm -cne 'aws:kms' -or
+      $rules[0].ApplyServerSideEncryptionByDefault.KMSMasterKeyID -cnotmatch "^arn:aws:kms:us-east-2:$ExpectedAccountId`:key/[a-f0-9-]{36}$") {
+    throw 'DeletionReplayPrimaryBackendRejected'
+  }
+  Assert-DeploymentTerraformBackend -TerraformDirectory $terraformRoot -DataDirectory $terraformPrivate `
+    -ExpectedBucket $StateBucket -ExpectedKey 'platform.tfstate' -ExpectedRegion $Region `
+    -ExpectedKmsKeyArn $rules[0].ApplyServerSideEncryptionByDefault.KMSMasterKeyID
+  Assert-D1RestoreDarkWritersStopped
 }
 
 function Assert-ReplayPrimaryDatabase([object]$Database, [object]$Snapshot, [string]$SnapshotId) {
