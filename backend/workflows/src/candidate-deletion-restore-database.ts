@@ -1,3 +1,4 @@
+import type { ReconciledCopyConfiguration } from "./candidate-deletion-reconciled-copy-contract.js";
 import type { CandidateDeletionRestoreConfiguration } from "./candidate-deletion-restore-contract.js";
 
 const MAXIMUM_SECRET_BYTES = 16_384;
@@ -113,6 +114,58 @@ export async function resolveRestoredDatabaseUrl(
   signal: AbortSignal,
   fetcher: typeof fetch = fetch,
 ): Promise<string> {
+  return resolveBoundDatabaseUrl(configuration, environment, signal, fetcher, false);
+}
+
+/** Separate read-only recovery path; it cannot weaken the original isolated replay guard. */
+export async function resolveReconciledCopyDatabaseUrl(
+  configuration: ReconciledCopyConfiguration,
+  environment: Readonly<Record<string, string | undefined>>,
+  signal: AbortSignal,
+  fetcher: typeof fetch = fetch,
+): Promise<string> {
+  if (
+    (configuration.mode !== "reconciled_isolated" && configuration.mode !== "promoted_primary") ||
+    (configuration.mode === "promoted_primary"
+      ? configuration.targetIdentifier !== "ai-job-apply-development"
+      : !/^ai-job-apply-development-restore-[0-9]{14}$/u.test(configuration.targetIdentifier))
+  )
+    rejected();
+  return resolveBoundDatabaseUrl(
+    {
+      accountId: configuration.accountId,
+      region: configuration.region,
+      sourceIdentifier: "ai-job-apply-development",
+      sourceHostname: `ai-job-apply-development.${configuration.targetHostname.split(".").slice(1).join(".")}`,
+      targetIdentifier: configuration.targetIdentifier,
+      targetHostname: configuration.targetHostname,
+      databaseName: "ai_job_apply",
+      databasePort: 5432,
+    },
+    environment,
+    signal,
+    fetcher,
+    configuration.mode === "promoted_primary",
+  );
+}
+
+async function resolveBoundDatabaseUrl(
+  configuration: Pick<
+    CandidateDeletionRestoreConfiguration,
+    | "accountId"
+    | "region"
+    | "sourceIdentifier"
+    | "sourceHostname"
+    | "targetIdentifier"
+    | "targetHostname"
+    | "databaseName"
+    | "databasePort"
+  >,
+  environment: Readonly<Record<string, string | undefined>>,
+  signal: AbortSignal,
+  fetcher: typeof fetch,
+  promotedPrimary: boolean,
+): Promise<string> {
   try {
     if (signal.aborted) rejected();
     for (const [key, value] of Object.entries(environment)) {
@@ -133,13 +186,15 @@ export async function resolveRestoredDatabaseUrl(
       configuration.databasePort !== 5432 ||
       region !== "us-east-2" ||
       !/^[0-9]{12}$/u.test(accountId) ||
-      sourceHostname === targetHostname ||
+      (promotedPrimary ? sourceHostname !== targetHostname : sourceHostname === targetHostname) ||
       !/^ai-job-apply-development\.[a-z0-9]+\.us-east-2\.rds\.amazonaws\.com$/u.test(
         sourceHostname,
       ) ||
-      !/^ai-job-apply-development-restore-[0-9]{14}\.[a-z0-9]+\.us-east-2\.rds\.amazonaws\.com$/u.test(
-        targetHostname,
-      ) ||
+      !(
+        promotedPrimary
+          ? /^ai-job-apply-development\.[a-z0-9]+\.us-east-2\.rds\.amazonaws\.com$/u
+          : /^ai-job-apply-development-restore-[0-9]{14}\.[a-z0-9]+\.us-east-2\.rds\.amazonaws\.com$/u
+      ).test(targetHostname) ||
       sourceHostname !==
         `${configuration.sourceIdentifier}.${sourceHostname.split(".").slice(1).join(".")}` ||
       targetHostname !==
@@ -229,7 +284,7 @@ export async function resolveRestoredDatabaseUrl(
     source.hostname = targetHostname;
     if (
       source.hostname !== targetHostname ||
-      source.hostname === sourceHostname ||
+      (!promotedPrimary && source.hostname === sourceHostname) ||
       deadline.aborted
     )
       rejected();

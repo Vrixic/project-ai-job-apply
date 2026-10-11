@@ -379,6 +379,9 @@ importers:
       '@ai-job-apply/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@ai-job-apply/database-migrations':
+        specifier: workspace:*
+        version: link:../services/database-migrations
       '@ai-job-apply/documents-service':
         specifier: workspace:*
         version: link:../services/documents

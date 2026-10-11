@@ -8,6 +8,7 @@
     "restore-manifest.v1.json"
   ],
   "exports": {
+    "./restore-manifest.json": "./restore-manifest.v1.json",
     "./restore-verifier": {
       "types": "./dist/src/restore-verifier.d.ts",
       "default": "./dist/src/restore-verifier.js"

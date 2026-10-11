@@ -24,6 +24,12 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 
 ## D3 — High-quality application preparation
 
+D3-102 completes repository runtime implementation with fresh admission and document continuity.
+207 focused tests, packaged default-off refusal, all 43 repository stages and the simulated browser
+journey pass. Guarded operator/result validation, managed recovery/promotion and live acceptance
+remain internal work; independent D1/admin acceptance stays deferred.
+[Evidence](evidence/d3-reconciled-copy-runtime-2026-10-10.md).
+
 D3-099 transactional replay preservation passes 348 focused tests, 790 operator assertions,
 11 real PostgreSQL regressions, independent review and all 43 repository stages. The simulated
 connected browser journey passes; development, Docker and WSL are off with recovery data retained.

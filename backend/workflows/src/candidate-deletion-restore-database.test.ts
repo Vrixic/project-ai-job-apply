@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { reconciledRuntimeFixture } from "./candidate-deletion-reconciled-copy-runtime.fixture.js";
 import type { CandidateDeletionRestoreConfiguration } from "./candidate-deletion-restore-contract.js";
-import { resolveRestoredDatabaseUrl } from "./candidate-deletion-restore-database.js";
+import {
+  resolveReconciledCopyDatabaseUrl,
+  resolveRestoredDatabaseUrl,
+} from "./candidate-deletion-restore-database.js";
 
 const configuration = {
   sourceIdentifier: "ai-job-apply-development",
@@ -22,6 +26,44 @@ const environment = {
 const signal = () => new AbortController().signal;
 const response = (value: unknown) => new Response(JSON.stringify(value));
 const error = "CandidateDeletionRestoreDatabaseResolutionRejected";
+
+describe("separate reconciled-copy database binding", () => {
+  it.each(["reconciled_isolated", "promoted_primary"] as const)(
+    "resolves only the exact %s target",
+    async (mode) => {
+      const f = reconciledRuntimeFixture();
+      const config = { ...f.configuration, mode };
+      const primary = "ai-job-apply-development.example.us-east-2.rds.amazonaws.com";
+      if (mode === "promoted_primary") {
+        config.targetIdentifier = "ai-job-apply-development";
+        config.targetHostname = primary;
+      }
+      const url = `postgres://platform:syntheticPassword@${primary}:5432/ai_job_apply?sslmode=require`;
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({ SecretString: url }));
+      const resolved = await resolveReconciledCopyDatabaseUrl(
+        config,
+        { ...f.environment, AWS_SESSION_TOKEN: "synthetic-token" },
+        signal(),
+        fetcher,
+      );
+      expect(new URL(resolved).hostname).toBe(config.targetHostname);
+      expect(fetcher).toHaveBeenCalledOnce();
+    },
+  );
+  it("rejects a primary target under isolated mode before secret access", async () => {
+    const f = reconciledRuntimeFixture();
+    const fetcher = vi.fn<typeof fetch>();
+    await expect(
+      resolveReconciledCopyDatabaseUrl(
+        { ...f.configuration, targetIdentifier: "ai-job-apply-development" },
+        f.environment,
+        signal(),
+        fetcher,
+      ),
+    ).rejects.toThrow(error);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});
 
 describe("restore-only database secret resolver", () => {
   it("reads only the local extension and substitutes only the authenticated target hostname", async () => {

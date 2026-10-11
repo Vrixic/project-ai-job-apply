@@ -16,6 +16,7 @@
     "build:lambda:applications-attempt-recovery": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-applications-attempt-recovery-lambda.mjs",
     "build:lambda:d2-community": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-d2-community-lambda.mjs",
     "build:lambda:deletion-restore": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-candidate-deletion-restore-lambda.mjs",
+    "build:lambda:reconciled-copy": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-candidate-deletion-reconciled-copy-lambda.mjs",
     "build:lambda:ingestion": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-ingestion-lambdas.mjs",
     "build:lambda:ingress": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-workflow-ingress-lambda.mjs",
     "build:lambda:profile": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-profile-readiness-lambdas.mjs",
@@ -41,6 +42,7 @@
     "build:lambda:native-material-control-family": "pnpm --filter @ai-job-apply/workflows... build && node ../../scripts/build-native-material-control-family.mjs"
   },
   "dependencies": {
+    "@ai-job-apply/database-migrations": "workspace:*",
     "@ai-job-apply/ai-sdk": "workspace:*",
     "@ai-job-apply/api-contracts": "workspace:*",
     "@ai-job-apply/applications-service": "workspace:*",

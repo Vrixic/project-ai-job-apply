@@ -2,10 +2,13 @@ import { fileURLToPath } from "node:url";
 import type { DatabaseHandle } from "@ai-job-apply/profile-service";
 import { build } from "esbuild";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { verifyReconciledCandidateDeletionCopy } from "./candidate-deletion-reconciled-copy.js";
 import {
-  restoreInspectionSha256,
+  verifyReconciledCandidateDeletionCopy,
+  verifyReconciledCandidateDeletionCopyWithDocumentContinuity,
+} from "./candidate-deletion-reconciled-copy.js";
+import {
   type CandidateDeletionRestoreReplayResult,
+  restoreInspectionSha256,
 } from "./candidate-deletion-restore-contract.js";
 import {
   ACCEPTED_CANDIDATE_DELETION_POLICIES,
@@ -289,5 +292,217 @@ describe("separate read-only reconciled-copy verification", () => {
     expect(bundle.outputFiles[0]?.text).not.toMatch(
       /\.delete_candidate_data|EncryptCommand|PutObjectCommand|DeleteObjectCommand|PutObjectTaggingCommand/u,
     );
+  });
+});
+
+describe("reconciled copy with document continuity", () => {
+  const issuedAt = "2026-09-01T00:00:00.000Z";
+  const error = "CandidateDeletionReconciledCopyRejected";
+  const evidence = () => ({ sha256: "a".repeat(64), versionsObserved: 2 });
+  const documents = () => ({ inspectReplayDocumentContinuity: vi.fn(async () => evidence()) });
+  afterEach(() => vi.useRealTimers());
+
+  it("brackets read-only SQL with metadata scans and rechecks markers after the final scan", async () => {
+    const h = setup(),
+      docs = documents(),
+      receipt = await h.receipt();
+    const result = await verifyReconciledCandidateDeletionCopyWithDocumentContinuity(
+      h.database,
+      h.ledger,
+      docs,
+      receipt,
+      issuedAt,
+    );
+    expect(result.documentContinuitySha256).toBe(evidence().sha256);
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(docs.inspectReplayDocumentContinuity).toHaveBeenCalledTimes(2);
+    const scans = docs.inspectReplayDocumentContinuity.mock.invocationCallOrder;
+    expect(scans[0]).toBeLessThan(h.begin.mock.invocationCallOrder[0] ?? 0);
+    expect(scans[1]).toBeGreaterThan(h.begin.mock.invocationCallOrder[0] ?? 0);
+    expect(h.ledger.inspectCompletedMarkers.mock.invocationCallOrder[1]).toBeGreaterThan(
+      scans[1] ?? 0,
+    );
+    expect(h.ledger.assertUnchanged).toHaveBeenCalledTimes(2);
+    expect(h.begin).toHaveBeenCalledWith(
+      "read only isolation level repeatable read",
+      expect.any(Function),
+    );
+    expect(h.queries.join("\n")).not.toMatch(/DELETE|UPDATE|INSERT/u);
+  });
+
+  it.each(["hash", "count", "new-object", "marker-during-final-scan", "marker-after-final-scan"])(
+    "refuses %s without aggregate success",
+    async (fault) => {
+      const h = setup(),
+        docs = documents(),
+        receipt = await h.receipt();
+      docs.inspectReplayDocumentContinuity
+        .mockImplementationOnce(async () => evidence())
+        .mockImplementationOnce(async () => {
+          if (fault === "new-object") throw new Error("raw-private-object-key");
+          if (fault === "marker-during-final-scan")
+            h.ledger.inspectCompletedMarkers.mockResolvedValueOnce({
+              ...h.snapshot,
+              sha256: "b".repeat(64),
+            });
+          if (fault === "marker-after-final-scan")
+            h.ledger.assertUnchanged.mockRejectedValueOnce(new Error("raw-private-marker"));
+          return {
+            sha256: (fault === "hash" ? "b" : "a").repeat(64),
+            versionsObserved: fault === "count" ? 3 : 2,
+          };
+        });
+      await expect(
+        verifyReconciledCandidateDeletionCopyWithDocumentContinuity(
+          h.database,
+          h.ledger,
+          docs,
+          receipt,
+          issuedAt,
+        ),
+      ).rejects.toThrow(error);
+    },
+  );
+
+  it("detaches caller receipt and continuity output across asynchronous boundaries", async () => {
+    const h = setup(),
+      docs = documents(),
+      receipt = await h.receipt(),
+      before = evidence();
+    docs.inspectReplayDocumentContinuity
+      .mockResolvedValueOnce(before)
+      .mockImplementationOnce(async () => {
+        before.sha256 = "c".repeat(64);
+        return evidence();
+      });
+    h.ledger.inspectCompletedMarkers.mockImplementationOnce(async () => {
+      receipt.markerSnapshotSha256 = "f".repeat(64);
+      return h.snapshot;
+    });
+    expect(
+      (
+        await verifyReconciledCandidateDeletionCopyWithDocumentContinuity(
+          h.database,
+          h.ledger,
+          docs,
+          receipt,
+          issuedAt,
+        )
+      ).documentContinuitySha256,
+    ).toBe("a".repeat(64));
+  });
+
+  it.each(["future", "noncanonical", "after-expiry", "overlong", "bad-receipt"])(
+    "refuses %s before object or database access",
+    async (fault) => {
+      const h = setup(),
+        docs = documents(),
+        receipt = await h.receipt();
+      let cutoff = issuedAt;
+      if (fault === "future") cutoff = "2999-01-01T00:00:00.000Z";
+      if (fault === "noncanonical") cutoff = "2026-09-01T00:00:00Z";
+      if (fault === "after-expiry") cutoff = receipt.expiresAt;
+      if (fault === "overlong") cutoff = "2026-08-31T23:59:59.999Z";
+      if (fault === "bad-receipt") Object.assign(receipt, { extra: true });
+      await expect(
+        verifyReconciledCandidateDeletionCopyWithDocumentContinuity(
+          h.database,
+          h.ledger,
+          docs,
+          receipt,
+          cutoff,
+        ),
+      ).rejects.toThrow(error);
+      expect(docs.inspectReplayDocumentContinuity).not.toHaveBeenCalled();
+      expect(h.begin).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["negative", "too-many", "extra", "bad-hash"])(
+    "refuses malformed continuity evidence %s",
+    async (fault) => {
+      const h = setup(),
+        docs = documents(),
+        receipt = await h.receipt();
+      const malformed = evidence();
+      if (fault === "negative") malformed.versionsObserved = -1;
+      if (fault === "too-many") malformed.versionsObserved = 10_001;
+      if (fault === "bad-hash") malformed.sha256 = "raw-private-key";
+      if (fault === "extra") Object.assign(malformed, { key: "raw-private-key" });
+      docs.inspectReplayDocumentContinuity.mockResolvedValueOnce(malformed);
+      await expect(
+        verifyReconciledCandidateDeletionCopyWithDocumentContinuity(
+          h.database,
+          h.ledger,
+          docs,
+          receipt,
+          issuedAt,
+        ),
+      ).rejects.toThrow(error);
+      expect(h.begin).not.toHaveBeenCalled();
+    },
+  );
+
+  it("bounds all phases together and checks wall-clock expiry even without timer delivery", async () => {
+    for (const stage of ["before", "after", "marker", "late-clock"] as const) {
+      vi.useFakeTimers();
+      const h = setup(),
+        docs = documents(),
+        receipt = await h.receipt();
+      if (stage === "before")
+        docs.inspectReplayDocumentContinuity.mockImplementationOnce(
+          () => new Promise(() => undefined),
+        );
+      if (stage === "after")
+        docs.inspectReplayDocumentContinuity
+          .mockResolvedValueOnce(evidence())
+          .mockImplementationOnce(() => new Promise(() => undefined));
+      if (stage === "marker")
+        h.ledger.inspectCompletedMarkers
+          .mockResolvedValueOnce(h.snapshot)
+          .mockImplementationOnce(() => new Promise(() => undefined));
+      if (stage === "late-clock")
+        docs.inspectReplayDocumentContinuity.mockImplementationOnce(async () => {
+          vi.setSystemTime(Date.now() + 90_001);
+          return evidence();
+        });
+      const refused = expect(
+        verifyReconciledCandidateDeletionCopyWithDocumentContinuity(
+          h.database,
+          h.ledger,
+          docs,
+          receipt,
+          issuedAt,
+        ),
+      ).rejects.toThrow(error);
+      await vi.advanceTimersByTimeAsync(90_001);
+      await refused;
+      vi.useRealTimers();
+    }
+  });
+
+  it("honors cancellation during a stalled final scan and never replays SQL", async () => {
+    const h = setup(),
+      docs = documents(),
+      receipt = await h.receipt(),
+      controller = new AbortController();
+    docs.inspectReplayDocumentContinuity
+      .mockResolvedValueOnce(evidence())
+      .mockImplementationOnce(() => new Promise(() => undefined));
+    const refused = expect(
+      verifyReconciledCandidateDeletionCopyWithDocumentContinuity(
+        h.database,
+        h.ledger,
+        docs,
+        receipt,
+        issuedAt,
+        controller.signal,
+      ),
+    ).rejects.toThrow(error);
+    await vi.waitFor(() => expect(docs.inspectReplayDocumentContinuity).toHaveBeenCalledTimes(2));
+    controller.abort();
+    await refused;
+    expect(h.begin).toHaveBeenCalledTimes(1);
+    expect(h.ledger.inspectCompletedMarkers).toHaveBeenCalledTimes(1);
   });
 });
