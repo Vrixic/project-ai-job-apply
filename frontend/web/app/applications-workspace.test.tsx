@@ -5,6 +5,7 @@ import axe from "axe-core";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { APPLICATIONS_CHANGED_EVENT } from "../lib/applications-client";
 import { ApplicationsWorkspace } from "./applications-workspace";
 
 const APP = "00000000-0000-7000-8000-000000000001";
@@ -110,6 +111,74 @@ async function mount(
 }
 
 describe("ApplicationsWorkspace", () => {
+  it("refreshes extension confirmation on return and notifies application history", async () => {
+    const current = application({
+      status: "submitting",
+      currentAction: "submission_in_progress",
+      revision: 3,
+    });
+    const applied = application({ status: "applied", currentAction: "none", revision: 4 });
+    const send = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(respond(current))
+      .mockResolvedValueOnce(respond(applied));
+    const historyChanged = vi.fn();
+    window.addEventListener(APPLICATIONS_CHANGED_EVENT, historyChanged);
+    try {
+      await mount(send, undefined, false, APP);
+      await act(async () => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send.mock.calls[1]?.[0]).toBe(`/api/platform/applications/${APP}`);
+      expect(historyChanged).toHaveBeenCalledTimes(1);
+      expect(container.textContent).toContain("Submitted and confirmed.");
+    } finally {
+      window.removeEventListener(APPLICATIONS_CHANGED_EVENT, historyChanged);
+    }
+  });
+
+  it.each(["foreign", "stale"])(
+    "deduplicates return refresh and refuses %s application state",
+    async (mode) => {
+      const current = application({
+        status: "submitting",
+        currentAction: "submission_in_progress",
+        revision: 3,
+      });
+      let resolveRead: ((response: Response) => void) | undefined;
+      const send = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(respond(current))
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveRead = resolve;
+            }),
+        );
+      await mount(send, undefined, false, APP);
+      await act(async () => {
+        window.dispatchEvent(new Event("focus"));
+        window.dispatchEvent(new Event("focus"));
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(send).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        resolveRead?.(
+          respond(
+            application({
+              id: mode === "foreign" ? JOB : APP,
+              revision: mode === "stale" ? 2 : 4,
+              status: "applied",
+              currentAction: "none",
+            }),
+          ),
+        );
+      });
+      expect(container.textContent).toContain("A submission is in progress.");
+    },
+  );
+
   it.each(["another field", "selected field"])(
     "preserves prior entries/form and replaces only an explicitly edited %s",
     async (kind) => {

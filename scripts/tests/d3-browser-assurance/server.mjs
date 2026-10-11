@@ -31,7 +31,7 @@ export async function startD3BrowserAssuranceServer() {
     legalComments: "none",
     define: {
       "process.env":
-        '{"NODE_ENV":"test","NEXT_PUBLIC_APPLICATION_EXTENSION_HANDOFF":"enabled","NEXT_PUBLIC_APPLICATIONS_UI":"enabled","NEXT_PUBLIC_COVER_LETTER_PREPARATION_UI":"enabled","NEXT_PUBLIC_NATIVE_MATERIAL_UI":"enabled","NEXT_PUBLIC_NATIVE_AUTH0_DOMAIN":"identity.example.test","NEXT_PUBLIC_NATIVE_AUTH0_CLIENT_ID":"synthetic-client","NEXT_PUBLIC_NATIVE_MATERIAL_BASE_HOST":"materials.example.test"}',
+        '{"NODE_ENV":"test","NEXT_PUBLIC_APPLICATION_EXTENSION_HANDOFF":"enabled","NEXT_PUBLIC_APPLICATIONS_UI":"enabled","NEXT_PUBLIC_COVER_LETTER_PREPARATION_UI":"enabled","NEXT_PUBLIC_NATIVE_MATERIAL_UI":"enabled","NEXT_PUBLIC_NATIVE_AUTH0_DOMAIN":"identity.example.test","NEXT_PUBLIC_NATIVE_AUTH0_CLIENT_ID":"synthetic-client","NEXT_PUBLIC_NATIVE_MATERIAL_BASE_HOST":"materials.example.test","NEXT_PUBLIC_APPLICATION_EXTENSION_TRANSFER_ENABLED":"true","NEXT_PUBLIC_APPLICATION_EXTENSION_ID":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}',
     },
   });
   const assets = new Map([

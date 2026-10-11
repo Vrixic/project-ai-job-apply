@@ -2,6 +2,9 @@ import { CAPTURE_FIELDS, type CaptureField } from "./job-capture";
 import type { JobIntentKind } from "./pending-queue";
 
 export type ExtensionMessage =
+  | { action: "application_native_select"; reviewLink: string }
+  | { action: "application_native_apply"; reviewLink: string }
+  | { action: "application_native_clear" }
   | { action: "application_form_capture"; reviewLink: string }
   | { action: "application_handoff_read"; reviewLink: string }
   | { action: "application_handoff_copy"; snapshotId: string; fieldKey: string; confirmed: true }
@@ -36,6 +39,8 @@ export function parseExtensionMessage(value: unknown): ExtensionMessage | undefi
   if (typeof record.action !== "string") return undefined;
   if (
     record.action === "application_handoff_read" ||
+    record.action === "application_native_select" ||
+    record.action === "application_native_apply" ||
     record.action === "application_form_capture"
   ) {
     return Object.keys(record).length === 2 &&
@@ -65,6 +70,7 @@ export function parseExtensionMessage(value: unknown): ExtensionMessage | undefi
     [
       "capture",
       "application_handoff_clear",
+      "application_native_clear",
       "clear_queue",
       "clear_stopped",
       "login",

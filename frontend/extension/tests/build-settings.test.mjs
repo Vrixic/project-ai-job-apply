@@ -1,11 +1,55 @@
 import { describe, expect, it } from "vitest";
 import {
+  applicationExecutionForBuild,
   applicationHandoffOriginForBuild,
   assertStoreContributionMode,
   capabilityPolicyPublicKeysForBuild,
   developmentContributionProvidersForBuild,
   parseDevelopmentContributions,
 } from "../build-settings.mjs";
+
+describe("separate application execution build boundary", () => {
+  it("defaults off and cannot reuse an absent manual handoff origin", () => {
+    expect(applicationExecutionForBuild({}, {}, "")).toBe(false);
+    expect(
+      applicationExecutionForBuild(
+        { EXTENSION_APPLICATION_EXECUTION_ENABLED: "false" },
+        {},
+        "https://candidate.example",
+      ),
+    ).toBe(false);
+    expect(() =>
+      applicationExecutionForBuild({ EXTENSION_APPLICATION_EXECUTION_ENABLED: "true" }, {}, ""),
+    ).toThrow();
+    expect(
+      applicationExecutionForBuild(
+        {},
+        { EXTENSION_APPLICATION_EXECUTION_ENABLED: "true" },
+        "https://candidate.example",
+      ),
+    ).toBe(true);
+  });
+  it.each(["", "TRUE", "enabled", true])("rejects invalid execution opt-in %j", (value) => {
+    expect(() =>
+      applicationExecutionForBuild(
+        { EXTENSION_APPLICATION_EXECUTION_ENABLED: value },
+        {},
+        "https://candidate.example",
+      ),
+    ).toThrow();
+  });
+  it("rejects store execution even when the other source masks enablement", () => {
+    const enabled = {
+      EXTENSION_APPLICATION_EXECUTION_ENABLED: "true",
+      EXTENSION_APPLICATION_HANDOFF_ENABLED: "true",
+      EXTENSION_APPLICATION_HANDOFF_WEB_ORIGIN: "https://candidate.example",
+    };
+    expect(() =>
+      assertStoreContributionMode({ EXTENSION_APPLICATION_EXECUTION_ENABLED: "false" }, enabled),
+    ).toThrow("unpacked-only");
+    expect(() => assertStoreContributionMode(enabled, {})).toThrow("unpacked-only");
+  });
+});
 
 describe("manual application handoff build boundary", () => {
   const enabled = {

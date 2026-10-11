@@ -1,0 +1,321 @@
+import { createHash } from "node:crypto";
+import type {
+  ApplicationAttempt,
+  ApplicationExecutionCommand,
+  ApplicationSubmissionResultRequest,
+} from "@ai-job-apply/api-contracts";
+import { activeJobRevisionDigestInput } from "@ai-job-apply/api-contracts/job-revision-canonical";
+import { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
+import { afterEach, expect, it, vi } from "vitest";
+import { executeApprovedApplication } from "../lib/application-executor";
+import type { NativeTransferSelection } from "../lib/native-material-transfer";
+import { APP, handoffFixture, LINK } from "./application-handoff-fixture";
+
+const profile = vi.hoisted(() => ({
+  variantId: "synthetic-only",
+  adapterVersion: "0.1.0",
+  implementationSha256: "c".repeat(64),
+  submitSelector: "#submit",
+  confirmationSelector: "#confirmation",
+  confirmationReferenceAttribute: "data-reference",
+}));
+vi.mock("../lib/greenhouse/profiles", () => ({ greenhouseExecutionProfile: () => profile }));
+const EMPLOYER = "https://boards.greenhouse.io/synthetic/jobs/123";
+const DOCUMENT = "00000000-0000-7000-8000-000000000007";
+const ATTEMPT = "00000000-0000-7000-8000-000000000009";
+const json = (body: unknown) => Response.json(body, { headers: { "cache-control": "no-store" } });
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+function setup(mode = "success") {
+  const fixture = handoffFixture();
+  const application = fixture.application;
+  const packet = application.currentPacket;
+  const material = packet?.temporaryMaterials?.[0];
+  const approval = application.approval;
+  if (!packet || !material || !approval || !fixture.job.sources[0])
+    throw Error("Fixture incomplete");
+  fixture.job.sources[0].canonicalUrl = EMPLOYER;
+  packet.jobRevision = createHash("sha256")
+    .update(activeJobRevisionDigestInput(fixture.job))
+    .digest("hex");
+  packet.form = {
+    adapterId: "greenhouse-application-v1",
+    variantId: profile.variantId,
+    formHash: "e".repeat(64),
+  };
+  const selection: NativeTransferSelection = {
+    applicationId: APP,
+    packetId: packet.id,
+    packetHash: packet.packetHash,
+    approvalId: approval.id,
+    revision: application.revision,
+    approvalExpiresAtMs: Date.parse(approval.expiresAt),
+    materials: [structuredClone(material)],
+    reviewLink: LINK,
+    jobId: application.canonicalJobId,
+    ownerFence: "synthetic-owner",
+    tabId: 7,
+    documentId: DOCUMENT,
+    employerUrl: EMPLOYER,
+    variantId: profile.variantId,
+  };
+  const registry = new AdapterRegistry([
+    {
+      id: "greenhouse-application-v1",
+      provider: "greenhouse",
+      version: profile.adapterVersion,
+      variants: [profile.variantId],
+      capabilities: { autofill: true, fileAttach: true, confirmationDetection: true },
+    },
+  ]);
+  vi.spyOn(registry, "executionStatus").mockReturnValue({ mode: "autofill", reasons: [] });
+  const controller = new AbortController();
+  const posts: string[] = [];
+  const results: ApplicationSubmissionResultRequest[] = [];
+  const listeners = new Set<Parameters<typeof chrome.runtime.onMessage.addListener>[0]>();
+  const commands: ApplicationExecutionCommand[] = [];
+  const wireCommands: ApplicationExecutionCommand[] = [];
+  let attempt: ApplicationAttempt | undefined;
+  const send = vi.fn(async (url: URL | RequestInfo, options?: RequestInit) => {
+    const path = new URL(String(url)).pathname;
+    if (options?.method !== "POST") {
+      if (path.includes("/authorization"))
+        return json(
+          mode === "withdrawn" && posts.some((path) => path.endsWith("/dispatch"))
+            ? {}
+            : fixture.proof,
+        );
+      if (path.startsWith("/v1/jobs/")) return json(fixture.job);
+      if (mode === "changed-attempt" && attempt?.status === "started")
+        return json({
+          ...application,
+          attempts: [{ ...attempt, startedAt: new Date(Date.now() - 10_000).toISOString() }],
+        });
+      return json(application);
+    }
+    posts.push(path);
+    if (path.endsWith("/submissions")) {
+      attempt = {
+        id: ATTEMPT,
+        sequence: 2,
+        status: "started",
+        adapterId: "greenhouse-application-v1",
+        adapterVersion: profile.adapterVersion,
+        startedAt: new Date().toISOString(),
+      };
+      application.status = "submitting";
+      application.currentAction = "submission_in_progress";
+      application.revision++;
+      delete application.approval;
+      application.attempts = [attempt];
+      if (mode === "historical-confirmed")
+        application.attempts.unshift({
+          ...attempt,
+          id: "00000000-0000-7000-8000-000000000010",
+          sequence: 1,
+          status: "confirmed",
+        });
+      return json({ outcome: "started", attemptId: ATTEMPT, application });
+    }
+    if (!attempt) throw Error("Attempt missing");
+    if (path.endsWith("/dispatch")) {
+      attempt.status = "dispatched";
+      attempt.dispatchedAt = new Date().toISOString();
+      if (mode === "lost-dispatch")
+        throw Error("Lost dispatch acknowledgement after durable write");
+      return json(attempt);
+    }
+    const result = JSON.parse(String(options.body)) as ApplicationSubmissionResultRequest;
+    results.push(result);
+    attempt.status = result.kind === "confirmed" ? "confirmed" : "ambiguous";
+    attempt.resolvedAt = new Date().toISOString();
+    application.status = result.kind === "confirmed" ? "applied" : "reconciliation_required";
+    application.currentAction = result.kind === "confirmed" ? "none" : "confirm_submission_status";
+    if (result.kind === "confirmed")
+      attempt.confirmation = {
+        kind: result.confirmation.kind,
+        observedAt: result.confirmation.observedAt,
+      };
+    if (mode === "lost-result") throw Error("Lost result acknowledgement after durable write");
+    if (mode === "wrong-terminal-time")
+      attempt.dispatchedAt = new Date(Date.now() - 60_000).toISOString();
+    return json(application);
+  });
+  vi.stubGlobal("fetch", send);
+  const sendMessage = vi.fn(
+    async (_tab: number, message: { schema: string; nonce?: string }, target: unknown) => {
+      expect(target).toEqual({ documentId: DOCUMENT, frameId: 0 });
+      if (message.schema === "application-execution-cancel.v1") return { ok: true };
+      if (message.schema === "application-execution-inspect.v1")
+        return {
+          schema: "application-execution-inspection.v1",
+          nonce: message.nonce,
+          formHash: packet.form?.formHash,
+          challengePresent: false,
+        };
+      const command = message as ApplicationExecutionCommand;
+      commands.push(command);
+      wireCommands.push(structuredClone(command));
+      expect(posts.filter((path) => path.endsWith("/dispatch"))).toHaveLength(1);
+      expect(command.fields.map((field) => field.fieldKey)).toEqual(["contact.email"]);
+      expect(command.deadline).toBeLessThanOrEqual(material.expiresAtMs);
+      expect(application.approval).toBeUndefined();
+      if (mode === "lost-command") throw Error("Lost page command acknowledgement");
+      if (mode === "worker-loss") {
+        controller.abort();
+        return new Promise(() => {});
+      }
+      const sender = {
+        id: "a".repeat(32),
+        tab: { id: 7, incognito: false },
+        frameId: 0,
+        documentId: mode === "foreign-proof" ? "foreign-document" : DOCUMENT,
+        url: EMPLOYER,
+        origin: new URL(EMPLOYER).origin,
+        documentLifecycle: "active",
+      };
+      let proof: unknown;
+      const listener = [...listeners][0];
+      if (!listener) throw Error("Proof listener missing");
+      const accepted: unknown = listener(
+        {
+          schema: "application-execution-proof.v1",
+          nonce: command.nonce,
+          attemptId: command.attemptId,
+        },
+        sender as chrome.runtime.MessageSender,
+        (response) => {
+          proof = response;
+        },
+      );
+      if (!accepted) throw Error("Proof rejected");
+      for (let i = 0; i < 150 && !proof; i++)
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(proof).toMatchObject({ ok: true, nonce: command.nonce, attemptId: ATTEMPT });
+      return {
+        schema: "application-execution-result.v1",
+        nonce: mode === "wrong-result-nonce" ? "f".repeat(64) : command.nonce,
+        attemptId: ATTEMPT,
+        result: {
+          kind: "confirmed",
+          confirmation: {
+            kind: mode === "api-evidence" ? "provider_api_response" : "provider_confirmation_page",
+            observedAt: new Date(
+              Date.now() + (mode === "future-evidence" ? 60_000 : 0),
+            ).toISOString(),
+            fingerprintSha256: "f".repeat(64),
+            providerReference: "synthetic-receipt",
+          },
+        },
+      };
+    },
+  );
+  vi.stubGlobal("chrome", {
+    runtime: {
+      id: "a".repeat(32),
+      onMessage: {
+        addListener: (listener: Parameters<typeof chrome.runtime.onMessage.addListener>[0]) =>
+          listeners.add(listener),
+        removeListener: (listener: Parameters<typeof chrome.runtime.onMessage.addListener>[0]) =>
+          listeners.delete(listener),
+      },
+    },
+    tabs: { query: vi.fn(async () => [{ id: 7, url: EMPLOYER, incognito: false }]), sendMessage },
+    scripting: {
+      executeScript: vi.fn(async () => [
+        { frameId: 0, documentId: DOCUMENT, result: { url: EMPLOYER, topFrame: true } },
+      ]),
+    },
+  });
+  const preflight = vi.fn(async () => undefined);
+  return {
+    posts,
+    results,
+    commands,
+    wireCommands,
+    listeners,
+    sendMessage,
+    preflight,
+    application,
+    run: () =>
+      executeApprovedApplication({
+        apiOrigin: "https://api.example",
+        registry,
+        identity: async () => ({
+          accessToken: "synthetic-private-credential",
+          identityFence: "synthetic-owner",
+        }),
+        preflight,
+        owned: {
+          signal: controller.signal,
+          deadline: Date.now() + 30_000,
+          selection,
+          files: [
+            {
+              kind: "tailored_resume",
+              generationId: material.generationId,
+              format: "pdf",
+              mediaType: "application/pdf",
+              sha256: material.contentSha256,
+              bytes: new TextEncoder().encode("%PDF-SYNTHETIC"),
+            },
+          ],
+        },
+      }),
+  };
+}
+
+it.each(["success", "historical-confirmed"])(
+  "confirms only the exact dispatched attempt (%s), without reopening approval",
+  async (mode) => {
+    const fixture = setup(mode);
+    expect(await fixture.run()).toMatchObject({ ok: true, outcome: "confirmed" });
+    expect(fixture.preflight).toHaveBeenCalledTimes(2);
+    expect(fixture.posts).toHaveLength(3);
+    expect(fixture.commands).toHaveLength(1);
+    expect(fixture.wireCommands[0]?.files[0]?.contentBase64).not.toBe("");
+    expect(fixture.commands[0]?.files.every((file) => file.contentBase64 === "")).toBe(true);
+    expect(fixture.commands[0]?.fields).toEqual([]);
+    expect(fixture.listeners.size).toBe(0);
+  },
+);
+
+it.each([
+  "lost-dispatch",
+  "lost-command",
+  "foreign-proof",
+  "wrong-result-nonce",
+  "api-evidence",
+  "future-evidence",
+  "withdrawn",
+])("records ambiguity once for %s and never replays the page effect", async (mode) => {
+  const fixture = setup(mode);
+  expect(await fixture.run()).toMatchObject({
+    outcome: mode === "lost-dispatch" ? "unknown" : "review_required",
+  });
+  expect(fixture.posts.filter((path) => path.endsWith("/dispatch"))).toHaveLength(1);
+  expect(fixture.results).toEqual([{ kind: "unrecognized_response" }]);
+  expect(fixture.commands.length).toBe(["lost-dispatch", "withdrawn"].includes(mode) ? 0 : 1);
+  expect(fixture.listeners.size).toBe(0);
+});
+
+it.each(["lost-result", "wrong-terminal-time", "worker-loss"])(
+  "leaves %s unknown without retrying a result or command",
+  async (mode) => {
+    const fixture = setup(mode);
+    expect(await fixture.run()).toMatchObject({ ok: false, outcome: "unknown" });
+    expect(fixture.commands).toHaveLength(1);
+    expect(fixture.results.length).toBe(mode === "worker-loss" ? 0 : 1);
+    expect(fixture.listeners.size).toBe(0);
+  },
+);
+
+it("refuses a changed owning attempt before dispatch or any page action", async () => {
+  const fixture = setup("changed-attempt");
+  expect(await fixture.run()).toMatchObject({ ok: false, outcome: "review_required" });
+  expect(fixture.posts).toHaveLength(1);
+  expect(fixture.commands).toEqual([]);
+});

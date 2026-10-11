@@ -9962,6 +9962,116 @@
         },
         "additionalProperties": false
       },
+      "ApplicationNativeTransferBegin": {
+        "type": "object",
+        "required": ["schema", "applicationId", "packetId", "packetHash", "format"],
+        "properties": {
+          "schema": { "const": "application-native-transfer-begin.v1", "type": "string" },
+          "applicationId": { "type": "string", "format": "uuid" },
+          "packetId": { "type": "string", "format": "uuid" },
+          "packetHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "format": { "type": "string", "enum": ["pdf", "docx"] }
+        },
+        "additionalProperties": false,
+        "description": "Default-off first-party website-to-extension transport only; no REST route, credentials or submission authority."
+      },
+      "ApplicationNativeTransferAdmission": {
+        "type": "object",
+        "required": [
+          "schema",
+          "nonce",
+          "expiresAtMs",
+          "applicationId",
+          "packetId",
+          "packetHash",
+          "approvalId",
+          "revision",
+          "format",
+          "materials"
+        ],
+        "properties": {
+          "schema": { "const": "application-native-transfer-admission.v1", "type": "string" },
+          "nonce": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "expiresAtMs": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "applicationId": { "type": "string", "format": "uuid" },
+          "packetId": { "type": "string", "format": "uuid" },
+          "packetHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "approvalId": { "type": "string", "format": "uuid" },
+          "revision": { "type": "integer", "minimum": 1 },
+          "format": { "type": "string", "enum": ["pdf", "docx"] },
+          "materials": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "items": { "$ref": "#/components/schemas/ApplicationTemporaryMaterial" }
+          }
+        },
+        "additionalProperties": false,
+        "description": "One-use transfer admission, at most 60 seconds and bounded by original material/approval deadlines. Runtime must bind Chrome sender and destination documents plus the current extension account. No token is carried."
+      },
+      "ApplicationNativeTransferFile": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ApplicationResumeFile" },
+          {
+            "type": "object",
+            "required": ["temporaryMaterial"],
+            "properties": {
+              "temporaryMaterial": { "$ref": "#/components/schemas/ApplicationTemporaryMaterial" }
+            }
+          }
+        ],
+        "description": "Transient native file with mandatory original generation metadata. Validate the exact resume/cover-letter producer shape by material kind, decoded bytes/hash/format and matching approved packet before use. Never send through Gateway, persist, log or renew expiry."
+      },
+      "ApplicationNativeTransferCommit": {
+        "type": "object",
+        "required": ["schema", "admission", "files"],
+        "properties": {
+          "schema": { "const": "application-native-transfer-commit.v1", "type": "string" },
+          "admission": { "$ref": "#/components/schemas/ApplicationNativeTransferAdmission" },
+          "files": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "items": { "$ref": "#/components/schemas/ApplicationNativeTransferFile" }
+          }
+        },
+        "additionalProperties": false,
+        "description": "Memory-only cross-client file transfer. Consume the exact admitted nonce before asynchronous validation; enforce aggregate serialized/decoded byte caps and one file per admitted material. A transfer ACK is not an ATS dispatch or confirmation."
+      },
+      "ApplicationNativeTransferReceipt": {
+        "type": "object",
+        "required": ["schema", "nonce", "expiresAtMs", "applicationId", "packetId", "packetHash"],
+        "properties": {
+          "schema": { "const": "application-native-transfer-receipt.v1", "type": "string" },
+          "nonce": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "expiresAtMs": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "applicationId": { "type": "string", "format": "uuid" },
+          "packetId": { "type": "string", "format": "uuid" },
+          "packetHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        },
+        "additionalProperties": false,
+        "description": "Private memory-transfer acknowledgement only. Expiry is the original material/approval minimum, not a renewed file lifetime. No submission-state meaning."
+      },
+      "ApplicationNativeTransferDiscard": {
+        "type": "object",
+        "required": ["schema", "receipt"],
+        "properties": {
+          "schema": { "const": "application-native-transfer-discard.v1", "type": "string" },
+          "receipt": { "$ref": "#/components/schemas/ApplicationNativeTransferReceipt" }
+        },
+        "additionalProperties": false,
+        "description": "Withdraw the exact retained transfer from its original trusted sender document. Confers no read, replacement, file upload or submission authority."
+      },
+      "ApplicationNativeTransferCancel": {
+        "type": "object",
+        "required": ["schema", "admission"],
+        "properties": {
+          "schema": { "const": "application-native-transfer-cancel.v1", "type": "string" },
+          "admission": { "$ref": "#/components/schemas/ApplicationNativeTransferAdmission" }
+        },
+        "additionalProperties": false,
+        "description": "Withdraw an admitted or committing transfer using its exact original sender and nonce, including after a lost acknowledgement. No replacement or ATS authority."
+      },
       "CreateApplicationRequest": {
         "type": "object",
         "required": ["jobId"],
@@ -10750,6 +10860,299 @@
             "enum": ["pending", "native_tasks_settled"]
           }
         }
+      },
+      "ApplicationExecutionField": {
+        "type": "object",
+        "required": ["fieldKey", "value", "needsUserAction"],
+        "properties": {
+          "fieldKey": {
+            "type": "string",
+            "maxLength": 100,
+            "pattern": "^(?!(?:authorization|demographic|disclosure|attestation|signature|challenge|captcha|mfa|documents?)\\.)[a-z][a-z0-9_.]+$"
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "string",
+                "maxLength": 5000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 5000
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "needsUserAction": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationExecutionFile": {
+        "type": "object",
+        "required": ["kind", "generationId", "format", "mediaType", "sha256", "contentBase64"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["tailored_resume", "cover_letter"]
+          },
+          "generationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "format": {
+            "type": "string",
+            "enum": ["pdf", "docx"]
+          },
+          "mediaType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "contentBase64": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 400000,
+            "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationExecutionInspect": {
+        "type": "object",
+        "required": ["schema", "nonce", "employerUrl", "deadline"],
+        "properties": {
+          "schema": {
+            "const": "application-execution-inspect.v1",
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "employerUrl": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "deadline": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationExecutionInspection": {
+        "type": "object",
+        "required": ["schema", "nonce", "formHash", "challengePresent"],
+        "properties": {
+          "schema": {
+            "const": "application-execution-inspection.v1",
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "formHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "challengePresent": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationExecutionCommand": {
+        "type": "object",
+        "required": [
+          "schema",
+          "nonce",
+          "attemptId",
+          "documentId",
+          "employerUrl",
+          "packetHash",
+          "formHash",
+          "variantId",
+          "adapterVersion",
+          "deadline",
+          "fields",
+          "files"
+        ],
+        "properties": {
+          "schema": {
+            "const": "application-execution-command.v1",
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "attemptId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "employerUrl": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "packetHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "formHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "variantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "adapterVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "deadline": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "fields": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/ApplicationExecutionField"
+            }
+          },
+          "files": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/components/schemas/ApplicationExecutionFile"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationExecutionProof": {
+        "type": "object",
+        "required": ["schema", "nonce", "attemptId"],
+        "properties": {
+          "schema": {
+            "const": "application-execution-proof.v1",
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "attemptId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationExecutionProofResult": {
+        "type": "object",
+        "required": ["schema", "nonce", "attemptId", "ok"],
+        "properties": {
+          "schema": {
+            "const": "application-execution-proof-result.v1",
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "attemptId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ok": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationExecutionResult": {
+        "type": "object",
+        "required": ["schema", "nonce", "attemptId", "result"],
+        "properties": {
+          "schema": {
+            "const": "application-execution-result.v1",
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "attemptId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ApplicationSubmissionResultRequest"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationExecutionCancel": {
+        "type": "object",
+        "required": ["schema", "nonce", "attemptId"],
+        "properties": {
+          "schema": {
+            "const": "application-execution-cancel.v1",
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "attemptId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
       }
     }
   }

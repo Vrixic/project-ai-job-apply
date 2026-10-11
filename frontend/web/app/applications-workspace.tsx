@@ -8,6 +8,7 @@ import {
   COVER_LETTER_DISCLOSURE_VERSION,
   type PrepareApplicationPacketRequest,
 } from "@ai-job-apply/api-contracts";
+import { validateApplication } from "@ai-job-apply/api-contracts/browser-validators";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { sameMaterial } from "../lib/application-material-lifetime";
 import {
@@ -181,6 +182,58 @@ function JobApplicationWorkspace({
       controller.abort();
     };
   }, [jobId, applicationId, lookupAttempt]);
+
+  // Extension submission changes server state while this workspace is in another tab.
+  useEffect(() => {
+    const id = application?.id;
+    if (
+      !id ||
+      !["approved", "submitting", "takeover", "reconciliation_required"].includes(
+        application.status,
+      )
+    )
+      return;
+    let pending: AbortController | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let disposed = false;
+    const refreshOnReturn = () => {
+      if (disposed || pending || document.visibilityState !== "visible") return;
+      const controller = new AbortController();
+      pending = controller;
+      timer = setTimeout(() => controller.abort(), 10_000);
+      void applicationsCall("GET", `/api/platform/applications/${id}`, {
+        signal: controller.signal,
+        ...(fetchImplementation ? { fetch: fetchImplementation } : {}),
+      })
+        .then((result) => {
+          if (
+            disposed ||
+            controller.signal.aborted ||
+            !result.ok ||
+            !validateApplication(result.application) ||
+            result.application.id !== id ||
+            result.application.canonicalJobId !== jobId
+          )
+            return;
+          acceptApplication(result.application);
+          if (result.application.status === "applied")
+            window.dispatchEvent(new Event(APPLICATIONS_CHANGED_EVENT));
+        })
+        .finally(() => {
+          clearTimeout(timer);
+          if (pending === controller) pending = undefined;
+        });
+    };
+    window.addEventListener("focus", refreshOnReturn);
+    document.addEventListener("visibilitychange", refreshOnReturn);
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+      pending?.abort();
+      window.removeEventListener("focus", refreshOnReturn);
+      document.removeEventListener("visibilitychange", refreshOnReturn);
+    };
+  }, [application?.id, application?.status, jobId, fetchImplementation, acceptApplication]);
 
   async function refresh(id: string) {
     const latest = await applicationsCall("GET", `/api/platform/applications/${id}`, options);

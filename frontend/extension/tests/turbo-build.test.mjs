@@ -9,6 +9,7 @@ const extensionRoot = new URL("../", import.meta.url);
 const repositoryRoot = fileURLToPath(new URL("../../", extensionRoot));
 const publicBuildSettings = [
   "EXTENSION_API_ORIGIN",
+  "EXTENSION_APPLICATION_EXECUTION_ENABLED",
   "EXTENSION_APPLICATION_HANDOFF_ENABLED",
   "EXTENSION_APPLICATION_HANDOFF_WEB_ORIGIN",
   "EXTENSION_AUTH0_AUDIENCE",

@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, context } from "esbuild";
 import {
+  applicationExecutionForBuild,
   applicationHandoffOriginForBuild,
   capabilityPolicyPublicKeysForBuild,
   developmentContributionProvidersForBuild,
@@ -22,6 +23,11 @@ const iconPaths = {
 
 const fileEnvironment = await localExtensionEnvironment(extensionRoot);
 const handoffWebOrigin = applicationHandoffOriginForBuild(process.env, fileEnvironment);
+const applicationExecution = applicationExecutionForBuild(
+  process.env,
+  fileEnvironment,
+  handoffWebOrigin,
+);
 const developmentContributions = parseDevelopmentContributions(
   process.env.EXTENSION_DEVELOPMENT_CONTRIBUTIONS ??
     fileEnvironment.EXTENSION_DEVELOPMENT_CONTRIBUTIONS,
@@ -154,6 +160,7 @@ const buildOptions = {
     ? { banner: { js: "// UNPACKED_DEVELOPMENT_CONTRIBUTIONS_ONLY" } }
     : {}),
   define: {
+    __APPLICATION_EXECUTION_ENABLED__: JSON.stringify(applicationExecution),
     __APPLICATION_HANDOFF_WEB_ORIGIN__: JSON.stringify(handoffWebOrigin),
     __AUTH0_AUDIENCE__: JSON.stringify(configured ? audience : ""),
     __AUTH0_CLIENT_ID__: JSON.stringify(configured ? clientId : ""),
@@ -171,6 +178,9 @@ const buildOptions = {
   entryPoints: {
     background: join(extensionRoot, "entrypoints", "background.ts"),
     popup: join(extensionRoot, "entrypoints", "popup.ts"),
+    ...(applicationExecution
+      ? { "greenhouse-execution": join(extensionRoot, "entrypoints", "greenhouse-execution.ts") }
+      : {}),
   },
   format: "esm",
   logLevel: "info",
@@ -207,6 +217,9 @@ const manifest = {
     "storage",
     ...(handoffWebOrigin ? ["clipboardWrite"] : []),
   ],
+  ...(applicationExecution
+    ? { externally_connectable: { matches: [`${handoffWebOrigin}/*`] } }
+    : {}),
   ...(configured || apiOrigin
     ? {
         host_permissions: [

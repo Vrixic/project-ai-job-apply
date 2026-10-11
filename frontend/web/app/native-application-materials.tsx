@@ -1,9 +1,20 @@
 "use client";
 
-import type { Application, ApplicationTemporaryMaterial } from "@ai-job-apply/api-contracts";
-import { useEffect, useRef, useState } from "react";
+import type {
+  Application,
+  ApplicationNativeTransferReceipt,
+  ApplicationTemporaryMaterial,
+} from "@ai-job-apply/api-contracts";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { materialDeadline } from "../lib/application-material-lifetime";
 import { sha256OfBytes } from "../lib/applications-client";
+import {
+  discardTransferredNativeMaterials,
+  type NativeExtensionMessenger,
+  nativeExtensionId,
+  nativeExtensionMessenger,
+  transferApprovedNativeMaterials,
+} from "../lib/native-extension-transfer";
 import { type NativeMaterialValue, readNativeMaterial } from "../lib/native-material-client";
 import {
   type NativeMaterialConfiguration,
@@ -42,6 +53,21 @@ export function NativeApplicationMaterials({
   fetchImplementation?: typeof fetch;
 }) {
   const [session] = useState(() => new NativeMaterialSession(configuration));
+  const [extensionId] = useState(nativeExtensionId);
+  const transferred = useRef<
+    | {
+        messenger: NativeExtensionMessenger;
+        extensionId: string;
+        receipt: ApplicationNativeTransferReceipt;
+      }
+    | undefined
+  >(undefined);
+  const withdrawTransfer = useCallback(() => {
+    const previous = transferred.current;
+    transferred.current = undefined;
+    if (previous)
+      discardTransferredNativeMaterials(previous.messenger, previous.extensionId, previous.receipt);
+  }, []);
   const [connected, setConnected] = useState(false);
   const [coordinationReady, setCoordinationReady] = useState(false);
   const [credentialDeadline, setCredentialDeadline] = useState<number>();
@@ -64,11 +90,18 @@ export function NativeApplicationMaterials({
   const materialKey = JSON.stringify(materials);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: changing approval revision cancels the old file without discarding the packet's unchanged previews.
-  useEffect(() => () => pendingDownload.current?.abort(), [application.revision]);
+  useEffect(
+    () => () => {
+      pendingDownload.current?.abort();
+      withdrawTransfer();
+    },
+    [application.revision, withdrawTransfer],
+  );
 
   useEffect(() => {
     mounted.current = true;
     const leave = () => {
+      withdrawTransfer();
       pending.current?.abort();
       session.clear();
       setConnected(false);
@@ -106,13 +139,15 @@ export function NativeApplicationMaterials({
       channel?.close();
       window.removeEventListener("pagehide", leave);
       mounted.current = false;
+      withdrawTransfer();
       pending.current?.abort();
       session.clear();
       onUnavailable();
     };
-  }, [session, onUnavailable]);
+  }, [session, onUnavailable, withdrawTransfer]);
 
   function disconnect() {
+    withdrawTransfer();
     pending.current?.abort();
     session.clear();
     setConnected(false);
@@ -124,6 +159,7 @@ export function NativeApplicationMaterials({
 
   useEffect(() => {
     if (expired || credentialExpired) {
+      withdrawTransfer();
       pending.current?.abort();
       session.clear();
       setConnected(false);
@@ -132,7 +168,7 @@ export function NativeApplicationMaterials({
       setPreviews([]);
       onUnavailable();
     }
-  }, [expired, credentialExpired, session, onUnavailable]);
+  }, [expired, credentialExpired, session, onUnavailable, withdrawTransfer]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: the complete material key and packet-keyed parent bind this read; approval revisions preserve the same material.
   useEffect(() => {
@@ -203,6 +239,69 @@ export function NativeApplicationMaterials({
           "Sign-in did not finish. Allow the popup and sign in with the same account as this workspace.",
         );
     } finally {
+      if (mounted.current) setWorking(false);
+    }
+  }
+
+  async function sendApprovedFiles(format: "pdf" | "docx") {
+    const messenger = nativeExtensionMessenger();
+    const approval = application.approval;
+    if (
+      !packet ||
+      !approval ||
+      !extensionId ||
+      !messenger ||
+      busy ||
+      working ||
+      !session.ready ||
+      application.currentAction !== "ready_to_submit" ||
+      Date.now() >= deadline
+    )
+      return;
+    withdrawTransfer();
+    const controller = new AbortController();
+    pending.current = controller;
+    pendingDownload.current = controller;
+    setWorking(true);
+    setMessage(undefined);
+    try {
+      const receipt = await transferApprovedNativeMaterials({
+        extensionId,
+        messenger,
+        session,
+        binding: {
+          applicationId: application.id,
+          packetId: packet.id,
+          packetHash: packet.packetHash,
+          approvalId: approval.id,
+          revision: application.revision,
+          approvalExpiresAtMs: Date.parse(approval.expiresAt),
+          materials,
+        },
+        format,
+        signal: controller.signal,
+        isCurrent: () =>
+          mounted.current &&
+          currentApproval.current.revision === application.revision &&
+          currentApproval.current.action === "ready_to_submit",
+        ...(fetchImplementation ? { fetch: fetchImplementation } : {}),
+      });
+      if (controller.signal.aborted || !mounted.current) {
+        discardTransferredNativeMaterials(messenger, extensionId, receipt);
+        return;
+      }
+      transferred.current = { messenger, extensionId, receipt };
+      setMessage(
+        "Approved files reached the selected extension tab. No application has been submitted.",
+      );
+    } catch {
+      if (mounted.current && !controller.signal.aborted)
+        setMessage(
+          "Files could not be transferred. Select the matching employer tab in the extension and check that its application adapter is available. You can still download your files.",
+        );
+    } finally {
+      if (pending.current === controller) pending.current = undefined;
+      if (pendingDownload.current === controller) pendingDownload.current = undefined;
       if (mounted.current) setWorking(false);
     }
   }
@@ -388,6 +487,31 @@ export function NativeApplicationMaterials({
         </>
       )}
       {message && !expired ? <p role="status">{message}</p> : null}
+      {extensionId && connected && !expired && application.currentAction === "ready_to_submit" ? (
+        <div>
+          <p>Select the matching employer tab in the extension before sending approved files.</p>
+          {(["pdf", "docx"] as const).map((format) => (
+            <button
+              key={format}
+              type="button"
+              disabled={busy || working || !nativeExtensionMessenger()}
+              onClick={() => void sendApprovedFiles(format)}
+            >
+              Send approved {format === "pdf" ? "PDF" : "Word"} files to extension
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              pendingDownload.current?.abort();
+              withdrawTransfer();
+              setMessage("Extension file transfer withdrawn.");
+            }}
+          >
+            Withdraw extension file transfer
+          </button>
+        </div>
+      ) : null}
       <p>
         Disconnect clears this page's material access. Files you downloaded and copies you sent to
         an employer are outside platform cleanup.

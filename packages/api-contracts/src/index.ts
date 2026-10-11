@@ -36,6 +36,18 @@ export type ApplicationTemporaryMaterialAuthorization =
 export type ApplicationTemporaryMaterialLocation =
   components["schemas"]["ApplicationTemporaryMaterialLocation"];
 export type ApplicationTemporaryMaterial = components["schemas"]["ApplicationTemporaryMaterial"];
+export type ApplicationNativeTransferBegin =
+  components["schemas"]["ApplicationNativeTransferBegin"];
+export type ApplicationNativeTransferAdmission =
+  components["schemas"]["ApplicationNativeTransferAdmission"];
+export type ApplicationNativeTransferCommit =
+  components["schemas"]["ApplicationNativeTransferCommit"];
+export type ApplicationNativeTransferReceipt =
+  components["schemas"]["ApplicationNativeTransferReceipt"];
+export type ApplicationNativeTransferDiscard =
+  components["schemas"]["ApplicationNativeTransferDiscard"];
+export type ApplicationNativeTransferCancel =
+  components["schemas"]["ApplicationNativeTransferCancel"];
 export type CurrentUser = components["schemas"]["CurrentUser"];
 export type ProfileFact = components["schemas"]["ProfileFact"];
 export type ProfileFactCollection = components["schemas"]["ProfileFactCollection"];
@@ -112,6 +124,15 @@ export type ApplicationFormBinding = components["schemas"]["ApplicationFormBindi
 export type ApplicationPacket = components["schemas"]["ApplicationPacket"];
 export type ApplicationApproval = components["schemas"]["ApplicationApproval"];
 export type ApplicationAttempt = components["schemas"]["ApplicationAttempt"];
+export type ApplicationExecutionInspect = components["schemas"]["ApplicationExecutionInspect"];
+export type ApplicationExecutionInspection =
+  components["schemas"]["ApplicationExecutionInspection"];
+export type ApplicationExecutionCommand = components["schemas"]["ApplicationExecutionCommand"];
+export type ApplicationExecutionProof = components["schemas"]["ApplicationExecutionProof"];
+export type ApplicationExecutionProofResult =
+  components["schemas"]["ApplicationExecutionProofResult"];
+export type ApplicationExecutionResult = components["schemas"]["ApplicationExecutionResult"];
+export type ApplicationExecutionCancel = components["schemas"]["ApplicationExecutionCancel"];
 export type Application = components["schemas"]["Application"];
 export type ApplicationPage = components["schemas"]["ApplicationPage"];
 export type ApplicationHistoryEntry = components["schemas"]["ApplicationHistoryEntry"];

@@ -8,7 +8,30 @@ const contract = JSON.parse(await readFile(new URL("openapi/platform.v1.json", r
 const schemas = JSON.parse(
   JSON.stringify(contract.components.schemas).replaceAll("#/components/schemas/", "#/$defs/"),
 );
-const names = ["Application", "CanonicalJobDetail", "ApplicationTemporaryMaterialAuthorization"];
+const names = [
+  "Application",
+  "StartApplicationSubmissionRequest",
+  "ApplicationSubmissionStart",
+  "ApplicationAttempt",
+  "ApplicationSubmissionResultRequest",
+  "ApplicationExecutionInspect",
+  "ApplicationExecutionInspection",
+  "ApplicationExecutionCommand",
+  "ApplicationExecutionProof",
+  "ApplicationExecutionProofResult",
+  "ApplicationExecutionResult",
+  "ApplicationExecutionCancel",
+  "CanonicalJobDetail",
+  "ApplicationTemporaryMaterialAuthorization",
+  "ApplicationResumeFile",
+  "ApplicationCoverLetterFile",
+  "ApplicationNativeTransferBegin",
+  "ApplicationNativeTransferAdmission",
+  "ApplicationNativeTransferCommit",
+  "ApplicationNativeTransferReceipt",
+  "ApplicationNativeTransferDiscard",
+  "ApplicationNativeTransferCancel",
+];
 const ajv = new Ajv2020({ strict: true, allErrors: false, code: { source: true } });
 addFormats(ajv);
 for (const name of names) {

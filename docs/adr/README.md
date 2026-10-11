@@ -70,3 +70,5 @@ ADRs are immutable historical records after acceptance. A new ADR supersedes an 
 - [ADR-047: Withdrawn-answer application recovery](047-withdrawn-answer-application-recovery.md) (proposed; compatible release and acceptance pending)
 
 - [ADR-048: Privacy-reconciled development recovery](048-privacy-reconciled-development-recovery.md) (proposed; transactional preservation source, promotion and managed acceptance pending)
+
+- [ADR-049: Greenhouse approved application execution](049-greenhouse-approved-application-execution.md) (proposed; default-off adapter and connected execution work)

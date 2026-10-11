@@ -281,6 +281,28 @@ try {
     }
   }
   const nativeA11y = await page.evaluate(async () => (await window.axe.run(document)).violations);
+  for (const label of ["PDF", "Word"]) {
+    await page
+      .getByRole("button", { name: `Send approved ${label} files to extension`, exact: true })
+      .press("Enter");
+    await page
+      .getByText(
+        "Approved files reached the selected extension tab. No application has been submitted.",
+        { exact: true },
+      )
+      .waitFor();
+    await page
+      .getByRole("button", { name: "Withdraw extension file transfer", exact: true })
+      .press("Enter");
+  }
+  assert.deepEqual(await page.evaluate(() => window.readD3TransferCalls()), [
+    "application-native-transfer-begin.v1",
+    "application-native-transfer-commit.v1",
+    "application-native-transfer-discard.v1",
+    "application-native-transfer-begin.v1",
+    "application-native-transfer-commit.v1",
+    "application-native-transfer-discard.v1",
+  ]);
   assert.deepEqual(
     nativeA11y.map((violation) => violation.id),
     [],
@@ -298,10 +320,10 @@ try {
   calls = await page.evaluate(() => window.readD3AssuranceCalls());
   assert.equal(
     calls.filter((call) => call.url.startsWith("https://") && call.url.includes("/file?")).length,
-    4,
+    8,
   );
   process.stdout.write(
-    "PASS search/prepare/review/approve/manual-Apply/candidate-confirmation/history/idle-preview-expiry/explicit-cover-letter-preparation/native-resume-cover-review/disconnect/four-approved-downloads/keyboard/WCAG (simulated authentication, BFF and native preview, no live generation or external submission)\n",
+    "PASS search/prepare/review/approve/manual-Apply/candidate-confirmation/history/idle-preview-expiry/explicit-cover-letter-preparation/native-resume-cover-review/disconnect/four-approved-downloads/two-format-file-transfer-withdrawal/keyboard/WCAG (simulated authentication, BFF, native service and Chrome receiver; no installed-extension acceptance, live generation or external submission)\n",
   );
 } catch (error) {
   // This harness contains generated fixtures only; report visible failure state for diagnosis.

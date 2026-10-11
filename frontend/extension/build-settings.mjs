@@ -32,6 +32,18 @@ export function applicationHandoffOriginForBuild(environment, fileEnvironment) {
   return url.origin;
 }
 
+export function applicationExecutionForBuild(environment, fileEnvironment, handoffOrigin) {
+  const enabled =
+    environment.EXTENSION_APPLICATION_EXECUTION_ENABLED ??
+    fileEnvironment.EXTENSION_APPLICATION_EXECUTION_ENABLED;
+  if (enabled === undefined || enabled === "false") return false;
+  if (enabled !== "true")
+    throw new Error("EXTENSION_APPLICATION_EXECUTION_ENABLED must be exactly true or false");
+  if (!handoffOrigin)
+    throw new Error("Application execution requires the exact handoff website origin");
+  return true;
+}
+
 export function developmentContributionProvidersForBuild(
   environment,
   fileEnvironment,
@@ -100,6 +112,10 @@ export function capabilityPolicyPublicKeysForBuild(environment, fileEnvironment,
 }
 
 export function assertStoreContributionMode(environment, fileEnvironment) {
+  for (const values of [environment, fileEnvironment]) {
+    if (applicationExecutionForBuild(values, {}, applicationHandoffOriginForBuild(values, {})))
+      throw new Error("Application execution is unpacked-only until its release is accepted");
+  }
   if (
     applicationHandoffOriginForBuild(environment, {}) ||
     applicationHandoffOriginForBuild({}, fileEnvironment)

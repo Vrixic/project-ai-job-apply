@@ -326,3 +326,21 @@ change, exit or explicit clear. Clipboard copies remain under the candidate's co
 handoff UI/background and generated static validators under MV3 script CSP with a real Chromium
 clipboard. Auth, Chrome APIs and API responses are synthetic. Installed Chrome/Edge, live identity,
 provider fixtures and release acceptance remain unverified. See [ADR-045](../../docs/adr/045-manual-approved-application-handoff.md).
+
+## Approved native file transfer (D3, separate default-off build)
+
+An unpacked execution build additionally requires `EXTENSION_APPLICATION_EXECUTION_ENABLED=true`
+and the exact handoff origin above. Only that build exposes website messaging and requests the
+existing `applications:write` scope; the actual public-client delegated grant still needs live
+verification. It grants no employer host access and store packaging rejects execution. Manual
+handoff builds retain their read-only application scope and no external listener.
+
+The web native workspace separately requires `NEXT_PUBLIC_APPLICATION_EXTENSION_TRANSFER_ENABLED=true`
+and `NEXT_PUBLIC_APPLICATION_EXTENSION_ID` set to one exact installed Chrome extension ID. Select
+the current employer tab with the approved review link, then explicitly send approved PDF or Word
+files from the workspace. Native credentials remain in the web session. One private extension
+selection/admission binds both documents, account, job, packet, approval and original generation.
+There is no file storage, discovery, upload or submission in this batch. Withdrawal, identity change,
+navigation, restart and original expiry discard the memory inventory; unknown acknowledgements
+never authorize a provider retry. Production registry controls remain dark pending accepted provider
+fixtures and accountable live-effect approval. See [ADR-049](../../docs/adr/049-greenhouse-approved-application-execution.md).

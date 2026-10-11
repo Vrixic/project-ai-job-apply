@@ -1,5 +1,25 @@
 # Phase 0 Threat Model
 
+2026-10-10 default-off ATS execution source adds a private exact-document command/proof channel.
+Durable dispatch precedes employer field/file events; commands and submit clicks are one-shot,
+with no replay after timeout, worker loss or unknown acknowledgement. Tokens stay in background.
+Current owner/attempt/packet/material authorization/job and original saved-answer/material expiry
+are rechecked. Exact assigned File identity and ordinary approved values resist employer handler
+replacement. Global challenges override fresh, version-bound profile confirmation; pre-existing
+success DOM cannot confirm. Abort clears owned command bytes and file controls even during stalled
+proof/digest work. Provider profiles remain empty and registry off. Batch tests, authorized provider
+fixtures, independent QA and employer all-copy retention conformance remain required; JavaScript
+reference clearing is not a guarantee of physical string/Blob erasure or remote deletion.
+
+2026-10-10 D3-101 internal source: Greenhouse DOM primitives use the existing action registry and
+SDK sensitive-field policy. Exact top-frame URL/document, form structure and stable control
+identities are rechecked before each event. Synchronous employer handlers that replace, hide,
+disable, invalidate or revert a control stop subsequent effects and require review. Approval
+reads have one fixed admission deadline and cancellation fence; partial effects never replay.
+These primitives are not wired into the extension UI and grant no upload/submission authority.
+Native file transport, write authorization, attempt-bound confirmation and accountable provider
+gates remain under [proposed ADR-049](../adr/049-greenhouse-approved-application-execution.md).
+
 Default-off observed-form selection (2026-10-09): forged imports are untrusted candidate inputs,
 not signed provider evidence. Refuse unknown/value-bearing fields, wrong application/job/destination,
 future/expired captures, challenges and oversized structures. Bracket extraction with owner/revision,

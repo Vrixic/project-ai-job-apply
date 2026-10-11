@@ -5,7 +5,8 @@ import { pkceChallenge, randomBase64Url, validateAuthorizationCallback } from ".
 const SESSION_KEY = "auth0Session";
 const REQUIRED_SCOPE =
   "openid profile email offline_access profile:read profile:write jobs:read jobs:write jobs:contribute" +
-  (extensionConfiguration.applicationHandoffWebOrigin ? " applications:read" : "");
+  (extensionConfiguration.applicationHandoffWebOrigin ? " applications:read" : "") +
+  (extensionConfiguration.applicationExecutionEnabled ? " applications:write" : "");
 const AUTH_REQUEST_TIMEOUT_MILLISECONDS = 10_000;
 const MAXIMUM_TOKEN_RESPONSE_BYTES = 65_536;
 

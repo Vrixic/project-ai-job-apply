@@ -1,5 +1,24 @@
 // Generated; do not edit.
-import type { Application, CanonicalJobDetail, ApplicationTemporaryMaterialAuthorization } from "../src/index.js";
+import type { Application, StartApplicationSubmissionRequest, ApplicationSubmissionStart, ApplicationAttempt, ApplicationSubmissionResultRequest, ApplicationExecutionInspect, ApplicationExecutionInspection, ApplicationExecutionCommand, ApplicationExecutionProof, ApplicationExecutionProofResult, ApplicationExecutionResult, ApplicationExecutionCancel, CanonicalJobDetail, ApplicationTemporaryMaterialAuthorization, ApplicationResumeFile, ApplicationCoverLetterFile, ApplicationNativeTransferBegin, ApplicationNativeTransferAdmission, ApplicationNativeTransferCommit, ApplicationNativeTransferReceipt, ApplicationNativeTransferDiscard, ApplicationNativeTransferCancel } from "../src/index.js";
 export function validateApplication(value: unknown): value is Application;
+export function validateStartApplicationSubmissionRequest(value: unknown): value is StartApplicationSubmissionRequest;
+export function validateApplicationSubmissionStart(value: unknown): value is ApplicationSubmissionStart;
+export function validateApplicationAttempt(value: unknown): value is ApplicationAttempt;
+export function validateApplicationSubmissionResultRequest(value: unknown): value is ApplicationSubmissionResultRequest;
+export function validateApplicationExecutionInspect(value: unknown): value is ApplicationExecutionInspect;
+export function validateApplicationExecutionInspection(value: unknown): value is ApplicationExecutionInspection;
+export function validateApplicationExecutionCommand(value: unknown): value is ApplicationExecutionCommand;
+export function validateApplicationExecutionProof(value: unknown): value is ApplicationExecutionProof;
+export function validateApplicationExecutionProofResult(value: unknown): value is ApplicationExecutionProofResult;
+export function validateApplicationExecutionResult(value: unknown): value is ApplicationExecutionResult;
+export function validateApplicationExecutionCancel(value: unknown): value is ApplicationExecutionCancel;
 export function validateCanonicalJobDetail(value: unknown): value is CanonicalJobDetail;
 export function validateApplicationTemporaryMaterialAuthorization(value: unknown): value is ApplicationTemporaryMaterialAuthorization;
+export function validateApplicationResumeFile(value: unknown): value is ApplicationResumeFile;
+export function validateApplicationCoverLetterFile(value: unknown): value is ApplicationCoverLetterFile;
+export function validateApplicationNativeTransferBegin(value: unknown): value is ApplicationNativeTransferBegin;
+export function validateApplicationNativeTransferAdmission(value: unknown): value is ApplicationNativeTransferAdmission;
+export function validateApplicationNativeTransferCommit(value: unknown): value is ApplicationNativeTransferCommit;
+export function validateApplicationNativeTransferReceipt(value: unknown): value is ApplicationNativeTransferReceipt;
+export function validateApplicationNativeTransferDiscard(value: unknown): value is ApplicationNativeTransferDiscard;
+export function validateApplicationNativeTransferCancel(value: unknown): value is ApplicationNativeTransferCancel;

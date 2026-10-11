@@ -210,49 +210,51 @@ describe("extension Auth0 protocol lifecycle", () => {
     expect(browser.records.has("auth0Session")).toBe(false);
   });
 
-  it.each([false, true])(
-    "exchanges a valid PKCE callback with handoff enabled=%s",
-    async (handoff) => {
-      vi.stubGlobal(
-        "__APPLICATION_HANDOFF_WEB_ORIGIN__",
-        handoff ? "https://candidate.example" : "",
-      );
-      const scope = completeScope + (handoff ? " applications:read" : "");
-      const issuedAccessToken = accessToken("auth0|candidate-one");
-      let authorizationState = "";
-      const browser = installChrome({});
-      browser.launchWebAuthFlow.mockImplementationOnce(async ({ url }: { url: string }) => {
-        const authorization = new URL(url);
-        authorizationState = authorization.searchParams.get("state") ?? "";
-        expect(authorization.origin).toBe("https://tenant.example.test");
-        expect(authorization.pathname).toBe("/authorize");
-        expect(authorization.searchParams.get("audience")).toBe("ai-job-apply-api");
-        expect(authorization.searchParams.get("client_id")).toBe("extension-native-client");
-        expect(authorization.searchParams.get("code_challenge_method")).toBe("S256");
-        expect(authorization.searchParams.get("response_type")).toBe("code");
-        expect(authorization.searchParams.get("scope")).toBe(scope);
-        return `https://extension-id.chromiumapp.org/auth0?code=short-code&state=${authorizationState}`;
-      });
-      const fetchMock = vi.fn(async (_url: URL, init: RequestInit) => {
-        const parameters = init.body as URLSearchParams;
-        expect(parameters.get("grant_type")).toBe("authorization_code");
-        expect(parameters.get("code")).toBe("short-code");
-        expect(parameters.get("code_verifier")).toMatch(/^[A-Za-z0-9_-]{86}$/u);
-        return tokenResponse(issuedAccessToken, "refresh-one", { scope });
-      });
-      vi.stubGlobal("fetch", fetchMock);
-      await (await protocol()).login();
-      const stored = browser.records.get("auth0Session") as SessionRecord;
-      expect(stored).toMatchObject({
-        accessToken: issuedAccessToken,
-        identityFenceVersion: "auth0-subject-sha256-v1",
-        refreshToken: "refresh-one",
-      });
-      expect(stored.expiresAt).toBeGreaterThan(Date.now());
-      expect(stored.identityFence).toBe(await accountFence("auth0|candidate-one"));
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-    },
-  );
+  it.each([
+    [false, false],
+    [true, false],
+    [true, true],
+  ])("exchanges a valid PKCE callback with handoff=%s execution=%s", async (handoff, execution) => {
+    vi.stubGlobal("__APPLICATION_EXECUTION_ENABLED__", execution);
+    vi.stubGlobal("__APPLICATION_HANDOFF_WEB_ORIGIN__", handoff ? "https://candidate.example" : "");
+    const scope =
+      completeScope +
+      (handoff ? " applications:read" : "") +
+      (execution ? " applications:write" : "");
+    const issuedAccessToken = accessToken("auth0|candidate-one");
+    let authorizationState = "";
+    const browser = installChrome({});
+    browser.launchWebAuthFlow.mockImplementationOnce(async ({ url }: { url: string }) => {
+      const authorization = new URL(url);
+      authorizationState = authorization.searchParams.get("state") ?? "";
+      expect(authorization.origin).toBe("https://tenant.example.test");
+      expect(authorization.pathname).toBe("/authorize");
+      expect(authorization.searchParams.get("audience")).toBe("ai-job-apply-api");
+      expect(authorization.searchParams.get("client_id")).toBe("extension-native-client");
+      expect(authorization.searchParams.get("code_challenge_method")).toBe("S256");
+      expect(authorization.searchParams.get("response_type")).toBe("code");
+      expect(authorization.searchParams.get("scope")).toBe(scope);
+      return `https://extension-id.chromiumapp.org/auth0?code=short-code&state=${authorizationState}`;
+    });
+    const fetchMock = vi.fn(async (_url: URL, init: RequestInit) => {
+      const parameters = init.body as URLSearchParams;
+      expect(parameters.get("grant_type")).toBe("authorization_code");
+      expect(parameters.get("code")).toBe("short-code");
+      expect(parameters.get("code_verifier")).toMatch(/^[A-Za-z0-9_-]{86}$/u);
+      return tokenResponse(issuedAccessToken, "refresh-one", { scope });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await (await protocol()).login();
+    const stored = browser.records.get("auth0Session") as SessionRecord;
+    expect(stored).toMatchObject({
+      accessToken: issuedAccessToken,
+      identityFenceVersion: "auth0-subject-sha256-v1",
+      refreshToken: "refresh-one",
+    });
+    expect(stored.expiresAt).toBeGreaterThan(Date.now());
+    expect(stored.identityFence).toBe(await accountFence("auth0|candidate-one"));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 
   it("reuses the same pseudonymous account fence after a full login to the same account", async () => {
     const firstFence = await accountFence("auth0|candidate-one");
