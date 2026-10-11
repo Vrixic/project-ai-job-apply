@@ -332,8 +332,10 @@ function JobApplicationWorkspace({
     }
   }
 
-  /** An application that exists but never got a packet (for example after a failed prepare). */
+  /** Explicit preparation also replaces an unavailable packet; ambiguous retries reuse its intent. */
   async function continuePreparing(current: Application) {
+    if (starting.current) return;
+    starting.current = true;
     setBusy(true);
     setNotice(undefined);
     try {
@@ -345,6 +347,7 @@ function JobApplicationWorkspace({
     } catch {
       // The notice already carries the fixed copy for this failure.
     } finally {
+      starting.current = false;
       setBusy(false);
     }
   }
@@ -605,6 +608,16 @@ function JobApplicationWorkspace({
               </p>
               <button type="button" disabled={busy} onClick={() => void checkGeneratedResume()}>
                 Check generated resume
+              </button>
+              <p>
+                Preparing again replaces the current packet and requires fresh review and approval.
+              </p>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void continuePreparing(application)}
+              >
+                Prepare a new packet
               </button>
             </section>
           ) : null}

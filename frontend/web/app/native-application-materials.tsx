@@ -15,7 +15,11 @@ import {
   nativeExtensionMessenger,
   transferApprovedNativeMaterials,
 } from "../lib/native-extension-transfer";
-import { type NativeMaterialValue, readNativeMaterial } from "../lib/native-material-client";
+import {
+  type NativeMaterialValue,
+  nativeMaterialReadFailureCopy,
+  readNativeMaterial,
+} from "../lib/native-material-client";
 import {
   type NativeMaterialConfiguration,
   NativeMaterialSession,
@@ -221,13 +225,11 @@ export function NativeApplicationMaterials({
         for (const material of materials) onReady(material);
         setMessage("Review each material before approving the application.");
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!controller.signal.aborted) {
           session.clear();
           setConnected(false);
-          setMessage(
-            "Materials could not be verified. Sign in with the same account as this workspace and try again.",
-          );
+          setMessage(nativeMaterialReadFailureCopy(error));
         }
       })
       .finally(() => {

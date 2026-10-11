@@ -1,6 +1,6 @@
 import type { ApplicationTemporaryMaterial } from "@ai-job-apply/api-contracts";
 import { afterEach, expect, it, vi } from "vitest";
-import { readNativeMaterial } from "./native-material-client";
+import { nativeMaterialReadFailureCopy, readNativeMaterial } from "./native-material-client";
 import type { NativeMaterialSession } from "./native-material-session";
 
 const id = (n: number) => `00000000-0000-7000-8000-${String(n).padStart(12, "0")}`;
@@ -45,6 +45,43 @@ function setup() {
   return { binding, location, preview, response, send, read, session, run };
 }
 afterEach(() => vi.useRealTimers());
+it.each(["packet", "location", "transport", "content", "second-location"])(
+  "reports only a safe actionable message for %s verification failures",
+  async (phase) => {
+    const f = setup();
+    const sensitive = "private-upstream-response-token";
+    if (phase === "packet") f.binding.applicationId = "invalid";
+    if (phase === "location") f.send.mockRejectedValueOnce(new Error(sensitive));
+    if (phase === "transport") f.read.mockRejectedValueOnce(new Error(sensitive));
+    if (phase === "content")
+      f.read.mockResolvedValueOnce(f.response({ ...f.preview, contentSha256: "c".repeat(64) }));
+    if (phase === "second-location")
+      f.send
+        .mockResolvedValueOnce(f.response(f.location))
+        .mockRejectedValueOnce(new Error(sensitive));
+    const error = await f.run().catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("MaterialReadUnavailable");
+    expect((error as Error).cause).toBeUndefined();
+    expect(JSON.stringify(error)).not.toContain(sensitive);
+    const message = nativeMaterialReadFailureCopy(error);
+    expect(message).not.toContain(sensitive);
+    expect(message).toContain(
+      phase === "packet"
+        ? "packet"
+        : phase.includes("location")
+          ? "availability"
+          : phase === "transport"
+            ? "connection"
+            : "Prepare a new packet",
+    );
+  },
+);
+it("does not expose arbitrary upstream error messages", () => {
+  expect(nativeMaterialReadFailureCopy(new Error("private-token"))).toBe(
+    "Materials could not be verified. Prepare a new packet and review it again.",
+  );
+});
 it("binds native content between two scalar proofs without forwarding a BFF bearer token", async () => {
   const f = setup();
   expect(await f.run()).toEqual(f.preview);

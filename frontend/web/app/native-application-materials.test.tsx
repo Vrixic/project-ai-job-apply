@@ -20,7 +20,10 @@ vi.mock("../lib/native-extension-transfer", () => ({
   transferApprovedNativeMaterials: mocks.transfer,
   discardTransferredNativeMaterials: mocks.discard,
 }));
-vi.mock("../lib/native-material-client", () => ({ readNativeMaterial: mocks.read }));
+vi.mock("../lib/native-material-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/native-material-client")>()),
+  readNativeMaterial: mocks.read,
+}));
 vi.mock("../lib/applications-client", () => ({ sha256OfBytes: mocks.hash }));
 vi.mock("../lib/native-material-session", () => ({
   NativeMaterialSession: class {

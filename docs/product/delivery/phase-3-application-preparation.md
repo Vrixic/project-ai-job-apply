@@ -36,6 +36,8 @@ Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 20
 
 ## Task register
 
+D3-113 started 2026-10-11; source verification passes. Managed native generation succeeds; preview verification is under diagnosis and approval remains blocked.
+
 Implemented means merged source; deployment and live acceptance are stated separately.
 
 | Capability / task IDs | Implemented | Remaining |
@@ -95,6 +97,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Native download approval expiry (D3-110) | Exact approval/material deadlines gate downloads before reads and after hashing; expiry aborts pending files and withdraws transfers while preserving previews. 52 focused tests, web typecheck, simulated Chromium journey and consequential review pass. | Compatible hosted release and live acceptance remain. [Evidence](evidence/d3-native-download-approval-expiry-2026-10-11.md). |
 | Retained native deployment policy (D3-111) | Compact serialized deployment grant/boundary preserves authorization and both original revisions; 25 bootstrap Terraform test runs and validation pass. | Consequential review and managed application are recorded separately; live acceptance remains. [Evidence](evidence/d3-retained-native-deployment-policy-2026-10-11.md). |
 | Primary manifest fingerprint (D3-112) | Primary context/admission/schema verification binds current 80-migration source and rejects the old fingerprint. 311 focused tests, 841 PowerShell checks and component typecheck pass. | Fresh executor and managed replay precede candidate traffic; live acceptance remains. [Evidence](evidence/d3-primary-manifest-fingerprint-2026-10-11.md). |
+| Native packet recovery (D3-113) | Explicit packet replacement preserves revision/idempotency and requires fresh review. Material verification failures carry only safe phase-specific guidance. 95 focused tests and web typecheck pass. | Consequential review and hosted retry are recorded separately; native acceptance remains open. [Evidence](evidence/d3-native-packet-recovery-2026-10-11.md). |
 
 ## Decisions and scope changes
 
@@ -374,3 +377,4 @@ rejects the old label. 311 focused tests, 841 PowerShell checks, component typec
 review pass. Migration 0017 and paused compatible Gateway/cleanup deployment pass; basic replay,
 native acceptance and final shutdown remain. Independent D1/admin acceptance stays deferred.
 [Evidence](evidence/d3-primary-manifest-fingerprint-2026-10-11.md).
+
