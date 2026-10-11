@@ -21,7 +21,7 @@ export type NativeMaterialValue =
   | ApplicationResumeFile
   | ApplicationCoverLetterFile;
 
-type ReadPhase = "packet" | "location" | "transport" | "content";
+type ReadPhase = "packet" | "location" | "transport" | "access" | "service" | "content";
 class MaterialReadUnavailable extends Error {
   constructor(readonly phase: ReadPhase) {
     super("MaterialReadUnavailable");
@@ -35,6 +35,10 @@ export function nativeMaterialReadFailureCopy(error: unknown): string {
       return "This packet could not be verified. Refresh the application before trying again.";
     if (error.phase === "location")
       return "Material availability could not be verified. Refresh the application before trying again.";
+    if (error.phase === "access")
+      return "Material access was refused. Sign in with the same account and try again.";
+    if (error.phase === "service")
+      return "The material service could not verify this read. Try again before the material expires.";
     if (error.phase === "transport")
       return "The material connection could not be verified. Sign in with the same account and try again.";
   }
@@ -160,6 +164,7 @@ export async function readNativeMaterial(
       );
       phase = "transport";
       const response = await session.read(url, controller.signal, send);
+      phase = response.status === 401 || response.status === 403 ? "access" : "service";
       const value = await json(response, controller.signal);
       phase = "content";
       const schema =

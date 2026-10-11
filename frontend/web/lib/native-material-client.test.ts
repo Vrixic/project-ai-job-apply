@@ -204,3 +204,18 @@ it("rejects a PDF-labelled response carrying DOCX media metadata", async () => {
     "MaterialReadUnavailable",
   );
 });
+
+it.each([401, 403, 409, 503])(
+  "reports safe access or service refusal without retaining response contents",
+  async (status) => {
+    const f = setup();
+    f.read.mockResolvedValueOnce(new Response("private-upstream-body", { status }));
+    const error = await f.run().catch((failure: unknown) => failure);
+    expect((error as Error).message).toBe("MaterialReadUnavailable");
+    expect(JSON.stringify(error)).not.toContain("private-upstream-body");
+    expect(nativeMaterialReadFailureCopy(error)).toContain(
+      status === 401 || status === 403 ? "access was refused" : "service could not verify",
+    );
+    expect(f.send).toHaveBeenCalledTimes(1);
+  },
+);
