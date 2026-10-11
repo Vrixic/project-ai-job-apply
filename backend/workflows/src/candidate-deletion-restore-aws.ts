@@ -202,10 +202,28 @@ async function* versionPages(
         ExpectedBucketOwner: options.expectedBucketOwner,
         Prefix: prefix,
         MaxKeys: PAGE_SIZE,
+        EncodingType: "url",
         ...(keyMarker ? { KeyMarker: keyMarker } : {}),
         ...(versionMarker ? { VersionIdMarker: versionMarker } : {}),
       }),
     );
+    if (output.EncodingType !== undefined && output.EncodingType !== "url") rejected();
+    // The pinned SDK preserves URL-encoded S3 key fields; version IDs are not encoded.
+    if (output.EncodingType === "url") {
+      for (const field of ["Prefix", "KeyMarker", "NextKeyMarker", "Delimiter"]) {
+        if (output[field] !== undefined) {
+          if (typeof output[field] !== "string") rejected();
+          output[field] = decodeURIComponent(output[field] as string);
+        }
+      }
+      for (const field of ["Versions", "DeleteMarkers"]) {
+        for (const value of array(output[field])) {
+          const item = record(value);
+          if (typeof item.Key !== "string") rejected();
+          item.Key = decodeURIComponent(item.Key);
+        }
+      }
+    }
     if (
       output.Name !== options.bucketName ||
       output.Prefix !== prefix ||
@@ -213,7 +231,6 @@ async function* versionPages(
       typeof output.IsTruncated !== "boolean" ||
       (output.KeyMarker ?? "") !== (keyMarker ?? "") ||
       (output.VersionIdMarker ?? "") !== (versionMarker ?? "") ||
-      output.EncodingType !== undefined ||
       (output.Delimiter ?? "") !== "" ||
       array(output.CommonPrefixes).length !== 0
     )
@@ -252,6 +269,8 @@ interface Version {
   owner: string | null;
   checksumAlgorithm: unknown;
   checksumType: unknown;
+  latest: boolean;
+  retirement: { versionId: string; lastModified: string; owner: string | null } | null;
 }
 
 async function listMarkers(
@@ -261,9 +280,9 @@ async function listMarkers(
 ): Promise<Version[]> {
   const result: Version[] = [];
   const keys = new Set<string>();
+  const retirements = new Map<string, NonNullable<Version["retirement"]>>();
   for await (const page of versionPages(sender, options, PREFIX, deadline)) {
-    if (page.deletions.length !== 0) rejected();
-    for (const raw of page.versions) {
+    for (const raw of page.deletions) {
       const item = record(raw);
       if (
         typeof item.Key !== "string" ||
@@ -273,6 +292,29 @@ async function listMarkers(
         !opaque(item.VersionId) ||
         item.VersionId === "null" ||
         item.IsLatest !== true ||
+        retirements.has(item.Key)
+      )
+        rejected();
+      const owner = item.Owner === undefined ? null : record(item.Owner).ID;
+      if (owner !== null && (typeof owner !== "string" || !/^[a-f0-9]{64}$/u.test(owner)))
+        rejected();
+      retirements.set(item.Key, {
+        versionId: item.VersionId,
+        lastModified: date(item.LastModified),
+        owner: owner as string | null,
+      });
+      if (retirements.size > MAX_RESTORED_DELETION_MARKERS) rejected();
+    }
+    for (const raw of page.versions) {
+      const item = record(raw);
+      if (
+        typeof item.Key !== "string" ||
+        !item.Key.startsWith(PREFIX) ||
+        !item.Key.endsWith(".json") ||
+        !UUID.test(item.Key.slice(PREFIX.length, -5)) ||
+        !opaque(item.VersionId) ||
+        item.VersionId === "null" ||
+        typeof item.IsLatest !== "boolean" ||
         !opaque(item.ETag, 256) ||
         !/^"[^"\r\n]+"$/u.test(item.ETag) ||
         typeof item.Size !== "number" ||
@@ -303,10 +345,27 @@ async function listMarkers(
         owner,
         checksumAlgorithm: item.ChecksumAlgorithm ?? null,
         checksumType: item.ChecksumType ?? null,
+        latest: item.IsLatest,
+        retirement: null,
       });
       if (result.length > MAX_RESTORED_DELETION_MARKERS) rejected();
     }
   }
+  for (const version of result) {
+    const retirement = retirements.get(version.key);
+    if (version.latest ? retirement !== undefined : retirement === undefined) rejected();
+    if (retirement) {
+      if (
+        retirement.versionId === version.versionId ||
+        retirement.lastModified < version.lastModified ||
+        retirement.owner !== version.owner
+      )
+        rejected();
+      version.retirement = retirement;
+      retirements.delete(version.key);
+    }
+  }
+  if (retirements.size !== 0) rejected();
   return result.sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
 }
 
@@ -427,7 +486,8 @@ export class AwsReadOnlyCandidateDeletionRestoreLedger {
     const deadline = new Deadline(this.timeoutMs, signal);
     try {
       const versions = await listMarkers(this.s3, this.options, deadline);
-      if (completionEvidence && versions.length !== 1) rejected();
+      if (completionEvidence && (versions.length !== 1 || versions[0]?.retirement !== null))
+        rejected();
       const entries: CandidateDeletionRecoveryEntry[] = [];
       const records: unknown[] = [];
       let completionMarker: HistoricalCompletionEvidence["marker"] | undefined;
@@ -493,6 +553,14 @@ export class AwsReadOnlyCandidateDeletionRestoreLedger {
           rejected();
         const confirmedAt = storedDate(body.confirmedAt);
         const backupExpiresAt = storedDate(body.backupExpiresAt);
+        // A retired marker still supplies deletion authority for restored copies. Never skip it
+        // merely because retention elapsed; authenticate its exact retained body and reconcile it.
+        if (
+          version.retirement &&
+          (version.retirement.lastModified < date(backupExpiresAt) ||
+            version.retirement.lastModified > date(now))
+        )
+          rejected();
         if (date(object.ObjectLockRetainUntilDate) !== date(backupExpiresAt)) rejected();
         const retentionResponse = await deadline.send(
           this.s3,
@@ -526,6 +594,7 @@ export class AwsReadOnlyCandidateDeletionRestoreLedger {
         }
         if (tags.get("state") !== "completed") rejected();
         const completedAt = storedDate(tags.get("completed-at"));
+        if (version.retirement && version.retirement.lastModified < date(completedAt)) rejected();
         const decrypted = await deadline.send(
           this.kms,
           new DecryptCommand({
@@ -559,6 +628,7 @@ export class AwsReadOnlyCandidateDeletionRestoreLedger {
           completedAt,
         });
         if (completionEvidence) {
+          const { latest: _latest, retirement: _retirement, ...currentVersion } = version;
           const observation = completionMarkerObservationFromAws({
             target: {
               bucketName: this.options.bucketName,
@@ -571,7 +641,7 @@ export class AwsReadOnlyCandidateDeletionRestoreLedger {
             tagging: tagged,
             retention: retentionResponse,
             // listMarkers has already rejected every other checksum representation.
-            version,
+            version: currentVersion,
           });
           if (observation.bodySha256 !== bodySha256) rejected();
           const { tagSet, ...immutable } = observation;
