@@ -207,9 +207,9 @@ reconciled tombstones are distinct counts. An empty valid inspection is not posi
 acceptance. Do not relabel this response as the historical D1 acceptance receipt or assert cleanup
 until the separate temporary-Lambda and PITR cleanup steps actually succeed.
 
-Complete normal schema/integrity, workflow, alarm, RTO/RPO and accountable recovery acceptance
-before any traffic is considered. Backup-window expiry still requires actual recoverability and
-manual/cross-account backup inventory evidence; elapsed time alone is insufficient.
+Before candidate testing, check current migrations and reconcile completed deletions. Formal
+database recovery-proof rehearsals are not D3 gates. Preserve encrypted backups and exact-target
+deletion safeguards; elapsed backup age alone does not establish deletion of every retained copy.
 
 ## Restored-primary recovery
 
@@ -227,3 +227,14 @@ transactional owner deletion safeguards. Neither action enables candidate traffi
 result requires explicit inspection; never automatically replay. Clean up the temporary Lambda
 before changing its bound primary, safety snapshot, role or network. Do not use PITR cleanup on the
 canonical primary; finish with the data-preserving development dormancy lifecycle.
+
+After primary replay Lambda cleanup, disable the platform role with `-CleanupMode
+CompletedPrimaryRecovery`, supplying the actual preparation, its primary context and cleanup
+journal with their reviewed hashes. The guard binds the canonical physical database, primary mode
+and exact role, retains the 330-second invocation drain, and checks that no function version uses
+the role. It requires no fabricated isolated PITR proof. Verify platform-role removal before
+disabling its bootstrap allowance. Keep databases and backups intact during permission cleanup.
+
+The no-change baseline accepts only the provider's `backing-up` to `available` status observation
+with an equal or advancing restore clock. Other status, identity or configuration changes refuse;
+this read-only comparison never rewrites the saved plan or original state.

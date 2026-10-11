@@ -561,14 +561,23 @@ function Assert-RestoreRoleFileBindings {
 }
 
 function Assert-RestoreRoleCleanupEvidence {
-  param([object]$Preparation,[object]$Config,[object]$Context,[object]$Journal,[string]$PreparationSha256,[string]$ContextSha256,[string]$AccountId,[datetimeoffset]$Now=[datetimeoffset]::UtcNow)
+  param([object]$Preparation,[object]$Config,[object]$Context,[object]$Journal,[string]$PreparationSha256,[string]$ContextSha256,[string]$AccountId,[datetimeoffset]$Now=[datetimeoffset]::UtcNow,[switch]$PrimaryRecovery)
   if($Preparation.accountId -cne $AccountId -or $Preparation.roleBoundary.roleArn -cne "arn:aws:iam::${AccountId}:role/ai-job-apply-development-deletion-restore" -or
-    $Context.source_identifier -cne 'ai-job-apply-development' -or $Context.target_identifier -cnotmatch '^ai-job-apply-development-restore-[a-z0-9-]+$' -or
+    $Context.source_identifier -cne 'ai-job-apply-development'){throw 'RestoreRoleCleanupEvidenceRejected'}
+  if($PrimaryRecovery){
+    if((Get-RestoreRoleProperty $Preparation 'baselineMode') -cne 'primary-recovery' -or
+      (Get-RestoreRoleProperty $Config 'recoveryMode') -cne 'primary_recovery' -or
+      $Context.baseline_mode -cne 'primary-recovery' -or $Context.target_identifier -cne $Context.source_identifier -or
+      $Config.sourceDbiResourceId -cne $Config.targetDbiResourceId -or $Config.sourceBoundarySha256 -cne $Config.targetBoundarySha256 -or
+      $Config.sourceHostname -cne $Config.targetHostname){throw 'RestoreRolePrimaryCleanupEvidenceRejected'}
+  }elseif((Get-RestoreRoleProperty $Config 'recoveryMode') -ceq 'primary_recovery' -or
+    $Context.target_identifier -cnotmatch '^ai-job-apply-development-restore-[a-z0-9-]+$' -or
     $Context.target_boundary_authenticated -isnot [bool] -or -not $Context.target_boundary_authenticated -or $Context.verified -isnot [bool] -or -not $Context.verified){throw 'RestoreRoleCleanupEvidenceRejected'}
   if($Config.restoreContextSha256 -cne $ContextSha256 -or $Config.accountId -cne $AccountId -or
     $Config.sourceIdentifier -cne $Context.source_identifier -or $Config.sourceDbiResourceId -cne $Context.source_dbi_resource_id -or $Config.sourceBoundarySha256 -cne $Context.source_boundary_sha256 -or
-    $Config.targetIdentifier -cne $Context.target_identifier -or $Config.targetDbiResourceId -cne $Context.target_dbi_resource_id -or $Config.targetBoundarySha256 -cne $Context.target_boundary_sha256 -or
-    $Context.target_resource_arn -cne "arn:aws:rds:us-east-2:${AccountId}:db:$($Config.targetIdentifier)" -or $Context.source_resource_arn -cne "arn:aws:rds:us-east-2:${AccountId}:db:ai-job-apply-development"){throw 'RestoreRoleCleanupTargetBindingChanged'}
+    $Config.targetIdentifier -cne $Context.target_identifier -or $Config.targetDbiResourceId -cne $Context.target_dbi_resource_id -or $Config.targetBoundarySha256 -cne $Context.target_boundary_sha256){throw 'RestoreRoleCleanupTargetBindingChanged'}
+  if(-not $PrimaryRecovery -and ($Context.target_resource_arn -cne "arn:aws:rds:us-east-2:${AccountId}:db:$($Config.targetIdentifier)" -or
+    $Context.source_resource_arn -cne "arn:aws:rds:us-east-2:${AccountId}:db:ai-job-apply-development")){throw 'RestoreRoleCleanupTargetBindingChanged'}
   if((@($Journal.PSObject.Properties.Name|Sort-Object)-join ',') -cne 'preparationSha256,schemaVersion,startedAt,status' -or
     ($Journal.schemaVersion -isnot [int] -and $Journal.schemaVersion -isnot [long]) -or $Journal.schemaVersion -ne 1 -or $Journal.status -cne 'started' -or $Journal.preparationSha256 -cne $PreparationSha256){throw 'RestoreRoleCleanupJournalRejected'}
   try{$started=[datetimeoffset]::Parse($Journal.startedAt,[Globalization.CultureInfo]::InvariantCulture)}catch{throw 'RestoreRoleCleanupTimestampRejected'}

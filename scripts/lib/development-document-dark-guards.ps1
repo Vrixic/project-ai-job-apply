@@ -998,6 +998,17 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
       "module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"
     ))
   $processorRole = "module.platform.aws_iam_role.document_processor[0]"
+  $privateEndpointTagOnly = @(
+    'module.platform.aws_vpc_endpoint.lambda[0]',
+    'module.platform.aws_vpc_endpoint.migration_ecr_api[0]',
+    'module.platform.aws_vpc_endpoint.migration_ecr_dkr[0]',
+    'module.platform.aws_vpc_endpoint.migration_logs[0]',
+    'module.platform.aws_vpc_endpoint.native_preparation_kms[0]',
+    'module.platform.aws_vpc_endpoint.native_resume_api["ec2"]',
+    'module.platform.aws_vpc_endpoint.native_resume_api["ecs"]',
+    'module.platform.aws_vpc_endpoint.secretsmanager[0]',
+    'module.platform.aws_vpc_endpoint.sqs[0]'
+  )
   $completeDarkMapping = "module.platform.aws_lambda_event_source_mapping.document_scan_results[0]"
   $d2TrustSignalMapping = "module.platform.aws_lambda_event_source_mapping.d2_trust_signal[0]"
   $completeDarkTagOnly = @(
@@ -1035,6 +1046,7 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
     )) { $allowedTypes[$address] = "aws_sqs_queue" }
   $allowedTypes["module.platform.aws_vpc_endpoint.candidate_documents_s3[0]"] = "aws_vpc_endpoint"
   $allowedTypes["module.platform.aws_vpc_endpoint.sts[0]"] = "aws_vpc_endpoint"
+  foreach ($address in $privateEndpointTagOnly) { $allowedTypes[$address] = 'aws_vpc_endpoint' }
 
   $planned = Get-TerraformStateResourceMap $RootModule
   $kms = $planned["module.platform.aws_kms_key.platform"]
@@ -1182,6 +1194,14 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
         Assert-DevelopmentDocumentS3EndpointCidrRefresh $before $after $expected
         $sensitivity += "cidr_blocks"
       }
+    } elseif ($address -cin $privateEndpointTagOnly) {
+      $expected = $planned[$address]
+      if ($null -eq $expected -or (ConvertTo-DeploymentCanonicalValue $after -SortArrays) -cne
+        (ConvertTo-DeploymentCanonicalValue $expected -SortArrays)) {
+        throw 'Private endpoint tag observation differs from the exact planned resource.'
+      }
+      Assert-DevelopmentDocumentNullToEmptyObject $before $after tags 'Private endpoint post-create tags'
+      $sensitivity += 'tags'
     } elseif ($address -cin $tagOnly) {
       Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Resource tag drift"
       $sensitivity += "tags"
@@ -1201,7 +1221,13 @@ function Assert-DevelopmentDocumentAcceptedResourceDrift {
     } elseif ($address -ceq "module.platform.aws_db_instance.postgres[0]") {
       $beforeClock = ConvertTo-StrictUtcWholeSecond $before.latest_restorable_time "RDS before restore clock"
       $afterClock = ConvertTo-StrictUtcWholeSecond $after.latest_restorable_time "RDS after restore clock"
-      if ($afterClock -le $beforeClock) { throw "The provider-observed RDS restore clock did not move strictly forward." }
+      $backupCompleted = $null -ne $before.PSObject.Properties['status'] -and
+        $null -ne $after.PSObject.Properties['status'] -and
+        $before.status -ceq 'backing-up' -and $after.status -ceq 'available'
+      if ($afterClock -lt $beforeClock -or ($afterClock -eq $beforeClock -and -not $backupCompleted)) {
+        throw "The provider-observed RDS restore clock regressed or lacked a forward observation."
+      }
+      if ($backupCompleted) { $after.status = $before.status }
       $after.latest_restorable_time = $before.latest_restorable_time
     } elseif ($address -cin $parserRoles) {
       Assert-DevelopmentDocumentNullToEmptyObject $before $after tags "Role tag drift"
