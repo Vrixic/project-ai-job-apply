@@ -1,5 +1,13 @@
 # Data Flow and Classification
 
+2026-10-10 default-off application execution source: trusted extension Apply → protected owner
+start/write-ahead dispatch → exact isolated employer document → one bounded ordinary-field/file
+command → accepted-profile confirmation → owning result/history. Tokens remain background-only.
+The private versioned channel carries filtered ordinary approved values and bounded native files;
+restricted/attestation/signature values are excluded. Current attempt, job, material withdrawal,
+original expiry and document proofs fence effects. No retry follows uncertain dispatch/click.
+Accepted application profiles are empty; batch verification/live/provider acceptance remain pending.
+
 2026-10-10 D3-101 internal source: exact Greenhouse document → bounded structure without values →
 existing SDK plan → registry and fresh owning-approval callback → ordinary control assignment
 and events. Only just-written approved values are read back to verify assignment; no pre-existing

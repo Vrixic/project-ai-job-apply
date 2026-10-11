@@ -22,30 +22,47 @@ export function mountApplicationHandoff() {
   let snapshot: ApprovedHandoff | undefined;
   let snapshotId: string | undefined;
   let busy = false;
-  for (const action of ["select", "clear"] as const) {
+  const nativeInstructions = section.querySelector<HTMLElement>("[data-native-instructions]");
+  if (nativeInstructions && extensionConfiguration.applicationExecutionEnabled)
+    nativeInstructions.hidden = false;
+  for (const action of ["select", "clear", "apply"] as const) {
     const button = section.querySelector<HTMLButtonElement>(`[data-native-${action}]`);
     if (!button || !extensionConfiguration.applicationExecutionEnabled) continue;
     button.hidden = false;
     button.addEventListener("click", async () => {
-      if (busy) return;
-      busy = true;
+      const ownsBusy = action !== "clear";
+      if (busy && ownsBusy) return;
+      if (ownsBusy) busy = true;
       button.disabled = true;
       try {
         const response = await chrome.runtime.sendMessage(
           action === "select"
             ? { action: "application_native_select", reviewLink: input.value }
-            : { action: "application_native_clear" },
+            : action === "apply"
+              ? { action: "application_native_apply", reviewLink: input.value }
+              : { action: "application_native_clear" },
         );
+        if (action === "apply") {
+          status.textContent =
+            response.ok && response.outcome === "confirmed"
+              ? "The employer confirmed submission. Return to the application workspace to view history."
+              : response.outcome === "unknown"
+                ? "The submission outcome is uncertain. Return to the workspace to review it; do not submit again."
+                : "Application needs review. Check the employer page and current application workspace before continuing.";
+          return;
+        }
         if (!response.ok) throw Error();
         status.textContent =
           action === "select"
             ? "Employer tab selected for one minute. Return to the approved workspace to send files. Transfer availability still depends on adapter acceptance."
-            : "Approved file transfer cleared.";
+            : "Approved file transfer cleared. If Apply had started, review the workspace before any further submission.";
       } catch {
         status.textContent =
-          "The file transfer could not be selected. Check the employer tab, current approval and extension sign-in.";
+          action === "apply"
+            ? "Apply could not complete. Review the application workspace before trying any further submission."
+            : "The file transfer could not be selected. Check the employer tab, current approval and extension sign-in.";
       } finally {
-        busy = false;
+        if (ownsBusy) busy = false;
         button.disabled = false;
       }
     });

@@ -155,3 +155,10 @@ bindings, byte caps and a one-use nonce; cancellation also withdraws an in-fligh
 a lost acknowledgement. No token, persistent content, expiry renewal or submission authority is
 carried. Deploy both compatible client builds before enabling the separate transport configuration;
 the manual handoff and native SPA scopes remain unchanged. See [ADR-049](../../docs/adr/049-greenhouse-approved-application-execution.md).
+
+The additive `ApplicationExecution*` components describe the extension's private isolated-world
+inspection, single execution command, owning proof, cancellation and result channel. Credentials
+never enter that channel. These are client-internal contracts, with no new REST route or migration;
+submission reuses the existing start/dispatch/result API. Both extension contexts must use the same
+generated validators. Commands retain original material/approval expiry, allow one document/attempt
+effect and never replay after an uncertain acknowledgement. Native transfer does not grant execution.

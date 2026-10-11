@@ -1,12 +1,14 @@
 # ADR-049: Greenhouse approved application execution
 
-Status: Proposed; implementation and release acceptance pending
+Status: Proposed; source locally verified, release acceptance pending
 Date: 2026-10-10
 
-Initial internal inspection/ordinary-field primitives compile and pass focused synthetic tests
-and intercepted Chromium probes. They are not connected to extension UI, native files or attempts.
-The existing extension session requests `applications:read` for manual handoff only. Any future
-execution build must separately opt into the existing `applications:write` grant, preserve
+Internal inspection/ordinary-field primitives and the separate native file bridge pass focused
+synthetic tests and intercepted Chromium probes. Connected attempt execution passes focused
+regressions, synthetic browser cases and all 43 repository verification stages. Independent
+targeted source review passes; installed-extension/provider acceptance remains separate.
+The manual handoff session requests `applications:read` only. The
+separate execution build opts into the existing `applications:write` grant, preserves
 default-off/manual permissions and verify that exact public-client delegated grant before live use.
 Neither this document nor a model-authored test grants provider or identity authority.
 
@@ -43,6 +45,21 @@ packet hashing, saved-answer validation and attempt reconciliation remain author
    before confirmed history. Failure or loss of acknowledgement after dispatch is ambiguous.
    Neither a worker restart nor a timeout may retry the click. Candidate-attested manual outcomes
    remain distinct from provider confirmation.
+
+The private page command is bound to one actual Chrome document, attempt and random nonce. The
+background holds credentials and repeats protected current-attempt/packet/material/job/document
+proofs after start; it does not reopen an approval after the backend enters submitting. Durable
+dispatch acknowledgement precedes field or file events because employer handlers can autosave.
+The isolated-world command spends its effect guard before any employer effect, and spends the
+submit guard synchronously before one click. Timeout, lost acknowledgement and worker loss never
+reinject or replay that command. Unknown navigation or response requires reconciliation.
+
+Confirmation requires a newly appearing, exact provider-profile signal/reference after that click,
+with global challenge detection taking precedence. Accepted profiles must bind the reviewed adapter
+version and implementation hash to the registry evidence. D2 job-detection fixtures do not supply
+this evidence; the production application-profile list remains empty. File controls retain exact
+assigned File identity and approved ordinary values are rechecked through the final click. Abort
+and original expiry clear file controls and owned byte buffers independently of pending proof work.
 
 ## Native transport proposal for the next batch
 

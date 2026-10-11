@@ -1,5 +1,6 @@
 import {
   validateApplication,
+  validateApplicationExecutionProof,
   validateCanonicalJobDetail,
 } from "@ai-job-apply/api-contracts/browser-validators";
 import { extractGenericForm } from "@ai-job-apply/ats-sdk/extract";
@@ -1009,6 +1010,8 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
+  // The private executor owns this channel and verifies the exact employer document/attempt.
+  if (validateApplicationExecutionProof(rawMessage)) return false;
   const message = parseExtensionMessage(rawMessage);
   if (!message || !trustedSender(sender)) {
     sendResponse({ error: "Invalid extension request.", ok: false });
@@ -1028,6 +1031,10 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
       if (message.action === "application_native_select") {
         if (!nativeTransfer) throw Error("NativeMaterialTransferUnavailable");
         return await nativeTransfer.select(message.reviewLink);
+      }
+      if (message.action === "application_native_apply") {
+        if (!nativeTransfer) throw Error("ApplicationExecutionUnavailable");
+        return await nativeTransfer.apply(message.reviewLink);
       }
       if (message.action === "application_native_clear") return { ok: true };
       if (message.action === "application_form_capture")

@@ -16,6 +16,16 @@ const CHALLENGE =
   'iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="turnstile"], .g-recaptcha, .h-captcha, [data-sitekey], [class*="captcha" i], [id*="captcha" i], input[autocomplete="one-time-code"], input[type="password"]';
 const refused = () => new Error("GreenhouseInspectionUnavailable");
 
+/** Global stop signal also applies after the application form has disappeared. */
+export function greenhouseChallengePresent(document: Document): boolean {
+  const walker = document.createTreeWalker(document, 1);
+  let nodes = 0;
+  while (walker.nextNode()) {
+    if (++nodes > 10_000) throw refused();
+  }
+  return document.querySelector(CHALLENGE) !== null;
+}
+
 /** Exact supported host/path metadata only. This is not provider fixture acceptance. */
 export function greenhouseApplicationIdentity(
   value: string,
@@ -56,11 +66,7 @@ export function greenhouseApplicationIdentity(
  */
 function captureGreenhouseApplication(document: Document, expectedUrl: string) {
   const identity = greenhouseApplicationIdentity(expectedUrl);
-  const walker = document.createTreeWalker(document, 1);
-  let nodes = 0;
-  while (walker.nextNode()) {
-    if (++nodes > 10_000) throw refused();
-  }
+  const challengePresent = greenhouseChallengePresent(document);
   if (
     !identity ||
     document.location.href !== expectedUrl ||
@@ -73,7 +79,7 @@ function captureGreenhouseApplication(document: Document, expectedUrl: string) {
   const root = roots[0];
   if (!root || root.querySelector("iframe")) throw refused();
   const form = extractGenericForm(root);
-  form.challengePresent ||= document.querySelector(CHALLENGE) !== null;
+  form.challengePresent ||= challengePresent;
   if (form.fields.length === 0) throw refused();
 
   // Resolve by stable provider attributes, never by the extractor's positional fN handles.

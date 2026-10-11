@@ -3,6 +3,7 @@ import type { JobIntentKind } from "./pending-queue";
 
 export type ExtensionMessage =
   | { action: "application_native_select"; reviewLink: string }
+  | { action: "application_native_apply"; reviewLink: string }
   | { action: "application_native_clear" }
   | { action: "application_form_capture"; reviewLink: string }
   | { action: "application_handoff_read"; reviewLink: string }
@@ -39,6 +40,7 @@ export function parseExtensionMessage(value: unknown): ExtensionMessage | undefi
   if (
     record.action === "application_handoff_read" ||
     record.action === "application_native_select" ||
+    record.action === "application_native_apply" ||
     record.action === "application_form_capture"
   ) {
     return Object.keys(record).length === 2 &&

@@ -27,6 +27,9 @@ export interface AdapterDeclaration {
 }
 
 export interface FixtureEvidence {
+  /** Execution acceptance binds reviewed code; legacy detector evidence grants no execution. */
+  adapterVersion?: string;
+  implementationSha256?: string;
   kind: "provider_derived" | "synthetic";
   authorizationRecordId: string;
   sanitizationScanPassedAt: string;
@@ -103,6 +106,29 @@ export class AdapterRegistry {
 
   get(id: string): AdapterDeclaration | undefined {
     return this.byId.get(id);
+  }
+
+  executionStatus(
+    id: string,
+    variantId: string,
+    version: string,
+    implementationSha256: string,
+    now: Date,
+  ): AdapterStatus {
+    const status = this.status(id, variantId, now);
+    if (status.mode !== "autofill") return status;
+    const declaration = this.get(id);
+    if (!declaration?.capabilities.fileAttach || !declaration.capabilities.confirmationDetection)
+      return { mode: "suggest_only", reasons: ["execution_capability_unavailable"] };
+    const evidence = this.controls.fixtureEvidence[id];
+    if (
+      declaration?.version !== version ||
+      evidence?.adapterVersion !== version ||
+      !/^[a-f0-9]{64}$/u.test(implementationSha256) ||
+      evidence.implementationSha256 !== implementationSha256
+    )
+      return { mode: "suggest_only", reasons: ["execution_implementation_not_accepted"] };
+    return status;
   }
 
   status(id: string, variantId: string, now: Date): AdapterStatus {

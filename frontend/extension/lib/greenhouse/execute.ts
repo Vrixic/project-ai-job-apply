@@ -1,0 +1,390 @@
+import type { ApplicationSubmissionResultRequest } from "@ai-job-apply/api-contracts";
+import { buildFillPlan, type PacketValue } from "@ai-job-apply/ats-sdk/plan";
+import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
+import type { TransferredNativeFile } from "../native-material-transfer";
+import { fillGreenhouseFields } from "./fill";
+import { greenhouseChallengePresent, inspectGreenhouseApplication } from "./inspect";
+
+/** Only reviewed adapter source supplies this profile. Page data never chooses selectors. */
+export interface GreenhouseExecutionProfile {
+  variantId: string;
+  adapterVersion: string;
+  implementationSha256: string;
+  submitSelector: string;
+  confirmationSelector: string;
+  confirmationReferenceAttribute: string;
+}
+
+const unavailable = () => Error("GreenhouseExecutionUnavailable");
+
+/** One document/attempt command, already durably dispatched. No retry or navigation recovery. */
+export async function executeGreenhouseApplication(options: {
+  document: Document;
+  employerUrl: string;
+  documentId: string;
+  formHash: string;
+  packetHash: string;
+  attemptId: string;
+  packet: readonly PacketValue[];
+  files: readonly TransferredNativeFile[];
+  profile: Readonly<GreenhouseExecutionProfile>;
+  registry: AdapterRegistry;
+  deadline: number;
+  signal: AbortSignal;
+  /** Must atomically spend the document/attempt guard before the first employer effect. */
+  claim(): boolean;
+  /** Fresh protected owning attempt/job/packet/material/document proof; no approval reopening. */
+  revalidateDispatched(): Promise<void>;
+}): Promise<ApplicationSubmissionResultRequest> {
+  const { document } = options;
+  const profile = Object.freeze(structuredClone(options.profile));
+  const view = document.defaultView;
+  const deadline = options.deadline;
+  const attachments: { control: HTMLInputElement; file: File; ref: string }[] = [];
+  const clearAttachments = () => {
+    for (const { control } of attachments) {
+      try {
+        Object.getOwnPropertyDescriptor(view?.HTMLInputElement.prototype, "value")?.set?.call(
+          control,
+          "",
+        );
+      } catch {
+        /* A detached document cannot authorize another effect. */
+      }
+    }
+    attachments.length = 0;
+  };
+  const controller = new AbortController();
+  const abort = () => {
+    controller.abort();
+    clearAttachments();
+  };
+  options.signal.addEventListener("abort", abort, { once: true });
+  const timer = setTimeout(abort, Math.max(0, deadline - Date.now()));
+  if (options.signal.aborted) abort();
+  let inspection: ReturnType<typeof inspectGreenhouseApplication> | undefined;
+  let submitted = false;
+  let claimed = false;
+  const stopped = new Promise<never>((_, reject) => {
+    controller.signal.addEventListener("abort", () => reject(unavailable()), { once: true });
+  });
+  // An already aborted operation may never enter a race; keep its rejection handled.
+  void stopped.catch(() => undefined);
+  const current = () => {
+    if (
+      !view ||
+      controller.signal.aborted ||
+      document.location.href !== options.employerUrl ||
+      Date.now() >= deadline ||
+      deadline > Date.now() + 60_000 ||
+      !Number.isFinite(deadline) ||
+      options.registry.executionStatus(
+        "greenhouse-application-v1",
+        profile.variantId,
+        profile.adapterVersion,
+        profile.implementationSha256,
+        new Date(),
+      ).mode !== "autofill"
+    )
+      throw unavailable();
+  };
+  const fresh = async () => {
+    current();
+    await Promise.race([options.revalidateDispatched(), stopped]);
+    current();
+  };
+  const actionable = (element: Element) => {
+    if (!view || element.matches(":disabled") || element.hasAttribute("readonly"))
+      throw unavailable();
+    for (let node: Element | null = element; node; node = node.parentElement) {
+      const style = view.getComputedStyle(node);
+      if (
+        node.hasAttribute("hidden") ||
+        node.hasAttribute("inert") ||
+        node.getAttribute("aria-hidden") === "true" ||
+        style.display === "none" ||
+        ["hidden", "collapse"].includes(style.visibility) ||
+        style.opacity === "0"
+      )
+        throw unavailable();
+    }
+  };
+  const confirmation = () => {
+    const matches = document.querySelectorAll(profile.confirmationSelector);
+    if (matches.length !== 1) return undefined;
+    const node = matches[0];
+    if (!node?.isConnected) return undefined;
+    actionable(node);
+    const reference = node.getAttribute(profile.confirmationReferenceAttribute);
+    return reference && /^[a-zA-Z0-9_-]{1,200}$/u.test(reference) ? { node, reference } : undefined;
+  };
+  try {
+    await fresh();
+    if (!view || document.querySelectorAll(profile.confirmationSelector).length !== 0)
+      throw unavailable();
+    inspection = inspectGreenhouseApplication(document, options.employerUrl);
+    if (inspection.form.challengePresent) return { kind: "challenge_required" };
+    const bytes = new TextEncoder().encode(inspection.structure);
+    const digest = new Uint8Array(
+      await Promise.race([crypto.subtle.digest("SHA-256", bytes), stopped]),
+    );
+    bytes.fill(0);
+    const formHash = [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    digest.fill(0);
+    if (formHash !== options.formHash) throw unavailable();
+    current();
+    const files = options.files;
+    if (
+      files.length < 1 ||
+      files.length > 2 ||
+      new Set(files.map((file) => file.kind)).size !== files.length
+    )
+      throw unavailable();
+    const plan = buildFillPlan(inspection.form, options.packet, {
+      resume: files.some((file) => file.kind === "tailored_resume"),
+      coverLetter: files.some((file) => file.kind === "cover_letter"),
+    });
+    if (plan.requiresTakeover) return { kind: "challenge_required" };
+    const plannedAttachments = plan.actions.filter((action) => action.kind === "attach_artifact");
+    if (
+      plannedAttachments.length !== files.length ||
+      files.some(
+        (file) =>
+          plannedAttachments.filter(
+            (action) =>
+              action.fieldKey ===
+              (file.kind === "tailored_resume" ? "documents.resume" : "documents.cover_letter"),
+          ).length !== 1,
+      )
+    )
+      throw unavailable();
+    const root = document.querySelector("form#application_form, form#application-form");
+    if (!(root instanceof view.HTMLFormElement)) throw unavailable();
+    // Required candidate-only controls may already be completed; inspect validity, never values.
+    for (const action of plan.actions) {
+      if (action.kind !== "require_user") continue;
+      for (const control of inspection.resolve(action.ref)) {
+        if (
+          !(
+            control instanceof view.HTMLInputElement ||
+            control instanceof view.HTMLSelectElement ||
+            control instanceof view.HTMLTextAreaElement
+          ) ||
+          !control.validity.valid
+        )
+          return { kind: "precondition_failed" };
+      }
+    }
+    const buttons = root.querySelectorAll(profile.submitSelector);
+    const button = buttons[0];
+    if (
+      buttons.length !== 1 ||
+      !(button instanceof view.HTMLButtonElement || button instanceof view.HTMLInputElement) ||
+      button.type !== "submit" ||
+      button.form !== root
+    )
+      throw unavailable();
+    actionable(button);
+    await fresh();
+    if (!options.claim()) throw unavailable();
+    claimed = true;
+    const filled = await fillGreenhouseFields(inspection, options.packet, {
+      registry: options.registry,
+      variantId: profile.variantId,
+      deadline,
+      signal: controller.signal,
+      revalidateApproval: fresh,
+      throwOnFailure: true,
+    });
+    const expectedFills = plan.actions.filter(
+      (action) => action.kind === "fill" || action.kind === "select",
+    );
+    if (filled.filled.length !== expectedFills.length) throw unavailable();
+    const requireWrittenFields = () => {
+      for (const action of expectedFills) {
+        const controls = inspection?.resolve(action.ref);
+        const control = controls?.[0];
+        if (controls?.length !== 1 || !control) throw unavailable();
+        actionable(control);
+        if (action.kind === "select") {
+          if (
+            !(control instanceof view.HTMLSelectElement) ||
+            control.multiple ||
+            control.selectedOptions.length !== 1 ||
+            control.selectedOptions[0]?.textContent?.replace(/\s+/gu, " ").trim() !==
+              action.option ||
+            control.selectedOptions[0]?.disabled ||
+            control.selectedOptions[0]?.parentElement?.hasAttribute("disabled")
+          )
+            throw unavailable();
+        } else if (control instanceof view.HTMLInputElement && control.type === "checkbox") {
+          if (control.checked !== action.value) throw unavailable();
+        } else if (
+          !(
+            control instanceof view.HTMLInputElement || control instanceof view.HTMLTextAreaElement
+          ) ||
+          control.value !== String(action.value)
+        )
+          throw unavailable();
+      }
+    };
+    requireWrittenFields();
+    const requireAttachments = () => {
+      for (const { control, file, ref } of attachments) {
+        if (inspection?.resolve(ref)[0] !== control) throw unavailable();
+        actionable(control);
+        if (
+          control.files?.length !== 1 ||
+          control.files[0] !== file ||
+          control.files[0].size !== file.size ||
+          control.files[0].type !== file.type ||
+          control.files[0].name !== file.name ||
+          !control.validity.valid
+        )
+          throw unavailable();
+      }
+    };
+    for (const action of plan.actions) {
+      if (action.kind !== "attach_artifact") continue;
+      await fresh();
+      requireAttachments();
+      requireWrittenFields();
+      const controls = inspection.resolve(action.ref);
+      const control = controls[0];
+      if (
+        controls.length !== 1 ||
+        !(control instanceof view.HTMLInputElement) ||
+        control.type !== "file" ||
+        control.multiple ||
+        control.files?.length
+      )
+        throw unavailable();
+      actionable(control);
+      const kind = action.fieldKey === "documents.resume" ? "tailored_resume" : "cover_letter";
+      const file = files.find((candidate) => candidate.kind === kind);
+      if (!file || file.bytes.byteLength < 1 || file.bytes.byteLength > 300_000)
+        throw unavailable();
+      const suffix = file.format === "pdf" ? ".pdf" : ".docx";
+      const accept = control.accept
+        .split(",")
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean);
+      if (
+        accept.length &&
+        !accept.includes(suffix) &&
+        !accept.includes(file.mediaType.toLowerCase())
+      )
+        throw unavailable();
+      const transfer = new view.DataTransfer();
+      const copy = new Uint8Array(file.bytes);
+      try {
+        transfer.items.add(new view.File([copy], `${kind}${suffix}`, { type: file.mediaType }));
+      } finally {
+        copy.fill(0);
+      }
+      const intended = transfer.files[0];
+      if (!intended) throw unavailable();
+      attachments.push({ control, file: intended, ref: action.ref });
+      current();
+      inspection.resolve(action.ref);
+      control.files = transfer.files;
+      for (const event of ["input", "change"]) {
+        current();
+        requireWrittenFields();
+        requireAttachments();
+        inspection.resolve(action.ref);
+        actionable(control);
+        if (
+          control.files?.length !== 1 ||
+          control.files[0]?.size !== file.bytes.byteLength ||
+          !control.validity.valid
+        )
+          throw unavailable();
+        control.dispatchEvent(new view.Event(event, { bubbles: true }));
+      }
+      inspection.resolve(action.ref);
+      if (control.files?.length !== 1 || !control.validity.valid) throw unavailable();
+    }
+    await fresh();
+    requireWrittenFields();
+    requireAttachments();
+    for (const field of inspection.form.fields) inspection.resolve(field.ref);
+    if (
+      !root.isConnected ||
+      !root.checkValidity() ||
+      document.querySelectorAll(profile.confirmationSelector).length !== 0 ||
+      root.querySelectorAll(profile.submitSelector).length !== 1 ||
+      root.querySelector(profile.submitSelector) !== button
+    )
+      throw unavailable();
+    actionable(button);
+    current();
+    // Spend synchronously before click. No later code path invokes click again.
+    submitted = true;
+    const clickedAt = Date.now();
+    button.click();
+    while (Date.now() < deadline) {
+      await fresh();
+      if (greenhouseChallengePresent(document)) return { kind: "challenge_required" };
+      const observed = confirmation();
+      if (observed) {
+        const observedAt = Date.now();
+        const encoded = new TextEncoder().encode(
+          JSON.stringify({
+            v: 1,
+            attemptId: options.attemptId,
+            packetHash: options.packetHash,
+            adapterVersion: profile.adapterVersion,
+            variantId: profile.variantId,
+            documentUrl: options.employerUrl,
+            documentId: options.documentId,
+            clickedAt,
+            observedAt,
+            reference: observed.reference,
+          }),
+        );
+        const hash = new Uint8Array(
+          await Promise.race([crypto.subtle.digest("SHA-256", encoded), stopped]),
+        );
+        encoded.fill(0);
+        const fingerprintSha256 = [...hash]
+          .map((byte) => byte.toString(16).padStart(2, "0"))
+          .join("");
+        hash.fill(0);
+        await fresh();
+        if (greenhouseChallengePresent(document)) return { kind: "challenge_required" };
+        const finalConfirmation = confirmation();
+        if (
+          finalConfirmation?.node !== observed.node ||
+          finalConfirmation.reference !== observed.reference
+        )
+          throw unavailable();
+        return {
+          kind: "confirmed",
+          confirmation: {
+            kind: "provider_confirmation_page",
+            observedAt: new Date(observedAt).toISOString(),
+            fingerprintSha256,
+            providerReference: observed.reference,
+          },
+        };
+      }
+      const inspected = inspectGreenhouseApplication(document, options.employerUrl);
+      try {
+        if (inspected.form.challengePresent) return { kind: "challenge_required" };
+      } finally {
+        inspected.dispose();
+      }
+      await Promise.race([new Promise<void>((resolve) => setTimeout(resolve, 200)), stopped]);
+    }
+    return { kind: "timeout" };
+  } catch {
+    return { kind: submitted || claimed ? "unrecognized_response" : "precondition_failed" };
+  } finally {
+    abort();
+    clearTimeout(timer);
+    options.signal.removeEventListener("abort", abort);
+    inspection?.dispose();
+    clearAttachments();
+  }
+}

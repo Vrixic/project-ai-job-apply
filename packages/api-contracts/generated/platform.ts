@@ -2691,6 +2691,84 @@ export interface components {
             /** @enum {string} */
             state: "pending" | "native_tasks_settled";
         };
+        ApplicationExecutionField: {
+            fieldKey: string;
+            value: string | number | boolean | null | (string | number | boolean)[];
+            needsUserAction: boolean;
+        };
+        ApplicationExecutionFile: {
+            /** @enum {string} */
+            kind: "tailored_resume" | "cover_letter";
+            /** Format: uuid */
+            generationId: string;
+            /** @enum {string} */
+            format: "pdf" | "docx";
+            mediaType: string;
+            sha256: string;
+            contentBase64: string;
+        };
+        ApplicationExecutionInspect: {
+            /** @constant */
+            schema: "application-execution-inspect.v1";
+            nonce: string;
+            employerUrl: string;
+            deadline: number;
+        };
+        ApplicationExecutionInspection: {
+            /** @constant */
+            schema: "application-execution-inspection.v1";
+            nonce: string;
+            formHash: string;
+            challengePresent: boolean;
+        };
+        ApplicationExecutionCommand: {
+            /** @constant */
+            schema: "application-execution-command.v1";
+            nonce: string;
+            /** Format: uuid */
+            attemptId: string;
+            /** Format: uuid */
+            documentId: string;
+            employerUrl: string;
+            packetHash: string;
+            formHash: string;
+            variantId: string;
+            adapterVersion: string;
+            deadline: number;
+            fields: components["schemas"]["ApplicationExecutionField"][];
+            files: components["schemas"]["ApplicationExecutionFile"][];
+        };
+        ApplicationExecutionProof: {
+            /** @constant */
+            schema: "application-execution-proof.v1";
+            nonce: string;
+            /** Format: uuid */
+            attemptId: string;
+        };
+        ApplicationExecutionProofResult: {
+            /** @constant */
+            schema: "application-execution-proof-result.v1";
+            nonce: string;
+            /** Format: uuid */
+            attemptId: string;
+            /** @constant */
+            ok: true;
+        };
+        ApplicationExecutionResult: {
+            /** @constant */
+            schema: "application-execution-result.v1";
+            nonce: string;
+            /** Format: uuid */
+            attemptId: string;
+            result: components["schemas"]["ApplicationSubmissionResultRequest"];
+        };
+        ApplicationExecutionCancel: {
+            /** @constant */
+            schema: "application-execution-cancel.v1";
+            nonce: string;
+            /** Format: uuid */
+            attemptId: string;
+        };
     };
     responses: {
         /** @description Request validation failed */

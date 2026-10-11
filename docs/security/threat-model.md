@@ -1,5 +1,16 @@
 # Phase 0 Threat Model
 
+2026-10-10 default-off ATS execution source adds a private exact-document command/proof channel.
+Durable dispatch precedes employer field/file events; commands and submit clicks are one-shot,
+with no replay after timeout, worker loss or unknown acknowledgement. Tokens stay in background.
+Current owner/attempt/packet/material authorization/job and original saved-answer/material expiry
+are rechecked. Exact assigned File identity and ordinary approved values resist employer handler
+replacement. Global challenges override fresh, version-bound profile confirmation; pre-existing
+success DOM cannot confirm. Abort clears owned command bytes and file controls even during stalled
+proof/digest work. Provider profiles remain empty and registry off. Batch tests, authorized provider
+fixtures, independent QA and employer all-copy retention conformance remain required; JavaScript
+reference clearing is not a guarantee of physical string/Blob erasure or remote deletion.
+
 2026-10-10 D3-101 internal source: Greenhouse DOM primitives use the existing action registry and
 SDK sensitive-field policy. Exact top-frame URL/document, form structure and stable control
 identities are rechecked before each event. Synchronous employer handlers that replace, hide,

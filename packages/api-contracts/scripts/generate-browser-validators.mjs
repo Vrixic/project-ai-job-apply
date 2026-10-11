@@ -10,6 +10,17 @@ const schemas = JSON.parse(
 );
 const names = [
   "Application",
+  "StartApplicationSubmissionRequest",
+  "ApplicationSubmissionStart",
+  "ApplicationAttempt",
+  "ApplicationSubmissionResultRequest",
+  "ApplicationExecutionInspect",
+  "ApplicationExecutionInspection",
+  "ApplicationExecutionCommand",
+  "ApplicationExecutionProof",
+  "ApplicationExecutionProofResult",
+  "ApplicationExecutionResult",
+  "ApplicationExecutionCancel",
   "CanonicalJobDetail",
   "ApplicationTemporaryMaterialAuthorization",
   "ApplicationResumeFile",

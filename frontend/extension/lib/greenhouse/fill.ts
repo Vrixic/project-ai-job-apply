@@ -30,6 +30,8 @@ export async function fillGreenhouseFields(
     deadline: number;
     signal: AbortSignal;
     revalidateApproval(): Promise<void>;
+    /** Submission composition must distinguish a stopped fill from candidate-only review. */
+    throwOnFailure?: boolean;
   },
 ): Promise<{ filled: readonly string[]; reviewRequired: boolean }> {
   const filled: string[] = [];
@@ -138,6 +140,7 @@ export async function fillGreenhouseFields(
       reviewRequired: plan.actions.some((action) => action.kind === "require_user"),
     };
   } catch {
+    if (authority.throwOnFailure) throw new Error("GreenhouseFillUnavailable");
     // Partial effects require review. Never replay or restore a previous value automatically.
     return { filled, reviewRequired: true };
   } finally {

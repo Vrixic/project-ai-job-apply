@@ -178,6 +178,9 @@ const buildOptions = {
   entryPoints: {
     background: join(extensionRoot, "entrypoints", "background.ts"),
     popup: join(extensionRoot, "entrypoints", "popup.ts"),
+    ...(applicationExecution
+      ? { "greenhouse-execution": join(extensionRoot, "entrypoints", "greenhouse-execution.ts") }
+      : {}),
   },
   format: "esm",
   logLevel: "info",

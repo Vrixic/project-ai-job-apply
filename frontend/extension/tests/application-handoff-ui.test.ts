@@ -4,7 +4,10 @@ import { approvedHandoff } from "../lib/application-handoff";
 import { handoffFixture, LINK, WEB } from "./application-handoff-fixture";
 
 vi.mock("../lib/config", () => ({
-  extensionConfiguration: { applicationHandoffWebOrigin: "https://candidate.example" },
+  extensionConfiguration: {
+    applicationHandoffWebOrigin: "https://candidate.example",
+    applicationExecutionEnabled: true,
+  },
 }));
 
 import { mountApplicationHandoff } from "../lib/application-handoff-ui";
@@ -56,7 +59,7 @@ beforeEach(() => {
   });
   clipboard.mockClear();
   document.body.innerHTML =
-    '<button id="logout">Logout</button><section id="application-handoff" hidden><input><button data-handoff-load>Load</button><button data-handoff-form>Copy structure</button><button data-handoff-clear>Clear</button><div data-handoff-content></div><div data-handoff-status></div></section>';
+    '<button id="logout">Logout</button><section id="application-handoff" hidden><input><button data-handoff-load>Load</button><button data-handoff-form>Copy structure</button><button data-handoff-clear>Clear</button><button data-native-apply hidden>Apply</button><button data-native-clear hidden>Clear files</button><div data-handoff-content></div><div data-handoff-status></div></section>';
   for (const target of [window, document]) {
     const original = target.addEventListener.bind(target);
     vi.spyOn(target, "addEventListener").mockImplementation(((
@@ -101,6 +104,45 @@ function copyButton() {
   return button;
 }
 describe("manual handoff UI", () => {
+  it("allows Clear during a pending Apply and blocks duplicate Apply", async () => {
+    let finish: (value: unknown) => void = () => undefined;
+    send.mockImplementation(async (message) =>
+      message.action === "application_native_apply"
+        ? new Promise((resolve) => {
+            finish = resolve;
+          })
+        : { ok: true },
+    );
+    control<HTMLInputElement>("input").value = LINK;
+    const apply = control<HTMLButtonElement>("[data-native-apply]");
+    expect(apply.hidden).toBe(false);
+    apply.click();
+    apply.click();
+    await flush();
+    expect(
+      send.mock.calls.filter(([message]) => message.action === "application_native_apply"),
+    ).toHaveLength(1);
+    control<HTMLButtonElement>("[data-native-clear]").click();
+    await flush();
+    expect(send).toHaveBeenCalledWith({ action: "application_native_clear" });
+    expect(control("[data-handoff-status]").textContent).toContain("If Apply had started");
+    finish({ ok: false, outcome: "unknown" });
+    await flush();
+    expect(control("[data-handoff-status]").textContent).toContain("do not submit again");
+    expect(apply.disabled).toBe(false);
+  });
+
+  it.each([true, false])(
+    "shows confirmed copy only for a positive owning acknowledgement (%s)",
+    async (ok) => {
+      send.mockResolvedValue({ ok, outcome: "confirmed" });
+      control<HTMLButtonElement>("[data-native-apply]").click();
+      await flush();
+      expect(
+        control("[data-handoff-status]").textContent?.includes("employer confirmed submission"),
+      ).toBe(ok);
+    },
+  );
   it("copies explicit structure only and suppresses a late result after clear", async () => {
     mountApplicationHandoff();
     control<HTMLInputElement>("input").value = LINK;

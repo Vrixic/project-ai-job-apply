@@ -381,6 +381,22 @@ export function createNativeMaterialTransfer(options: {
         },
       };
     },
+    /** Trusted owning Apply consumes private ready state; no receipt is exposed to the popup. */
+    consumeSelected(reviewLink: string) {
+      const state = current;
+      if (state?.phase !== "ready" || !active(state) || state.selection.reviewLink !== reviewLink)
+        throw unavailable();
+      state.phase = "consumed";
+      return {
+        files: state.files,
+        signal: state.controller.signal,
+        deadline: state.deadline,
+        selection: structuredClone(state.selection),
+        dispose: () => {
+          if (current === state) clear();
+        },
+      };
+    },
     /** Browser navigation/removal and extension identity/cancel hooks own this invalidation. */
     documentChanged(tabId: number) {
       if (current && (current.selection.tabId === tabId || current.sender?.tabId === tabId))

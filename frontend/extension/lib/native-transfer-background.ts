@@ -1,5 +1,6 @@
 import { validateApplication } from "@ai-job-apply/api-contracts/browser-validators";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
+import { executeApprovedApplication } from "./application-executor";
 import { parseHandoffLink, readApprovedHandoff, readJson } from "./application-handoff";
 import { greenhouseApplicationIdentity } from "./greenhouse/inspect";
 import {
@@ -184,5 +185,27 @@ export function installNativeTransferBackground(options: {
     },
     // Private executor composition only. No content in popup snapshots or external responses.
     consume: transfer.consume,
+    async apply(reviewLink: string) {
+      const owned = transfer.consumeSelected(reviewLink);
+      try {
+        return await executeApprovedApplication({
+          apiOrigin: options.apiOrigin,
+          registry: options.registry,
+          identity: options.identity,
+          owned,
+          async preflight(selection, signal) {
+            const proof = await protectedSelection(
+              selection.reviewLink,
+              selection.tabId,
+              signal,
+              selection.documentId,
+            );
+            if (!sameNativeTransferBinding(proof, selection)) throw unavailable();
+          },
+        });
+      } finally {
+        owned.dispose();
+      }
+    },
   };
 }
