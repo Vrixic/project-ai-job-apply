@@ -61,7 +61,7 @@ foreign proof documents, material withdrawal and terminal attempt timestamps. Fu
 verification now passes as recorded below. Production profiles remain empty and
 registry controls off; source wiring grants no provider acceptance.
 
-Remaining internal work: final review and merge; live delegated-grant
+Remaining internal work: live delegated-grant
 verification and the connected installed/native/provider journey. Managed
 privacy recovery and compatible publication still precede live activation. See
 [proposed ADR-049](../../../adr/049-greenhouse-approved-application-execution.md).
@@ -106,3 +106,10 @@ These tests use simulated identity/owning APIs/provider profiles. Worker loss is
 cancellation, not actual Chrome worker termination. They do not establish one installed-extension
 Prepare-to-provider-confirmed-history journey, live grants, provider retention or accountable
 acceptance. [PR #634](https://github.com/Vrixic/project-ai-job-apply/pull/634) carries this source.
+
+Final independent exact-source review passes clean commit
+`d4c0cf27cade4cf9ab6cce96aee717432fd53e4e`, confirms the tested source hashes and permits normal
+source merge. Its private receipt SHA-256 is
+`ebc9838283ad64f3d48100127d93012cc2e5e3e3f55f1b0bc2453b846b99ede2`.
+Hosted quality CI did not start because of account billing/spending restrictions. Local checks
+above supply verification; hosted failures are not pass evidence or authority to bypass protection.
