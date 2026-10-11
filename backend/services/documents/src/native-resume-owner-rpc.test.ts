@@ -1,6 +1,5 @@
 import type { InvokeCommand } from "@aws-sdk/client-lambda";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { nativeOwnerJson } from "./native-owner-rpc-contract.js";
 import { createNativeResumeOwnerRpcClient } from "./native-resume-owner-rpc-client.js";
 import {
   type NativeResumeBootstrap,
