@@ -23,3 +23,14 @@ candidate confirmation/history, expiry, four downloads, transfer withdrawal and 
 Authentication, BFF, native service and Chrome receiver are simulated; no live generation or
 external submission is claimed. No full-repository checks were run.
 Independent D1/admin acceptance remains deferred; this is not live candidate/provider acceptance.
+
+Primary preparation subsequently exposed the isolated recovery path's full Terraform drift sweep
+as another unnecessary D3 gate. Primary mode now uses saved-plan/account/encrypted-backend binding,
+strict writer inputs and fresh actual writer drain, retaining all live target/backup/permission,
+expiry, current-schema and transactional checks. Other modes remain unchanged. The actual live
+account/backend/input/drain check passes, as do 47 primary and 790 replay assertions, consequential
+review and the simulated connected journey. No formal recovery sweep or full-repository run occurs.
+
+The role wrapper assumes an older endpoint layout. The actual scoped role, policy and three
+endpoint permissions were therefore applied through independently reviewed exact Terraform plan,
+followed by live IAM and no-action readback. No specialized verification receipt was fabricated.

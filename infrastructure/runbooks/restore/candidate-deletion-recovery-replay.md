@@ -221,6 +221,15 @@ physical database, plus the existing exact current no-action plan, clean source 
 catalog parameters. No PITR context or physical-restore proof is required. Each preparation writes
 its own private basic target/backup metadata and preserves original 30-minute admission.
 
+Primary actions bind the saved no-action plan, AWS account and encrypted locking backend, validate
+writer-enable inputs and freshly inspect actual routes, consumers, schedules, tasks, durable work
+and queues. They do not run the isolated path's whole-Terraform recovery-drift proof sweep. Exact
+live database/backup, permissions/network, expiry and transactional checks remain mandatory.
+If the specialized role wrapper cannot represent the current native endpoint composition, use
+normal exact saved-plan Terraform review/apply and live permission/no-action readback. Record that
+direct path truthfully; never fabricate a specialized verification receipt or use `UnusedRole` for
+executed replay. Review role/endpoint cleanup separately after actual executor absence and drain.
+
 Keep the primary private, encrypted, protected and covered by 35-day backups. Inspect and Replay
 check current schema/migrations read-only and retain existing subject/operation/marker/document and
 transactional owner deletion safeguards. Neither action enables candidate traffic. An ambiguous
