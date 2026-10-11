@@ -73,3 +73,52 @@ run "development_all_routed_families" {
     error_message = "Compaction must not broaden which roles can be created with resume boundaries."
   }
 }
+
+run "development_retained_resume_revisions" {
+  command = plan
+  variables {
+    candidate_deletion_restore_role_enabled = true
+    native_resume_control_releases = {
+      for revision in ["1", "2"] : revision => {
+        database_secret_arn      = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/database-url-Abc123"
+        platform_kms_key_arn     = "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-4234-8234-123456789012"
+        route                    = { hosted_zone_id = "ZSYNTHETIC", base_host = "materials.example.com" }
+        cluster_name             = "ai-job-apply-development"
+        observer_dead_letter_arn = "arn:aws:sqs:us-east-2:111122223333:ai-job-apply-development-resume-observer-r${revision}"
+      }
+    }
+  }
+  assert {
+    condition     = length(aws_iam_policy.github_deploy_boundary.policy) <= 6144 && aws_iam_role_policy.github_deploy.policy == aws_iam_policy.github_deploy_boundary.policy
+    error_message = "Both retained resume revisions and primary deletion safeguards must fit the same deployment grant and ceiling."
+  }
+  assert {
+    condition = jsondecode(local.github_deploy_policy_json) == jsondecode(jsonencode({
+      Version = local.github_deploy_policy.Version
+      Statement = [for statement in local.github_deploy_policy.Statement : {
+        for key, value in statement : key => value if key != "Sid"
+      } if !contains(["TerraformStateBucket", "TerraformStateKey"], statement.Sid)]
+    }))
+    error_message = "Serialization must preserve every nonredundant statement's actions, resources, effect and conditions."
+  }
+  assert {
+    condition = alltrue([for statement in local.github_deploy_policy.Statement : (
+      statement.Effect == "Allow" && !contains(keys(statement), "Condition") &&
+      alltrue([for action in statement.Action : contains(["s3", "kms"], split(":", action)[0])])
+      ) if contains(["TerraformStateBucket", "TerraformStateKey"], statement.Sid)]) && alltrue([
+      for statement in local.github_deploy_policy.Statement : (
+        statement.Effect == "Allow" && statement.Resource == "*" && !contains(keys(statement), "Condition") &&
+        contains(statement.Action, "s3:*") && contains(statement.Action, "kms:*")
+      ) if statement.Sid == "PlatformInfrastructure"
+    ])
+    error_message = "Omitted state grants must remain entirely subsumed by unconditional wildcard S3/KMS authority."
+  }
+  assert {
+    condition = alltrue([for revision in ["1", "2"] : contains(jsondecode(local.github_deploy_policy_json).Statement, {
+      Effect    = "Allow", Action = ["iam:CreateRole"],
+      Resource  = [for kind in ["control", "observer", "durable"] : "arn:aws:iam::111122223333:role/ai-job-apply-development-resume-${kind}-r${revision}"],
+      Condition = { StringEquals = { "iam:PermissionsBoundary" = [for kind in ["control", "observer", "durable"] : "arn:aws:iam::111122223333:policy/ai-job-apply-development-resume-${kind}-r${revision}-boundary"] } }
+    })])
+    error_message = "Serialized role creation must retain each original revision's separate exact role/boundary grant."
+  }
+}

@@ -278,6 +278,16 @@ locals {
       }
     ], local.native_resume_deploy_statements)
   }
+
+  # Keep annotated source for review; IAM does not require statement identifiers. The two
+  # state grants are already covered by PlatformInfrastructure's unconditional s3:* / kms:*.
+  # Compact only the deployment document so retained releases fit its managed-policy ceiling.
+  github_deploy_policy_json = jsonencode({
+    Version = local.github_deploy_policy.Version
+    Statement = [for statement in local.github_deploy_policy.Statement : {
+      for key, value in statement : key => value if key != "Sid"
+    } if !contains(["TerraformStateBucket", "TerraformStateKey"], statement.Sid)]
+  })
 }
 
 resource "aws_iam_policy" "workload_boundary" {
@@ -481,7 +491,7 @@ resource "aws_iam_policy" "workload_boundary" {
 resource "aws_iam_policy" "github_deploy_boundary" {
   name        = "ai-job-apply-${var.environment}-github-deploy-boundary"
   description = "Maximum permissions for the ${var.environment} GitHub deployment role."
-  policy      = jsonencode(local.github_deploy_policy)
+  policy      = local.github_deploy_policy_json
   lifecycle {
     postcondition {
       condition     = length(self.policy) <= 6144
@@ -499,5 +509,5 @@ resource "aws_iam_role" "github_deploy" {
 resource "aws_iam_role_policy" "github_deploy" {
   name   = "terraform-state-and-deploy"
   role   = aws_iam_role.github_deploy.id
-  policy = jsonencode(local.github_deploy_policy)
+  policy = local.github_deploy_policy_json
 }

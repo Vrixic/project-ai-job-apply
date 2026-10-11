@@ -50,7 +50,7 @@ resource "aws_iam_policy" "native_material_control_boundary" {
   }) })] })
   lifecycle {
     precondition {
-      condition     = length(jsonencode(local.github_deploy_policy)) <= 6144
+      condition     = length(local.github_deploy_policy_json) <= 6144
       error_message = "Combined deployment policy exceeds IAM's managed-policy size limit; retain original releases and split reviewed policy composition before adding more."
     }
   }

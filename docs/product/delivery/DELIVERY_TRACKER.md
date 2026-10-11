@@ -146,6 +146,13 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 
 ## Current operating state
 
+2026-10-11: [D3-111](evidence/d3-retained-native-deployment-policy-2026-10-11.md) fixes the retained-r2
+deployment policy size limit with unchanged authorization and 25 bootstrap test runs. Enabled worker
+and migration images/scans and compatible Gateway/cleanup publication pass. Development is temporarily
+restored with writers off for testing; shutdown remains required before handoff. Docker/WSL are off;
+the PC stays on. D3 live acceptance remains open; independent D1/admin acceptance stays deferred.
+The entries below are historical checkpoints.
+
 2026-10-11: See [D3-108 live-test and shutdown evidence](evidence/d3-native-live-admission-fixes-2026-10-11.md).
 Candidate sign-in is complete; full live generation/submission acceptance remains open.
 [D3-109](evidence/d3-native-launch-rejection-2026-10-11.md) adds locally verified definitive launch-rejection settlement. Corrected local worker/migration smoke and six immutable native Lambda publications pass; revision-2 RPCs are staged disabled. Historical claims and live acceptance remain unresolved. Docker is repaired again; remaining image publication resumes.
