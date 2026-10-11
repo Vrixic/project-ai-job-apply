@@ -1,9 +1,9 @@
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { nativeLaunchControlVersion } from "./native-launch-control-contract.js";
 import {
+  type NativeOwnerRpcOutput,
   nativeOwnerJson,
   nativeOwnerRpcUnavailable,
-  type NativeOwnerRpcOutput,
 } from "./native-owner-rpc-contract.js";
 import type { NativeTaskCallerProof } from "./native-task-caller-contract.js";
 import { nativeTaskCredentials } from "./native-task-credentials.js";
@@ -120,8 +120,11 @@ export function createNativeOwnerRpcTransport<Request>(options: {
         throw nativeOwnerRpcUnavailable();
       const text = new TextDecoder("utf-8", { fatal: true }).decode(received);
       const output: unknown = JSON.parse(text);
+      nativeOwnerJson(output);
       if (
-        nativeOwnerJson(output) !== text ||
+        // Lambda preserves handler property order. Round-trip its compact JSON while still
+        // rejecting duplicate keys and ambiguous encodings; digests remain canonical.
+        JSON.stringify(output) !== text ||
         !validateOutput(output, request) ||
         output.outcome !== "ready"
       )
