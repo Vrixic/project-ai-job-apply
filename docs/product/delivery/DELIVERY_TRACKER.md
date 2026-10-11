@@ -162,7 +162,7 @@ source snapshots and the exact-version state-506 recovery archive remain retaine
 plan has no resource/output actions and one task-tags refresh difference; strict zero drift is not
 claimed. No Gateway release or live native acceptance occurred. Retained storage/security/artifact
 resources incur charges.
-Docker/WSL were verified off at that checkpoint; Docker has since restarted for the current test batch. The PC remains on.
+Docker/WSL are off; the PC remains on.
 [Current recovery and shutdown evidence](evidence/d3-native-application-disposal-2026-10-07.md#managed-snapshot-data-comparison--2026-10-10).
 
 Current batch: managed reconciliation passes for all seven original receipts. The task stopped;
