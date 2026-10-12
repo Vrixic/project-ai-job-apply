@@ -29,7 +29,8 @@ export async function withNativeMaterialInvocationCredential<T>(
 ): Promise<T> {
   const scope = { internalAccessToken, applicationId, token: accessToken as string | undefined };
   try {
-    return await invocationCredentials.run(scope, work);
+    // Fastify injection returns a lazy thenable. Start its dispatch inside this context too.
+    return await invocationCredentials.run(scope, async () => await work());
   } finally {
     scope.token = undefined;
   }
