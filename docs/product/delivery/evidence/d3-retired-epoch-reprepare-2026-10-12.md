@@ -18,6 +18,10 @@ test-event guard found by the initial build was corrected before the passing ret
 consequential source review passes. No full repository checks were run. The isolated database was
 stopped after testing; existing PostgreSQL services were preserved.
 
+GitHub Actions did not start: the CI/static-analysis annotations report an account billing or
+spending-limit restriction. They are not passing CI evidence; the targeted local results above
+are the executed verification for this change.
+
 The connected Chromium journey passes search → Prepare → review → approve → manual Apply →
 candidate-attested confirmation/history, with expiry, downloads, transfer withdrawal and keyboard
 checks. Authentication, BFF, native service and Chrome receiver are simulated. This is not live
