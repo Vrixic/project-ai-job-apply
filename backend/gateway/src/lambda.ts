@@ -4,7 +4,10 @@ import {
 } from "@ai-job-apply/applications-service";
 import { legacyReceiptReplayFromEnvironment } from "@ai-job-apply/applications-service/legacy-receipt-runtime";
 import { restrictedPacketWriterFromEnvironment } from "@ai-job-apply/applications-service/restricted-packet-runtime";
-import { nativeMaterialAvailabilityFromEnvironment } from "./native-material-availability.js";
+import {
+  nativeMaterialAvailabilityFromEnvironment,
+  withNativeMaterialInvocationCredential,
+} from "./native-material-availability.js";
 import { nativeMaterialDisposalFromEnvironment } from "./native-material-disposal-runtime.js";
 import "reflect-metadata";
 import { randomBytes } from "node:crypto";
@@ -12,6 +15,7 @@ import {
   type AccessTokenVerifier,
   AuthenticationError,
   type AuthPrincipal,
+  bearerToken,
   createOidcIdTokenVerifier,
 } from "@ai-job-apply/auth";
 import {
@@ -281,6 +285,10 @@ const APPLICATION_COMMAND_PATH_PATTERN = new RegExp(
 );
 const APPLICATION_DISPATCH_PATH_PATTERN = new RegExp(
   `^/v1/applications/${APPLICATION_ID}/attempts/${APPLICATION_ID}/dispatch$`,
+  "u",
+);
+const APPLICATION_NATIVE_AVAILABILITY_PATH_PATTERN = new RegExp(
+  `^/v1/applications/${APPLICATION_ID}/(?:approval|submissions|manual-submissions)$`,
   "u",
 );
 const APPLICATION_ATTEMPT_COMMAND_PATH_PATTERN = new RegExp(
@@ -951,24 +959,40 @@ export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiG
     const app = await options.app;
     const inject = (internalAccessToken?: string) => {
       const headers = requestHeaders(event);
+      const nativeAccessToken =
+        internalAccessToken &&
+        method === "POST" &&
+        (APPLICATION_NATIVE_AVAILABILITY_PATH_PATTERN.test(path) ||
+          APPLICATION_DISPATCH_PATH_PATTERN.test(path))
+          ? bearerToken(headers.authorization)
+          : undefined;
       headers["x-correlation-id"] ??= event.requestContext.requestId;
       if (internalAccessToken) {
         headers.authorization = `Bearer ${internalAccessToken}`;
       }
-      return app.inject({
-        method,
-        url:
-          (route.acceptsReviewQueueQuery ||
-            route.acceptsApplicationHistoryQuery ||
-            route.acceptsApplicationGenerationQuery ||
-            route.acceptsApplicationResumeFormatQuery ||
-            route.acceptsRestrictedAnswerContextQuery) &&
-          event.rawQueryString
-            ? `${path}?${event.rawQueryString}`
-            : path,
-        headers,
-        ...(decodedRequest.payload !== undefined ? { payload: decodedRequest.payload } : {}),
-      });
+      const dispatch = () =>
+        app.inject({
+          method,
+          url:
+            (route.acceptsReviewQueueQuery ||
+              route.acceptsApplicationHistoryQuery ||
+              route.acceptsApplicationGenerationQuery ||
+              route.acceptsApplicationResumeFormatQuery ||
+              route.acceptsRestrictedAnswerContextQuery) &&
+            event.rawQueryString
+              ? `${path}?${event.rawQueryString}`
+              : path,
+          headers,
+          ...(decodedRequest.payload !== undefined ? { payload: decodedRequest.payload } : {}),
+        });
+      return nativeAccessToken && internalAccessToken
+        ? withNativeMaterialInvocationCredential(
+            internalAccessToken,
+            path.split("/")[3] ?? "",
+            nativeAccessToken,
+            dispatch,
+          )
+        : dispatch();
     };
     const response = principal
       ? await options.principalBridge.run(principal, inject)

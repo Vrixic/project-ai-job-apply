@@ -36,6 +36,11 @@ Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 20
 
 ## Task register
 
+D3-117 started 2026-10-12: invocation-scoped original JWT forwarding corrects the diagnosed
+Lambda/native credential mismatch. 144 focused tests, Gateway build/typecheck and consequential
+security review pass; managed deployment/live approval retry remain.
+[Evidence](evidence/d3-native-invocation-credential-2026-10-12.md).
+
 D3-116 started 2026-10-12: bounded native approval diagnostics; 31 focused tests, Gateway typecheck
 and focused Biome pass. Live preview passes; approval returns 503 and remains under diagnosis.
 [Evidence](evidence/d3-native-availability-diagnostics-2026-10-12.md).
