@@ -2088,6 +2088,9 @@ resource "aws_lambda_function" "gateway" {
       var.restricted_answer_vault_enabled ? {
         RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN = aws_kms_key.restricted_answer_vault[0].arn
       } : {},
+      var.restricted_answer_reuse_enabled ? {
+        RESTRICTED_ANSWER_REUSE_ENABLED = "true"
+      } : {},
       local.d2_community_enabled ? {
         D2_PRIVATE_CAPTURE_ROUTES_ENABLED   = "true"
         D2_CONTRIBUTION_ROUTES_ENABLED      = tostring(local.d2_community_operational)

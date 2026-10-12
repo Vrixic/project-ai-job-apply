@@ -17,6 +17,7 @@ export const MAXIMUM_RESTRICTED_EXPORT_ENVELOPE_BYTES =
 const REJECTED = Object.freeze({ valid: false, error: "CandidateRightsExportRejected" });
 const READY = Object.freeze({ ready: true });
 const D2_POLICY_VERSION = "d2-development-synthetic-v1";
+const D3_POLICY_VERSION = "d3-development-synthetic-v1";
 const MAXIMUM_JSON_DEPTH = 32;
 let validateExport;
 
@@ -157,7 +158,7 @@ export function validateCandidateRightsExport(artifactBytes, expected) {
       reject();
     }
     if (
-      expected.expectedPolicyVersion === D2_POLICY_VERSION &&
+      [D2_POLICY_VERSION, D3_POLICY_VERSION].includes(expected.expectedPolicyVersion) &&
       (!Object.hasOwn(artifact.profile, "contributionConsents") ||
         !Object.hasOwn(artifact.jobs, "contributions") ||
         !Object.hasOwn(artifact.matching, "privateSavedPageCaptures") ||
@@ -165,6 +166,7 @@ export function validateCandidateRightsExport(artifactBytes, expected) {
     ) {
       reject();
     }
+    if (expected.expectedPolicyVersion === D3_POLICY_VERSION && !artifact.applications) reject();
     const contributions = artifact.jobs.contributions ?? [];
     return Object.freeze({
       valid: true,
@@ -175,6 +177,15 @@ export function validateCandidateRightsExport(artifactBytes, expected) {
       privateCaptureCount: artifact.matching.privateSavedPageCaptures?.length ?? 0,
       trustCaseCount: artifact.trust?.cases.length ?? 0,
       trustCaseEventCount: artifact.trust?.caseEvents.length ?? 0,
+      ...(expected.expectedPolicyVersion === D3_POLICY_VERSION
+        ? {
+            applicationCount: artifact.applications.applications.length,
+            packetCount: artifact.applications.packets.length,
+            approvalCount: artifact.applications.approvals.length,
+            attemptCount: artifact.applications.attempts.length,
+            historyCount: artifact.applications.history.length,
+          }
+        : {}),
     });
   } catch {
     return REJECTED;
@@ -288,7 +299,7 @@ export function validateRestrictedAnswerExport(artifactBytes, expected) {
         "expectedPolicyVersion",
         "expectedRestrictedAnswers",
       ]) ||
-      expected.expectedPolicyVersion !== D2_POLICY_VERSION ||
+      ![D2_POLICY_VERSION, D3_POLICY_VERSION].includes(expected.expectedPolicyVersion) ||
       !Array.isArray(expected.expectedRestrictedAnswers) ||
       expected.expectedRestrictedAnswers.length < 3 ||
       expected.expectedRestrictedAnswers.length > 100 ||

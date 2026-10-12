@@ -115,8 +115,9 @@ recent-MFA confirmation, Auth0 reconciliation, recovery-ledger completion, alert
 cleanup. RecoverUnconfirmed accepts only the exact UTC timestamp of a privacy-safe failed
 confirmation log, discovers its request identifier without printing it, and can only cancel that
 still-requested record. RecoverCleanup cannot create or confirm a deletion; it can only prove
-already-confirmed cleanup. Verify additionally requires a separately reviewed aggregate
-recovery-replay receipt from a quiesced disposable restore. No action accepts a token, subject,
+already-confirmed cleanup. The D3 policy requires the exact eight-owner inventory including
+Applications and nonempty Applications export coverage. Verify can optionally inspect a separately
+reviewed recovery-replay receipt; it never claims unperformed restore checks. No action accepts a token, subject,
 secret, payload, route, SQL, command, role, bucket, Lambda, or network destination from the command
 line.
 "@
@@ -131,6 +132,7 @@ $terraformInspectionDataDirectory = Join-Path $terraformRoot "development-candid
 $stateKey = "platform.tfstate"
 $utf8WithoutBom = New-Object Text.UTF8Encoding($false)
 $requiredOwners = "identity,profile,documents,jobs,matching,billing,trust"
+if ($ExpectedPolicyVersion -ceq 'd3-development-synthetic-v1') { $requiredOwners += ',applications' }
 $tokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN"
 $idTokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN"
 $refreshTokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_REFRESH_TOKEN"
@@ -517,11 +519,27 @@ function Get-RuntimeBoundary {
   }
 }
 
+function Assert-ApplicationsRightsRuntime {
+  param([Parameter(Mandatory)][object]$Runtime)
+  if ($ExpectedPolicyVersion -cne 'd3-development-synthetic-v1') { return }
+  if ([string](Get-OptionalProperty $Runtime.Aliases.activity.Environment 'RESTRICTED_PACKET_EXPORT_ENABLED') -cne 'true') {
+    throw 'D3 rights acceptance requires the private protected-packet export reader.'
+  }
+  foreach ($name in @('RESTRICTED_PACKET_ENCRYPTION_KEY_ARN','RESTRICTED_PACKET_FINGERPRINT_KEY_ARN')) {
+    $gateway = [string](Get-OptionalProperty $Runtime.Aliases.gateway.Environment $name)
+    $activity = [string](Get-OptionalProperty $Runtime.Aliases.activity.Environment $name)
+    if ($gateway -cnotmatch "^arn:aws:kms:us-east-2:${ExpectedAccountId}:key/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" -or $activity -cne $gateway) {
+      throw 'D3 rights acceptance requires the exact protected-packet key bindings.'
+    }
+  }
+}
+
 function Get-AcceptanceBoundary {
   param([switch]$RequireIdentity)
   $source = Assert-CallerAndSource -RequireSource:$RequireIdentity
   $snapshot = Read-StateSnapshot
   $runtime = Get-RuntimeBoundary $snapshot
+  Assert-ApplicationsRightsRuntime $runtime
   if ($RestrictedAnswerFixture) {
     Assert-RestrictedFixtureRuntime $runtime
   }
@@ -755,6 +773,9 @@ function Read-CandidateRightsExportHelperResult {
   }
   else {
     $countNames = if ($RestrictedAnswers) { @('activeValueCount','expiredValueCount','deletedTombstoneCount','revisedValueCount') } else { @('consentCount','contributionApprovalCount','contributionCount','privateCaptureCount','trustCaseCount','trustCaseEventCount') }
+    if (-not $RestrictedAnswers -and $ExpectedPolicyVersion -ceq 'd3-development-synthetic-v1') {
+      $countNames += @('applicationCount','packetCount','approvalCount','attemptCount','historyCount')
+    }
     $null = Assert-ExactPropertySet $result (@('valid') + $countNames) 'Candidate export verification'
     if ($result.valid -isnot [bool] -or $result.valid -ne $true) { throw 'Candidate export verification failed.' }
     foreach ($name in $countNames) {
@@ -770,6 +791,17 @@ function Read-CandidateRightsExportHelperResult {
 
 function Assert-CandidateRightsAcceptanceCoverage {
   param([Parameter(Mandatory)][object]$Coverage)
+  if ($ExpectedPolicyVersion -ceq 'd3-development-synthetic-v1') {
+    $missing = @(
+      foreach ($name in @('applicationCount','packetCount','approvalCount','attemptCount','historyCount')) {
+        if ($Coverage.$name -lt 1) { $name }
+      }
+    )
+    if ($missing.Count) {
+      throw "D3 acceptance stopped before account deletion: nonempty Applications export coverage is required for $($missing -join ', '). Prepare the authorized disposable account's missing D3 test records, then obtain fresh MFA and a new reviewed run. The existing export remains subject to its configured expiry and cleanup."
+    }
+    return $true
+  }
   if ($ExpectedPolicyVersion -cne 'd2-development-synthetic-v1') { return $true }
   # The download verifier already checks the exact aggregate shape and integer bounds. This
   # acceptance-only gate does not change the export contract: empty exports remain valid data.
@@ -1028,7 +1060,7 @@ function Invoke-FixedLifecycle {
     startedAt = $started.ToString('o'); completedAt = [DateTimeOffset]::UtcNow.ToString('o')
     exportsRequested = 1; idempotentExportReplays = 1; exactVersionDownloads = 1; expiredDownloadGrants = 1; exportObjectsCleaned = 1
     deletionRequestsCreated = 2; deletionRequestsCancelled = 1; recentMfaConfirmations = 1; deletionMarkersCompleted = 1
-    ownerInventoriesReconciled = 7; auth0Reconciled = $true; persistentSyntheticIdentities = 0
+    ownerInventoriesReconciled = @($requiredOwners.Split(',')).Count; auth0Reconciled = $true; persistentSyntheticIdentities = 0
     queueCount = $post.QueueCount; queuedMessages = 0; alarmCount = $post.AlarmCount; alarmsOk = $true; activeCompute = 0
     stateLineage = $Boundary.Snapshot.Lineage; stateSerial = $Boundary.Snapshot.Serial; zeroDriftPlanSha256 = $ReviewedZeroDriftPlanSha256
   }
@@ -1041,6 +1073,10 @@ function Invoke-FixedLifecycle {
     Assert-RightsResumeCoverage $script:VerifiedResumeCoverage
     $receipt.schemaVersion = 3
     $receipt.resumeCoverage = $script:VerifiedResumeCoverage
+  }
+  if ($ExpectedPolicyVersion -ceq 'd3-development-synthetic-v1') {
+    $null = Assert-CandidateRightsAcceptanceCoverage $script:VerifiedExportCoverage
+    $receipt.applicationsExportCoverage = $script:VerifiedExportCoverage
   }
   return $receipt
 }
@@ -1060,11 +1096,18 @@ function Read-AggregateReceipt {
     if ([int]$receipt.schemaVersion -ne 3) { throw 'The reviewed receipt does not include the resume fixture.' }
     Assert-RightsResumeCoverage (Get-OptionalProperty $receipt 'resumeCoverage')
   }
-  if ([string]$receipt.kind -cne 'development-candidate-rights-acceptance-receipt' -or [string]$receipt.phase -cne 'verified-cleaned' -or [string]$receipt.sourceSha -cne $SourceSha -or [int]$receipt.exportsRequested -ne 1 -or [int]$receipt.exportObjectsCleaned -ne 1 -or [int]$receipt.deletionMarkersCompleted -ne 1 -or [int]$receipt.ownerInventoriesReconciled -ne 7 -or $receipt.auth0Reconciled -ne $true -or [int]$receipt.persistentSyntheticIdentities -ne 0 -or [int]$receipt.queuedMessages -ne 0 -or [int]$receipt.activeCompute -ne 0) { throw "The reviewed candidate-rights aggregate receipt is incomplete." }
+  if ($ExpectedPolicyVersion -ceq 'd3-development-synthetic-v1') {
+    $coverage = Get-OptionalProperty $receipt 'applicationsExportCoverage'
+    if ($null -eq $coverage) { throw 'The reviewed receipt omits Applications export coverage.' }
+    $validated = Read-CandidateRightsExportHelperResult ($coverage | ConvertTo-Json -Compress)
+    $null = Assert-CandidateRightsAcceptanceCoverage $validated
+  }
+  if ([string]$receipt.kind -cne 'development-candidate-rights-acceptance-receipt' -or [string]$receipt.phase -cne 'verified-cleaned' -or [string]$receipt.sourceSha -cne $SourceSha -or [string]$receipt.policySha256 -cne $ReviewedPolicySha256 -or [int]$receipt.exportsRequested -ne 1 -or [int]$receipt.exportObjectsCleaned -ne 1 -or [int]$receipt.deletionMarkersCompleted -ne 1 -or [int]$receipt.ownerInventoriesReconciled -ne @($requiredOwners.Split(',')).Count -or $receipt.auth0Reconciled -ne $true -or [int]$receipt.persistentSyntheticIdentities -ne 0 -or [int]$receipt.queuedMessages -ne 0 -or [int]$receipt.activeCompute -ne 0) { throw "The reviewed candidate-rights aggregate receipt is incomplete." }
   return $receipt
 }
 
 function Read-RecoveryReplayReceipt {
+  if ([string]::IsNullOrWhiteSpace($RecoveryReplayReceiptPath) -and [string]::IsNullOrWhiteSpace($ReviewedRecoveryReplayReceiptSha256)) { return $null }
   if ([string]::IsNullOrWhiteSpace($RecoveryReplayReceiptPath) -or $ReviewedRecoveryReplayReceiptSha256 -notmatch '^[a-f0-9]{64}$' -or -not (Test-Path -LiteralPath $RecoveryReplayReceiptPath -PathType Leaf)) { throw "A separately reviewed aggregate recovery-replay receipt is required." }
   if ((Get-FileSha256 $RecoveryReplayReceiptPath) -cne $ReviewedRecoveryReplayReceiptSha256) { throw "The recovery-replay receipt checksum does not match." }
   $receipt = ConvertFrom-OperatorJson (Get-Content -LiteralPath $RecoveryReplayReceiptPath -Raw) "Recovery-replay receipt"
@@ -1128,7 +1171,7 @@ if (-not $script:TestOnly) {
       $replay = Read-RecoveryReplayReceipt
       $boundary = Get-AcceptanceBoundary -RequireIdentity:$false
       if ([long]$receipt.stateSerial -ne $boundary.Snapshot.Serial -or [string]$receipt.stateLineage -cne $boundary.Snapshot.Lineage) { throw "Terraform state changed after candidate-rights execution." }
-      [pscustomobject]@{ Outcome = 'verified'; ExportLifecyclePassed = $true; DeletionLifecyclePassed = $true; RecoveryMarkersValidated = [int]$replay.markersValidated; PersistentSyntheticIdentities = 0; QueuedMessages = 0; ActiveCompute = 0; AlarmsOk = $true; StateChanged = $false; CloudMutation = $false }
+      [pscustomobject]@{ Outcome = 'verified'; ExportLifecyclePassed = $true; DeletionLifecyclePassed = $true; RecoveryReplayVerified = ($null -ne $replay); RecoveryMarkersValidated = $(if ($null -ne $replay) { [int]$replay.markersValidated } else { $null }); PersistentSyntheticIdentities = 0; QueuedMessages = 0; ActiveCompute = 0; AlarmsOk = $true; StateChanged = $false; CloudMutation = $false }
     }
   }
 }

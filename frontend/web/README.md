@@ -6,6 +6,9 @@ paste it into the matching application within 60 seconds, select exact saved met
 confirm meaning before preparing. Protected values appear only in the new packet's mandatory
 final review. Backend `RESTRICTED_ANSWER_REUSE_ENABLED` remains separately gated. No raw question
 text is sent to Applications or stored; no answer is inferred or automatically filled.
+Managed releases also require default-off Terraform `restricted_answer_reuse_enabled=true`,
+which refuses missing Applications, vault keys or enabled protected packets. Public web flags
+and the backend switch are reviewed separately; neither authorizes real-candidate use.
 See [ADR-046](../../docs/adr/046-observed-form-saved-answer-selection.md).
 
 The primary candidate experience: onboarding, profile management, job discovery, application review, technical history through confirmed submission, outreach, billing, settings, and crawlable public job pages.

@@ -24,6 +24,10 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 
 ## D3 — High-quality application preparation
 
+D3-122/123 implement guarded saved-answer reuse release wiring and exact D3 Applications rights
+test coverage. Targeted local checks and source review pass; agent-owned managed verification
+is continuing before human acceptance. [Evidence](evidence/d3-independent-release-guards-2026-10-12.md).
+
 D3-115–120 are merged. Managed development testing on Gateway 108/native preparation 9 passed
 synthetic search, preparation, separate in-memory sign-in, exact preview/review, approval and
 PDF/DOCX downloads. The manual Apply UI and truthful not-submitted reconciliation passed;

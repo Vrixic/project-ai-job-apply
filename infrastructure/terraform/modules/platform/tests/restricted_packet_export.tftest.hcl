@@ -272,3 +272,59 @@ run "missing_applications_owner" {
   }
   expect_failures = [var.restricted_packet_export_enabled]
 }
+
+run "saved_answer_reuse_default_off" {
+  command = plan
+  assert {
+    condition     = !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "RESTRICTED_ANSWER_REUSE_ENABLED")
+    error_message = "Saved-answer reuse must remain absent by default."
+  }
+}
+
+run "saved_answer_reuse_exact_prerequisites" {
+  command = plan
+  variables {
+    restricted_answer_reuse_enabled    = true
+    restricted_answer_vault_enabled    = true
+    restricted_packet_keys_provisioned = true
+    gateway_native_materials           = { packet_protection_enabled = true }
+  }
+  override_resource {
+    target          = aws_kms_key.restricted_answer_vault[0]
+    override_during = plan
+    values          = { arn = "arn:aws:kms:us-east-2:111122223333:key/42345678-1234-4234-8234-123456789012" }
+  }
+  assert {
+    condition     = aws_lambda_function.gateway[0].environment[0].variables.RESTRICTED_ANSWER_REUSE_ENABLED == "true"
+    error_message = "A reviewed saved-answer release must reach the Gateway environment."
+  }
+}
+
+run "saved_answer_reuse_without_vault_refused" {
+  command = plan
+  variables {
+    restricted_answer_reuse_enabled    = true
+    restricted_packet_keys_provisioned = true
+  }
+  expect_failures = [var.restricted_answer_reuse_enabled]
+}
+
+run "saved_answer_reuse_without_packet_keys_refused" {
+  command = plan
+  variables {
+    restricted_answer_reuse_enabled = true
+    restricted_answer_vault_enabled = true
+  }
+  expect_failures = [var.restricted_answer_reuse_enabled]
+}
+
+run "saved_answer_reuse_without_packet_protection_refused" {
+  command = plan
+  variables {
+    restricted_answer_reuse_enabled    = true
+    restricted_answer_vault_enabled    = true
+    restricted_packet_keys_provisioned = true
+    gateway_native_materials           = {}
+  }
+  expect_failures = [var.restricted_answer_reuse_enabled]
+}

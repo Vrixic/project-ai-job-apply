@@ -36,6 +36,12 @@ Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 20
 
 ## Task register
 
+D3-122/123 started 2026-10-12: complete agent-owned verification before human acceptance.
+Audit found missing default-off saved-answer reuse deployment wiring and D2-only rights-test
+coverage. Implementation adds guarded reuse wiring, exact D3 Applications export/deletion
+coverage and optional formal restore diagnostics. Targeted local verification and consequential
+source review pass; managed tests remain. [Evidence](evidence/d3-independent-release-guards-2026-10-12.md).
+
 D3-121 started 2026-10-12: after an ambiguous cancellation, observe the exact newer cancelled
 application once without replaying the command. 61 targeted workspace tests, web typecheck,
 focused review and the simulated connected journey pass; live retest remains.

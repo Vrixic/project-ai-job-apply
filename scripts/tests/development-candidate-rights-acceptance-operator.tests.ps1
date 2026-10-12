@@ -37,7 +37,7 @@ foreach ($required in @(
     'PersistentSyntheticIdentities = 0',
     'ActiveCompute = 0',
     'QueuedMessages = 0',
-    'ownerInventoriesReconciled = 7',
+    'ownerInventoriesReconciled = @($requiredOwners.Split',
     'MeaningfulChanges = 0'
   )) {
   if (-not $source.Contains($required)) { throw "The operator is missing the required fixed guard: $required" }
@@ -680,9 +680,18 @@ public sealed class GeneratedRightsExportHandler : HttpMessageHandler {
     foreach ($name in @('consentCount','contributionApprovalCount','contributionCount','privateCaptureCount','trustCaseCount','trustCaseEventCount')) {
       $coverageCases += @{ Policy = 'd2-development-synthetic-v1'; Missing = $name; Continue = $false }
     }
+    $coverageCases += @{ Policy = 'd3-development-synthetic-v1'; Missing = $null; Continue = $true }
+    foreach ($name in @('applicationCount','packetCount','approvalCount','attemptCount','historyCount')) {
+      $coverageCases += @{ Policy = 'd3-development-synthetic-v1'; Missing = $name; Continue = $false }
+    }
     foreach ($case in $coverageCases) {
       $ExpectedPolicyVersion = $case.Policy
       $script:generatedAcceptanceCoverage = $completeCoverage | ConvertTo-Json | ConvertFrom-Json
+      if ($case.Policy -ceq 'd3-development-synthetic-v1') {
+        foreach ($name in @('applicationCount','packetCount','approvalCount','attemptCount','historyCount')) {
+          $script:generatedAcceptanceCoverage | Add-Member -NotePropertyName $name -NotePropertyValue 1
+        }
+      }
       if ($case.Missing -ceq 'all') {
         $script:generatedAcceptanceCoverage = $zeroCoverage | ConvertTo-Json | ConvertFrom-Json
       }
@@ -704,7 +713,8 @@ public sealed class GeneratedRightsExportHandler : HttpMessageHandler {
         }
       }
       else {
-        Assert-GeneratedCoverageCondition ($failure.StartsWith('D2 acceptance stopped before account deletion: nonempty export coverage is required for ')) 'Incomplete D2 coverage did not produce the fixed actionable refusal.'
+        $expectedRefusal = if ($case.Policy -ceq 'd3-development-synthetic-v1') { 'D3 acceptance stopped before account deletion: nonempty Applications export coverage is required for ' } else { 'D2 acceptance stopped before account deletion: nonempty export coverage is required for ' }
+        Assert-GeneratedCoverageCondition ($failure.StartsWith($expectedRefusal)) 'Incomplete coverage did not produce the fixed actionable refusal.'
         Assert-GeneratedCoverageCondition ($script:coverageGrantWaitCalls -eq 0) 'Incomplete D2 coverage reached grant expiry waiting.'
         Assert-GeneratedCoverageCondition ($null -eq $script:VerifiedExportCoverage) 'Incomplete D2 coverage was retained as verified acceptance.'
         Assert-GeneratedCoverageCondition ($failure.Contains('fresh MFA and a new reviewed run') -and $failure.Contains('configured expiry')) 'The refusal omitted recovery guidance for the existing export and next reviewed run.'
