@@ -13,6 +13,28 @@ const credentials = new AsyncLocalStorage<{
   token: string | undefined;
 }>();
 
+const invocationCredentials = new AsyncLocalStorage<{
+  internalAccessToken: string;
+  applicationId: string;
+  token: string | undefined;
+}>();
+
+/** Trusted Lambda boundary only: preserve the validated caller JWT for native HEAD, while the
+ * application continues authenticating with its invocation-local opaque capability. */
+export async function withNativeMaterialInvocationCredential<T>(
+  internalAccessToken: string,
+  applicationId: string,
+  accessToken: string,
+  work: () => Promise<T>,
+): Promise<T> {
+  const scope = { internalAccessToken, applicationId, token: accessToken as string | undefined };
+  try {
+    return await invocationCredentials.run(scope, work);
+  } finally {
+    scope.token = undefined;
+  }
+}
+
 /** Called only after Gateway identity resolution. No process-global token or credential cache. */
 export async function withNativeMaterialCredential<T>(
   ownerUserId: string,
@@ -20,7 +42,16 @@ export async function withNativeMaterialCredential<T>(
   token: string,
   work: () => Promise<T>,
 ): Promise<T> {
-  const scope = { ownerUserId, applicationId, token: token as string | undefined };
+  const invocation = invocationCredentials.getStore();
+  const scope = {
+    ownerUserId,
+    applicationId,
+    token: invocation
+      ? invocation.internalAccessToken === token && invocation.applicationId === applicationId
+        ? invocation.token
+        : undefined
+      : token,
+  };
   try {
     return await credentials.run(scope, work);
   } finally {
