@@ -33,11 +33,20 @@ type Location = {
   resolve(reference: TemporaryMaterialReference, signal: AbortSignal): Promise<string | null>;
 };
 
+export type NativeMaterialAvailabilityFailure = Readonly<{
+  stage: "admission" | "location" | "address" | "head" | "metadata" | "freshness";
+  status?: number;
+  transport?: "dns" | "tls" | "connection" | "aborted" | "other";
+}>;
+
+type ReportFailure = (failure: NativeMaterialAvailabilityFailure) => void;
+
 /** Metadata-only, point-in-time memory availability. Never downloads a generated body. */
 export function createNativeMaterialAvailability(options: {
   coverLetter?: Location;
   resume?: Location;
   enabled: () => boolean;
+  reportFailure?: ReportFailure;
 }): Pick<ApplicationTemporaryMaterials, "current"> {
   const locations = {
     cover_letter: options.coverLetter ? { ...options.coverLetter } : undefined,
@@ -45,6 +54,13 @@ export function createNativeMaterialAvailability(options: {
   };
   return {
     async current(ownerUserId, applicationId, reference) {
+      const report = (failure: NativeMaterialAvailabilityFailure) => {
+        try {
+          options.reportFailure?.(Object.freeze({ ...failure }));
+        } catch {
+          // Diagnostics cannot change availability or expose the original failure.
+        }
+      };
       const credential = credentials.getStore();
       if (
         !options.enabled() ||
@@ -55,6 +71,7 @@ export function createNativeMaterialAvailability(options: {
         reference.ownerUserId !== ownerUserId ||
         reference.applicationId !== applicationId
       ) {
+        report({ stage: "admission" });
         throw Error("NativeMaterialAvailabilityUnavailable");
       }
       const fixed = Object.freeze({ ...reference });
@@ -63,6 +80,7 @@ export function createNativeMaterialAvailability(options: {
         !location ||
         !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/u.test(location.baseHost)
       ) {
+        report({ stage: "location" });
         throw Error("NativeMaterialAvailabilityUnavailable");
       }
       const controller = new AbortController();
@@ -73,6 +91,9 @@ export function createNativeMaterialAvailability(options: {
         !!credential.token &&
         !controller.signal.aborted &&
         Date.now() < fixed.expiresAtMs;
+      let stage: NativeMaterialAvailabilityFailure["stage"] = "location";
+      let status: number | undefined;
+      let transport: NativeMaterialAvailabilityFailure["transport"];
       try {
         if (!live()) return null;
         const address = await Promise.race([
@@ -87,6 +108,7 @@ export function createNativeMaterialAvailability(options: {
         ]);
         if (!live()) throw Error();
         if (!address) return null;
+        stage = "address";
         const target = new URL(address);
         const allocation = target.hostname.slice(0, -(location.baseHost.length + 1));
         if (
@@ -102,6 +124,7 @@ export function createNativeMaterialAvailability(options: {
         )
           throw Error();
         target.pathname = `/v1/applications/${applicationId}/${fixed.kind === "cover_letter" ? "cover-letter" : "resume"}`;
+        stage = "head";
         const current = await new Promise<TemporaryMaterialReference>((resolve, reject) => {
           const req = request(
             target,
@@ -115,6 +138,8 @@ export function createNativeMaterialAvailability(options: {
             },
             (response) => {
               try {
+                status = response.statusCode;
+                if (status === 204) stage = "metadata";
                 const encoded = response.headers["x-native-material-reference"];
                 if (
                   response.statusCode !== 204 ||
@@ -142,12 +167,43 @@ export function createNativeMaterialAvailability(options: {
               }
             },
           );
-          req.once("error", () => reject(Error("NativeMaterialAvailabilityUnavailable")));
+          req.once("error", (failure: NodeJS.ErrnoException) => {
+            const code = failure.code ?? "";
+            transport =
+              code === "ENOTFOUND" || code === "EAI_AGAIN"
+                ? "dns"
+                : code === "ABORT_ERR"
+                  ? "aborted"
+                  : code.startsWith("ERR_TLS_") ||
+                      code.startsWith("CERT_") ||
+                      [
+                        "DEPTH_ZERO_SELF_SIGNED_CERT",
+                        "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+                        "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+                      ].includes(code)
+                    ? "tls"
+                    : [
+                          "ECONNREFUSED",
+                          "ECONNRESET",
+                          "ENETUNREACH",
+                          "EHOSTUNREACH",
+                          "ETIMEDOUT",
+                        ].includes(code)
+                      ? "connection"
+                      : "other";
+            reject(Error("NativeMaterialAvailabilityUnavailable"));
+          });
           req.end();
         });
+        stage = "freshness";
         if (!live()) throw Error();
         return current;
       } catch {
+        report({
+          stage,
+          ...(status === undefined ? {} : { status }),
+          ...(transport ? { transport } : {}),
+        });
         throw Error("NativeMaterialAvailabilityUnavailable");
       } finally {
         clearTimeout(timer);
@@ -162,10 +218,12 @@ export function nativeMaterialAvailabilityFromEnvironment(
   protectionEnabled: () => boolean,
   coverLetter: Omit<Location, "baseHost"> | undefined,
   resume: Omit<Location, "baseHost"> | undefined,
+  reportFailure?: ReportFailure,
 ): ApplicationTemporaryMaterials {
   const letterHost = environment.NATIVE_MATERIAL_BASE_HOST ?? "";
   const resumeHost = environment.NATIVE_RESUME_BASE_HOST ?? "";
   return createNativeMaterialAvailability({
+    ...(reportFailure ? { reportFailure } : {}),
     ...(coverLetter
       ? { coverLetter: { baseHost: letterHost, resolve: coverLetter.resolve.bind(coverLetter) } }
       : {}),

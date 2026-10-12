@@ -7,6 +7,7 @@ vi.mock("node:https", () => ({ request }));
 
 import {
   createNativeMaterialAvailability,
+  type NativeMaterialAvailabilityFailure,
   nativeMaterialAvailabilityFromEnvironment,
   withNativeMaterialCredential,
 } from "./native-material-availability.js";
@@ -36,9 +37,11 @@ function fixture() {
     contentLength: "0",
   };
   const resolve = vi.fn(async () => state.address);
+  const failures: NativeMaterialAvailabilityFailure[] = [];
   const port = createNativeMaterialAvailability({
     enabled: () => state.enabled,
     coverLetter: { baseHost: "material.test.invalid", resolve },
+    reportFailure: (failure) => failures.push(failure),
   });
   request.mockImplementation((_url, options, callback) => {
     const req = new EventEmitter() as EventEmitter & { end(): void };
@@ -62,10 +65,56 @@ function fixture() {
   });
   const read = () => port.current(owner, app, reference);
   const run = () => withNativeMaterialCredential(owner, app, "synthetic-token", read);
-  return { state, reference, port, resolve, read, run };
+  return { state, reference, port, resolve, failures, read, run };
 }
 beforeEach(() => {
   request.mockReset();
+});
+it("reports only fixed stages and HTTP status, never credentials or material metadata", async () => {
+  const f = fixture();
+  await expect(f.read()).rejects.toThrow("NativeMaterialAvailabilityUnavailable");
+  f.state.status = 403;
+  await expect(f.run()).rejects.toThrow("NativeMaterialAvailabilityUnavailable");
+  f.state.status = 204;
+  f.state.metadata = { ...f.reference, contentSha256: "b".repeat(64) };
+  await expect(f.run()).rejects.toThrow("NativeMaterialAvailabilityUnavailable");
+  expect(f.failures).toEqual([
+    { stage: "admission" },
+    { stage: "head", status: 403 },
+    { stage: "metadata", status: 204 },
+  ]);
+  expect(JSON.stringify(f.failures)).not.toContain("synthetic-token");
+  expect(JSON.stringify(f.failures)).not.toContain(app);
+  expect(JSON.stringify(f.failures)).not.toContain(f.reference.contentSha256);
+});
+it.each([
+  ["ENOTFOUND", "dns"],
+  ["CERT_HAS_EXPIRED", "tls"],
+  ["ECONNREFUSED", "connection"],
+  ["ABORT_ERR", "aborted"],
+  ["untrusted diagnostic payload", "other"],
+])("maps transport failures to a bounded category: %s", async (code, transport) => {
+  const f = fixture();
+  request.mockImplementation(() => {
+    const req = new EventEmitter() as EventEmitter & { end(): void };
+    req.end = () =>
+      queueMicrotask(() => req.emit("error", Object.assign(Error("secret"), { code })));
+    return req;
+  });
+  await expect(f.run()).rejects.toThrow("NativeMaterialAvailabilityUnavailable");
+  expect(f.failures).toEqual([{ stage: "head", transport }]);
+});
+it("a throwing diagnostic sink cannot turn refusal into availability", async () => {
+  const f = fixture();
+  const port = createNativeMaterialAvailability({
+    enabled: () => false,
+    reportFailure: () => {
+      throw Error("sink failed");
+    },
+  });
+  await expect(port.current(owner, app, f.reference)).rejects.toThrow(
+    "NativeMaterialAvailabilityUnavailable",
+  );
 });
 it("uses a bodyless exact-host TLS request with request-scoped credentials", async () => {
   const f = fixture();
