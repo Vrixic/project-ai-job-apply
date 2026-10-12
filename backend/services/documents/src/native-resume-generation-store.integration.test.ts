@@ -2618,6 +2618,103 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
     expect(send).not.toHaveBeenCalled();
     expect((await s.readLaunch(scope(r), hash)).state).toBe("pending");
   });
+  async function retireOriginal(
+    s: PostgresNativeResumeGenerationStore,
+    r: NativeResumeGenerationRecord,
+  ) {
+    const at = Date.now();
+    await s.recordRetirement({
+      schemaVersion: 1,
+      kind: "native_task_stopped",
+      allocationId: r.allocationId,
+      ownerUserId: input.identity.ownerUserId,
+      applicationId: input.identity.applicationId,
+      generationId: input.identity.generationId,
+      clusterArn: input.deployment.clusterArn,
+      taskArn: task,
+      taskDefinitionArn: input.deployment.taskDefinitionArn,
+      stoppedAtEpochMs: at,
+      observedAtEpochMs: at,
+    });
+  }
+  async function queuedReplacement() {
+    const f = await queuedResumeFixture();
+    await f.applicationStore.createPacket(f.command);
+    const [event] = await sql`SELECT id FROM applications.outbox
+      WHERE application_id=${input.identity.applicationId} AND event_type='application.resume-preparation.requested.v1'`;
+    if (!event) throw Error("SyntheticReplacementEventMissing");
+    const claim = await f.requests.claim(
+      event.id,
+      "arn:aws:lambda:us-east-2:123456789012:function:synthetic-resume:9",
+    );
+    if (!claim) throw Error("SyntheticReplacementMissing");
+    return {
+      generationId: claim.eventId,
+      application: claim.application,
+      jobContextSha256: input.identity.jobContextSha256,
+      deployment: input.deployment,
+    };
+  }
+  it("replaces a positively retired unsealed generation only through a fresh admitted request", async () => {
+    const { s, r } = await bound();
+    await retireOriginal(s, r);
+    const before =
+      await sql`SELECT * FROM documents.native_resume_generations WHERE id=${input.identity.generationId}`;
+    const request = await queuedReplacement();
+    const fresh = await s.reserveRequest(request);
+    expect(fresh?.epochId).not.toBe(r.epochId);
+    expect(fresh?.reservation.previousEpochId).toBe(r.epochId);
+    expect(fresh?.reservation.identity.version).toBe(2);
+    expect(fresh?.reference).toBeNull();
+    expect(await s.reserveRequest(request)).toEqual(fresh);
+    expect(
+      await sql`SELECT * FROM documents.native_resume_generations WHERE id=${input.identity.generationId}`,
+    ).toEqual(before);
+    await expect(
+      s.reserveRequest({
+        ...request,
+        generationId: input.identity.generationId,
+        application: input.application,
+      }),
+    ).rejects.toThrow();
+    expect(await s.reserveRequest(request)).toEqual(fresh);
+  });
+  it.each(["bound", "pending", "unknown"] as const)(
+    "refuses replacement of an unsealed %s epoch without a positive settled generation",
+    async (state) => {
+      if (state === "bound") await bound();
+      else if (state === "pending") await store().reserve(input);
+      else
+        await sql`INSERT INTO documents.native_material_admission(user_id,application_id,epoch_id)
+        VALUES (${input.identity.ownerUserId},${input.identity.applicationId},${uuidv7()})`;
+      const before = await sql`SELECT * FROM documents.native_material_admission
+        WHERE user_id=${input.identity.ownerUserId} AND application_id=${input.identity.applicationId}`;
+      const request = await queuedReplacement();
+      await expect(store().reserveRequest(request)).rejects.toThrow();
+      expect(
+        await sql`SELECT * FROM documents.native_material_admission
+        WHERE user_id=${input.identity.ownerUserId} AND application_id=${input.identity.applicationId}`,
+      ).toEqual(before);
+      expect(
+        await sql`SELECT id FROM documents.native_resume_generations WHERE id=${request.generationId}`,
+      ).toHaveLength(0);
+    },
+  );
+  it("admits one of competing fresh replacements after positive retirement", async () => {
+    const { s, r } = await bound();
+    await retireOriginal(s, r);
+    const request = await queuedReplacement();
+    const results = await Promise.allSettled([
+      s.reserveRequest(request),
+      s.reserveRequest({ ...request, generationId: uuidv7() }),
+    ]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(
+      await sql`SELECT id FROM documents.native_resume_generations
+      WHERE user_id=${input.identity.ownerUserId} AND application_id=${input.identity.applicationId}`,
+    ).toHaveLength(2);
+  });
   it("requires positive exact-task retirement before a fresh generation can reopen a sealed epoch", async () => {
     const { s, r } = await bound();
     await s.seal(input.identity.ownerUserId, input.identity.applicationId);
