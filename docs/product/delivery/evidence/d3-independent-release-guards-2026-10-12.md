@@ -34,3 +34,12 @@ development shutdown snapshot. No runtime has been activated by this source batc
 answer, cancellation and disposable-account rights checks remain agent-owned work. Live AI,
 authorized ATS fixtures and accountable acceptance remain external. Independent D1/admin
 acceptance remains deferred.
+
+D3-124 follow-up: the memory-only sign-in helper now accepts only explicit
+`ApplicationsInventory: true` to select the existing fixed D3 policy/digest and eight owners.
+Its closed result reader requires all five Applications categories while allowing empty unrelated
+D2 categories. D2 remains the default. OAuth scopes, PKCE, recent MFA and token disposal are
+unchanged. All 67 targeted session tests, focused Biome and consequential review pass. A new
+regression exposed the older broad `clean` error classifier matching cleanup guidance; it now
+recognizes only the exact known source-readiness error. Development dark restoration is underway;
+live checks and fresh shutdown remain required. No employer or AI effect is authorized by this change.

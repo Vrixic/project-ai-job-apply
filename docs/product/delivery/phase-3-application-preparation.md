@@ -36,6 +36,12 @@ Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 20
 
 ## Task register
 
+D3-124 started 2026-10-12: the in-memory rights session now supports explicit fixed D3 policy
+selection and exact Applications coverage while preserving D2 defaults, token memory boundaries
+and OAuth scopes. All 67 focused session tests, formatting checks and consequential source
+review pass. Development is being restored with writers off for agent-owned tests; fresh
+shutdown remains mandatory before handoff. Managed rights acceptance remains.
+
 D3-122/123 started 2026-10-12: complete agent-owned verification before human acceptance.
 Audit found missing default-off saved-answer reuse deployment wiring and D2-only rights-test
 coverage. Implementation adds guarded reuse wiring, exact D3 Applications export/deletion
