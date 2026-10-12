@@ -89,6 +89,10 @@ function JobApplicationWorkspace({
   const [nativeConfiguration] = useState(nativeMaterialConfiguration);
   const [createKey] = useState(() => `web-create-${crypto.randomUUID()}`);
   const [application, setApplication] = useState<Application>();
+  const [replacementConsent, setReplacementConsent] = useState<string>();
+  const replacementRevision = application
+    ? `${application.id}:${application.revision}:${application.currentPacket?.packetHash ?? ""}`
+    : undefined;
   const materials = application?.currentPacket?.temporaryMaterials ?? [];
   const materialsExpired = useMaterialExpiry(
     materials.length ? Math.min(...materials.map(materialDeadline)) : undefined,
@@ -279,7 +283,7 @@ function JobApplicationWorkspace({
           (material) => material.kind === "tailored_resume",
         )
           ? "The current packet has a generated resume. Sign in to review its availability and exact content."
-          : "No generated resume is available in the current packet. No new preparation was requested.",
+          : "The generated resume is not available yet. It may still be preparing. Check again without replacing the packet; no new preparation was requested.",
       );
     } finally {
       clearTimeout(timeout);
@@ -610,8 +614,8 @@ function JobApplicationWorkspace({
               {!materials.length ? (
                 <>
                   <p>
-                    Check whether a generated resume is available. This does not start another
-                    preparation.
+                    Your generated resume may still be preparing. Check its availability without
+                    replacing the packet. This does not start another preparation.
                   </p>
                   <button type="button" disabled={busy} onClick={() => void checkGeneratedResume()}>
                     Check generated resume
@@ -621,10 +625,26 @@ function JobApplicationWorkspace({
               <p>
                 Preparing again replaces the current packet and requires fresh review and approval.
               </p>
+              {!materials.length ? (
+                <label>
+                  <input
+                    type="checkbox"
+                    disabled={busy}
+                    checked={replacementConsent === replacementRevision}
+                    onChange={(event) =>
+                      setReplacementConsent(event.target.checked ? replacementRevision : undefined)
+                    }
+                  />{" "}
+                  Replace the current preparation even if it is still running
+                </label>
+              ) : null}
               <button
                 type="button"
-                disabled={busy}
-                onClick={() => void continuePreparing(application)}
+                disabled={busy || (!materials.length && replacementConsent !== replacementRevision)}
+                onClick={() => {
+                  if (materials.length || replacementConsent === replacementRevision)
+                    void continuePreparing(application);
+                }}
               >
                 Prepare a new packet
               </button>

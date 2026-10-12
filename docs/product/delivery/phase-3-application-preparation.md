@@ -36,6 +36,11 @@ Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 20
 
 ## Task register
 
+D3-119/120 started 2026-10-12: original-deadline DNS propagation observation and explicit
+revision-bound replacement consent. 58 workflow and 50 workspace tests, component typechecks
+and focused Biome pass; managed live approval/download remains required.
+[Evidence](evidence/d3-native-propagation-wait-2026-10-12.md).
+
 D3-118 started 2026-10-12: real Fastify injection reproduces and fixes lazy-thenable credential
 context loss. 144 targeted tests and Gateway build/typecheck pass; fresh live approval remains.
 [Evidence](evidence/d3-native-fastify-credential-2026-10-12.md).
