@@ -26,13 +26,21 @@ const coverageNames = [
   "trustCaseCount",
   "trustCaseEventCount",
 ];
+const applicationsCoverageNames = [
+  "applicationCount",
+  "packetCount",
+  "approvalCount",
+  "attemptCount",
+  "historyCount",
+];
 
-export function sanitizeMissingCoverage(value) {
+export function sanitizeMissingCoverage(value, applicationsInventory = false) {
+  const allowed = applicationsInventory ? applicationsCoverageNames : coverageNames;
   return Array.isArray(value) &&
     value.length >= 1 &&
-    value.length <= coverageNames.length &&
+    value.length <= allowed.length &&
     new Set(value).size === value.length &&
-    value.every((name) => coverageNames.includes(name))
+    value.every((name) => allowed.includes(name))
     ? [...value]
     : null;
 }
@@ -41,11 +49,14 @@ export function sanitizeOperatorFailure(value) {
   if (
     exactKeys(value, ["outcome", "reason", "missingCoverage"]) &&
     value.outcome === "failed" &&
-    value.reason === "d2_coverage_missing"
+    ["d2_coverage_missing", "d3_coverage_missing"].includes(value.reason)
   ) {
-    const missingCoverage = sanitizeMissingCoverage(value.missingCoverage);
+    const missingCoverage = sanitizeMissingCoverage(
+      value.missingCoverage,
+      value.reason === "d3_coverage_missing",
+    );
     if (missingCoverage) {
-      const error = new Error("d2_coverage_missing");
+      const error = new Error(value.reason);
       error.missingCoverage = Object.freeze(missingCoverage);
       return error;
     }
@@ -88,14 +99,17 @@ function generatedResultPath(path, kind) {
 export function validatePlanOptions(value) {
   const restricted = Object.hasOwn(value ?? {}, "RestrictedAnswerFixture");
   const resume = Object.hasOwn(value ?? {}, "ResumeFixture");
+  const applications = Object.hasOwn(value ?? {}, "ApplicationsInventory");
   if (
     !exactKeys(value, [
       ...planKeys,
       ...(restricted ? ["RestrictedAnswerFixture"] : []),
       ...(resume ? ["ResumeFixture"] : []),
+      ...(applications ? ["ApplicationsInventory"] : []),
     ]) ||
     (restricted && value.RestrictedAnswerFixture !== true) ||
     (resume && value.ResumeFixture !== true) ||
+    (applications && value.ApplicationsInventory !== true) ||
     planKeys.some((key) => typeof value[key] !== "string") ||
     !/^[0-9]{12}$/u.test(value.ExpectedAccountId) ||
     !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/u.test(value.StateBucket) ||
@@ -130,6 +144,7 @@ export function sanitizeOperatorResult(
   value,
   restrictedAnswerFixture = false,
   resumeFixture = false,
+  applicationsInventory = false,
 ) {
   if (
     action === "plan" &&
@@ -156,6 +171,7 @@ export function sanitizeOperatorResult(
     "trustCaseCount",
     "trustCaseEventCount",
   ];
+  if (applicationsInventory) counts.push(...applicationsCoverageNames);
   if (
     action === "execute" &&
     exactKeys(value, [
@@ -180,7 +196,8 @@ export function sanitizeOperatorResult(
     counts.every(
       (key) =>
         Number.isSafeInteger(value.ExportCoverage[key]) &&
-        value.ExportCoverage[key] >= 1 &&
+        value.ExportCoverage[key] >=
+          (applicationsInventory && !applicationsCoverageNames.includes(key) ? 0 : 1) &&
         value.ExportCoverage[key] <= 1048576,
     ) &&
     value.ExportCoverage.contributionCount === value.ExportCoverage.contributionApprovalCount &&
@@ -305,6 +322,7 @@ export async function runSessionOperator({
       reviewedPlan,
       checked.RestrictedAnswerFixture === true,
       checked.ResumeFixture === true,
+      checked.ApplicationsInventory === true,
     );
     request.reviewedPlan = { path: plan.PlanPath, sha256: plan.PlanSha256 };
   }
@@ -379,5 +397,6 @@ export async function runSessionOperator({
     result,
     checked.RestrictedAnswerFixture === true,
     checked.ResumeFixture === true,
+    checked.ApplicationsInventory === true,
   );
 }

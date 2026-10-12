@@ -28,6 +28,9 @@ private protected-packet export, matching exact Gateway/activity keys and nonemp
 Applications, packets, approvals, attempts and history. It refuses incomplete coverage before
 requesting account deletion. The aggregate receipt binds that coverage and all eight owners.
 The existing restricted-answer and generated-resume fixtures remain available for this policy.
+For the in-memory session helper, set `ApplicationsInventory: true` in the exact plan options.
+This selects the fixed D3 policy/digest and eight owners; it accepts no caller-selected policy,
+scope or destination. D2 remains the default. OAuth scopes and memory-only token handling are unchanged.
 
 ## Read-only restricted-answer artifact acceptance (D3-029/D3-030)
 

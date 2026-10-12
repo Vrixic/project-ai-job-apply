@@ -24,6 +24,12 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 
 ## D3 — High-quality application preparation
 
+D3-124 started 2026-10-12: the in-memory rights session now supports explicit fixed D3 policy
+selection and exact Applications coverage while preserving D2 defaults, token memory boundaries
+and OAuth scopes. All 67 focused session tests, formatting checks and consequential source
+review pass. Development is being restored with writers off for agent-owned tests; fresh
+shutdown remains mandatory before handoff. Managed rights acceptance remains.
+
 D3-122/123 implement guarded saved-answer reuse release wiring and exact D3 Applications rights
 test coverage. Targeted local checks and source review pass; agent-owned managed verification
 is continuing before human acceptance. [Evidence](evidence/d3-independent-release-guards-2026-10-12.md).

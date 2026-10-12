@@ -442,3 +442,161 @@ test("PowerShell bridge rejects unknown operations before any operator call", ()
   });
   assert.equal(`${run.stdout}${run.stderr}`.includes("generated-secret"), false);
 });
+
+test("D3 Applications inventory is an exact opt-in without caller-selected policy", () => {
+  for (const RestrictedAnswerFixture of [false, true]) {
+    const selected = {
+      ...options(),
+      ApplicationsInventory: true,
+      ...(RestrictedAnswerFixture ? { RestrictedAnswerFixture: true } : {}),
+    };
+    assert.deepEqual(validatePlanOptions(selected), selected);
+    assert.deepEqual(validateSessionCommand({ action: "plan", options: selected }), {
+      action: "plan",
+      options: selected,
+    });
+    for (const invalid of [false, "true", 1, null])
+      assert.throws(
+        () => validatePlanOptions({ ...selected, ApplicationsInventory: invalid }),
+        /invalid_plan_options/u,
+      );
+    for (const key of ["ExpectedPolicyVersion", "ReviewedPolicySha256", "ExpectedOwnerInventory"])
+      assert.throws(
+        () => validatePlanOptions({ ...selected, [key]: "caller-selected" }),
+        /invalid_plan_options/u,
+      );
+  }
+});
+
+test("D3 receipts require all Applications coverage while permitting empty D2 categories", () => {
+  const completed = receipt();
+  for (const key of Object.keys(completed.ExportCoverage))
+    if (key !== "valid") completed.ExportCoverage[key] = 0;
+  const names = [
+    "applicationCount",
+    "packetCount",
+    "approvalCount",
+    "attemptCount",
+    "historyCount",
+  ];
+  for (const name of names) completed.ExportCoverage[name] = 1;
+  assert.deepEqual(sanitizeOperatorResult("execute", completed, false, false, true), completed);
+  assert.throws(() => sanitizeOperatorResult("execute", completed), /operator_result_invalid/u);
+  for (const name of names) {
+    const partial = structuredClone(completed);
+    partial.ExportCoverage[name] = 0;
+    assert.throws(
+      () => sanitizeOperatorResult("execute", partial, false, false, true),
+      /operator_result_invalid/u,
+    );
+    delete partial.ExportCoverage[name];
+    assert.throws(
+      () => sanitizeOperatorResult("execute", partial, false, false, true),
+      /operator_result_invalid/u,
+    );
+  }
+  completed.ExportCoverage.privateValue = "generated-secret";
+  assert.throws(
+    () => sanitizeOperatorResult("execute", completed, false, false, true),
+    /operator_result_invalid/u,
+  );
+});
+
+test("D3 failure reports only fixed Applications count names", () => {
+  assert.deepEqual(sanitizeMissingCoverage(["packetCount"], true), ["packetCount"]);
+  assert.equal(sanitizeMissingCoverage(["packetCount"]), null);
+  assert.equal(sanitizeMissingCoverage(["privateCaptureCount"], true), null);
+  const failure = sanitizeOperatorFailure({
+    outcome: "failed",
+    reason: "d3_coverage_missing",
+    missingCoverage: ["applicationCount", "historyCount"],
+  });
+  assert.equal(failure.message, "d3_coverage_missing");
+  assert.deepEqual(failure.missingCoverage, ["applicationCount", "historyCount"]);
+  for (const missingCoverage of [
+    ["generated-secret"],
+    ["packetCount", "packetCount"],
+    ["consentCount"],
+  ]) {
+    assert.equal(
+      sanitizeOperatorFailure({ outcome: "failed", reason: "d3_coverage_missing", missingCoverage })
+        .message,
+      "operator_failed_check_recovery",
+    );
+  }
+});
+
+test("PowerShell D3 policy selection is fixed to the accepted inventory and canonical digest", async () => {
+  const script = `$tokens=$null; $errors=$null
+    $ast=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path (Get-Location) 'scripts/lib/invoke-candidate-rights-session-action.ps1'),[ref]$tokens,[ref]$errors)
+    if($errors.Count){throw 'Parse failure'}
+    $function=$ast.Find({param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Get-RightsSessionPolicy'},$false)
+    . ([scriptblock]::Create($function.Extent.Text))
+    @((Get-RightsSessionPolicy $false),(Get-RightsSessionPolicy $true))|ConvertTo-Json -Compress`;
+  const run = spawnSync(
+    process.platform === "win32" ? "pwsh.exe" : "pwsh",
+    ["-NoProfile", "-Command", script],
+    { cwd: root, encoding: "utf8", windowsHide: true, timeout: 10000 },
+  );
+  assert.equal(run.status, 0);
+  const results = JSON.parse(run.stdout);
+  const { createHash } = await import("node:crypto");
+  const { readFile } = await import("node:fs/promises");
+  for (const [index, version] of [
+    "d2-development-synthetic-v1",
+    "d3-development-synthetic-v1",
+  ].entries()) {
+    const policy = JSON.parse(
+      await readFile(join(root, `docs/security/policies/candidate-rights.${version}.json`), "utf8"),
+    );
+    assert.deepEqual(results[index], {
+      ExpectedPolicyVersion: version,
+      ReviewedPolicySha256: createHash("sha256")
+        .update(`${JSON.stringify(policy, null, 2)}\n`)
+        .digest("hex"),
+      ExpectedOwnerInventory: policy.inventory.owners.join(","),
+    });
+  }
+});
+
+test("PowerShell D3 diagnostics cannot reflect arbitrary or D2 coverage names", () => {
+  const prefix =
+    "D3 acceptance stopped before account deletion: nonempty Applications export coverage is required for ";
+  const suffix =
+    ". Prepare the authorized disposable account's missing D3 test records, then obtain fresh MFA and a new reviewed run. The existing export remains subject to its configured expiry and cleanup.";
+  const messages = [
+    `${prefix}applicationCount, packetCount${suffix}`,
+    `${prefix}consentCount${suffix}`,
+    `${prefix}generated-secret${suffix}`,
+    `${prefix}packetCount, packetCount${suffix}`,
+    `${prefix}packetCount${suffix}\n`,
+  ];
+  const script = `$tokens=$null; $errors=$null
+    $ast=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path (Get-Location) 'scripts/lib/invoke-candidate-rights-session-action.ps1'),[ref]$tokens,[ref]$errors)
+    if($errors.Count){throw 'Parse failure'}
+    $function=$ast.Find({param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'ConvertTo-SafeSessionFailure'},$false)
+    . ([scriptblock]::Create($function.Extent.Text))
+    $messages=[Console]::In.ReadToEnd()|ConvertFrom-Json
+    @($messages|ForEach-Object {ConvertTo-SafeSessionFailure $_})|ConvertTo-Json -Depth 4 -Compress`;
+  const run = spawnSync(
+    process.platform === "win32" ? "pwsh.exe" : "pwsh",
+    ["-NoProfile", "-Command", script],
+    {
+      cwd: root,
+      encoding: "utf8",
+      input: JSON.stringify(messages),
+      windowsHide: true,
+      timeout: 10000,
+    },
+  );
+  assert.equal(run.status, 0);
+  assert.equal(`${run.stdout}${run.stderr}`.includes("generated-secret"), false);
+  const results = JSON.parse(run.stdout);
+  assert.deepEqual(results[0], {
+    outcome: "failed",
+    reason: "d3_coverage_missing",
+    missingCoverage: ["applicationCount", "packetCount"],
+  });
+  for (const result of results.slice(1))
+    assert.deepEqual(result, { outcome: "failed", reason: "operator_failed_check_recovery" });
+});

@@ -7,19 +7,40 @@ function ConvertTo-SafeSessionFailure {
   $failure = [ordered]@{ outcome = 'failed'; reason = 'operator_failed_check_recovery' }
   $prefix = 'D2 acceptance stopped before account deletion: nonempty export coverage is required for '
   $suffix = ". Prepare the authorized disposable account's missing D2 test records, then obtain fresh MFA and a new reviewed run. The existing export remains subject to its configured expiry."
+  $d3 = $Message.StartsWith('D3 acceptance stopped before account deletion: nonempty Applications export coverage is required for ')
+  if ($d3) {
+    $prefix = 'D3 acceptance stopped before account deletion: nonempty Applications export coverage is required for '
+    $suffix = ". Prepare the authorized disposable account's missing D3 test records, then obtain fresh MFA and a new reviewed run. The existing export remains subject to its configured expiry and cleanup."
+  }
   if ($Message.Length -le 1024 -and $Message -cmatch ('\A' + [regex]::Escape($prefix) + '(?<names>[A-Za-z, ]+)' + [regex]::Escape($suffix) + '\z')) {
     $names = @($Matches.names -csplit ', ')
     $allowed = @('consentCount','contributionApprovalCount','contributionCount','privateCaptureCount','trustCaseCount','trustCaseEventCount')
-    if ($names.Count -ge 1 -and $names.Count -le 6 -and
+    if ($d3) { $allowed = @('applicationCount','packetCount','approvalCount','attemptCount','historyCount') }
+    if ($names.Count -ge 1 -and $names.Count -le $allowed.Count -and
         @($names | Where-Object { $_ -cnotin $allowed }).Count -eq 0 -and
         @($names | Select-Object -Unique).Count -eq $names.Count) {
-      $failure.reason = 'd2_coverage_missing'
+      $failure.reason = if ($d3) { 'd3_coverage_missing' } else { 'd2_coverage_missing' }
       $failure.missingCoverage = $names
     }
   }
   elseif ($Message -like 'The disposable identity is not an exact current*') { $failure.reason = 'identity_not_fresh' }
-  elseif ($Message -match 'clean|origin/main|merged') { $failure.reason = 'source_not_ready' }
+  elseif ($Message -ceq 'Acceptance requires clean main exactly matching origin/main and SourceSha.') { $failure.reason = 'source_not_ready' }
   return [pscustomobject]$failure
+}
+function Get-RightsSessionPolicy {
+  param([bool]$ApplicationsInventory)
+  if ($ApplicationsInventory) {
+    return @{
+      ExpectedPolicyVersion = 'd3-development-synthetic-v1'
+      ReviewedPolicySha256 = 'c47a4637cfd1f008f29147ec610d95d1f7ca9126a5242b8ff38706157a38ab6c'
+      ExpectedOwnerInventory = 'identity,profile,documents,jobs,matching,billing,trust,applications'
+    }
+  }
+  return @{
+    ExpectedPolicyVersion = 'd2-development-synthetic-v1'
+    ReviewedPolicySha256 = '7dbde35dda7542ace2932a68cc8d28618ce14951180f9ab69025b9f511ac35cf'
+    ExpectedOwnerInventory = 'identity,profile,documents,jobs,matching,billing,trust'
+  }
 }
 try {
   $inputJson = [Console]::In.ReadToEnd()
@@ -32,22 +53,25 @@ try {
   $optionKeys = @($request.options.PSObject.Properties.Name | Sort-Object) -join ','
   $restricted = $null -ne $request.options.PSObject.Properties['RestrictedAnswerFixture']
   $resume = $null -ne $request.options.PSObject.Properties['ResumeFixture']
+  $applications = $null -ne $request.options.PSObject.Properties['ApplicationsInventory']
   $expectedNames = @('ExpectedAccountId','ReviewedZeroDriftPlanSha256','SourceSha','StateBucket','ZeroDriftPlanPath')
   if ($restricted) { $expectedNames += 'RestrictedAnswerFixture' }
   if ($resume) { $expectedNames += 'ResumeFixture' }
+  if ($applications) { $expectedNames += 'ApplicationsInventory' }
   $expectedOptionKeys = @($expectedNames | Sort-Object) -join ','
   if ($optionKeys -cne $expectedOptionKeys -or ($restricted -and ($request.options.RestrictedAnswerFixture -isnot [bool] -or $request.options.RestrictedAnswerFixture -ne $true)) -or
-      ($resume -and ($request.options.ResumeFixture -isnot [bool] -or $request.options.ResumeFixture -ne $true))) { throw 'Invalid session options.' }
+      ($resume -and ($request.options.ResumeFixture -isnot [bool] -or $request.options.ResumeFixture -ne $true)) -or
+      ($applications -and ($request.options.ApplicationsInventory -isnot [bool] -or $request.options.ApplicationsInventory -ne $true))) { throw 'Invalid session options.' }
   $parameters = @{
     Action = $(if ($request.action -ceq 'plan') { 'Plan' } else { 'Execute' })
-    ExpectedPolicyVersion = 'd2-development-synthetic-v1'
-    ReviewedPolicySha256 = '7dbde35dda7542ace2932a68cc8d28618ce14951180f9ab69025b9f511ac35cf'
     ExpectedExportLifetimeSeconds = 3600
     ExpectedDownloadGrantSeconds = 300
     ExpectedBackupRetentionDays = 35
     ExpectedRecentAuthMaxAgeSeconds = 900
     ExpectedSubprocessorInventory = 'none'
   }
+  $policy = Get-RightsSessionPolicy $applications
+  foreach ($name in $policy.Keys) { $parameters[$name] = $policy[$name] }
   foreach ($name in @('ExpectedAccountId', 'StateBucket', 'SourceSha', 'ZeroDriftPlanPath', 'ReviewedZeroDriftPlanSha256')) {
     if ($request.options.$name -isnot [string]) { throw 'Invalid session option type.' }
     $parameters[$name] = $request.options.$name

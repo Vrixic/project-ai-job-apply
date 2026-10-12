@@ -149,13 +149,13 @@ input.on("line", async (line) => {
       "operator_unavailable",
       "operator_failed_check_recovery",
       "d2_coverage_missing",
+      "d3_coverage_missing",
       "identity_not_fresh",
       "source_not_ready",
     ];
-    const missingCoverage =
-      error.message === "d2_coverage_missing"
-        ? sanitizeMissingCoverage(error.missingCoverage)
-        : null;
+    const missingCoverage = ["d2_coverage_missing", "d3_coverage_missing"].includes(error.message)
+      ? sanitizeMissingCoverage(error.missingCoverage, error.message === "d3_coverage_missing")
+      : null;
     report(
       safe.includes(error.message) ? error.message : "session-command-failed",
       missingCoverage ? { missingCoverage } : {},
