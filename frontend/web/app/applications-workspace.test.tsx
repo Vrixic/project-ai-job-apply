@@ -721,43 +721,54 @@ describe("ApplicationsWorkspace", () => {
     expect(calls.filter((url) => url.includes("/preparations/"))).toHaveLength(121);
     expect(calls.filter((url) => url.endsWith("/packets"))).toHaveLength(1);
   });
-  it("cancels pending preparation at the latest revision and stops polling", async () => {
-    vi.useFakeTimers();
-    const OP = "00000000-0000-7000-8000-000000000020";
-    const operation = {
-      id: OP,
-      applicationId: APP,
-      state: "running",
-      createdAt: AT,
-      updatedAt: AT,
-    };
-    const calls: Array<{ url: string; init: RequestInit }> = [];
-    const send = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
-      const url = String(input);
-      calls.push({ url, init });
-      if (url.endsWith("/search")) return respond({ items: [] });
-      if (url.endsWith("/packets")) return respond(operation, 202);
-      if (url.includes("/preparations/")) return respond(operation);
-      if (url.endsWith("/cancel"))
-        return respond(application({ status: "cancelled", revision: 3, currentAction: "none" }));
-      if (url === `/api/platform/applications/${APP}`) return respond(reviewable(2));
-      return respond(application(), 201);
-    });
-    await mount(send, undefined, true);
-    await act(async () => {
-      container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
-    });
-    await click("Prepare resume and cover letter");
-    await click("Cancel application");
-    expect(container.textContent).toContain("This application was cancelled");
-    const cancel = calls.find(({ url }) => url.endsWith("/cancel"));
-    expect(JSON.parse(String(cancel?.init.body))).toEqual({ expectedRevision: 2 });
-    const count = calls.length;
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(10_000);
-    });
-    expect(calls).toHaveLength(count);
-  });
+  it.each([false, true])(
+    "cancels pending preparation and stops polling (ambiguous=%s)",
+    async (ambiguous) => {
+      vi.useFakeTimers();
+      const OP = "00000000-0000-7000-8000-000000000020";
+      const operation = {
+        id: OP,
+        applicationId: APP,
+        state: "running",
+        createdAt: AT,
+        updatedAt: AT,
+      };
+      const calls: Array<{ url: string; init: RequestInit }> = [];
+      let cancellationSent = false;
+      const send = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+        const url = String(input);
+        calls.push({ url, init });
+        if (url.endsWith("/search")) return respond({ items: [] });
+        if (url.endsWith("/packets")) return respond(operation, 202);
+        if (url.includes("/preparations/")) return respond(operation);
+        const cancelled = application({ status: "cancelled", revision: 3, currentAction: "none" });
+        if (url.endsWith("/cancel")) {
+          cancellationSent = true;
+          return ambiguous
+            ? respond({ code: "applications_unavailable" }, 503)
+            : respond(cancelled);
+        }
+        if (url === `/api/platform/applications/${APP}`)
+          return respond(cancellationSent ? cancelled : reviewable(2));
+        return respond(application(), 201);
+      });
+      await mount(send, undefined, true);
+      await act(async () => {
+        container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
+      });
+      await click("Prepare resume and cover letter");
+      await click("Cancel application");
+      expect(container.textContent).toContain("This application was cancelled");
+      const cancel = calls.find(({ url }) => url.endsWith("/cancel"));
+      expect(calls.filter(({ url }) => url.endsWith("/cancel"))).toHaveLength(1);
+      expect(JSON.parse(String(cancel?.init.body))).toEqual({ expectedRevision: 2 });
+      const count = calls.length;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(calls).toHaveLength(count);
+    },
+  );
   it("refuses a succeeded operation whose exact packet does not match the current application", async () => {
     const OP = "00000000-0000-7000-8000-000000000020";
     const send = vi.fn(async (input: RequestInfo | URL) => {
@@ -1224,6 +1235,106 @@ describe("ApplicationsWorkspace", () => {
     await click(/cancel/i);
     expect(calls).toContain(`GET /api/platform/applications/${APP}`);
     expect(container.textContent).toContain("This application changed");
+  });
+
+  it.each(["503", "transport"])(
+    "observes a committed cancellation after %s without replaying its command",
+    async (failure) => {
+      let reads = 0;
+      const send = vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
+        if (url === `/api/platform/applications/${APP}/cancel`) {
+          if (failure === "transport") throw new Error("Synthetic connection loss");
+          return respond({ code: "applications_unavailable" }, 503);
+        }
+        if (url === `/api/platform/applications/${APP}` && init?.method === "GET")
+          return respond(
+            ++reads === 1
+              ? reviewable()
+              : application({ status: "cancelled", revision: 3, currentAction: "none" }),
+          );
+        return respond({}, 404);
+      });
+      await mount(send, undefined, false, APP);
+      await click(/cancel/i);
+      expect(container.textContent).toContain("This application was cancelled");
+      expect(container.textContent).not.toContain("Cancellation could not be confirmed");
+      const calls = send.mock.calls.filter(
+        ([url]) => url === `/api/platform/applications/${APP}` || String(url).endsWith("/cancel"),
+      );
+      expect(calls.map(([, init]) => init?.method)).toEqual(["GET", "POST", "GET"]);
+      expect(calls[2]?.[1]).not.toHaveProperty("body");
+    },
+  );
+
+  it.each(["wrong-id", "wrong-job", "same", "older", "active", "malformed", "unavailable"])(
+    "does not claim cancellation from a %s observation",
+    async (observation) => {
+      const latest = application({ status: "cancelled", revision: 3, currentAction: "none" });
+      if (observation === "wrong-id") latest.id = "00000000-0000-7000-8000-000000000099";
+      if (observation === "wrong-job")
+        latest.canonicalJobId = "00000000-0000-7000-8000-000000000099";
+      if (observation === "same") latest.revision = 2;
+      if (observation === "older") latest.revision = 1;
+      let reads = 0;
+      const send = vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
+        if (String(url).endsWith("/cancel"))
+          return respond({ code: "applications_unavailable" }, 503);
+        if (url === `/api/platform/applications/${APP}` && init?.method === "GET") {
+          if (++reads === 1) return respond(reviewable());
+          return respond(
+            observation === "malformed"
+              ? { id: APP, status: "cancelled" }
+              : observation === "active"
+                ? reviewable(3)
+                : latest,
+            observation === "unavailable" ? 503 : 200,
+          );
+        }
+        return respond({}, 404);
+      });
+      await mount(send, undefined, false, APP);
+      await click(/cancel/i);
+      expect(container.textContent).not.toContain("This application was cancelled");
+      expect(container.textContent).toContain("Cancellation could not be confirmed");
+      expect(
+        send.mock.calls
+          .filter(
+            ([url]) =>
+              url === `/api/platform/applications/${APP}` || String(url).endsWith("/cancel"),
+          )
+          .map(([, init]) => init?.method),
+      ).toEqual(["GET", "POST", "GET"]);
+    },
+  );
+
+  it("bounds cancellation observation without replaying the command", async () => {
+    vi.useFakeTimers();
+    let observationSignal: AbortSignal | undefined;
+    let reads = 0;
+    const send = vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
+      if (String(url).endsWith("/cancel"))
+        return respond({ code: "applications_unavailable" }, 503);
+      if (url === `/api/platform/applications/${APP}` && init?.method === "GET") {
+        if (++reads === 1) return respond(reviewable());
+        return new Promise<Response>((_resolve, reject) => {
+          observationSignal = init?.signal ?? undefined;
+          observationSignal?.addEventListener("abort", () => reject(new Error("Aborted")));
+        });
+      }
+      return respond({}, 404);
+    });
+    await mount(send, undefined, false, APP);
+    await click(/cancel/i);
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(observationSignal?.aborted).toBe(true);
+    expect(container.textContent).toContain("Cancellation could not be confirmed");
+    expect(
+      send.mock.calls
+        .filter(
+          ([url]) => url === `/api/platform/applications/${APP}` || String(url).endsWith("/cancel"),
+        )
+        .map(([, init]) => init?.method),
+    ).toEqual(["GET", "POST", "GET"]);
   });
 
   it("has no detectable accessibility violations before and after preparing", async () => {

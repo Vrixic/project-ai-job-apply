@@ -14,3 +14,7 @@ became disabled, its task was positively STOPPED and its preparation workflow SU
 Live approval/downloads remain unverified; a fresh packet requires fresh review and approval.
 
 Live AI and employer submission remain off. Independent D1/admin acceptance remains deferred.
+
+2026-10-12 follow-up: managed Gateway 108/native preparation 9 review, approval and direct
+PDF/DOCX downloads pass. See the [current connected journey](d3-native-connected-journey-2026-10-12.md)
+for exact limits and remaining acceptance.
