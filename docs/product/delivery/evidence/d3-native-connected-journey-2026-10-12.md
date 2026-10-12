@@ -30,10 +30,20 @@ foreign, old, still-active and timed-out observations retain uncertainty. Both p
 preparation and packet cancellation use the same behavior. Executed checks: all 61 workspace
 tests, web typecheck, focused Biome/diff checks, consequential review and the simulated Chromium
 connected journey pass. Its authentication, BFF, native service and Chrome receiver are simulated.
-The cancellation UI correction still needs live retest.
+The cancellation UI correction still needs live retest. GitHub Actions jobs did not start because
+of the account payment/spending restriction; targeted local results are not a hosted CI-pass claim.
 
-Shutdown verification is in progress. Final off-state and recovery archive must be recorded
-before handoff. Private operator receipts remain under `.tmp/d3-primary-recovery-20261010`.
+Development shutdown passed fresh readback at 2026-10-12T19:02:04Z: no project RDS instance,
+active NAT, paid Interface endpoints, EIPs, running work or enabled writers; all 13 queues were
+drained. The exact physical database's final snapshot `20261012183804` and its safety snapshot
+are available and encrypted. Automated backups are retained. The complete 143-field dormant
+inputs were archived in versioned KMS-encrypted storage with exact-version SHA-256 verification.
+Docker/WSL are off, the isolated test PostgreSQL cluster is stopped and the PC remains on.
+Staging was unchanged; its last off verification was 2026-10-11T18:01:49Z. Retained backups,
+S3/ECR, KMS, secrets and monitoring/security resources can still incur charges.
+Both exact synthetic downloaded test files were removed. Private operator receipts remain
+under `.tmp/d3-primary-recovery-20261010`. [PR #664](https://github.com/Vrixic/project-ai-job-apply/pull/664)
+contains D3-121 source and this delivery record.
 
 Live AI remains off: the owner confirmed no provider/account policy satisfying ADR-038's
 30-minute all-copy retention requirement. Authorized Greenhouse QA/fixtures, installed Chrome/Edge

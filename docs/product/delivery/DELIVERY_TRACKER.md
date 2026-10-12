@@ -32,7 +32,7 @@ D3-121 adds bounded read-only observation after ambiguous cancellation; 61 works
 web typecheck, focused checks/review and the simulated connected journey pass. Live retest remains.
 Live AI stays off without the required 30-minute all-copy provider policy. Authorized ATS QA/fixtures,
 installed-extension and accountable acceptance remain open. Independent D1/admin acceptance is deferred.
-Development shutdown is in progress; final database/endpoint verification remains required.
+Development shutdown was freshly verified at 2026-10-12T19:02:04Z; encrypted backups and recovery inputs are retained.
 [Current evidence](evidence/d3-native-connected-journey-2026-10-12.md).
 
 D3-106 handles standard S3 URL encoding and authenticates retired deletion markers without skipping
@@ -148,7 +148,9 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 
 2026-10-12: [Current native journey and cancellation evidence](evidence/d3-native-connected-journey-2026-10-12.md)
 records managed synthetic review/approval/download success and targeted cancellation verification.
-Shutdown verification remains in progress. Independent D1/admin acceptance stays deferred.
+Development shutdown was freshly verified at 2026-10-12T19:02:04Z; encrypted backups and recovery inputs are retained.
+Docker/WSL are off and the PC stays on. Staging was last verified off on 2026-10-11 and was unchanged.
+Independent D1/admin acceptance stays deferred.
 
 The entries below are historical checkpoints.
 
