@@ -1267,6 +1267,22 @@ variable "restricted_answer_vault_enabled" {
   }
 }
 
+variable "restricted_answer_reuse_enabled" {
+  description = "Enable explicit exact-version saved-answer selection in Applications after a reviewed release; never infer or silently reuse values."
+  type        = bool
+  default     = false
+  nullable    = false
+
+  validation {
+    condition = !var.restricted_answer_reuse_enabled || (
+      var.deploy_applications && var.deploy_gateway_lambda &&
+      var.restricted_answer_vault_enabled && var.restricted_packet_keys_provisioned &&
+      try(var.gateway_native_materials.packet_protection_enabled, false)
+    )
+    error_message = "Saved-answer reuse requires Applications, the Gateway, the dedicated vault key and enabled packet protection with separate keys."
+  }
+}
+
 variable "restricted_answer_export_enabled" {
   description = "Allow the private candidate-rights activity to decrypt latest non-deleted restricted answers into the candidate's encrypted export only."
   type        = bool

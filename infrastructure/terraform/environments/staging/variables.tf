@@ -499,6 +499,13 @@ variable "restricted_answer_vault_enabled" {
   default     = false
 }
 
+variable "restricted_answer_reuse_enabled" {
+  description = "Enable explicitly selected saved-answer reuse after a reviewed Applications/vault/packet release."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "restricted_answer_export_enabled" {
   description = "Enable decrypt-only restricted-answer access for the candidate-rights export activity."
   type        = bool

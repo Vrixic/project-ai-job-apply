@@ -20,6 +20,14 @@ Its exact runtime values are export `3600`, download grant `300`, backup retenti
 authentication `900`, export lifecycle `1`, owners
 `identity,profile,documents,jobs,matching,billing,trust`, and executable subprocessor adapters `none`.
 This is generated-synthetic engineering policy, not real-candidate or public-policy approval.
+For D3, select the existing [D3 synthetic policy](../../../docs/security/policies/candidate-rights.d3-development-synthetic-v1.json)
+and its canonical SHA-256, with the exact owner inventory ending in `trust,applications`.
+The historical Stage B operator above is D2-specific; it must not be used to certify a D3 rollout.
+Review the complete D3 Terraform inputs and plan separately. D3 acceptance requires enabled
+private protected-packet export, matching exact Gateway/activity keys and nonempty exported
+Applications, packets, approvals, attempts and history. It refuses incomplete coverage before
+requesting account deletion. The aggregate receipt binds that coverage and all eight owners.
+The existing restricted-answer and generated-resume fixtures remain available for this policy.
 
 ## Read-only restricted-answer artifact acceptance (D3-029/D3-030)
 
@@ -574,9 +582,10 @@ is established by an old acceptance plan, receipt or encrypted reviewer credenti
 
 ## Recovery replay and verification
 
-Account deletion is not restore-safe until the independent marker replay runs against a disposable,
-quiesced, generated-synthetic development restore. Use the existing restore procedure to create and
-clean that restore. The old direct-URL `run-candidate-deletion-recovery-replay` implementation is
+Formal restore-proof exercises are optional following the owner decision on 2026-10-10.
+Encrypted backups, exact target checks and completed-deletion replay before restored traffic remain
+required. An optional diagnostic can use and clean a disposable, quiesced, generated-synthetic restore.
+The old direct-URL `run-candidate-deletion-recovery-replay` implementation is
 retired; use the [guarded isolated replay operator](../restore/candidate-deletion-recovery-replay.md).
 Its current schema-bound inspection/replay outputs are not automatically interchangeable with this
 historical D1 acceptance packet. Never fabricate this packet from a local unit test, empty cloud
@@ -605,7 +614,9 @@ Retain a separately reviewed aggregate receipt with exactly:
 must not contain restored identifiers, database endpoints, marker keys, decrypted locators, owner
 values, row values, or artifact content.
 
-After independent checksum review, run `Verify` with the reviewed lifecycle and recovery receipts.
+After checksum review, run `Verify` with the reviewed lifecycle receipt. A recovery receipt and
+its checksum are optional; provide both or neither. Omission reports `RecoveryReplayVerified=false`
+and a null `RecoveryMarkersValidated`, without claiming a restore check.
 It revalidates state identity, live policy/runtime, alarms, queues, and idle compute and reports only
 aggregate outcomes. `RecoverCleanup` accepts only an already complete lifecycle receipt and proves
 cleanup/health again; it cannot create, confirm, cancel, delete, invoke replay, or convert a failed
@@ -616,7 +627,7 @@ run into acceptance.
 At repository implementation time, development candidate rights remain default-off and the exact
 accountable policy/timing digest, backup inventory disposition, authorized non-Zach Auth0 M2M
 secret/tags, disposable recent-MFA identity, current enabled aliases, zero-drift plan, and isolated
-restore replay receipt are external/runtime inputs. Therefore the operator and pure tests can be
+optional restore replay receipt are separate external/runtime inputs. Therefore the operator and pure tests can be
 completed locally, but a deployed acceptance run cannot be claimed yet.
 
 A successful run proves one generated-synthetic development lifecycle only. It does not approve

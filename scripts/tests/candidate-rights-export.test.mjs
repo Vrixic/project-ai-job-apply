@@ -962,3 +962,73 @@ test("normal CLI is stdin-only, private and bounded on both acceptance and refus
     assert.deepEqual(cli(undefined, args), { status: 1, output: rejected });
   }
 });
+
+function d3Fixture() {
+  const artifact = fixture();
+  artifact.policyVersion = "d3-development-synthetic-v1";
+  artifact.applications = {
+    schemaVersion: 1,
+    applications: [],
+    packets: [],
+    approvals: [],
+    attempts: [],
+    history: [],
+  };
+  return artifact;
+}
+
+test("D3 export requires Applications and returns bounded technical counts", () => {
+  const artifact = d3Fixture();
+  artifact.applications.applications.push({
+    id: exportId,
+    canonicalJobId: contributionId,
+    status: "cancelled",
+    revision: 1,
+    createdAt: at,
+    updatedAt: at,
+  });
+  const binding = { expectedExportId: exportId, expectedPolicyVersion: artifact.policyVersion };
+  assert.deepEqual(validateCandidateRightsExport(bytes(artifact), binding), {
+    ...emptyCounts,
+    applicationCount: 1,
+    packetCount: 0,
+    approvalCount: 0,
+    attemptCount: 0,
+    historyCount: 0,
+  });
+  delete artifact.applications;
+  assert.deepEqual(validateCandidateRightsExport(bytes(artifact), binding), rejected);
+});
+
+for (const section of ["applications", "packets", "approvals", "attempts", "history"]) {
+  test(`D3 export rejects omitted ${section} coverage`, () => {
+    const artifact = d3Fixture();
+    delete artifact.applications[section];
+    assert.deepEqual(
+      validateCandidateRightsExport(bytes(artifact), {
+        expectedExportId: exportId,
+        expectedPolicyVersion: artifact.policyVersion,
+      }),
+      rejected,
+    );
+  });
+}
+
+test("D3 export retains closed Applications schema and D2 owner coverage", () => {
+  const artifact = d3Fixture();
+  const binding = { expectedExportId: exportId, expectedPolicyVersion: artifact.policyVersion };
+  artifact.applications.privateValue = sentinel;
+  assert.deepEqual(validateCandidateRightsExport(bytes(artifact), binding), rejected);
+  delete artifact.applications.privateValue;
+  delete artifact.trust;
+  assert.deepEqual(validateCandidateRightsExport(bytes(artifact), binding), rejected);
+});
+
+test("D3 restricted-answer validation preserves exact independent value checks", () => {
+  const { artifact, binding } = restrictedFixture();
+  artifact.policyVersion = binding.expectedPolicyVersion = "d3-development-synthetic-v1";
+  artifact.applications = d3Fixture().applications;
+  assert.deepEqual(validateRestrictedAnswerExport(bytes(artifact), binding), restrictedCounts);
+  artifact.profile.restrictedAnswers[0].value = sentinel;
+  assert.deepEqual(validateRestrictedAnswerExport(bytes(artifact), binding), rejected);
+});
