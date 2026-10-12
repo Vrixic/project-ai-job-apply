@@ -36,6 +36,10 @@ Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 20
 
 ## Task register
 
+D3-118 started 2026-10-12: real Fastify injection reproduces and fixes lazy-thenable credential
+context loss. 144 targeted tests and Gateway build/typecheck pass; fresh live approval remains.
+[Evidence](evidence/d3-native-fastify-credential-2026-10-12.md).
+
 D3-117 started 2026-10-12: invocation-scoped original JWT forwarding corrects the diagnosed
 Lambda/native credential mismatch. 144 focused tests, Gateway build/typecheck and consequential
 security review pass; managed deployment/live approval retry remain.

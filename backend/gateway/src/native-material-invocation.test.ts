@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import Fastify from "fastify";
 import { expect, it, vi } from "vitest";
 
 const { request } = vi.hoisted(() => ({ request: vi.fn() }));
@@ -71,18 +72,27 @@ it.each(["approval", "submissions", "manual-submissions", `attempts/${other}/dis
     const bridge = createInvocationPrincipalBridge();
     const path = `/v1/applications/${app}/${command}`;
     const token = "synthetic.original.jwt";
+    const server = Fastify();
+    server.post(path, async (incoming) => {
+      const internal = incoming.headers.authorization?.slice(7) ?? "";
+      expect(incoming.headers.authorization).not.toBe(`Bearer ${token}`);
+      expect((await bridge.verifier.verify(internal)).subject).toBe("synthetic|owner");
+      await withNativeMaterialCredential(owner, app, internal, f.read);
+      return {};
+    });
+    await server.ready();
     const handler = createApiGatewayHandler({
       issuer,
       audience,
       principalBridge: bridge,
       app: Promise.resolve({
-        inject: async ({ headers }) => {
-          expect(headers.authorization).not.toBe(`Bearer ${token}`);
-          const internal = headers.authorization?.slice(7) ?? "";
-          expect((await bridge.verifier.verify(internal)).subject).toBe("synthetic|owner");
-          await withNativeMaterialCredential(owner, app, internal, f.read);
-          return { statusCode: 200, headers: {}, body: "{}" };
-        },
+        inject: ({ headers, url, payload }) =>
+          server.inject({
+            method: "POST",
+            headers,
+            url,
+            ...(payload === undefined ? {} : { payload }),
+          }),
       }),
     });
     const result = await handler({
@@ -123,6 +133,7 @@ it.each(["approval", "submissions", "manual-submissions", `attempts/${other}/dis
     } as AuthorizedHttpApiEvent);
     expect(result.statusCode).toBe(200);
     expect(f.observed).toEqual([`Bearer ${token}`]);
+    await server.close();
   },
 );
 
