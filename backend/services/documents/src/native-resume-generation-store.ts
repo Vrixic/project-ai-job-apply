@@ -416,7 +416,32 @@ export class PostgresNativeResumeGenerationStore {
         if (!base) return null;
         const [previous] = await tx<Array<{ epoch_id: string; sealed_at: Date | null }>>`
           SELECT epoch_id,sealed_at FROM documents.native_material_admission
-          WHERE user_id=${fixed.application.ownerUserId} AND application_id=${fixed.application.applicationId}`;
+          WHERE user_id=${fixed.application.ownerUserId} AND application_id=${fixed.application.applicationId} FOR UPDATE`;
+        let previousEpochId = previous?.sealed_at ? previous.epoch_id : null;
+        if (previous && !previous.sealed_at) {
+          const [settled] = await tx<Array<{ settled: boolean }>>`
+            SELECT EXISTS (
+              SELECT 1 FROM documents.native_resume_generations
+              WHERE user_id=${fixed.application.ownerUserId} AND application_id=${fixed.application.applicationId}
+                AND epoch_id=${previous.epoch_id} AND state IN ('retired','abandoned','launch_rejected')
+            ) AND NOT EXISTS (
+              SELECT 1 FROM documents.native_resume_generations
+              WHERE user_id=${fixed.application.ownerUserId} AND application_id=${fixed.application.applicationId}
+                AND state NOT IN ('retired','abandoned','launch_rejected')
+            ) AND NOT EXISTS (
+              SELECT 1 FROM documents.native_material_allocations
+              WHERE user_id=${fixed.application.ownerUserId} AND application_id=${fixed.application.applicationId}
+                AND state NOT IN ('retired','abandoned')
+            ) AS settled`;
+          if (!settled?.settled) throw unavailable();
+          // A new admitted request may close a positively settled epoch. Expiry alone is
+          // never retirement, and existing-generation replay above cannot rotate its epoch.
+          await tx`UPDATE documents.native_material_admission SET sealed_at=t.at,minimum_work_issued_at=t.at
+            FROM (SELECT clock_timestamp() AS at) t
+            WHERE user_id=${fixed.application.ownerUserId} AND application_id=${fixed.application.applicationId}
+              AND epoch_id=${previous.epoch_id} AND sealed_at IS NULL`;
+          previousEpochId = previous.epoch_id;
+        }
         const [version] = await tx<
           Array<{ next: number }>
         >`SELECT (coalesce(max(version),0)+1)::int AS next
@@ -434,7 +459,7 @@ export class PostgresNativeResumeGenerationStore {
           },
           application: fixed.application,
           normalizedSha256: base.normalized_sha256,
-          previousEpochId: previous?.sealed_at ? previous.epoch_id : null,
+          previousEpochId,
           deployment: fixed.deployment,
         });
       });

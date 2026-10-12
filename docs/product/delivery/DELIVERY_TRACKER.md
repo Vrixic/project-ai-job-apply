@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-10-11. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
+Last updated: 2026-10-12. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
 
 ## Summary
 
@@ -24,16 +24,16 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 
 ## D3 — High-quality application preparation
 
-D3-108–110 fixes are merged. Candidate sign-in, search, synthetic upload processing and grounded
-fact confirmation pass. The corrected default-off native worker and migration image build and pass
-isolated smoke checks; all six reproducible native Lambda artifacts are published. Revision-2 RPCs
-are staged disabled with zero resource/output drift. No live material or submission is accepted.
-Docker is repaired again and the next enabled worker/migration publication batch is in progress.
-The historical rejected claim needs owning recovery for that application, not a fresh r2 journey.
-Live AI retention policy and authorized ATS QA/fixtures remain unavailable. D3 is In progress;
-independent D1/admin acceptance stays deferred. AWS test runtimes are off; encrypted backups/current
-recovery inputs are retained. Docker is in use for publication and must be off with WSL at handoff.
-[Current evidence](evidence/d3-native-launch-rejection-2026-10-11.md).
+D3-108–114 fixes are merged. Synthetic sign-in, search, upload/fact confirmation, native r2
+launch/attachment and expiry/retirement have managed evidence. API application scopes are corrected
+and deployed; explicit reprepare exposed a retired-epoch reservation failure. D3-115 implements
+its guarded fix: five real PostgreSQL regressions, component build, focused review and the
+simulated connected journey pass. Deployment/live preview, approval and downloads remain open.
+Live AI retention policy and authorized ATS QA/fixtures remain unavailable; both capabilities stay
+off. D3 is In progress; independent D1/admin acceptance stays deferred. The interrupted development
+shutdown needs fresh verification after SSO renewal; database and paid endpoints may remain.
+Docker is unavailable in this session; the isolated test database is stopped. The PC stays on.
+[Current evidence](evidence/d3-retired-epoch-reprepare-2026-10-12.md).
 
 D3-106 handles standard S3 URL encoding and authenticates retired deletion markers without skipping
 their deletion authority. 257 focused tests, managed primary replay and consequential review pass.
