@@ -1199,6 +1199,7 @@ async function createConfiguredApplication(
       () => packetProtection?.enabled() === true,
       nativeMaterialLocations,
       nativeResumeLocations,
+      (failure) => logger.warn({ event: "native_material_availability_failed", ...failure }),
     ),
     ...(nativeMaterialDisposal ? { nativeMaterialDisposal } : {}),
     nativeCoverLetterPreparationEnabled: () =>

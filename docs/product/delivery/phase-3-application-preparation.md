@@ -36,6 +36,10 @@ Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 20
 
 ## Task register
 
+D3-116 started 2026-10-12: bounded native approval diagnostics; 31 focused tests, Gateway typecheck
+and focused Biome pass. Live preview passes; approval returns 503 and remains under diagnosis.
+[Evidence](evidence/d3-native-availability-diagnostics-2026-10-12.md).
+
 D3-113 started 2026-10-11; source verification passes. Managed native generation succeeds; preview verification is under diagnosis and approval remains blocked.
 
 D3-114 started 2026-10-11: native API scope admission is corrected and passes focused Terraform/controller tests and consequential review. Managed scope/binding readback passes; native acceptance remains open. [Evidence](evidence/d3-native-api-scope-admission-2026-10-11.md).
