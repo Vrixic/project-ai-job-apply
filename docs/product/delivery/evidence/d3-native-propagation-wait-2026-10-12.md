@@ -31,3 +31,7 @@ No generated content or credentials are included in this record.
 
 Live AI and employer submission remain off behind their existing external gates. Independent
 D1/admin acceptance remains deferred. D3 remains In progress.
+
+2026-10-12 follow-up: managed Gateway 108/native preparation 9 review, approval and direct
+PDF/DOCX downloads pass. See the [current connected journey](d3-native-connected-journey-2026-10-12.md)
+for exact limits and remaining acceptance.

@@ -1,15 +1,15 @@
 # D3 — High-Quality Application Preparation
 
-D3-108–114 fixes are merged. Synthetic sign-in, search, upload/fact confirmation, native r2
-launch/attachment and expiry/retirement have managed evidence. API application scopes are corrected
-and deployed; explicit reprepare exposed a retired-epoch reservation failure. D3-115 implements
-its guarded fix: five real PostgreSQL regressions, component build, focused review and the
-simulated connected journey pass. Deployment/live preview, approval and downloads remain open.
-Live AI retention policy and authorized ATS QA/fixtures remain unavailable; both capabilities stay
-off. D3 is In progress; independent D1/admin acceptance stays deferred. The interrupted development
-shutdown needs fresh verification after SSO renewal; database and paid endpoints may remain.
-Docker is unavailable in this session; the isolated test database is stopped. The PC stays on.
-[Current evidence](evidence/d3-retired-epoch-reprepare-2026-10-12.md).
+D3-115–120 are merged. Managed development testing on Gateway 108/native preparation 9 passed
+synthetic search, preparation, separate in-memory sign-in, exact preview/review, approval and
+PDF/DOCX downloads. The manual Apply UI and truthful not-submitted reconciliation passed;
+refreshed Applied history showed no confirmed applications. Employer submission was not performed.
+D3-121 adds bounded read-only observation after ambiguous cancellation; 61 workspace tests,
+web typecheck, focused checks/review and the simulated connected journey pass. Live retest remains.
+Live AI stays off without the required 30-minute all-copy provider policy. Authorized ATS QA/fixtures,
+installed-extension and accountable acceptance remain open. Independent D1/admin acceptance is deferred.
+Development shutdown is in progress; final database/endpoint verification remains required.
+[Current evidence](evidence/d3-native-connected-journey-2026-10-12.md).
 
 D3-106 handles standard S3 URL encoding and authenticates retired deletion markers without skipping
 their deletion authority. 257 focused tests, managed primary replay and consequential review pass.
@@ -36,25 +36,30 @@ Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 20
 
 ## Task register
 
+D3-121 started 2026-10-12: after an ambiguous cancellation, observe the exact newer cancelled
+application once without replaying the command. 61 targeted workspace tests, web typecheck,
+focused review and the simulated connected journey pass; live retest remains.
+[Evidence](evidence/d3-native-connected-journey-2026-10-12.md).
+
 D3-119/120 started 2026-10-12: original-deadline DNS propagation observation and explicit
 revision-bound replacement consent. 58 workflow and 50 workspace tests, component typechecks
-and focused Biome pass; managed live approval/download remains required.
+and focused Biome pass. Managed Gateway 108/native 9 approval and direct PDF/DOCX downloads pass.
 [Evidence](evidence/d3-native-propagation-wait-2026-10-12.md).
 
 D3-118 started 2026-10-12: real Fastify injection reproduces and fixes lazy-thenable credential
-context loss. 144 targeted tests and Gateway build/typecheck pass; fresh live approval remains.
+context loss. 144 targeted tests and Gateway build/typecheck pass; Gateway 108 live approval passes.
 [Evidence](evidence/d3-native-fastify-credential-2026-10-12.md).
 
 D3-117 started 2026-10-12: invocation-scoped original JWT forwarding corrects the diagnosed
 Lambda/native credential mismatch. 144 focused tests, Gateway build/typecheck and consequential
-security review pass; managed deployment/live approval retry remain.
+security review pass; the subsequent Fastify fix and Gateway 108 live approval pass.
 [Evidence](evidence/d3-native-invocation-credential-2026-10-12.md).
 
 D3-116 started 2026-10-12: bounded native approval diagnostics; 31 focused tests, Gateway typecheck
-and focused Biome pass. Live preview passes; approval returns 503 and remains under diagnosis.
+and focused Biome pass. The diagnosed 503 is corrected by D3-118; Gateway 108 live approval passes.
 [Evidence](evidence/d3-native-availability-diagnostics-2026-10-12.md).
 
-D3-113 started 2026-10-11; source verification passes. Managed native generation succeeds; preview verification is under diagnosis and approval remains blocked.
+D3-113 started 2026-10-11; source verification passes. Managed native generation, preview, review, approval and direct downloads pass in the current synthetic journey.
 
 D3-114 started 2026-10-11: native API scope admission is corrected and passes focused Terraform/controller tests and consequential review. Managed scope/binding readback passes; native acceptance remains open. [Evidence](evidence/d3-native-api-scope-admission-2026-10-11.md).
 
@@ -64,13 +69,13 @@ Implemented means merged source; deployment and live acceptance are stated separ
 |---|---|---|
 | Facts and saved answers (D3-001, D3-039, D3-055, D3-056, D3-075, D3-076) | Fact grounding, encrypted answer storage, selected-version checks and expiry/correction/quarantine guards are locally verified. | Compatible release and live saved-answer reuse acceptance; D3-087 supplies locally verified selection/review and reuse remains off. |
 | Resume import (D3-002, D3-023, D3-024) | Immutable import, normalized resume structure and upload registration are implemented; synthetic scan/parse has development evidence. | Real-resume processing approval and final connected onboarding acceptance. |
-| Resume preparation (D3-003, D3-016, D3-022) | Deterministic tailoring, visible diffs, factuality checks and verified PDF/DOCX rendering are implemented. | Connected native generation/download and candidate output-quality acceptance. |
+| Resume preparation (D3-003, D3-016, D3-022) | Deterministic tailoring, visible diffs, factuality checks and verified PDF/DOCX rendering are implemented. | Managed synthetic native generation/direct downloads pass; candidate output-quality acceptance remains. |
 | AI generation (D3-004, D3-037, D3-038) | A gated model adapter, grounded output validation and fresh disclosure checks are locally verified. | Externally blocked: owner confirms no provider/account policy meeting ADR-038's 30-minute all-copy retention limit. Keep live AI off. Provider configuration, evaluation and live acceptance remain. |
 | Applications (D3-005, D3-021, D3-074) | Immutable packets, owner-scoped lifecycle/history, application reopening and approval rechecks are implemented. | Final connected generation, approval, dispatch and confirmation acceptance. |
 | Review (D3-006) | Review-by-exception and explicit approve/cancel UI are implemented. | Live native material/saved-answer integration and final accessibility acceptance. |
 | ATS adapters (D3-007, D3-013) | Provider-neutral extraction, mapping, approved-field planning and challenge detection are locally verified; D3-101 implements the default-off Greenhouse bridge. | Authorized provider fixtures, exact-variant QA and installed/live acceptance; Lever/Ashby follow later. |
 | Submission safety (D3-008) | Attempt idempotency, validation, takeover, ambiguity handling and terminal confirmed-submission history are implemented. | Connected extension submission and provider confirmation acceptance. |
-| Assisted/manual Apply (D3-009, D3-018) | Canonical job opening, approved-answer copying and safe manual fallback are implemented; the deployed manual flow passed human review. | Direct native downloads and extension handoff acceptance. |
+| Assisted/manual Apply (D3-009, D3-018) | Canonical job opening, approved-answer copying and safe manual fallback are implemented; the deployed manual flow passed human review. | Managed direct native PDF/DOCX downloads pass; installed-extension handoff acceptance remains. |
 | Metrics (D3-010, D3-036) | Versioned correction/outcome metrics and strict detached telemetry envelopes are locally verified. | Production sinks/dashboards/alarms are deferred from the candidate-journey critical path. |
 | Verification (D3-011, D3-019) | Local adversarial, owner-isolation, duplicate-start and crash/replay checks pass; basic manual Apply is accepted. | Full generated-material journey, installed-extension checks and final security/privacy/accessibility/product acceptance. |
 | Capability approval (D3-012) | Engineering approval packet refreshed on October 9 against current source/evidence; existing limited development owner dispositions are linked without amendment. | Provider retention under ADR-038, exact release/source review and accountable legal/security/privacy gates remain; development direction alone does not close them. |
@@ -119,7 +124,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Primary manifest fingerprint (D3-112) | Primary context/admission/schema verification binds current 80-migration source and rejects the old fingerprint. 311 focused tests, 841 PowerShell checks and component typecheck pass. | Current 80-migration managed replay and temporary authority cleanup pass; live acceptance remains. [Evidence](evidence/d3-primary-manifest-fingerprint-2026-10-11.md). |
 | Native packet recovery (D3-113) | Explicit packet replacement preserves revision/idempotency and requires fresh review. Material verification failures carry only safe phase-specific guidance. 95 focused tests and web typecheck pass. | Consequential review, hosted expiry controls and explicit replacement pass; native preview remains open. [Evidence](evidence/d3-native-packet-recovery-2026-10-11.md). |
 | Native API scope admission (D3-114) | Application scopes conditionally included; two Terraform mock plans, three controller tests, focused review and managed Gateway 102 readback pass. | Live native preview remains open. [Evidence](evidence/d3-native-api-scope-admission-2026-10-11.md). |
-| Retired-epoch reprepare (D3-115) | Guarded fresh-epoch replacement implemented; five real PostgreSQL cases, component build, focused review and simulated connected journey pass. | Managed dispatch release and live native preview/approval/download remain. [Evidence](evidence/d3-retired-epoch-reprepare-2026-10-12.md). |
+| Retired-epoch reprepare (D3-115) | Guarded fresh-epoch replacement implemented; five real PostgreSQL cases, component build, focused review and simulated connected journey pass. | Managed native release, synthetic preview, approval and PDF/DOCX download pass; accountable output-quality/provider acceptance remains. [Evidence](evidence/d3-retired-epoch-reprepare-2026-10-12.md). |
 
 ## Decisions and scope changes
 
@@ -402,3 +407,6 @@ native acceptance and final shutdown remain. Independent D1/admin acceptance sta
 
 
 2026-10-12: D3-115 fixes retired unsealed epoch replacement. Five targeted PostgreSQL cases, Documents build, focused checks/review and simulated connected journey pass. Managed release/live acceptance remain; development shutdown is being reverified after an interrupted apply and expired SSO. [Evidence](evidence/d3-retired-epoch-reprepare-2026-10-12.md).
+
+
+2026-10-12: D3-115–120 managed native release and synthetic preview/review/approval/PDF/DOCX journey pass. D3-121 adds locally verified ambiguous-cancellation observation. Real employer confirmation, live AI and accountable acceptance remain open. [Evidence](evidence/d3-native-connected-journey-2026-10-12.md).

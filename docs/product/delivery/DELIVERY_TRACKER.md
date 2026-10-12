@@ -24,16 +24,16 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 
 ## D3 — High-quality application preparation
 
-D3-108–114 fixes are merged. Synthetic sign-in, search, upload/fact confirmation, native r2
-launch/attachment and expiry/retirement have managed evidence. API application scopes are corrected
-and deployed; explicit reprepare exposed a retired-epoch reservation failure. D3-115 implements
-its guarded fix: five real PostgreSQL regressions, component build, focused review and the
-simulated connected journey pass. Deployment/live preview, approval and downloads remain open.
-Live AI retention policy and authorized ATS QA/fixtures remain unavailable; both capabilities stay
-off. D3 is In progress; independent D1/admin acceptance stays deferred. The interrupted development
-shutdown needs fresh verification after SSO renewal; database and paid endpoints may remain.
-Docker is unavailable in this session; the isolated test database is stopped. The PC stays on.
-[Current evidence](evidence/d3-retired-epoch-reprepare-2026-10-12.md).
+D3-115–120 are merged. Managed development testing on Gateway 108/native preparation 9 passed
+synthetic search, preparation, separate in-memory sign-in, exact preview/review, approval and
+PDF/DOCX downloads. The manual Apply UI and truthful not-submitted reconciliation passed;
+refreshed Applied history showed no confirmed applications. Employer submission was not performed.
+D3-121 adds bounded read-only observation after ambiguous cancellation; 61 workspace tests,
+web typecheck, focused checks/review and the simulated connected journey pass. Live retest remains.
+Live AI stays off without the required 30-minute all-copy provider policy. Authorized ATS QA/fixtures,
+installed-extension and accountable acceptance remain open. Independent D1/admin acceptance is deferred.
+Development shutdown is in progress; final database/endpoint verification remains required.
+[Current evidence](evidence/d3-native-connected-journey-2026-10-12.md).
 
 D3-106 handles standard S3 URL encoding and authenticates retired deletion markers without skipping
 their deletion authority. 257 focused tests, managed primary replay and consequential review pass.
@@ -145,6 +145,12 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 [Phase 7 tasks](phase-7-quality-and-expansion.md).
 
 ## Current operating state
+
+2026-10-12: [Current native journey and cancellation evidence](evidence/d3-native-connected-journey-2026-10-12.md)
+records managed synthetic review/approval/download success and targeted cancellation verification.
+Shutdown verification remains in progress. Independent D1/admin acceptance stays deferred.
+
+The entries below are historical checkpoints.
 
 2026-10-11: [D3-112](evidence/d3-primary-manifest-fingerprint-2026-10-11.md) corrects the primary
 deletion check's stale manifest fingerprint with targeted regressions. Migration 0017 and paused

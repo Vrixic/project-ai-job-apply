@@ -443,6 +443,53 @@ function JobApplicationWorkspace({
     await settle(result, current.id);
   }
 
+  async function cancelApplication(current: Application) {
+    const result = await applicationsCall(
+      "POST",
+      `/api/platform/applications/${current.id}/cancel`,
+      {
+        ...options,
+        body: { expectedRevision: current.revision },
+        idempotencyKey: commandKey("cancel", current.id, current.revision),
+      },
+    );
+    if (result.ok || result.code !== "applications_unavailable") {
+      await settle(result, current.id);
+      return;
+    }
+    if (lifetime.current.signal.aborted) throw new Error("Workspace closed");
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    lifetime.current.signal.addEventListener("abort", abort, { once: true });
+    const timeout = setTimeout(abort, 10_000);
+    try {
+      const latest = await applicationsCall("GET", `/api/platform/applications/${current.id}`, {
+        ...options,
+        signal: controller.signal,
+      });
+      if (
+        !controller.signal.aborted &&
+        latest.ok &&
+        validateApplication(latest.application) &&
+        latest.application.id === current.id &&
+        latest.application.canonicalJobId === jobId &&
+        latest.application.revision > current.revision &&
+        latest.application.status === "cancelled"
+      ) {
+        await settle(latest, current.id);
+        return;
+      }
+    } finally {
+      clearTimeout(timeout);
+      lifetime.current.signal.removeEventListener("abort", abort);
+    }
+    if (!lifetime.current.signal.aborted)
+      setNotice(
+        "Cancellation could not be confirmed. Refresh the application before trying again.",
+      );
+    throw new Error("Cancellation unconfirmed");
+  }
+
   async function cancelPreparation() {
     if (!application || starting.current) return;
     starting.current = true;
@@ -459,16 +506,9 @@ function JobApplicationWorkspace({
       }
       if (latest.application.id !== application.id) throw new Error("Application changed");
       const current = latest.application;
-      await settle(
-        current.status === "cancelled" || current.status === "applied"
-          ? latest
-          : await applicationsCall("POST", `/api/platform/applications/${current.id}/cancel`, {
-              ...options,
-              body: { expectedRevision: current.revision },
-              idempotencyKey: commandKey("cancel", current.id, current.revision),
-            }),
-        current.id,
-      );
+      if (current.status === "cancelled" || current.status === "applied")
+        await settle(latest, current.id);
+      else await cancelApplication(current);
       setPreparation(undefined);
     } catch {
       if (!lifetime.current.signal.aborted)
@@ -513,14 +553,7 @@ function JobApplicationWorkspace({
           );
         },
         async onCancel() {
-          await settle(
-            await applicationsCall("POST", `/api/platform/applications/${application.id}/cancel`, {
-              ...options,
-              body: { expectedRevision: application.revision },
-              idempotencyKey: commandKey("cancel", application.id, application.revision),
-            }),
-            application.id,
-          );
+          await cancelApplication(application);
         },
         async onReconcile(input) {
           const path = `/api/platform/applications/${application.id}/attempts/${input.attemptId}/reconciliation`;
