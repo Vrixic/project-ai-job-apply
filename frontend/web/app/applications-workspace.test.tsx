@@ -92,6 +92,19 @@ async function click(label: RegExp | string) {
   });
 }
 
+async function acknowledgeReplacement() {
+  const checkbox = Array.from(
+    container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+  ).find((element) =>
+    element.closest("label")?.textContent?.includes("Replace the current preparation"),
+  );
+  if (checkbox && !checkbox.checked) await act(async () => checkbox.click());
+}
+
+async function replacePacket() {
+  await acknowledgeReplacement();
+  await click("Prepare a new packet");
+}
 async function mount(
   fetchImplementation: typeof globalThis.fetch,
   applyUrl?: string,
@@ -178,11 +191,40 @@ describe("ApplicationsWorkspace", () => {
     await mount(send, undefined, false, APP);
     await click("Check generated resume");
     expect(container.textContent).toContain(
-      "No generated resume is available in the current packet.",
+      "The generated resume is not available yet. It may still be preparing.",
     );
     await click("Check generated resume");
     expect(send).toHaveBeenCalledTimes(3);
     expect(send.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+
+  it("requires fresh replacement consent when the current preparation state is unknown", async () => {
+    nativeUi();
+    const send = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(respond(reviewable()))
+      .mockResolvedValueOnce(respond(reviewable(3)))
+      .mockResolvedValueOnce(respond(reviewable(4), 201));
+    await mount(send, undefined, false, APP);
+    const replacement = () =>
+      Array.from(container.querySelectorAll("button")).find(
+        (element) => element.textContent === "Prepare a new packet",
+      );
+    expect(container.textContent).toContain("may still be preparing");
+    expect(replacement()?.disabled).toBe(true);
+    await click("Prepare a new packet");
+    expect(send).toHaveBeenCalledTimes(1);
+    await acknowledgeReplacement();
+    expect(replacement()?.disabled).toBe(false);
+    await click("Check generated resume");
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(replacement()?.disabled).toBe(true);
+    await acknowledgeReplacement();
+    await click("Prepare a new packet");
+    const writes = send.mock.calls.filter(([, options]) => options?.method === "POST");
+    expect(writes).toHaveLength(1);
+    expect(JSON.parse(String(writes[0]?.[1]?.body))).toEqual({ expectedRevision: 3 });
+    expect(replacement()?.disabled).toBe(true);
   });
 
   it.each(["expired", "expires while open"])(
@@ -219,7 +261,7 @@ describe("ApplicationsWorkspace", () => {
         expect(container.textContent).toContain("requires fresh review and approval");
         expect(container.textContent).not.toContain("Check generated resume");
         expect(send).toHaveBeenCalledTimes(1);
-        await click("Prepare a new packet");
+        await replacePacket();
         const writes = send.mock.calls.filter(([, options]) => options?.method === "POST");
         expect(writes).toHaveLength(1);
         expect(JSON.parse(String(writes[0]?.[1]?.body))).toEqual({ expectedRevision: 2 });
@@ -246,6 +288,7 @@ describe("ApplicationsWorkspace", () => {
       (element) => element.textContent === "Prepare a new packet",
     );
     if (!button) throw Error("Missing explicit preparation action");
+    await acknowledgeReplacement();
     await act(async () => {
       button.click();
       button.click();
@@ -267,8 +310,8 @@ describe("ApplicationsWorkspace", () => {
       .mockRejectedValueOnce(Error("Lost response"))
       .mockResolvedValueOnce(respond(reviewable(3), 201));
     await mount(send, undefined, false, APP);
-    await click("Prepare a new packet");
-    await click("Prepare a new packet");
+    await replacePacket();
+    await replacePacket();
     const writes = send.mock.calls.filter(([, options]) => options?.method === "POST");
     expect(writes).toHaveLength(2);
     expect(writes[0]?.[0]).toBe(`/api/platform/applications/${APP}/packets`);
@@ -286,8 +329,8 @@ describe("ApplicationsWorkspace", () => {
       .mockResolvedValueOnce(respond(reviewable(4)))
       .mockResolvedValueOnce(respond(reviewable(5), 201));
     await mount(send, undefined, false, APP);
-    await click("Prepare a new packet");
-    await click("Prepare a new packet");
+    await replacePacket();
+    await replacePacket();
     const writes = send.mock.calls.filter(([, options]) => options?.method === "POST");
     expect(writes.map(([, options]) => JSON.parse(String(options?.body)))).toEqual([
       { expectedRevision: 2 },
@@ -317,7 +360,7 @@ describe("ApplicationsWorkspace", () => {
       .mockResolvedValueOnce(respond(reviewable(4), 201))
       .mockResolvedValueOnce(respond(stale));
     await mount(send, undefined, false, APP);
-    await click("Prepare a new packet");
+    await replacePacket();
     await click("Check generated resume");
     expect(container.textContent).toContain("We could not check the generated resume.");
     expect(container.textContent).not.toContain("Sign in to view generated materials");
@@ -1235,7 +1278,7 @@ describe("withdrawn packet recovery", () => {
         ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
     );
     expect(container.textContent).toContain("previous packet is withheld");
-    await click("Prepare a new packet");
+    await replacePacket();
     expect(bodies).toEqual([
       {
         expectedRevision: 2,
@@ -1271,7 +1314,7 @@ describe("withdrawn packet recovery", () => {
     expect(container.textContent).not.toContain("Your application is approved and ready");
     expect(container.querySelector('a[href="https://employer.example/jobs/1"]')).toBeNull();
     await click("Reopen for preparation");
-    await click("Prepare a new packet");
+    await replacePacket();
     expect(bodies).toEqual([{ expectedRevision: 4 }]);
     expect(container.textContent).toContain("candidate@example.test");
     const approve = Array.from(container.querySelectorAll("button")).find((button) =>

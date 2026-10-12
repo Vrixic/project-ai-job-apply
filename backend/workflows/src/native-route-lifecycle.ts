@@ -134,15 +134,28 @@ export function createNativeRouteLifecycle(
     if (created.kind === "skipped") return result("not_created", "not_attempted");
 
     async function propagated(id: string, name: string, expected: "present" | "absent") {
-      for (let n = 0; n < 12; n++) {
+      // DNS may remain PENDING beyond one minute. Observe the sole original CREATE
+      // until its material deadline; never renew that deadline or issue another write.
+      const polls = expected === "present" ? 360 : 12;
+      for (let n = 0; n < polls; n++) {
         const ready = await context.step(
           `${name}.poll-${n}`,
           async () => {
             check();
             try {
-              if (checkedReceipt(await route.status(id), id).status !== "INSYNC") return false;
+              if (expected === "present") {
+                if (Date.now() >= snapshot.expiresAtMs) return "ended" as const;
+              }
+              if (checkedReceipt(await route.status(id), id).status !== "INSYNC") {
+                if (expected === "present" && (await options.retired(scope)) === true)
+                  return "ended" as const;
+                check();
+                return false;
+              }
               const observed = await route.inspect();
               check();
+              if (expected === "present" && Date.now() >= snapshot.expiresAtMs)
+                return "ended" as const;
               return observed.kind === expected;
             } catch {
               return false;
@@ -150,8 +163,9 @@ export function createNativeRouteLifecycle(
           },
           noRetry,
         );
+        if (ready === "ended") return false;
         if (ready) return true;
-        if (n < 11) await context.wait(`${name}.wait-${n}`, { seconds: 5 });
+        if (n < polls - 1) await context.wait(`${name}.wait-${n}`, { seconds: 5 });
       }
       return false;
     }

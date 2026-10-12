@@ -45,7 +45,9 @@ describe.each(["resume", "material"] as const)("%s original route lifecycle", (k
     const inspect = vi.fn(async () => ({
       kind: present ? ("present" as const) : ("absent" as const),
     }));
-    const status = vi.fn(async (id: string) => ({ changeId: id, status: "INSYNC" as const }));
+    const status = vi.fn<
+      (id: string) => Promise<{ changeId: string; status: "PENDING" | "INSYNC" }>
+    >(async (id) => ({ changeId: id, status: "INSYNC" }));
     const capture = vi.fn(async () => ({
       intent: { ...intent },
       expiresAtMs: Date.now() + 1_800_000,
@@ -155,7 +157,7 @@ describe.each(["resume", "material"] as const)("%s original route lifecycle", (k
     expect(x.attach).toHaveBeenCalledOnce();
     expect(x.admit).toHaveBeenCalledTimes(2);
     expect(sends.filter((name) => name === "ChangeResourceRecordSetsCommand")).toHaveLength(2);
-    expect(result.getInvocations().length).toBeGreaterThan(1);
+    expect(runner.getOperation(`${kind}-route.ready.v1.wait-0`)).toBeDefined();
     expect(runner.getOperation(`${kind}-route.intent.v1`)).toBeDefined();
     expect(runner.getOperation(`${kind}-route.create.v1`)).toBeDefined();
     expect(runner.getOperation(`${kind}-route.remove.v1`)).toBeDefined();
@@ -176,6 +178,78 @@ describe.each(["resume", "material"] as const)("%s original route lifecycle", (k
       expect(x.remove).not.toHaveBeenCalled();
     },
   );
+  it("attaches once when the original DNS change propagates after twelve polls", async () => {
+    const x = setup();
+    let polls = 0;
+    x.status.mockImplementation(async (id) => ({
+      changeId: id,
+      status: id === "/change/CCREATE" && ++polls <= 13 ? "PENDING" : "INSYNC",
+    }));
+    x.retired.mockImplementation(async () => x.attach.mock.calls.length > 0);
+    const { result } = await x.run();
+    expect(result.getResult()).toMatchObject({ cleanup: "removed", attachment: "acknowledged" });
+    expect(polls).toBe(14);
+    expect(x.create).toHaveBeenCalledOnce();
+    expect(x.attach).toHaveBeenCalledOnce();
+    expect(x.remove).toHaveBeenCalledOnce();
+    expect(x.capture).toHaveBeenCalledOnce();
+  });
+  it("stops pending propagation at the original deadline without attaching or regenerating", async () => {
+    const x = setup();
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    x.capture.mockResolvedValue({ intent, expiresAtMs: now + 2_000 });
+    x.retired.mockResolvedValue(false);
+    x.status.mockImplementation(async (id) => {
+      if (id === "/change/CCREATE") {
+        clock.mockReturnValue(now + 2_001);
+        return { changeId: id, status: "PENDING" };
+      }
+      return { changeId: id, status: "INSYNC" };
+    });
+    try {
+      const { result } = await x.run();
+      expect(result.getResult()).toMatchObject({ cleanup: "removed", attachment: "not_attempted" });
+      expect(x.create).toHaveBeenCalledOnce();
+      expect(x.attach).not.toHaveBeenCalled();
+      expect(x.capture).toHaveBeenCalledOnce();
+      expect(x.status.mock.calls.filter(([id]) => id === "/change/CCREATE")).toHaveLength(1);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+  it("cleans up a pending original route after positive task retirement", async () => {
+    const x = setup();
+    x.status.mockImplementation(async (id) => ({
+      changeId: id,
+      status: id === "/change/CCREATE" ? "PENDING" : "INSYNC",
+    }));
+    const { result } = await x.run();
+    expect(result.getResult()).toMatchObject({ cleanup: "removed", attachment: "not_attempted" });
+    expect(x.status.mock.calls.filter(([id]) => id === "/change/CCREATE")).toHaveLength(1);
+    expect(x.attach).not.toHaveBeenCalled();
+    expect(x.create).toHaveBeenCalledOnce();
+    expect(x.remove).toHaveBeenCalledOnce();
+  });
+  it("bounds pending creation observation without repeating the original DNS write", async () => {
+    const x = setup();
+    let polls = 0;
+    x.status.mockImplementation(async (id) => {
+      if (id === "/change/CCREATE") polls++;
+      return { changeId: id, status: id === "/change/CCREATE" ? "PENDING" : "INSYNC" };
+    });
+    x.retired.mockResolvedValue(false);
+    const context = {
+      step: async (_name: string, work: () => Promise<unknown>) => work(),
+      wait: async () => undefined,
+    } as unknown as DurableContext;
+    const result = await createLifecycle(x.options)(context, scope);
+    expect(result).toMatchObject({ cleanup: "unresolved", attachment: "not_attempted" });
+    expect(polls).toBe(360);
+    expect(x.create).toHaveBeenCalledOnce();
+    expect(x.attach).not.toHaveBeenCalled();
+    expect(x.capture).toHaveBeenCalledOnce();
+  });
   it("keeps cleanup active with new creation withdrawn after its original write", async () => {
     const x = setup();
     x.create.mockImplementation(async () => {
