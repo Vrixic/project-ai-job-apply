@@ -946,6 +946,30 @@ data "aws_iam_policy_document" "candidate_documents_s3_endpoint" {
   dynamic "statement" {
     for_each = var.candidate_rights_enabled ? [1] : []
     content {
+      sid       = "CandidateRightsExportVersionInventory"
+      effect    = "Allow"
+      actions   = ["s3:ListBucketVersions"]
+      resources = [aws_s3_bucket.candidate_data_exports[0].arn]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = [aws_iam_role.profile_readiness_activity[0].arn]
+      }
+      condition {
+        test     = "StringLike"
+        variable = "s3:prefix"
+        values   = ["${local.candidate_data_export_prefix}*"]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.candidate_rights_enabled ? [1] : []
+    content {
       sid       = "CandidateRightsExportAccess"
       effect    = "Allow"
       actions   = ["s3:PutObject", "s3:GetObject", "s3:GetObjectVersion", "s3:DeleteObjectVersion"]

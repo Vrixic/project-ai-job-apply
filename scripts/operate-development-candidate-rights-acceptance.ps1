@@ -1000,6 +1000,48 @@ function Wait-DeletionCompletion {
   throw "The candidate deletion recovery marker did not reach completed."
 }
 
+function Confirm-RightsExportDeletion {
+  param([Parameter(Mandatory)][Uri]$GrantUri, [Parameter(Mandatory)][string]$ExportId)
+  $query = [Web.HttpUtility]::ParseQueryString($GrantUri.Query)
+  $key = [Uri]::UnescapeDataString($GrantUri.AbsolutePath.TrimStart('/'))
+  $version = [string]$query['versionId']
+  $bucket = [string]$script:Runtime.ExportBucket
+  if ($GrantUri.Scheme -cne 'https' -or $GrantUri.Host -cne "$bucket.s3.$Region.amazonaws.com" -or
+      $ExportId -cnotmatch '^[a-f0-9-]{36}$' -or
+      $key -cnotmatch "^candidate-data-exports/[a-f0-9-]{36}/$([regex]::Escape($ExportId))\.json$" -or
+      [string]::IsNullOrWhiteSpace($version) -or $version -ceq 'null') {
+    throw 'The deleted export does not bind the exact state-owned object version.'
+  }
+  # A completed deletion marker or expired grant alone does not prove artifact cleanup.
+  # The AWS CLI paginates this exact-prefix version inventory; access errors fail closed.
+  $inventory = Invoke-AwsJson @('s3api','list-object-versions','--bucket',$bucket,'--prefix',$key,'--output','json') 'Deleted export version inventory'
+  $truncated = Get-OptionalProperty $inventory 'IsTruncated'
+  if ($truncated -isnot [bool] -or $truncated -ne $false -or
+      -not [string]::IsNullOrWhiteSpace([string](Get-OptionalProperty $inventory 'NextToken'))) {
+    throw 'The deleted export version inventory is incomplete.'
+  }
+  $seenVersions = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+  foreach ($property in @('Versions','DeleteMarkers')) {
+    $entries = $inventory.PSObject.Properties[$property]
+    if ($null -eq $entries) { continue }
+    if ($entries.Value -isnot [array]) { throw 'The deleted export version inventory is malformed.' }
+    foreach ($item in $entries.Value) {
+      $itemKey = Get-OptionalProperty $item 'Key'
+      $itemVersion = Get-OptionalProperty $item 'VersionId'
+      if ($itemKey -isnot [string] -or [string]::IsNullOrWhiteSpace($itemKey) -or
+          -not $itemKey.StartsWith($key, [StringComparison]::Ordinal) -or
+          $itemVersion -isnot [string] -or [string]::IsNullOrWhiteSpace($itemVersion) -or $itemVersion -ceq 'null' -or
+          -not $seenVersions.Add("$itemKey`0$itemVersion")) {
+        throw 'The deleted export version inventory is malformed.'
+      }
+      if ($itemKey -ceq $key -and $itemVersion -ceq $version) {
+        throw 'The exact exported object version remains after account deletion.'
+      }
+    }
+  }
+  return 1
+}
+
 function Invoke-FixedLifecycle {
   param([Parameter(Mandatory)][object]$Boundary, [Parameter(Mandatory)][object]$Plan)
   $script:VerifiedExportCoverage = $null
@@ -1049,6 +1091,7 @@ function Invoke-FixedLifecycle {
   if ([string]$confirmed.Body.state -cne 'quarantined') { throw "Deletion confirmation did not atomically quarantine the generated-synthetic identity." }
   $expectedSubjectDigest = Get-CandidateDeletionSubjectDigest $Boundary.Runtime.Issuer $Boundary.Identity.Subject
   $null = Wait-DeletionCompletion ([string]$confirmRequest.Body.id) $expectedSubjectDigest
+  $exportsCleaned = Confirm-RightsExportDeletion $grantUri ([string]$first.Body.id)
   if ($ResumeFixture) {
     $script:VerifiedResumeCoverage = Confirm-RightsResumeDeletion $Boundary.Resume $resumeFixture
     Assert-RightsResumeCoverage $script:VerifiedResumeCoverage
@@ -1058,7 +1101,7 @@ function Invoke-FixedLifecycle {
     schemaVersion = 1; kind = 'development-candidate-rights-acceptance-receipt'; phase = 'verified-cleaned'; sourceSha = $SourceSha
     executionPlanSha256 = $ReviewedExecutionPlanSha256; policySha256 = $ReviewedPolicySha256; subjectSha256 = $Boundary.Identity.SubjectSha256
     startedAt = $started.ToString('o'); completedAt = [DateTimeOffset]::UtcNow.ToString('o')
-    exportsRequested = 1; idempotentExportReplays = 1; exactVersionDownloads = 1; expiredDownloadGrants = 1; exportObjectsCleaned = 1
+    exportsRequested = 1; idempotentExportReplays = 1; exactVersionDownloads = 1; expiredDownloadGrants = 1; exportObjectsCleaned = $exportsCleaned
     deletionRequestsCreated = 2; deletionRequestsCancelled = 1; recentMfaConfirmations = 1; deletionMarkersCompleted = 1
     ownerInventoriesReconciled = @($requiredOwners.Split(',')).Count; auth0Reconciled = $true; persistentSyntheticIdentities = 0
     queueCount = $post.QueueCount; queuedMessages = 0; alarmCount = $post.AlarmCount; alarmsOk = $true; activeCompute = 0

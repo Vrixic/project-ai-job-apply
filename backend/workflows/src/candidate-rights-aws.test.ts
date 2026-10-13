@@ -39,6 +39,86 @@ function localS3Client(
 }
 
 describe("candidate-rights AWS object boundaries", () => {
+  const ownedExportKey =
+    "candidate-data-exports/019c2b89-79b2-7000-8000-000000000004/019c2b89-79b2-7000-8000-000000000002.json";
+  it("recovers exact unrecorded export versions across pages without neighboring keys", async () => {
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce({
+        IsTruncated: true,
+        NextKeyMarker: ownedExportKey,
+        NextVersionIdMarker: "old-version",
+        Versions: [{ Key: ownedExportKey, VersionId: "old-version" }],
+      })
+      .mockResolvedValueOnce({
+        IsTruncated: false,
+        Versions: [{ Key: `${ownedExportKey}.neighbor`, VersionId: "foreign-version" }],
+        DeleteMarkers: [{ Key: ownedExportKey, VersionId: "marker-version" }],
+      });
+    const store = new AwsCandidateExportArtifactStore("synthetic-bucket", "synthetic-kms", {
+      send,
+    });
+    await expect(store.inventoryExactKey(ownedExportKey)).resolves.toEqual([
+      { objectVersion: "old-version", deleteMarker: false },
+      { objectVersion: "marker-version", deleteMarker: true },
+    ]);
+    expect(commandInput(send.mock.calls[1]?.[0])).toMatchObject({
+      Prefix: ownedExportKey,
+      KeyMarker: ownedExportKey,
+      VersionIdMarker: "old-version",
+    });
+  });
+
+  it.each([
+    {},
+    { IsTruncated: false, Versions: {} },
+    { IsTruncated: false, Versions: [{ Key: "foreign", VersionId: "version" }] },
+    { IsTruncated: false, Versions: [{ Key: ownedExportKey, VersionId: "null" }] },
+    { IsTruncated: true, NextKeyMarker: ownedExportKey },
+  ])("refuses incomplete or malformed exact export inventory (%j)", async (page) => {
+    const send = vi.fn().mockResolvedValue(page);
+    const store = new AwsCandidateExportArtifactStore("synthetic-bucket", "synthetic-kms", {
+      send,
+    });
+    await expect(store.inventoryExactKey(ownedExportKey)).rejects.toThrow(
+      "CandidateExportInventoryInvalid",
+    );
+  });
+
+  it("refuses repeated export pagination and unknown version-list failures", async () => {
+    const send = vi.fn().mockResolvedValue({
+      IsTruncated: true,
+      NextKeyMarker: ownedExportKey,
+      NextVersionIdMarker: "same-page",
+    });
+    const store = new AwsCandidateExportArtifactStore("synthetic-bucket", "synthetic-kms", {
+      send,
+    });
+    await expect(store.inventoryExactKey(ownedExportKey)).rejects.toThrow(
+      "CandidateExportInventoryInvalid",
+    );
+    send.mockRejectedValueOnce(new Error("SyntheticAccessDenied"));
+    await expect(store.inventoryExactKey(ownedExportKey)).rejects.toThrow("SyntheticAccessDenied");
+    expect(send).toHaveBeenCalledTimes(3);
+  });
+
+  it("removes an inventoried export delete marker only with its exact positive acknowledgment", async () => {
+    const send = vi.fn().mockResolvedValue({
+      VersionId: "exact-marker",
+      DeleteMarker: true,
+      $metadata: { httpStatusCode: 204 },
+    });
+    const store = new AwsCandidateExportArtifactStore("synthetic-bucket", "synthetic-kms", {
+      send,
+    });
+    await expect(store.deleteExactVersion(ownedExportKey, "exact-marker", true)).resolves.toBe(
+      true,
+    );
+    send.mockResolvedValueOnce({ VersionId: "exact-marker", $metadata: { httpStatusCode: 204 } });
+    await expect(store.deleteExactVersion(ownedExportKey, "exact-marker", true)).rejects.toThrow(
+      "CandidateExportArtifactDeletionUnconfirmed",
+    );
+  });
   it("writes one checksum/KMS/version-bound export artifact", async () => {
     const send = vi.fn(async (_command: unknown) => ({ VersionId: "exact-version" }));
     const store = new AwsCandidateExportArtifactStore(

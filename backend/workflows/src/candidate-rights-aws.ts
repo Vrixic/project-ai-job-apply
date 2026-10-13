@@ -127,7 +127,74 @@ export class AwsCandidateExportArtifactStore implements CandidateExportArtifactS
     }
   }
 
-  async deleteExactVersion(objectKey: string, objectVersion: string): Promise<boolean> {
+  async inventoryExactKey(
+    objectKey: string,
+  ): Promise<Array<{ objectVersion: string; deleteMarker: boolean }>> {
+    if (!/^candidate-data-exports\/[a-f0-9-]{36}\/[a-f0-9-]{36}\.json$/u.test(objectKey)) {
+      throw new Error("CandidateExportArtifactIdentityRejected");
+    }
+    const versions: Array<{ objectVersion: string; deleteMarker: boolean }> = [];
+    const seenPages = new Set<string>();
+    const seenVersions = new Set<string>();
+    let keyMarker: string | undefined;
+    let versionIdMarker: string | undefined;
+    for (let pageCount = 0; pageCount < 100; pageCount += 1) {
+      const page = await this.client.send(
+        new ListObjectVersionsCommand({
+          Bucket: this.bucketName,
+          Prefix: objectKey,
+          MaxKeys: 1000,
+          ...(keyMarker ? { KeyMarker: keyMarker } : {}),
+          ...(versionIdMarker ? { VersionIdMarker: versionIdMarker } : {}),
+        }),
+      );
+      if (typeof page.IsTruncated !== "boolean") throw new Error("CandidateExportInventoryInvalid");
+      for (const [property, deleteMarker] of [
+        ["Versions", false],
+        ["DeleteMarkers", true],
+      ] as const) {
+        const items = page[property] ?? [];
+        if (!Array.isArray(items)) throw new Error("CandidateExportInventoryInvalid");
+        for (const item of items) {
+          if (
+            !item ||
+            typeof item !== "object" ||
+            typeof item.Key !== "string" ||
+            !item.Key.startsWith(objectKey) ||
+            typeof item.VersionId !== "string" ||
+            !item.VersionId ||
+            item.VersionId === "null"
+          )
+            throw new Error("CandidateExportInventoryInvalid");
+          if (item.Key !== objectKey) continue;
+          if (seenVersions.has(item.VersionId)) throw new Error("CandidateExportInventoryInvalid");
+          seenVersions.add(item.VersionId);
+          versions.push({ objectVersion: item.VersionId, deleteMarker });
+        }
+      }
+      if (!page.IsTruncated) return versions;
+      if (
+        typeof page.NextKeyMarker !== "string" ||
+        !page.NextKeyMarker ||
+        typeof page.NextVersionIdMarker !== "string" ||
+        !page.NextVersionIdMarker
+      ) {
+        throw new Error("CandidateExportInventoryInvalid");
+      }
+      keyMarker = page.NextKeyMarker;
+      versionIdMarker = page.NextVersionIdMarker;
+      const pageIdentity = JSON.stringify([keyMarker, versionIdMarker]);
+      if (seenPages.has(pageIdentity)) throw new Error("CandidateExportInventoryInvalid");
+      seenPages.add(pageIdentity);
+    }
+    throw new Error("CandidateExportInventoryBoundExceeded");
+  }
+
+  async deleteExactVersion(
+    objectKey: string,
+    objectVersion: string,
+    deleteMarker = false,
+  ): Promise<boolean> {
     if (
       typeof objectKey !== "string" ||
       objectKey.length === 0 ||
@@ -150,7 +217,9 @@ export class AwsCandidateExportArtifactStore implements CandidateExportArtifactS
     if (
       metadata?.httpStatusCode !== 204 ||
       result.VersionId !== objectVersion ||
-      (result.DeleteMarker !== undefined && result.DeleteMarker !== false)
+      (deleteMarker
+        ? result.DeleteMarker !== true
+        : result.DeleteMarker !== undefined && result.DeleteMarker !== false)
     ) {
       throw new Error("CandidateExportArtifactDeletionUnconfirmed");
     }
