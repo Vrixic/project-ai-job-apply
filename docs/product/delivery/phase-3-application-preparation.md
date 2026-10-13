@@ -36,6 +36,11 @@ Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 20
 
 ## Task register
 
+D3-125 started 2026-10-12: the generated-resume rights fixture now admits only the fixed D2/D3
+synthetic policies. All 287 fixture assertions, 23 focused D3 rights assertions, 67 session tests
+and the production PDF parser check pass. Consequential source review passes; managed fixture verification remains.
+[Evidence](evidence/d3-synthetic-resume-fixture-policy-2026-10-12.md).
+
 D3-124 started 2026-10-12: the in-memory rights session now supports explicit fixed D3 policy
 selection and exact Applications coverage while preserving D2 defaults, token memory boundaries
 and OAuth scopes. All 67 focused session tests, formatting checks and consequential source

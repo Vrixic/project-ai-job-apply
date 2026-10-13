@@ -38,7 +38,7 @@ The opt-in `node scripts/lib/candidate-rights-export.mjs --restricted-answer-acc
 mode verifies a generated-synthetic export without making any network call or candidate-data
 change. Send its closed JSON envelope on stdin from an in-memory harness, never through command
 arguments, a shell transcript, or a committed file. The exact envelope keys are `schemaVersion`
-(integer `1`), `expectedExportId`, `expectedPolicyVersion` (`d2-development-synthetic-v1`),
+(integer `1`), `expectedExportId`, `expectedPolicyVersion` (fixed D2 or D3 synthetic policy),
 `expectedRestrictedAnswers`, and canonical padded `artifactBase64`.
 
 Prepare `expectedRestrictedAnswers` independently from the reviewed synthetic fixture and latest
@@ -96,7 +96,7 @@ real-data, API, security/privacy, or production authority.
 Select `RestrictedAnswerFixture: true` in the existing process-memory session's plan options, or
 `-RestrictedAnswerFixture` on the maintained PowerShell operator. Supply the same selection for
 Plan, Execute and later Verify. Omit it for the unchanged historical lifecycle. The selection
-requires `profile:read` and `profile:write`, the exact D2 synthetic policy, and matching concrete
+requires `profile:read` and `profile:write`, the selected fixed D2/D3 synthetic policy, and matching concrete
 vault KMS key ARNs in the immutable Gateway and activity versions; the activity's export flag must
 be exactly `enabled`. Rebuild/deploy compatible clients before the approved Gateway metadata
 producer, and verify that exact release separately. This operator cannot perform that rollout.
@@ -137,7 +137,7 @@ Historical schema-1 and vault-only schema-2 plans remain unchanged and cannot au
 The reconstructed live plan compares the hash-only resume runtime identity before execution.
 
 This mode requires `documents:read` and `documents:write`, the reviewed
-`d2-development-synthetic-v1` policy, an empty disposable owner's resume inventory, and exact
+fixed D2/D3 synthetic policy, an empty disposable owner's resume inventory, and exact
 state/Gateway/activity bucket bindings. The Gateway's source KMS key must match the processor.
 The processor must use the state-current or a retained earlier immutable numeric version of the
 same exact regional parser function, and `resume-parser-v1`. This follows the established

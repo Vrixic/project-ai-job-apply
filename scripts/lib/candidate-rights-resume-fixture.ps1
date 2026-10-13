@@ -164,7 +164,7 @@ function Assert-RightsResumeCoverage {
 
 function Get-RightsResumeRuntime {
   param([Parameter(Mandatory)][object]$Snapshot, [Parameter(Mandatory)][object]$Runtime)
-  if ($ExpectedPolicyVersion -cne 'd2-development-synthetic-v1') { throw 'The generated resume fixture requires the reviewed synthetic policy.' }
+  if ($ExpectedPolicyVersion -cnotin @('d2-development-synthetic-v1','d3-development-synthetic-v1')) { throw 'The generated resume fixture requires the reviewed synthetic policy.' }
   $bucket = [string](Get-StateOutput $Snapshot 'candidate_document_bucket')
   $key = [string](Get-OptionalProperty $Runtime.Aliases.gateway.Environment 'DOCUMENT_UPLOAD_KMS_KEY_ARN')
   if ($bucket -cnotmatch '^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$' -or

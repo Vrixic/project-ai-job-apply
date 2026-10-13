@@ -9,6 +9,9 @@ text is sent to Applications or stored; no answer is inferred or automatically f
 Managed releases also require default-off Terraform `restricted_answer_reuse_enabled=true`,
 which refuses missing Applications, vault keys or enabled protected packets. Public web flags
 and the backend switch are reviewed separately; neither authorizes real-candidate use.
+Hosted test deployments must provide the vault flag to the server runtime as well as the build;
+build-only configuration does not enable its server-rendered page. Keep saved-answer selection
+configured at build time for the client bundle.
 See [ADR-046](../../docs/adr/046-observed-form-saved-answer-selection.md).
 
 The primary candidate experience: onboarding, profile management, job discovery, application review, technical history through confirmed submission, outreach, billing, settings, and crawlable public job pages.
