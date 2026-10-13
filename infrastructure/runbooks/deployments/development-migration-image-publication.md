@@ -38,9 +38,9 @@ vulnerability scan, publish an image, or satisfy the publication/scan/recovery g
 The current package boundary is the Phase 3 manifest
 `d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1`: seven ordered owners
 (Profile, Jobs, Documents, Matching, Billing, Trust, and Applications), twelve schemas, 96 regular relations, and
-79 exact checksum-bound migrations. The smoke gate also requires the Trust and Applications runners and every
+81 exact checksum-bound migrations. The smoke gate also requires the Trust and Applications runners and every
 Phase 2/3 migration file, including Jobs `0027`, Documents
-`0016`, Trust `0005_development_test_removal`, Profile `0011_active_candidate_lease`,
+`0018`, Trust `0005_development_test_removal`, Profile `0011_active_candidate_lease`,
 and Applications through `0015`,
 before an image can be considered locally buildable.
 Every owner's exact SQL filenames must match the pinned inventory and the validated restore

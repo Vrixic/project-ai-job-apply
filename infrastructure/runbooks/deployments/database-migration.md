@@ -28,7 +28,7 @@ the failed test as required by the development lifecycle.
 - For the Phase 3 package, require the exact
   `d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1` manifest, the
   ordered Profile, Jobs, Documents, Matching, Billing, Trust, and Applications runners, twelve declared
-  schemas, 96 declared regular relations, and 80 checksum-bound migrations, including Jobs `0027`, Documents `0017`, Trust
+  schemas, 96 declared regular relations, and 81 checksum-bound migrations, including Jobs `0027`, Documents `0018`, Trust
   `0005`, Profile `0011`, and Applications through `0015` before enabling the compatible Gateway or either D2 worker. Apply the
   Applications migration before releasing a Gateway that composes it. Reject older D1/D2 package and
   receipt boundaries; a prior six-owner release remains verifiable only against its own recorded boundary.

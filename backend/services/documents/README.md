@@ -812,3 +812,15 @@ finish without inventing a task; new work requires an explicitly sealed fresh ep
 Apply 0017 before publishing compatible preparation/observer/cleanup owners, then pin the numeric
 controls together before activation. Earlier claims cannot be backfilled through this transition;
 historical failures require separate exact original-request evidence and owning recovery work.
+
+Migration `0018_native_resume_legacy_launch_rejection` adds a separate immutable evidence hash for
+that private historical recovery. `recordLegacyLaunchRejection` requires exact original scope,
+deployment, configuration and claim microseconds, then atomically seals the matching old head and
+records `launch_rejected`. It preserves the absent original request digest as NULL. The trusted
+operator must freshly bind the authoritative AWS rejection, complete same-token history, original
+durable input and numeric control code/configuration before calling it; a cached event or task
+absence alone is insufficient. The hash identifies this distinct evidence, not a reconstructed
+RunTask digest or cryptographically signed CloudTrail log. Normal SDK rejection and positive-task
+recovery remain unchanged. Apply the migration before the compatible private owner tool; no public
+API, launch, task-death receipt or automatic retry is added. Existing disposal and deletion can
+proceed after this terminal settlement, and new work still requires an explicit fresh epoch.

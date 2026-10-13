@@ -12,8 +12,8 @@ $config | Add-Member recoveryMode 'primary_recovery'
 $manifestPath=Join-Path $PSScriptRoot '../../backend/services/database-migrations/restore-manifest.v1.json'
 $currentManifestHash=(Get-FileHash $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $manifest=ConvertFrom-D1RestoreJson ([IO.File]::ReadAllText($manifestPath))
-Assert (@($manifest.contributors | ForEach-Object { $_.migrations }).Count -eq 80) 'primary checks current 80 migrations'
-Assert (($manifest.contributors | Where-Object owner -CEQ documents).migrations[-1].version -ceq '0017_native_resume_launch_rejection') 'native rejection migration included'
+Assert (@($manifest.contributors | ForEach-Object { $_.migrations }).Count -eq 81) 'primary checks current 81 migrations'
+Assert (($manifest.contributors | Where-Object owner -CEQ documents).migrations[-1].version -ceq '0018_native_resume_legacy_launch_rejection') 'legacy rejection migration included'
 $config.restoreManifestSha256=$currentManifestHash
 foreach ($part in @('Identifier','Hostname','DbiResourceId','BoundarySha256')) { $config."target$part" = $config."source$part" }
 $encoded = Get-DeletionReplayConfigJson $config ([datetimeoffset]$fixture.now)

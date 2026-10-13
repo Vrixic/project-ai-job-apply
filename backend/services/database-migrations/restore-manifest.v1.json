@@ -181,6 +181,10 @@
         {
           "version": "0017_native_resume_launch_rejection",
           "checksum": "ce0ac840d5b3a019d31e48a15ae029daac30de4081138f92f50e869caa08f7bf"
+        },
+        {
+          "version": "0018_native_resume_legacy_launch_rejection",
+          "checksum": "c9375fbeac33c9c603e64e9dab3306a4d38a442abff04c312f72eae4d92aca28"
         }
       ],
       "relations": [

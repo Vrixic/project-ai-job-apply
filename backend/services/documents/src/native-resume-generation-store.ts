@@ -51,6 +51,15 @@ export interface NativeResumeGenerationScope {
   allocationId: string;
   epochId: string;
 }
+export interface NativeResumeLegacyLaunchRejectionEvidence {
+  configurationSha256: string;
+  claimedAtMicros: string;
+  clusterArn: string;
+  taskDefinitionArn: string;
+  containerName: string;
+  requestId: string;
+  evidenceSha256: string;
+}
 export interface NativeResumeGenerationOwnerPorts {
   /** Owning Applications locks the exact captured preparation intent on this transaction. */
   application(
@@ -93,6 +102,8 @@ type Row = Record<string, unknown> & {
   launch_claimed_at: Date | null;
   launch_request_sha256: string | null;
   launch_rejection_request_id: string | null;
+  legacy_launch_rejection_evidence_sha256: string | null;
+  observation_attempted_at: Date | null;
   content_sha256: string | null;
   completed_at_ms: string | null;
   expires_at_ms: string | null;
@@ -581,6 +592,89 @@ export class PostgresNativeResumeGenerationStore {
         if (row.state !== "pending") throw unavailable();
         await tx`UPDATE documents.native_resume_generations SET state='launch_rejected',
           launch_rejection_request_id=${requestId},launch_rejected_at=clock_timestamp() WHERE id=${row.id}`;
+        this.check();
+      });
+    });
+  }
+  /** Trusted private recovery only, after fresh authoritative original AWS rejection and
+   * sole-send/input/configuration binding. The evidence digest is not a missing request digest.
+   * Seal only the original head atomically; never launch, bind, fabricate task death or backfill. */
+  async recordLegacyLaunchRejection(
+    input: NativeResumeGenerationScope,
+    evidence: NativeResumeLegacyLaunchRejectionEvidence,
+  ): Promise<void> {
+    return this.guarded(async () => {
+      const scope = this.scope(input);
+      const fixed = closed(evidence, [
+        "configurationSha256",
+        "claimedAtMicros",
+        "clusterArn",
+        "taskDefinitionArn",
+        "containerName",
+        "requestId",
+        "evidenceSha256",
+      ]);
+      if (
+        typeof fixed.configurationSha256 !== "string" ||
+        !hash.test(fixed.configurationSha256) ||
+        typeof fixed.evidenceSha256 !== "string" ||
+        !hash.test(fixed.evidenceSha256) ||
+        typeof fixed.claimedAtMicros !== "string" ||
+        !/^[1-9][0-9]{15,16}$/u.test(fixed.claimedAtMicros) ||
+        typeof fixed.requestId !== "string" ||
+        !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(fixed.requestId) ||
+        ![fixed.clusterArn, fixed.taskDefinitionArn, fixed.containerName].every(
+          (value) => typeof value === "string",
+        )
+      )
+        throw unavailable();
+      nativeTaskDeploymentRegion(fixed);
+      await this.sql.begin(async (tx) => {
+        await this.lock(tx, scope.ownerUserId, scope.applicationId);
+        const [head] = await tx<Array<{ epoch_id: string; sealed_at: Date | null }>>`
+          SELECT epoch_id,sealed_at FROM documents.native_material_admission
+          WHERE user_id=${scope.ownerUserId} AND application_id=${scope.applicationId} FOR UPDATE`;
+        const [row] = await tx<Array<Row & { claimed_at_micros: string | null }>>`
+          SELECT *,((extract(epoch FROM launch_claimed_at)*1000000)::bigint)::text AS claimed_at_micros
+          FROM documents.native_resume_generations WHERE id=${scope.generationId}
+            AND user_id=${scope.ownerUserId} AND application_id=${scope.applicationId}
+            AND allocation_id=${scope.allocationId} AND epoch_id=${scope.epochId} FOR UPDATE`;
+        if (
+          !head ||
+          head.epoch_id !== scope.epochId ||
+          !row ||
+          !row.launch_claimed_at ||
+          row.claimed_at_micros !== fixed.claimedAtMicros ||
+          row.configuration_sha256 !== fixed.configurationSha256 ||
+          row.cluster_arn !== fixed.clusterArn ||
+          row.task_definition_arn !== fixed.taskDefinitionArn ||
+          row.container_name !== fixed.containerName ||
+          row.launch_request_sha256 !== null ||
+          row.task_arn !== null ||
+          row.content_sha256 !== null ||
+          row.completed_at_ms !== null ||
+          row.expires_at_ms !== null ||
+          row.ready_at !== null ||
+          row.observation_attempted_at !== null
+        )
+          throw unavailable();
+        if (row.state === "launch_rejected") {
+          if (
+            head.sealed_at === null ||
+            row.launch_rejection_request_id !== fixed.requestId ||
+            row.legacy_launch_rejection_evidence_sha256 !== fixed.evidenceSha256
+          )
+            throw unavailable();
+          return;
+        }
+        if (row.state !== "pending" || row.legacy_launch_rejection_evidence_sha256 !== null)
+          throw unavailable();
+        await tx`UPDATE documents.native_material_admission SET sealed_at=t.at,minimum_work_issued_at=t.at
+          FROM (SELECT clock_timestamp() AS at) t WHERE user_id=${scope.ownerUserId}
+            AND application_id=${scope.applicationId} AND epoch_id=${scope.epochId} AND sealed_at IS NULL`;
+        await tx`UPDATE documents.native_resume_generations SET state='launch_rejected',
+          launch_rejection_request_id=${fixed.requestId},launch_rejected_at=clock_timestamp(),
+          legacy_launch_rejection_evidence_sha256=${fixed.evidenceSha256} WHERE id=${row.id}`;
         this.check();
       });
     });
