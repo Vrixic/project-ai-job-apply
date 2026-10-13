@@ -146,7 +146,11 @@ missed-event reconciliation remain required; retained checkpoints expire after s
 
 Private execution inspection shares the observer artifact. `execution_inspection_enabled` defaults
 false, requires runtime but not new launch, and exposes only an explicit bounded metadata read.
-`retained_workflow_versions` lists at most seven old numeric versions beside the current version.
+`retained_workflow_versions` lists at most eight old numeric versions beside the current version.
+The observer, inspection and reconciliation claim validators accept at most nine total versions;
+each inspection page and reconciliation claim still contains at most two receipts. Deploy the
+compatible observer before enabling inspection with nine versions. Preserve unresolved original
+versions when pausing intake; retaining a version does not grant launch or replacement authority.
 Applications 0011, original observer bootstrap ceiling and Lambda endpoint policy must precede
 activation. Inspect whole inventories repeatedly; no persistent cursor or automatic settlement is
 provided. The [recovery runbook](../../../runbooks/observability/native-resume-terminal-recovery.md)

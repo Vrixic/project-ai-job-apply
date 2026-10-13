@@ -197,7 +197,7 @@ export class PostgresNativeResumeRequestStore {
     const arns = [...workflowArns];
     if (
       !arns.length ||
-      arns.length > 8 ||
+      arns.length > 9 ||
       new Set(arns).size !== arns.length ||
       arns.some(
         (arn) => !isPreparationFunctionArn(arn) || !arn.startsWith("arn:aws:lambda:us-east-2:"),

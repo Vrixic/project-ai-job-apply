@@ -30,7 +30,7 @@ export function createNativeResumeExecutionInspection(options: {
   const base = arns[0]?.slice(0, arns[0].lastIndexOf(":"));
   if (
     !arns.length ||
-    arns.length > 8 ||
+    arns.length > 9 ||
     new Set(arns).size !== arns.length ||
     arns.some(
       (arn) =>
