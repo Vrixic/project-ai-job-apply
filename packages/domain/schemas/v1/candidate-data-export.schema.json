@@ -2190,7 +2190,9 @@
             "vault_answer_changed",
             "superseded",
             "attempt_requires_review",
-            "cancelled"
+            "cancelled",
+            "temporary_material_expired",
+            "temporary_material_changed"
           ]
         }
       },
@@ -2415,7 +2417,7 @@
         },
         "state": {
           "type": "string",
-          "enum": ["pending", "bound", "retired"]
+          "enum": ["pending", "bound", "retired", "abandoned"]
         },
         "createdAt": {
           "type": "string",
@@ -2498,7 +2500,7 @@
         },
         "state": {
           "type": "string",
-          "enum": ["pending", "bound", "retired", "abandoned"]
+          "enum": ["pending", "bound", "retired", "abandoned", "launch_rejected"]
         }
       },
       "additionalProperties": false,
