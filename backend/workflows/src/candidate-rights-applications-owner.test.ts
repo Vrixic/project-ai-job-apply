@@ -78,6 +78,7 @@ function harness(
   restrictedPacketExport?: CandidateRightsActivityDependencies["restrictedPacketExport"],
   publication?: { active?: boolean; beforeLease?: () => void; put?: () => Promise<void> },
   nativeDocuments?: Record<string, unknown>,
+  profileProjection?: { preferences?: unknown; facts?: unknown },
 ) {
   const queries: string[] = [];
   const stored: { body?: Buffer } = {};
@@ -107,6 +108,8 @@ function harness(
       if (text.includes("profile.export_candidate_data") && restrictedAnswers !== undefined) {
         Object.assign(data.profile ?? {}, { restrictedAnswers });
       }
+      if (text.includes("profile.export_candidate_data") && profileProjection !== undefined)
+        Object.assign(data.profile ?? {}, profileProjection);
       if (text.includes("documents.export_candidate_data") && coverLetters !== undefined)
         Object.assign(data.documents ?? {}, { coverLetters });
       if (text.includes("documents.export_candidate_data") && nativeDocuments !== undefined)
@@ -203,6 +206,74 @@ const letter = {
   model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
 };
 const paragraphs = [{ text: "I build reliable synthetic systems.", factIds: [REQUEST] }];
+
+describe("portable Profile producer assembly", () => {
+  const fact = {
+    id: REQUEST,
+    version: 1,
+    kind: "skill",
+    key: "skill.synthetic",
+    value: "Synthetic TypeScript",
+    verification: "confirmed",
+    availability: "available",
+    sensitivity: "standard",
+    sourceType: "resume",
+    sourceReference: "synthetic.resume-provenance",
+    createdAt: AT,
+    updatedAt: AT,
+  };
+  const preferences = {
+    version: 1,
+    targetRoles: ["Synthetic engineer"],
+    locations: ["Synthetic location"],
+    workModes: ["remote"],
+    employmentTypes: ["full_time"],
+    requiresSponsorship: false,
+    updatedAt: AT,
+  };
+  function run(profileProjection: { preferences: unknown; facts: unknown }) {
+    return harness(
+      WITH_APPLICATIONS,
+      undefined,
+      [restrictedAnswer],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      profileProjection,
+    );
+  }
+  it("assembles all eight owners with existing fact provenance and false sponsorship preference", async () => {
+    const fixture = run({ preferences, facts: [fact] });
+    await fixture.store.assembleExport(input("export_assemble"));
+    const exported = JSON.parse(fixture.stored.body?.toString("utf8") ?? "{}");
+    expect(exported.profile.facts).toEqual([fact]);
+    expect(exported.profile.preferences).toEqual(preferences);
+    expect(exported.applications).toEqual(applicationsSection);
+    expect(exported.trust.schemaVersion).toBe(1);
+    expect(validateCandidateDataExportV1(exported)).toBe(true);
+    expect(fixture.queries).toContain("put-artifact");
+  });
+  it.each([
+    { preferences, facts: [{ ...fact, sourceReference: "x".repeat(201) }] },
+    { preferences, facts: [{ ...fact, sourceReference: false }] },
+    { preferences: { ...preferences, requiresSponsorship: "false" }, facts: [fact] },
+    { preferences, facts: [{ ...fact, unknownField: "synthetic-forbidden" }] },
+    { preferences: { ...preferences, unknownField: "synthetic-forbidden" }, facts: [fact] },
+  ])(
+    "refuses unsupported Profile projection fields before publication (%#)",
+    async (projection) => {
+      const fixture = run(projection);
+      await expect(fixture.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+        "CandidateExportSchemaRejected",
+      );
+      expect(fixture.stored.body).toBeUndefined();
+      expect(fixture.queries).not.toContain("put-artifact");
+    },
+  );
+});
 
 describe("portable native terminal history assembly", () => {
   const allocation = {
