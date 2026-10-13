@@ -1,5 +1,6 @@
 import type { SaveRestrictedAnswerRequest } from "@ai-job-apply/api-contracts";
 import { getLazyAuth0Session } from "../../../../../lib/auth0";
+import { readBoundedRequestBody } from "../../../../../lib/bounded-request-body";
 import { validateFoundationResponse } from "../../../../../lib/foundation-response-bff";
 import { readFoundationWriteRequest } from "../../../../../lib/foundation-write-bff";
 import { forwardPlatformRequest } from "../../../../../lib/platform-api";
@@ -121,14 +122,27 @@ export async function DELETE(
   if (!isRestrictedAnswerVaultUiEnabled()) return notFound(request);
   const fieldKey = (await context.params).fieldKey;
   const resolvedTarget = target(request, fieldKey);
+  const declaredLength = request.headers.get("content-length");
   if (
     !resolvedTarget ||
-    request.body !== null ||
-    request.headers.get("content-length") !== null ||
+    request.signal.aborted ||
+    (declaredLength !== null && declaredLength !== "0") ||
     request.headers.get("transfer-encoding") !== null ||
     request.headers.get("content-type") !== null
   ) {
     return invalidRequest(request);
+  }
+  // Next's Node adapter exposes a stream even for bodyless DELETE requests.
+  if (request.body) {
+    try {
+      const bytes = await readBoundedRequestBody(request, {
+        maximumBytes: 1,
+        timeoutMilliseconds: 2_000,
+      });
+      if (bytes.byteLength !== 0) return invalidRequest();
+    } catch {
+      return invalidRequest();
+    }
   }
   const response = await forwardPlatformRequest(
     resolvedTarget.path,
