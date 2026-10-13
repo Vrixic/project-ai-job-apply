@@ -20,6 +20,93 @@ async function exportDefinition(name: string) {
   return ajv.compile({ $ref: `#/$defs/${name}`, $defs: schema.$defs });
 }
 
+describe("portable native lifecycle metadata", () => {
+  const id = "019d04cf-1f80-7000-8000-000000000001";
+  const at = "2026-10-13T18:00:00.000Z";
+  async function producerValues(path: string, column: string) {
+    const sql = await readFile(new URL(`../../../${path}`, import.meta.url), "utf8");
+    const values = new RegExp(`\\b${column} IN \\(([^)]+)\\)`, "u").exec(sql)?.[1];
+    if (!values) throw new Error("SyntheticProducerEnumNotFound");
+    return [...values.matchAll(/'([a-z_]+)'/gu)].map((match) => match[1] as string);
+  }
+  it.each([
+    [
+      "nativeMaterialAllocation",
+      "backend/services/documents/migrations/0016_native_application_disposal.sql",
+    ],
+    [
+      "nativeResumeGeneration",
+      "backend/services/documents/migrations/0017_native_resume_launch_rejection.sql",
+    ],
+  ])(
+    "accepts every existing SQL producer state in %s while refusing content and unknown states",
+    async (definition, path) => {
+      const validate = await exportDefinition(definition);
+      const metadata =
+        definition === "nativeMaterialAllocation"
+          ? { id, applicationId: id, generationId: id, epochId: id, createdAt: at }
+          : {
+              id,
+              applicationId: id,
+              version: 1,
+              baseDocumentId: id,
+              baseVersion: 1,
+              baseSha256: "a".repeat(64),
+              jobContextSha256: "b".repeat(64),
+              createdAt: at,
+            };
+      const states = await producerValues(path, "state");
+      expect(states.length).toBeGreaterThan(3);
+      for (const state of states) {
+        expect(validate({ ...metadata, state }), state).toBe(true);
+        for (const forbidden of [
+          "text",
+          "paragraphs",
+          "taskArn",
+          "configurationSha256",
+          "launchRequestSha256",
+        ]) {
+          expect(
+            validate({ ...metadata, state, [forbidden]: "synthetic-forbidden" }),
+            forbidden,
+          ).toBe(false);
+        }
+      }
+      for (const state of ["submitted", "unknown", null, 0])
+        expect(validate({ ...metadata, state })).toBe(false);
+    },
+  );
+
+  it("accepts every existing approval invalidation reason without relaxing closed metadata", async () => {
+    const validate = await exportDefinition("applicationsApproval");
+    const approval = {
+      id,
+      applicationId: id,
+      packetId: id,
+      packetHash: "a".repeat(64),
+      acknowledgedFieldKeys: [],
+      approvedAt: at,
+      expiresAt: at,
+      invalidatedAt: at,
+    };
+    const reasons = await producerValues(
+      "backend/services/applications/migrations/0008_temporary_material_bindings.sql",
+      "invalidation_reason",
+    );
+    expect(reasons).toContain("temporary_material_expired");
+    expect(reasons).toContain("temporary_material_changed");
+    for (const invalidationReason of reasons) {
+      expect(validate({ ...approval, invalidationReason }), invalidationReason).toBe(true);
+      expect(
+        validate({ ...approval, invalidationReason, generatedText: "synthetic-forbidden" }),
+      ).toBe(false);
+    }
+    for (const invalidationReason of ["unknown", "submission_confirmed", null, 0]) {
+      expect(validate({ ...approval, invalidationReason })).toBe(false);
+    }
+  });
+});
+
 describe("portable report review status", () => {
   const report = {
     id: "018f1e02-1a11-7abc-8abc-1234567890ab",

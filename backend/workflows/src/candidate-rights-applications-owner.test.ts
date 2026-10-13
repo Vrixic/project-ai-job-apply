@@ -77,6 +77,7 @@ function harness(
   coverLetterExport?: CandidateRightsActivityDependencies["coverLetterExport"],
   restrictedPacketExport?: CandidateRightsActivityDependencies["restrictedPacketExport"],
   publication?: { active?: boolean; beforeLease?: () => void; put?: () => Promise<void> },
+  nativeDocuments?: Record<string, unknown>,
 ) {
   const queries: string[] = [];
   const stored: { body?: Buffer } = {};
@@ -108,6 +109,8 @@ function harness(
       }
       if (text.includes("documents.export_candidate_data") && coverLetters !== undefined)
         Object.assign(data.documents ?? {}, { coverLetters });
+      if (text.includes("documents.export_candidate_data") && nativeDocuments !== undefined)
+        Object.assign(data.documents ?? {}, nativeDocuments);
       return [{ data }];
     }
     if (text.includes("FROM profile.candidate_data_exports")) return [exportRow];
@@ -200,6 +203,164 @@ const letter = {
   model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
 };
 const paragraphs = [{ text: "I build reliable synthetic systems.", factIds: [REQUEST] }];
+
+describe("portable native terminal history assembly", () => {
+  const allocation = {
+    id: REQUEST,
+    applicationId: OPERATION,
+    generationId: REQUEST,
+    epochId: REQUEST,
+    state: "abandoned",
+    createdAt: AT,
+  };
+  const generation = {
+    id: REQUEST,
+    applicationId: OPERATION,
+    version: 1,
+    baseDocumentId: REQUEST,
+    baseVersion: 1,
+    baseSha256: "a".repeat(64),
+    jobContextSha256: "b".repeat(64),
+    state: "launch_rejected",
+    createdAt: AT,
+  };
+  const approval = {
+    id: REQUEST,
+    applicationId: OPERATION,
+    packetId: REQUEST,
+    packetHash: "a".repeat(64),
+    acknowledgedFieldKeys: [],
+    approvedAt: AT,
+    expiresAt: AT,
+    invalidatedAt: AT,
+    invalidationReason: "temporary_material_expired",
+  };
+  function run(overrides: { allocation?: object; generation?: object; approval?: object } = {}) {
+    return harness(
+      WITH_APPLICATIONS,
+      {
+        applications: {
+          ...applicationsSection,
+          applications: [
+            {
+              id: OPERATION,
+              canonicalJobId: REQUEST,
+              status: "cancelled",
+              revision: 5,
+              currentPacketId: REQUEST,
+              createdAt: AT,
+              updatedAt: AT,
+            },
+          ],
+          packets: [
+            {
+              id: REQUEST,
+              applicationId: OPERATION,
+              version: 1,
+              packetHash: "a".repeat(64),
+              jobRevision: "b".repeat(64),
+              createdAt: AT,
+              fields: [],
+              resumeHash: "c".repeat(64),
+              temporaryMaterials: [
+                {
+                  schemaVersion: 1,
+                  kind: "tailored_resume",
+                  generationId: OPERATION,
+                  version: 1,
+                  contentSha256: "c".repeat(64),
+                  completedAtMs: Date.parse(AT) - 1000,
+                  expiresAtMs: Date.parse(AT) + 1_799_000,
+                },
+              ],
+            },
+          ],
+          approvals: [
+            overrides.approval ?? approval,
+            { ...approval, id: OPERATION, invalidationReason: "temporary_material_changed" },
+          ],
+          attempts: [
+            {
+              id: REQUEST,
+              applicationId: OPERATION,
+              packetId: REQUEST,
+              sequence: 1,
+              status: "reconciled_not_submitted",
+              adapterId: "manual",
+              adapterVersion: "manual-v1",
+              startedAt: AT,
+              resolvedAt: AT,
+              evidenceKind: "user_attested",
+              evidenceObservedAt: AT,
+            },
+          ],
+          history: [
+            {
+              applicationId: OPERATION,
+              seq: 1,
+              kind: "application_cancelled",
+              fromStatus: "review_required",
+              toStatus: "cancelled",
+              occurredAt: AT,
+            },
+          ],
+        },
+        audit: { events: [] },
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        nativeMaterialAllocations: [overrides.allocation ?? allocation],
+        nativeResumeGenerations: [overrides.generation ?? generation],
+      },
+    );
+  }
+  it("publishes the complete eight-owner export with native rejection/abandonment and truthful cancelled/not-submitted history", async () => {
+    const fixture = run();
+    await fixture.store.assembleExport(input("export_assemble"));
+    expect(fixture.stored.body).toBeDefined();
+    const value = JSON.parse(fixture.stored.body?.toString("utf8") ?? "{}");
+    expect(validateCandidateDataExportV1(value)).toBe(true);
+    expect(value.documents.nativeMaterialAllocations[0]).toEqual(allocation);
+    expect(value.documents.nativeResumeGenerations[0]).toEqual(generation);
+    expect(
+      value.applications.approvals.map((entry: typeof approval) => entry.invalidationReason),
+    ).toEqual(["temporary_material_expired", "temporary_material_changed"]);
+    expect(value.applications.attempts[0].status).toBe("reconciled_not_submitted");
+    expect(value.applications.applications[0].status).toBe("cancelled");
+    for (const forbidden of [
+      "generatedText",
+      "paragraphs",
+      "taskArn",
+      "ownerUserId",
+      "launchRequestSha256",
+    ])
+      expect(fixture.stored.body?.toString("utf8")).not.toContain(forbidden);
+    expect(fixture.queries).toContain("put-artifact");
+  });
+  it.each([
+    { generation: { ...generation, state: "unknown" } },
+    { allocation: { ...allocation, state: "unknown" } },
+    { approval: { ...approval, invalidationReason: "unknown" } },
+    { generation: { ...generation, text: "synthetic-forbidden" } },
+    { allocation: { ...allocation, taskArn: "synthetic-forbidden" } },
+    { approval: { ...approval, generatedText: "synthetic-forbidden" } },
+  ])(
+    "refuses unsupported or content-bearing native metadata before artifact publication (%j)",
+    async (overrides) => {
+      const fixture = run(overrides);
+      await expect(fixture.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+        "CandidateExportSchemaRejected",
+      );
+      expect(fixture.stored.body).toBeUndefined();
+      expect(fixture.queries).not.toContain("put-artifact");
+    },
+  );
+});
 
 describe("export publication quarantine fence", () => {
   it("refuses queued start and building publication for an already quarantined owner", async () => {
