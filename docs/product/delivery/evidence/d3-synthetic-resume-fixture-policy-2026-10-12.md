@@ -14,7 +14,9 @@ cleanup and private receipt exclusions remain enforced.
 Executed verification passes: 287 generated-resume fixture assertions, 23 focused D3 rights
 assertions, 67 memory-session tests and the fixed PDF's production parser/normalizer test.
 These are local tests; they do not prove managed account deletion or installed-browser acceptance.
-Consequential source review passes with no authority expansion. Managed fixture verification remains pending.
+Consequential source review passes with no authority expansion. PR 667 is merged. The maintained
+D3 `Status -ResumeFixture` passes against the managed parser/scan/policy/backup/health boundary;
+the actual account-deletion fixture remains pending candidate authentication.
 
 The candidate hosting guidance also distinguishes the vault's server-runtime flag from client
 build flags. A protected test deployment supplies both after the build-only attempt failed to
@@ -22,4 +24,4 @@ show the vault. Actual authenticated UI verification remains required.
 
 Live AI remains off without the required provider retention policy. Provider QA, connected
 Chrome/Edge capture and accountable acceptance remain external. Independent D1/admin acceptance
-stays deferred; test-runtime shutdown remains mandatory before handoff.
+stays deferred. [Managed checkpoint and shutdown](d3-independent-managed-verification-2026-10-12.md).
