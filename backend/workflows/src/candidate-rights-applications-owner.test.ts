@@ -360,6 +360,143 @@ describe("portable native terminal history assembly", () => {
       expect(fixture.queries).not.toContain("put-artifact");
     },
   );
+  it.each(["required", "enum", "additionalProperties"])(
+    "emits one static %s diagnostic without candidate details and preserves the public refusal",
+    async (keyword) => {
+      const canary = "synthetic-private-canary-do-not-log";
+      const metadata: Record<string, unknown> = { ...generation };
+      if (keyword === "required") delete metadata.baseSha256;
+      else if (keyword === "enum") metadata.state = canary;
+      else metadata[canary] = canary;
+      const fixture = run({ generation: metadata });
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      try {
+        const result = await createCandidateRightsActivityHandler(fixture.store)(
+          input("export_assemble"),
+        );
+        expect(result).toEqual({
+          schemaVersion: 1,
+          action: "export_assemble",
+          outcome: "non_retryable_failure",
+          errorCode: "CandidateExportSchemaRejected",
+        });
+        expect(warn).toHaveBeenCalledOnce();
+        const logged = warn.mock.calls[0]?.[0];
+        expect(Object.keys(logged).sort()).toEqual([
+          "event",
+          "keyword",
+          "schemaPath",
+          "section",
+          "stage",
+        ]);
+        expect(logged).toMatchObject({
+          event: "candidate_export_validation_failed",
+          stage: "metadata",
+          section: "documents",
+          keyword,
+        });
+        expect(logged.schemaPath).toBe(
+          keyword === "enum" ? "#/properties/state/enum" : `#/${keyword}`,
+        );
+        for (const forbidden of [
+          canary,
+          "params",
+          "message",
+          "instancePath",
+          USER,
+          REQUEST,
+          OPERATION,
+        ])
+          expect(JSON.stringify(logged)).not.toContain(forbidden);
+        expect(fixture.stored.body).toBeUndefined();
+        expect(fixture.queries).not.toContain("put-artifact");
+      } finally {
+        warn.mockRestore();
+      }
+    },
+  );
+  it("keeps the same fixed refusal when diagnostic output fails", async () => {
+    const fixture = run({ generation: { ...generation, state: "unknown" } });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {
+      throw new Error("SyntheticDiagnosticFailure");
+    });
+    try {
+      await expect(fixture.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+        "CandidateExportSchemaRejected",
+      );
+      expect(warn).toHaveBeenCalledOnce();
+      expect(fixture.stored.body).toBeUndefined();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
+describe("portable export enrichment diagnostic stages", () => {
+  it.each(["restricted_answers", "cover_letters"])(
+    "names only the fixed %s stage for invalid reader output",
+    async (stage) => {
+      const fixture =
+        stage === "restricted_answers"
+          ? harness(BASE, undefined, [restrictedAnswer], { readValue: async () => "" })
+          : harness(BASE, undefined, undefined, undefined, [letter], { readValue: async () => [] });
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      try {
+        await expect(fixture.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+          "CandidateExportSchemaRejected",
+        );
+        expect(warn).toHaveBeenCalledOnce();
+        expect(warn.mock.calls[0]?.[0]).toMatchObject({
+          event: "candidate_export_validation_failed",
+          stage,
+          section: stage === "restricted_answers" ? "profile" : "documents",
+        });
+        expect(Object.keys(warn.mock.calls[0]?.[0]).sort()).toEqual([
+          "event",
+          "keyword",
+          "schemaPath",
+          "section",
+          "stage",
+        ]);
+        expect(fixture.stored.body).toBeUndefined();
+      } finally {
+        warn.mockRestore();
+      }
+    },
+  );
+  it.each(["restricted_answers", "cover_letters"])(
+    "keeps owner-projection content out of %s diagnostics",
+    async (stage) => {
+      const canary = "synthetic-private-canary-do-not-log";
+      const fixture =
+        stage === "restricted_answers"
+          ? harness(BASE, undefined, [{ ...restrictedAnswer, value: canary }])
+          : harness(BASE, undefined, undefined, undefined, [
+              {
+                ...letter,
+                paragraphs: [{ text: canary, factIds: [REQUEST] }],
+                reviewRequired: true,
+              },
+            ]);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      try {
+        await expect(fixture.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+          "CandidateExportSchemaRejected",
+        );
+        expect(warn).toHaveBeenCalledOnce();
+        expect(warn.mock.calls[0]?.[0]).toMatchObject({
+          event: "candidate_export_validation_failed",
+          stage,
+          section: stage === "restricted_answers" ? "profile" : "documents",
+          keyword: "owner_projection",
+        });
+        expect(JSON.stringify(warn.mock.calls)).not.toContain(canary);
+        expect(fixture.stored.body).toBeUndefined();
+      } finally {
+        warn.mockRestore();
+      }
+    },
+  );
 });
 
 describe("export publication quarantine fence", () => {
@@ -462,6 +599,40 @@ describe("restricted packet portable artifact composition", () => {
     packetId: packet.id,
     packetHash: packet.packetHash,
     values: new Map([[fieldKey, true]]),
+  });
+  it("logs only a static restricted-packet stage when enriched values violate the final schema", async () => {
+    const canary = "synthetic-private-canary-do-not-log";
+    const reader = {
+      readExportPacketValues: async () => ({
+        ...values(),
+        values: new Map([[fieldKey, canary.repeat(1000)]]),
+      }),
+    };
+    const fixture = harness(
+      WITH_APPLICATIONS,
+      ownerData(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      reader,
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      await expect(fixture.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+        "CandidateExportSchemaRejected",
+      );
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toMatchObject({
+        event: "candidate_export_validation_failed",
+        stage: "restricted_packet",
+        section: "applications",
+      });
+      expect(JSON.stringify(warn.mock.calls)).not.toContain(canary);
+      expect(fixture.stored.body).toBeUndefined();
+    } finally {
+      warn.mockRestore();
+    }
   });
   it("writes only exact authorized values into the strict portable artifact", async () => {
     const result = values();
