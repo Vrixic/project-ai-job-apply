@@ -2924,4 +2924,253 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
     expect(fresh.allocationId).not.toBe(r.allocationId);
     expect(fresh.configurationSha256).toBeNull();
   });
+  async function legacyClaim() {
+    const s = store();
+    const r = await s.reserve(input);
+    const original = scope(r);
+    await s.claimLaunch(original, config);
+    const [row] = await sql<Array<{ claimed_at_micros: string }>>`
+      SELECT ((extract(epoch FROM launch_claimed_at)*1000000)::bigint)::text AS claimed_at_micros
+      FROM documents.native_resume_generations WHERE id=${original.generationId}`;
+    if (!row) throw Error("SyntheticLegacyClaimMissing");
+    const evidence = {
+      configurationSha256: config,
+      claimedAtMicros: row.claimed_at_micros,
+      ...input.deployment,
+      requestId: uuidv7(),
+      evidenceSha256: createHash("sha256")
+        .update("synthetic original legacy rejection")
+        .digest("hex"),
+    };
+    return { s, r, original, evidence };
+  }
+  it("settles an exact legacy rejection plan once while preserving its missing request digest", async () => {
+    const { s, original, evidence } = await legacyClaim();
+    const before = await sql`
+      SELECT launch_claimed_at,configuration_sha256,launch_request_sha256
+      FROM documents.native_resume_generations WHERE id=${original.generationId}`;
+    await s.recordLegacyLaunchRejection(original, evidence);
+    const [settled] = await sql`
+      SELECT launch_claimed_at,configuration_sha256,launch_request_sha256,state,task_arn,
+        stopped_at_ms,observed_at_ms,content_sha256,completed_at_ms,expires_at_ms,ready_at,
+        launch_rejection_request_id,legacy_launch_rejection_evidence_sha256
+      FROM documents.native_resume_generations WHERE id=${original.generationId}`;
+    expect(settled).toMatchObject({
+      ...before[0],
+      state: "launch_rejected",
+      task_arn: null,
+      stopped_at_ms: null,
+      observed_at_ms: null,
+      content_sha256: null,
+      completed_at_ms: null,
+      expires_at_ms: null,
+      ready_at: null,
+      launch_rejection_request_id: evidence.requestId,
+      legacy_launch_rejection_evidence_sha256: evidence.evidenceSha256,
+    });
+    const [head] = await sql`
+      SELECT epoch_id,sealed_at,minimum_work_issued_at FROM documents.native_material_admission
+      WHERE user_id=${original.ownerUserId} AND application_id=${original.applicationId}`;
+    expect(head?.epoch_id).toBe(original.epochId);
+    expect(head?.sealed_at).toBeInstanceOf(Date);
+    expect(head?.minimum_work_issued_at).toEqual(head?.sealed_at);
+    await s.recordLegacyLaunchRejection(original, evidence);
+    const [replayed] = await sql`
+      SELECT epoch_id,sealed_at,minimum_work_issued_at FROM documents.native_material_admission
+      WHERE user_id=${original.ownerUserId} AND application_id=${original.applicationId}`;
+    expect(replayed).toEqual(head);
+    await expect(
+      s.recordLegacyLaunchRejection(original, { ...evidence, requestId: uuidv7() }),
+    ).rejects.toThrow();
+    await expect(
+      s.recordLegacyLaunchRejection(original, { ...evidence, evidenceSha256: "c".repeat(64) }),
+    ).rejects.toThrow();
+    const publicRecord = await s.readLaunch(original, config);
+    expect(publicRecord).toMatchObject({
+      state: "launch_rejected",
+      allocation: null,
+      reference: null,
+      ready: false,
+    });
+    const [exported] =
+      await sql`SELECT documents.export_candidate_data(${original.ownerUserId}::uuid) AS data`;
+    expect(exported?.data.documents.nativeResumeGenerations[0].state).toBe("launch_rejected");
+    for (const value of [
+      "legacy_launch_rejection_evidence_sha256",
+      "evidenceSha256",
+      "launch_request_sha256",
+      evidence.evidenceSha256,
+      evidence.requestId,
+    ]) {
+      expect(JSON.stringify(exported?.data)).not.toContain(value);
+      expect(JSON.stringify(publicRecord)).not.toContain(value);
+    }
+  });
+  it("rejects altered original scope, deployment, configuration and exact claim time without sealing", async () => {
+    const { s, original, evidence } = await legacyClaim();
+    for (const key of [
+      "ownerUserId",
+      "applicationId",
+      "generationId",
+      "allocationId",
+      "epochId",
+    ] as const)
+      await expect(
+        s.recordLegacyLaunchRejection({ ...original, [key]: uuidv7() }, evidence),
+      ).rejects.toThrow();
+    for (const changed of [
+      { ...evidence, configurationSha256: "0".repeat(64) },
+      { ...evidence, claimedAtMicros: String(BigInt(evidence.claimedAtMicros) + 1n) },
+      {
+        ...evidence,
+        clusterArn: evidence.clusterArn.replace("cluster/synthetic-resume", "cluster/foreign"),
+      },
+      { ...evidence, taskDefinitionArn: evidence.taskDefinitionArn.replace(/:1$/u, ":2") },
+      { ...evidence, containerName: "foreign" },
+    ])
+      await expect(s.recordLegacyLaunchRejection(original, changed)).rejects.toThrow();
+    const [row] = await sql`
+      SELECT g.state,g.launch_request_sha256,g.legacy_launch_rejection_evidence_sha256,h.sealed_at
+      FROM documents.native_resume_generations g JOIN documents.native_material_admission h
+        ON h.user_id=g.user_id AND h.application_id=g.application_id WHERE g.id=${original.generationId}`;
+    expect(row).toEqual({
+      state: "pending",
+      launch_request_sha256: null,
+      legacy_launch_rejection_evidence_sha256: null,
+      sealed_at: null,
+    });
+  });
+  it("keeps normal digested rejection distinct from legacy proof", async () => {
+    const s = store(),
+      r = await s.reserve(input),
+      original = scope(r),
+      request = "a".repeat(64);
+    await s.claimLaunch(original, config, request);
+    const [claim] = await sql<
+      Array<{ at: string }>
+    >`SELECT ((extract(epoch FROM launch_claimed_at)*1000000)::bigint)::text AS at
+      FROM documents.native_resume_generations WHERE id=${original.generationId}`;
+    if (!claim) throw Error("SyntheticClaimMissing");
+    await expect(
+      s.recordLegacyLaunchRejection(original, {
+        ...input.deployment,
+        configurationSha256: config,
+        claimedAtMicros: claim.at,
+        requestId: uuidv7(),
+        evidenceSha256: "d".repeat(64),
+      }),
+    ).rejects.toThrow();
+    await s.recordLaunchRejection(original, config, request, uuidv7());
+    const [row] =
+      await sql`SELECT state,launch_request_sha256,legacy_launch_rejection_evidence_sha256
+      FROM documents.native_resume_generations WHERE id=${original.generationId}`;
+    expect(row).toEqual({
+      state: "launch_rejected",
+      launch_request_sha256: request,
+      legacy_launch_rejection_evidence_sha256: null,
+    });
+  });
+  it("keeps legacy evidence and the absent request digest immutable even to direct SQL", async () => {
+    const { s, original, evidence } = await legacyClaim();
+    await expect(sql`UPDATE documents.native_resume_generations SET legacy_launch_rejection_evidence_sha256=${evidence.evidenceSha256}
+      WHERE id=${original.generationId}`).rejects.toThrow();
+    await expect(sql`UPDATE documents.native_resume_generations SET state='launch_rejected',launch_rejection_request_id=${evidence.requestId},
+      launch_rejected_at=clock_timestamp(),legacy_launch_rejection_evidence_sha256=${evidence.evidenceSha256}
+      WHERE id=${original.generationId}`).rejects.toThrow();
+    await expect(sql`UPDATE documents.native_resume_generations SET launch_request_sha256=${"a".repeat(64)}
+      WHERE id=${original.generationId}`).rejects.toThrow();
+    await s.recordLegacyLaunchRejection(original, evidence);
+    for (const change of ["request", "evidence", "requestId", "state"] as const) {
+      await expect(
+        sql.begin(async (tx) => {
+          if (change === "request")
+            await tx`UPDATE documents.native_resume_generations SET launch_request_sha256=${"a".repeat(64)} WHERE id=${original.generationId}`;
+          if (change === "evidence")
+            await tx`UPDATE documents.native_resume_generations SET legacy_launch_rejection_evidence_sha256=${"c".repeat(64)} WHERE id=${original.generationId}`;
+          if (change === "requestId")
+            await tx`UPDATE documents.native_resume_generations SET launch_rejection_request_id=${uuidv7()} WHERE id=${original.generationId}`;
+          if (change === "state")
+            await tx`UPDATE documents.native_resume_generations SET state='pending' WHERE id=${original.generationId}`;
+        }),
+      ).rejects.toThrow();
+    }
+    await expect(s.bindTask(original, config, task)).rejects.toThrow();
+    await expect(s.claimLaunch(original, config)).rejects.toThrow();
+  });
+  it("serializes legacy rejection and positive original-task binding with one winner", async () => {
+    const { s, original, evidence } = await legacyClaim();
+    const results = await Promise.allSettled([
+      s.recordLegacyLaunchRejection(original, evidence),
+      s.bindTask(original, config, task),
+    ]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const row = await s.readLaunch(original, config);
+    expect(["bound", "launch_rejected"]).toContain(row.state);
+    expect(row.allocation === null).toBe(row.state === "launch_rejected");
+    const [saved] =
+      await sql`SELECT launch_request_sha256 FROM documents.native_resume_generations WHERE id=${original.generationId}`;
+    expect(saved?.launch_request_sha256).toBeNull();
+  });
+  it("rolls back both old-head sealing and rejection when owner authority closes before commit", async () => {
+    const { s, original, evidence } = await legacyClaim();
+    let checks = 0;
+    const closing = new PostgresNativeResumeGenerationStore(sql, ports, () => ++checks < 3);
+    await expect(closing.recordLegacyLaunchRejection(original, evidence)).rejects.toThrow();
+    const [row] = await sql`
+      SELECT g.state,g.launch_request_sha256,g.legacy_launch_rejection_evidence_sha256,h.sealed_at
+      FROM documents.native_resume_generations g JOIN documents.native_material_admission h
+        ON h.user_id=g.user_id AND h.application_id=g.application_id WHERE g.id=${original.generationId}`;
+    expect(row).toEqual({
+      state: "pending",
+      launch_request_sha256: null,
+      legacy_launch_rejection_evidence_sha256: null,
+      sealed_at: null,
+    });
+    await s.recordLegacyLaunchRejection(original, evidence);
+  });
+  it("refuses replay across a newer explicitly opened epoch without sealing that head", async () => {
+    const { s, r, original, evidence } = await legacyClaim();
+    await s.recordLegacyLaunchRejection(original, evidence);
+    const next = { ...input, identity: { ...input.identity, generationId: uuidv7(), version: 2 } };
+    await expect(s.reserve(next)).rejects.toThrow();
+    const fresh = await s.reserve({ ...next, previousEpochId: r.epochId });
+    await expect(s.recordLegacyLaunchRejection(original, evidence)).rejects.toThrow();
+    const [head] = await sql`SELECT epoch_id,sealed_at FROM documents.native_material_admission
+      WHERE user_id=${original.ownerUserId} AND application_id=${original.applicationId}`;
+    expect(head).toEqual({ epoch_id: fresh.epochId, sealed_at: null });
+  });
+  it("settles a quarantined tombstone and lets ordinary guarded purge cascade its terminal evidence", async () => {
+    const { s, original, evidence } = await legacyClaim();
+    await sql`UPDATE documents.resume_documents SET deleted_at=clock_timestamp() WHERE id=${input.identity.baseDocumentId}`;
+    await sql`UPDATE identity.users SET account_state='quarantined',quarantined_at=clock_timestamp() WHERE id=${original.ownerUserId}`;
+    await expect(
+      sql`SELECT documents.complete_resume_purge(${original.ownerUserId}::uuid,${input.identity.baseDocumentId}::uuid,true)`,
+    ).rejects.toThrow();
+    await s.recordLegacyLaunchRejection(original, evidence);
+    const retire = vi.fn(async () => {
+      throw Error("UnexpectedTaskRetirement");
+    });
+    const disposer = createNativeMaterialDisposal({
+      registry: new PostgresNativeApplicationDisposalStore(sql, () => true),
+      enabled: () => true,
+      testRetire: retire,
+    });
+    expect(await disposer.discardApplication(original.ownerUserId, original.applicationId)).toBe(
+      "discarded",
+    );
+    expect(retire).not.toHaveBeenCalled();
+    await expect(
+      sql`SELECT documents.complete_resume_purge(${original.ownerUserId}::uuid,${input.identity.baseDocumentId}::uuid,false)`,
+    ).rejects.toThrow();
+    const [result] =
+      await sql`SELECT documents.complete_resume_purge(${original.ownerUserId}::uuid,${input.identity.baseDocumentId}::uuid,true) AS result`;
+    expect(result?.result.purged).toBe(true);
+    expect(
+      await sql`SELECT id FROM documents.native_resume_generations WHERE id=${original.generationId}`,
+    ).toHaveLength(0);
+    const [replayed] =
+      await sql`SELECT documents.complete_resume_purge(${original.ownerUserId}::uuid,${input.identity.baseDocumentId}::uuid,true) AS result`;
+    expect(replayed?.result).toEqual({ purged: false, reason: "absent" });
+    await expect(s.recordLegacyLaunchRejection(original, evidence)).rejects.toThrow();
+  });
 });
