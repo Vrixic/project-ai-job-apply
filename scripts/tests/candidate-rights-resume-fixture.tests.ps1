@@ -200,12 +200,15 @@ $runtime = [pscustomobject]@{ Aliases = [pscustomobject]@{
   activity = [pscustomobject]@{ Environment = [pscustomobject]@{ CANDIDATE_DOCUMENT_BUCKET = $resume.Bucket } }
 } }
 $script:runtimeCase = 'success'
+$script:runtimeObservationCalls = 0
 function Get-StateOutput($Snapshot, $Name) {
+  $script:runtimeObservationCalls++
   if ($script:runtimeCase -ceq 'mutable-parser' -and $Name -ceq 'document_parser_version_arn') { return $parserArn.Replace(':7', ':current') }
   if ($script:runtimeCase -ceq 'state-plan' -and $Name -ceq 'candidate_document_malware_protection_plan_id') { return 'different' }
   return $outputs.$Name
 }
 function Get-LambdaIdentity($Arn, $Description) {
+  $script:runtimeObservationCalls++
   Assert-Test ($Arn -ceq $processorArn) 'Different processor alias inspected.'
   $environment = [pscustomobject]@{ CANDIDATE_DOCUMENT_BUCKET = $resume.Bucket; DOCUMENT_PARSER_VERSION = 'resume-parser-v1'; PLATFORM_KMS_KEY_ARN = $resume.KmsKeyArn; DOCUMENT_PARSER_FUNCTION_ARN = $parserArn; GUARDDUTY_PROTECTION_PLAN_ARN = $scanArn }
   switch ($script:runtimeCase) {
@@ -221,6 +224,7 @@ function Get-LambdaIdentity($Arn, $Description) {
   return [pscustomobject]@{ AliasArnSha256 = 'c' * 64; Version = 1; CodeSha256 = ('A' * 43) + '='; Environment = $environment }
 }
 function Invoke-AwsJson($Arguments, $Description) {
+  $script:runtimeObservationCalls++
   if ($Arguments[0] -ceq 'lambda' -and $Arguments[1] -ceq 'get-function-configuration') {
     $value = [pscustomobject]@{ Version = '7'; CodeSha256 = ('A' * 43) + '='; Environment = [pscustomobject]@{ Variables = [pscustomobject]@{ CANDIDATE_DOCUMENT_BUCKET = $resume.Bucket; DOCUMENT_PARSER_VERSION = 'resume-parser-v1' } } }
     if ($script:runtimeCase -ceq 'parser-version') { $value.Version = '8' }
@@ -253,25 +257,35 @@ function Invoke-AwsJson($Arguments, $Description) {
   }
   throw 'Unexpected metadata command.'
 }
-$observed = Get-RightsResumeRuntime ([pscustomobject]@{}) $runtime
-Assert-Test ($observed.Bucket -ceq $resume.Bucket -and ($observed.Identity | ConvertTo-Json -Depth 10 -Compress) -notmatch $resume.Bucket) 'Runtime boundary leaked raw bucket.'
-$script:runtimeCase = 'retained-parser'
-$retained = Get-RightsResumeRuntime ([pscustomobject]@{}) $runtime
-Assert-Test ($retained.Identity.parser.versionArnSha256 -ceq (Get-TextSha256 $parserArn.Replace(':7', ':6')) -and $retained.Identity.parser.currentVersionArnSha256 -ceq (Get-TextSha256 $parserArn)) 'Retained/current parser identities were not independently bound.'
-foreach ($case in @('mutable-parser','foreign-parser','mutable-pin','state-plan','processor-bucket','processor-key','processor-parser','semantic-version','foreign-plan','parser-version','parser-hash','scan-inactive','scan-prefix','scan-bucket','scan-tagging','mapping-disabled','mapping-target','rule-disabled','rule-target')) {
-  $script:runtimeCase = $case
-  Assert-Refused { Get-RightsResumeRuntime ([pscustomobject]@{}) $runtime }
-}
-$script:runtimeCase = 'success'
-foreach ($case in @('gateway-bucket','activity-bucket','foreign-key')) {
-  $copy = Copy-TestObject $runtime
-  switch ($case) {
-    'gateway-bucket' { $copy.Aliases.gateway.Environment.DOCUMENT_UPLOAD_BUCKET = 'different' }
-    'activity-bucket' { $copy.Aliases.activity.Environment.CANDIDATE_DOCUMENT_BUCKET = 'different' }
-    'foreign-key' { $copy.Aliases.gateway.Environment.DOCUMENT_UPLOAD_KMS_KEY_ARN = $resume.KmsKeyArn.Replace('123456789012:', '223456789012:') }
+foreach ($policy in @('d2-development-synthetic-v1','d3-development-synthetic-v1')) {
+  $ExpectedPolicyVersion = $policy
+  $script:runtimeCase = 'success'
+  $observed = Get-RightsResumeRuntime ([pscustomobject]@{}) $runtime
+  Assert-Test ($observed.Bucket -ceq $resume.Bucket -and ($observed.Identity | ConvertTo-Json -Depth 10 -Compress) -notmatch $resume.Bucket) 'Runtime boundary leaked raw bucket.'
+  $script:runtimeCase = 'retained-parser'
+  $retained = Get-RightsResumeRuntime ([pscustomobject]@{}) $runtime
+  Assert-Test ($retained.Identity.parser.versionArnSha256 -ceq (Get-TextSha256 $parserArn.Replace(':7', ':6')) -and $retained.Identity.parser.currentVersionArnSha256 -ceq (Get-TextSha256 $parserArn)) 'Retained/current parser identities were not independently bound.'
+  foreach ($case in @('mutable-parser','foreign-parser','mutable-pin','state-plan','processor-bucket','processor-key','processor-parser','semantic-version','foreign-plan','parser-version','parser-hash','scan-inactive','scan-prefix','scan-bucket','scan-tagging','mapping-disabled','mapping-target','rule-disabled','rule-target')) {
+    $script:runtimeCase = $case
+    Assert-Refused { Get-RightsResumeRuntime ([pscustomobject]@{}) $runtime }
   }
-  Assert-Refused { Get-RightsResumeRuntime ([pscustomobject]@{}) $copy }
+  $script:runtimeCase = 'success'
+  foreach ($case in @('gateway-bucket','activity-bucket','foreign-key')) {
+    $copy = Copy-TestObject $runtime
+    switch ($case) {
+      'gateway-bucket' { $copy.Aliases.gateway.Environment.DOCUMENT_UPLOAD_BUCKET = 'different' }
+      'activity-bucket' { $copy.Aliases.activity.Environment.CANDIDATE_DOCUMENT_BUCKET = 'different' }
+      'foreign-key' { $copy.Aliases.gateway.Environment.DOCUMENT_UPLOAD_KMS_KEY_ARN = $resume.KmsKeyArn.Replace('123456789012:', '223456789012:') }
+    }
+    Assert-Refused { Get-RightsResumeRuntime ([pscustomobject]@{}) $copy }
+  }
 }
+foreach ($policy in @('','d1-development-synthetic-v1','d3-development-synthetic-v2','D3-development-synthetic-v1','d3-development-synthetic-v1 ','d3-development-synthetic-v1,d2-development-synthetic-v1')) {
+  $script:runtimeObservationCalls = 0
+  Assert-Refused { $ExpectedPolicyVersion = $policy; Get-RightsResumeRuntime ([pscustomobject]@{}) $runtime }
+  Assert-Test ($script:runtimeObservationCalls -eq 0) 'Unreviewed policy reached runtime observations.'
+}
+$ExpectedPolicyVersion = 'd2-development-synthetic-v1'
 # Exercise the real lifecycle ordering around the marker, prefix proof and receipt creation.
 $ResumeFixture = $true; $RestrictedAnswerFixture = $false
 $script:lifecycleCase = 'success'; $script:events = @()
