@@ -6,6 +6,8 @@ import type {
 
 export * from "./answer-vault.js";
 export {
+  type CandidateDataExportValidationIssue,
+  candidateDataExportValidationIssue,
   restrictedAnswerExportFieldKeys,
   validateCandidateDataExportV1,
 } from "./candidate-data-export.js";

@@ -4,7 +4,10 @@ import type {
   CoverLetterExportReader,
   CoverLetterExportReference,
 } from "@ai-job-apply/documents-service/cover-letter-export";
-import { validateCandidateDataExportV1 } from "@ai-job-apply/domain";
+import {
+  type CandidateDataExportValidationIssue,
+  candidateDataExportValidationIssue,
+} from "@ai-job-apply/domain";
 import type {
   DatabaseHandle,
   PostgresResumeProposalWriter,
@@ -124,6 +127,33 @@ class CandidateRightsActivityRejected extends Error {
     this.name = "CandidateRightsActivityRejected";
     this.code = code;
   }
+}
+
+type ExportValidationStage =
+  | "metadata"
+  | "restricted_packet"
+  | "restricted_answers"
+  | "cover_letters";
+function rejectExportSchema(
+  stage: ExportValidationStage,
+  issue: CandidateDataExportValidationIssue,
+): never {
+  try {
+    console.warn({
+      event: "candidate_export_validation_failed",
+      stage,
+      section: issue.section,
+      schemaPath: issue.schemaPath,
+      keyword: issue.keyword,
+    });
+  } catch {
+    // Unavailable diagnostics must not replace the fixed refusal or permit publication.
+  }
+  throw new CandidateRightsActivityRejected("CandidateExportSchemaRejected");
+}
+function assertExportSchema(value: unknown, stage: ExportValidationStage): void {
+  const issue = candidateDataExportValidationIssue(value);
+  if (issue) rejectExportSchema(stage, issue);
 }
 
 /**
@@ -468,9 +498,7 @@ export class PostgresCandidateRightsActivityStore {
       ],
       this.includesApplications,
     );
-    if (!validateCandidateDataExportV1(envelope)) {
-      throw new CandidateRightsActivityRejected("CandidateExportSchemaRejected");
-    }
+    assertExportSchema(envelope, "metadata");
     if (this.includesApplications) {
       envelope.applications = await enrichRestrictedPacketExport({
         applications: envelope.applications as Record<string, unknown>,
@@ -485,8 +513,7 @@ export class PostgresCandidateRightsActivityStore {
           ? { reader: this.dependencies.restrictedPacketExport }
           : {}),
       });
-      if (!validateCandidateDataExportV1(envelope))
-        throw new CandidateRightsActivityRejected("CandidateExportSchemaRejected");
+      assertExportSchema(envelope, "restricted_packet");
     }
     const exportProfile = envelope.profile as Record<string, unknown>;
     if (
@@ -495,7 +522,11 @@ export class PostgresCandidateRightsActivityStore {
         Object.hasOwn(entry, "value"),
       )
     ) {
-      throw new CandidateRightsActivityRejected("CandidateExportSchemaRejected");
+      rejectExportSchema("restricted_answers", {
+        section: "profile",
+        schemaPath: "#/properties/profile/properties/restrictedAnswers",
+        keyword: "owner_projection",
+      });
     }
     if (this.dependencies.restrictedAnswerExport) {
       const profile = exportProfile;
@@ -517,9 +548,7 @@ export class PostgresCandidateRightsActivityStore {
         entries.push({ ...entry, value });
       }
       profile.restrictedAnswers = entries;
-      if (!validateCandidateDataExportV1(envelope)) {
-        throw new CandidateRightsActivityRejected("CandidateExportSchemaRejected");
-      }
+      assertExportSchema(envelope, "restricted_answers");
     }
     const documents = envelope.documents as Record<string, unknown>;
     if (Array.isArray(documents.coverLetters)) {
@@ -530,7 +559,11 @@ export class PostgresCandidateRightsActivityStore {
             Object.hasOwn(letter, "paragraphs") || Object.hasOwn(letter, "reviewRequired"),
         )
       )
-        throw new CandidateRightsActivityRejected("CandidateExportSchemaRejected");
+        rejectExportSchema("cover_letters", {
+          section: "documents",
+          schemaPath: "#/properties/documents/properties/coverLetters",
+          keyword: "owner_projection",
+        });
       if (this.dependencies.coverLetterExport) {
         const exported = [];
         for (const letter of letters) {
@@ -549,8 +582,7 @@ export class PostgresCandidateRightsActivityStore {
           });
         }
         documents.coverLetters = exported;
-        if (!validateCandidateDataExportV1(envelope))
-          throw new CandidateRightsActivityRejected("CandidateExportSchemaRejected");
+        assertExportSchema(envelope, "cover_letters");
       }
     }
     const body = Buffer.from(`${JSON.stringify(envelope)}\n`, "utf8");

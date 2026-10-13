@@ -1,8 +1,9 @@
 import { readdir, readFile } from "node:fs/promises";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import * as addFormatsModule from "ajv-formats";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  candidateDataExportValidationIssue,
   restrictedAnswerExportFieldKeys,
   validateCandidateDataExportV1,
 } from "./candidate-data-export.js";
@@ -19,6 +20,129 @@ async function exportDefinition(name: string) {
   addFormats(ajv);
   return ajv.compile({ $ref: `#/$defs/${name}`, $defs: schema.$defs });
 }
+
+describe("portable export safe validation diagnostics", () => {
+  const canary = "synthetic-private-canary-do-not-log";
+  const at = "2026-10-13T18:00:00.000Z";
+  const base = {
+    schemaVersion: 1,
+    format: "candidate-data-export-v1",
+    exportId: "019d04cf-1f80-7000-8000-000000000001",
+    policyVersion: "synthetic-v1",
+    generatedAt: at,
+    candidate: { createdAt: at, connectedAccounts: [] },
+    profile: { preferences: null, facts: [] },
+    documents: { resumes: [] },
+    jobs: { reports: [] },
+    matching: { savedJobs: [] },
+    billing: { entitlement: { plan: "free", version: 0, effectiveAt: at } },
+    audit: { events: [] },
+  };
+  it.each(["required", "enum", "additionalProperties"])(
+    "returns only a trusted static schema location for %s failure",
+    (keyword) => {
+      const value: Record<string, unknown> = structuredClone(base);
+      if (keyword === "required") value.profile = { preferences: null };
+      else if (keyword === "enum")
+        value.billing = { entitlement: { plan: canary, version: 0, effectiveAt: at } };
+      else value[canary] = { value: canary };
+      const issue = candidateDataExportValidationIssue(value);
+      expect(issue).toBeDefined();
+      expect(Object.keys(issue ?? {}).sort()).toEqual(["keyword", "schemaPath", "section"]);
+      expect(issue?.keyword).toBe(keyword);
+      expect(issue?.section).toBe(
+        keyword === "required" ? "profile" : keyword === "enum" ? "billing" : "root",
+      );
+      expect(issue?.schemaPath.startsWith("#/")).toBe(true);
+      expect(Object.isFrozen(issue)).toBe(true);
+      const encoded = JSON.stringify(issue);
+      for (const forbidden of [canary, "instancePath", "params", "message", base.exportId])
+        expect(encoded).not.toContain(forbidden);
+      expect(candidateDataExportValidationIssue(base)).toBeUndefined();
+      expect(JSON.stringify(issue)).toBe(encoded);
+    },
+  );
+
+  it("attributes invalid Applications to its fixed owner when optional Trust is absent", () => {
+    expect(candidateDataExportValidationIssue(base)).toBeUndefined();
+    const value = { ...base, applications: { schemaVersion: 1 } };
+    expect(value).not.toHaveProperty("trust");
+    expect(candidateDataExportValidationIssue(value)).toMatchObject({
+      section: "applications",
+      keyword: "required",
+    });
+  });
+
+  it("uses root for a missing required field while all present sections are valid", () => {
+    const value: Record<string, unknown> = structuredClone(base);
+    delete value.profile;
+    expect(candidateDataExportValidationIssue(value)).toEqual({
+      section: "root",
+      schemaPath: "#/required",
+      keyword: "required",
+    });
+  });
+
+  it("retains a trusted section-relative constraint for an invalid owner array", () => {
+    expect(
+      candidateDataExportValidationIssue({
+        ...base,
+        documents: { resumes: [], coverLetters: { value: canary } },
+      }),
+    ).toEqual({
+      section: "documents",
+      schemaPath: "#/properties/coverLetters/type",
+      keyword: "type",
+    });
+  });
+
+  it("falls back for untrusted paths/keywords and never reads input-bearing Ajv details", async () => {
+    const raw: Record<string, unknown> = {
+      schemaPath: "#/additionalProperties",
+      keyword: "additionalProperties",
+    };
+    for (const name of ["params", "message", "instancePath", "data"]) {
+      Object.defineProperty(raw, name, {
+        get: () => {
+          throw new Error(canary);
+        },
+      });
+    }
+    const compiled = Object.assign(() => false, { errors: [raw] });
+    const compile = vi.spyOn(Ajv2020.prototype, "compile").mockReturnValue(compiled as never);
+    const getSchema = vi
+      .spyOn(Ajv2020.prototype, "getSchema")
+      .mockReturnValue((() => true) as never);
+    vi.doMock("ajv/dist/2020.js", () => ({ Ajv2020 }));
+    vi.resetModules();
+    try {
+      const fresh = await import("./candidate-data-export.js");
+      expect(fresh.candidateDataExportValidationIssue({ [canary]: canary })).toEqual({
+        section: "root",
+        schemaPath: "#/additionalProperties",
+        keyword: "additionalProperties",
+      });
+      for (const unsafe of [
+        { schemaPath: `#/properties/${canary}`, keyword: "additionalProperties" },
+        { schemaPath: "#/additionalProperties", keyword: canary },
+        { schemaPath: `#/${"x".repeat(257)}`, keyword: "required" },
+        { schemaPath: "#/required", keyword: "x".repeat(41) },
+      ]) {
+        Object.assign(raw, unsafe);
+        expect(fresh.candidateDataExportValidationIssue({ [canary]: canary })).toEqual({
+          section: "root",
+          schemaPath: "#",
+          keyword: "validation",
+        });
+      }
+    } finally {
+      compile.mockRestore();
+      getSchema.mockRestore();
+      vi.doUnmock("ajv/dist/2020.js");
+      vi.resetModules();
+    }
+  });
+});
 
 describe("portable native lifecycle metadata", () => {
   const id = "019d04cf-1f80-7000-8000-000000000001";
