@@ -1,5 +1,11 @@
 # D3 — High-Quality Application Preparation
 
+D3-122–125 source is merged and targeted checks/review pass. Managed D3 policy, packet keys,
+native bindings and document-runtime status pass. Fresh candidate sign-in remains pending;
+authenticated saved-answer, cancellation recovery and document-inclusive rights tests remain
+agent-owned work before final human acceptance. Development shutdown passed at 2026-10-13T01:15:40Z;
+Docker/WSL are off and the PC stays on. [Managed checkpoint](evidence/d3-independent-managed-verification-2026-10-12.md).
+
 D3-115–120 are merged. Managed development testing on Gateway 108/native preparation 9 passed
 synthetic search, preparation, separate in-memory sign-in, exact preview/review, approval and
 PDF/DOCX downloads. The manual Apply UI and truthful not-submitted reconciliation passed;
@@ -8,7 +14,7 @@ D3-121 adds bounded read-only observation after ambiguous cancellation; 61 works
 web typecheck, focused checks/review and the simulated connected journey pass. Live retest remains.
 Live AI stays off without the required 30-minute all-copy provider policy. Authorized ATS QA/fixtures,
 installed-extension and accountable acceptance remain open. Independent D1/admin acceptance is deferred.
-Development shutdown was freshly verified at 2026-10-12T19:02:04Z; encrypted backups and recovery inputs are retained.
+The earlier session's shutdown passed at 2026-10-12T19:02:04Z; see the managed checkpoint for the latest session.
 [Current evidence](evidence/d3-native-connected-journey-2026-10-12.md).
 
 D3-106 handles standard S3 URL encoding and authenticates retired deletion markers without skipping
@@ -38,14 +44,15 @@ Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 20
 
 D3-125 started 2026-10-12: the generated-resume rights fixture now admits only the fixed D2/D3
 synthetic policies. All 287 fixture assertions, 23 focused D3 rights assertions, 67 session tests
-and the production PDF parser check pass. Consequential source review passes; managed fixture verification remains.
+and the production PDF parser check pass. Consequential source review and managed runtime status pass;
+the actual rights fixture remains pending authentication.
 [Evidence](evidence/d3-synthetic-resume-fixture-policy-2026-10-12.md).
 
 D3-124 started 2026-10-12: the in-memory rights session now supports explicit fixed D3 policy
 selection and exact Applications coverage while preserving D2 defaults, token memory boundaries
 and OAuth scopes. All 67 focused session tests, formatting checks and consequential source
-review pass. Development is being restored with writers off for agent-owned tests; fresh
-shutdown remains mandatory before handoff. Managed rights acceptance remains.
+review pass. Dark restore/replay and managed configuration checks pass; the authenticated rights
+fixture remains pending. The managed checkpoint records the latest shutdown and remaining tests.
 
 D3-122/123 started 2026-10-12: complete agent-owned verification before human acceptance.
 Audit found missing default-off saved-answer reuse deployment wiring and D2-only rights-test
@@ -96,7 +103,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Metrics (D3-010, D3-036) | Versioned correction/outcome metrics and strict detached telemetry envelopes are locally verified. | Production sinks/dashboards/alarms are deferred from the candidate-journey critical path. |
 | Verification (D3-011, D3-019) | Local adversarial, owner-isolation, duplicate-start and crash/replay checks pass; basic manual Apply is accepted. | Full generated-material journey, installed-extension checks and final security/privacy/accessibility/product acceptance. |
 | Capability approval (D3-012) | Engineering approval packet refreshed on October 9 against current source/evidence; existing limited development owner dispositions are linked without amendment. | Provider retention under ADR-038, exact release/source review and accountable legal/security/privacy gates remain; development direction alone does not close them. |
-| Candidate rights (D3-014, D3-028, D3-029, D3-030, D3-031, D3-073) | Applications export/delete/restore support, restricted-answer export and document-prefix cleanup are implemented with local and partial managed evidence. | Current deployed document-inclusive deletion/export/restore acceptance and backup-aging/accountable review. |
+| Candidate rights (D3-014, D3-028, D3-029, D3-030, D3-031, D3-073) | Applications export/delete support, restricted-answer export and document-prefix cleanup have local and partial managed evidence. Basic completed-deletion replay and D3 document-runtime status pass. | Current document-inclusive deletion/export lifecycle, backup aging and accountable review. Formal recovery proofs remain removed. |
 | Migration/release tooling (D3-015, D3-020, D3-032, D3-033, D3-034, D3-040, D3-041) | Release convergence, provenance guards, dependency corrections and checksum-bound migration/restore tooling are implemented and verified. | Fresh compatible publication and exact managed release/restore checks for the next activation. |
 | Resume limits/deletion (D3-025, D3-026, D3-027) | Plan-driven limits, in-progress upload exclusion, deletion and version/prefix byte purge are implemented and accepted in development. | Document-inclusive account-deletion acceptance remains under candidate rights. |
 | Cover-letter preparation (D3-017, D3-042, D3-043, D3-044, D3-050, D3-067) | Private initialization, single-dispatch admission, original-work recovery and failure fences are locally verified. | Live provider composition, positive remote settlement, temporary-copy cleanup and candidate preview acceptance. |
@@ -427,3 +434,9 @@ native acceptance and final shutdown remain. Independent D1/admin acceptance sta
 
 
 2026-10-12: D3-115–120 managed native release and synthetic preview/review/approval/PDF/DOCX journey pass. D3-121 adds locally verified ambiguous-cancellation observation. Real employer confirmation, live AI and accountable acceptance remain open. [Evidence](evidence/d3-native-connected-journey-2026-10-12.md).
+
+2026-10-12: D3-122–125 source/review and targeted checks pass. Managed D3 policy, native bindings,
+completed-deletion replay and document-runtime status pass. Authenticated saved-answer, cancellation
+and document-inclusive rights tests await candidate sign-in. Development shutdown, encrypted recovery
+archive and zero-change dormant baseline pass at 2026-10-13T01:15:40Z; Docker/WSL are off and the PC stays on.
+Independent D1/admin acceptance remains deferred. [Evidence](evidence/d3-independent-managed-verification-2026-10-12.md).

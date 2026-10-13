@@ -25,14 +25,17 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 ## D3 — High-quality application preparation
 
 D3-125 fixes the remaining D2-only generated-resume fixture check. Targeted fixture, D3 rights,
-session and production-parser checks and consequential source review pass; managed verification remains.
+session and production-parser checks, consequential source review and managed runtime status pass.
+Fresh candidate sign-in is pending for agent-owned saved-answer, cancellation and document-inclusive
+rights tests before human acceptance. Development shutdown passed at 2026-10-13T01:15:40Z;
+Docker/WSL are off and the PC stays on. [Managed checkpoint](evidence/d3-independent-managed-verification-2026-10-12.md).
 [Evidence](evidence/d3-synthetic-resume-fixture-policy-2026-10-12.md).
 
 D3-124 started 2026-10-12: the in-memory rights session now supports explicit fixed D3 policy
 selection and exact Applications coverage while preserving D2 defaults, token memory boundaries
 and OAuth scopes. All 67 focused session tests, formatting checks and consequential source
-review pass. Development is being restored with writers off for agent-owned tests; fresh
-shutdown remains mandatory before handoff. Managed rights acceptance remains.
+review pass. Dark restore/replay and managed configuration checks pass; the authenticated rights
+fixture remains pending. The managed checkpoint records the latest shutdown and remaining tests.
 
 D3-122/123 implement guarded saved-answer reuse release wiring and exact D3 Applications rights
 test coverage. Targeted local checks and source review pass; agent-owned managed verification
