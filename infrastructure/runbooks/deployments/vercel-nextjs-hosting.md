@@ -243,6 +243,20 @@ complete ordinary Auth0 sign-in/MFA and perform the read-only queue/logout check
 old callback or start login from the generated preview: its transaction cookie cannot follow the
 stable callback. No protection-bypass token or case decision is needed for hosting.
 
+### Stable candidate alias during D3 tests
+
+A later automatic `main` deployment can reassign the stable candidate alias and does not inherit
+earlier deployment-scoped D3 build/runtime overrides. Before live testing and after the final
+docs merge, read the current exact mapping with
+`GET /v4/aliases/ai-job-apply-candidate.vercel.app`; verify deployment ID, source, project, Ready
+state, paired flags and all-deployment protection. Historical alias arrays or `aliasAssigned`
+do not establish the current mapping.
+
+If repair is needed, assign only the named stable alias to the reviewed protected deployment.
+Preserve project-wide environment settings, Auth0 origins/callbacks and indexing-off controls.
+Start candidate sign-in from the stable origin, then verify authenticated reads after ordinary
+sign-in/MFA. Protection and a correct alias alone do not prove a fresh candidate session.
+
 ## Hosted verification
 
 For each activated protected target, retain only the deployment identifier/commit, stable hostname,

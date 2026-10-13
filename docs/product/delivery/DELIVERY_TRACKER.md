@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-10-12. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
+Last updated: 2026-10-13. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
 
 ## Summary
 
@@ -24,12 +24,20 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 
 ## D3 — High-quality application preparation
 
-D3-125 fixes the remaining D2-only generated-resume fixture check. Targeted fixture, D3 rights,
-session and production-parser checks, consequential source review and managed runtime status pass.
-Fresh candidate sign-in is pending for agent-owned saved-answer, cancellation and document-inclusive
-rights tests before human acceptance. Development shutdown passed at 2026-10-13T01:15:40Z;
-Docker/WSL are off and the PC stays on. [Managed checkpoint](evidence/d3-independent-managed-verification-2026-10-12.md).
-[Evidence](evidence/d3-synthetic-resume-fixture-policy-2026-10-12.md).
+D3-126–132 are merged. Hosted synthetic vault deletion/reload and the current native preparation,
+separate sign-in, review, approval, PDF/DOCX and truthful not-submitted/cancellation journey pass.
+The old resume's source/normalized copies are absent. Profile activity 25/source `cc464385` release
+and ordinary UI export download/schema/latest-vault comparison pass. Three failed export notices
+are archived and individually acknowledged; all thirteen queues were empty on readback. Capacity
+checks, sixteen published native artifacts and paused version 15 binding readback pass. Legacy
+claim settlement is implemented and locally verified; its reproducible migration image is
+published with zero High/Critical scan findings. Managed 0018 completion and live settlement remain
+unverified after one unacknowledged launch attempt; no retry occurred and fresh development SSO is
+pending. Account deletion has not started and the candidate memory session
+has expired. Account cleanup and final shutdown remain pending. Hosted Actions could not start
+because of account billing. Live AI stays off; authorized ATS QA/fixtures, installed-extension
+and accountable acceptance remain open. Independent D1/admin acceptance is
+deferred. [Evidence](evidence/d3-vault-native-rights-verification-2026-10-13.md).
 
 D3-124 started 2026-10-12: the in-memory rights session now supports explicit fixed D3 policy
 selection and exact Applications coverage while preserving D2 defaults, token memory boundaries
@@ -162,6 +170,23 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 [Phase 7 tasks](phase-7-quality-and-expansion.md).
 
 ## Current operating state
+
+2026-10-13: Development runtime intake is paused. Gateway 115 and native revision-2 version 15
+code, environment, IAM and qualified-recipient readback pass at 22:40 UTC: no public routes or new
+launches, with eight prior versions retained and no executions on current version 15. Profile
+activity 25/source `cc464385` is unchanged. An encrypted database safety snapshot is available from
+21:30 UTC. Migration image publication and the sole effective task-image update pass. One launch
+attempt was unacknowledged before SSO expiry; at 23:30:06 UTC a still-valid role found no matching
+running/stopped migration tasks, but SQL completion is unverified. Fresh development SSO is pending.
+The database, NAT/EIP and ten paid Interface endpoints remain on, with intake, maintenance and
+dispatch paused. AWS shutdown is mandatory incomplete work while the normal AWS profile reports
+SSO expiry. Docker/WSL were positively off at 23:07:15 UTC. The owned PostgreSQL fixture
+is stopped; optional recursive fixture deletion was blocked by automatic approval and its files
+are preserved. The PC stays on. Staging was
+not changed; its last verified-off observation remains 2026-10-11.
+[Current evidence](evidence/d3-vault-native-rights-verification-2026-10-13.md).
+
+The entries below are historical checkpoints.
 
 2026-10-12: [Current native journey and cancellation evidence](evidence/d3-native-connected-journey-2026-10-12.md)
 records managed synthetic review/approval/download success and targeted cancellation verification.
