@@ -82,7 +82,7 @@ function configuration(env: Environment) {
     if (
       !Array.isArray(values) ||
       !values.length ||
-      values.length > 8 ||
+      values.length > 9 ||
       new Set(values).size !== values.length
     )
       throw unavailable();

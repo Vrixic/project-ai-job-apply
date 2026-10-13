@@ -264,6 +264,27 @@ run "inspection_requires_runtime" {
   variables { execution_inspection_enabled = true }
   expect_failures = [var.execution_inspection_enabled]
 }
+run "inspection_retains_eight_original_versions" {
+  command = apply
+  variables {
+    enabled                      = true
+    execution_inspection_enabled = true
+    retained_workflow_versions   = ["1", "3", "4", "5", "6", "7", "8", "9"]
+  }
+  assert {
+    condition     = toset(jsondecode(aws_lambda_function.observer[0].environment[0].variables.NATIVE_RESUME_INSPECTION_WORKFLOWS_JSON)) == toset([for version in range(1, 10) : "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-resume-durable-r7:${version}"])
+    error_message = "Eight prior versions and the current version must all remain inspectable."
+  }
+  assert {
+    condition     = toset(jsondecode(aws_iam_role_policy.execution_inspection[0].policy).Statement[0].Resource) == toset([for version in range(1, 10) : "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-resume-durable-r7:${version}/durable-execution/*"]) && jsondecode(aws_iam_role_policy.execution_inspection[0].policy).Statement[0].Action == ["lambda:GetDurableExecution"] && aws_lambda_function.control[0].environment[0].variables.NATIVE_RESUME_NEW_LAUNCH_ENABLED == "false" && aws_cloudwatch_event_rule.dispatch[0].state == "DISABLED"
+    error_message = "The larger retained allowlist must grant only exact metadata reads and leave launches disabled."
+  }
+}
+run "inspection_rejects_nine_retained_versions" {
+  command = plan
+  variables { retained_workflow_versions = ["1", "3", "4", "5", "6", "7", "8", "9", "10"] }
+  expect_failures = [var.retained_workflow_versions]
+}
 run "inspection_rejects_alias" {
   command = plan
   variables { retained_workflow_versions = ["live"] }

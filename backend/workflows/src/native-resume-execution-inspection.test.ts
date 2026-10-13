@@ -116,3 +116,58 @@ it("refuses disabled, unretained and overlapping reads", async () => {
   });
   await expect(x.run(arn, null)).rejects.toThrow();
 });
+
+it("retains eight original versions alongside the current version with two receipts per read", async () => {
+  const workflowArns = Array.from({ length: 9 }, (_unused, index) =>
+    arn.replace(":9", `:${index + 1}`),
+  );
+  const executionReceipts = vi.fn(async () => []);
+  const send = vi.fn();
+  const run = createNativeResumeExecutionInspection({
+    workflowArns,
+    requests: { executionReceipts },
+    client: { send },
+    enabled: () => true,
+  });
+
+  for (const workflowArn of workflowArns) {
+    expect(await run(workflowArn, null)).toEqual({
+      schemaVersion: 1,
+      results: [],
+      nextAfterEventId: null,
+    });
+    expect(executionReceipts).toHaveBeenLastCalledWith(workflowArn, null, 2);
+  }
+  await expect(run(arn.replace(":9", ":10"), null)).rejects.toThrow();
+  expect(executionReceipts).toHaveBeenCalledTimes(9);
+  expect(send).not.toHaveBeenCalled();
+});
+
+it.each<[string, string[]]>([
+  ["empty", []],
+  [
+    "ten versions",
+    Array.from({ length: 10 }, (_unused, index) => arn.replace(":9", `:${index + 1}`)),
+  ],
+  ["duplicate", [arn, arn]],
+  ["foreign function", [arn, arn.replace("resume-durable", "foreign-durable")]],
+  ["foreign account", [arn, arn.replace("123456789012", "999900001111")]],
+  ["foreign region", [arn.replace("us-east-2", "us-west-2")]],
+  ["alias", [arn.replace(":9", ":development")]],
+])(
+  "rejects a %s inspection allowlist before receipt or provider access",
+  (_label, workflowArns) => {
+    const executionReceipts = vi.fn();
+    const send = vi.fn();
+    expect(() =>
+      createNativeResumeExecutionInspection({
+        workflowArns,
+        requests: { executionReceipts },
+        client: { send },
+        enabled: () => true,
+      }),
+    ).toThrow("NativeResumeExecutionInspectionUnavailable");
+    expect(executionReceipts).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  },
+);

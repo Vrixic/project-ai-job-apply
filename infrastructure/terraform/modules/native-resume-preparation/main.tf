@@ -541,8 +541,8 @@ variable "retained_workflow_versions" {
   default     = []
   nullable    = false
   validation {
-    condition     = length(var.retained_workflow_versions) <= 7 && alltrue([for version in var.retained_workflow_versions : can(regex("^[1-9][0-9]{0,8}$", version))])
-    error_message = "Retain at most seven original numeric versions; aliases and latest are forbidden."
+    condition     = length(var.retained_workflow_versions) <= 8 && alltrue([for version in var.retained_workflow_versions : can(regex("^[1-9][0-9]{0,8}$", version))])
+    error_message = "Retain at most eight original numeric versions; aliases and latest are forbidden."
   }
 }
 locals {

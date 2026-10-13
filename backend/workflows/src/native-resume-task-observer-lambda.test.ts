@@ -47,7 +47,7 @@ function setup() {
     allocationId: scope.allocationId,
     taskArn: "arn:aws:ecs:us-east-2:123456789012:task/resume/12345678901234567890123456789012",
   }));
-  const runtime = vi.fn(() => ({
+  const runtime = vi.fn((_url: string, _configuration: unknown, _enabled: () => boolean) => ({
     observe,
     reconcileExecutions: vi.fn(async () => ({
       schemaVersion: 1 as const,
@@ -277,6 +277,72 @@ it("rejects default-off execution inspection before secret access", async () => 
     ),
   ).rejects.toThrow();
   expect(x.resolve).not.toHaveBeenCalled();
+});
+
+it("admits nine original inspection versions without enabling task observation", async () => {
+  const x = setup();
+  const workflows = Array.from(
+    { length: 9 },
+    (_unused, index) =>
+      `arn:aws:lambda:us-east-2:123456789012:function:resume-durable:${index + 1}`,
+  );
+  x.env.NATIVE_RESUME_EXECUTION_INSPECTION_ENABLED = "true";
+  x.env.NATIVE_RESUME_INSPECTION_WORKFLOWS_JSON = JSON.stringify(workflows);
+
+  await expect(
+    x.handler(
+      {
+        schemaVersion: 1,
+        action: "inspect_executions",
+        workflowArn: workflows[8],
+        afterEventId: null,
+      },
+      { invokedFunctionArn: target },
+    ),
+  ).resolves.toEqual({ schemaVersion: 1, results: [], nextAfterEventId: null });
+
+  expect(x.runtime.mock.calls[0]?.[1]).toMatchObject({ inspectionArns: workflows });
+  expect(x.runtime.mock.results[0]?.value.inspectExecutions).toHaveBeenCalledExactlyOnceWith(
+    workflows[8],
+    null,
+  );
+  expect(x.observe).not.toHaveBeenCalled();
+});
+
+it.each<[string, string[]]>([
+  ["empty", []],
+  [
+    "ten versions",
+    Array.from(
+      { length: 10 },
+      (_unused, index) =>
+        `arn:aws:lambda:us-east-2:123456789012:function:resume-durable:${index + 1}`,
+    ),
+  ],
+  ["duplicate", Array(2).fill("arn:aws:lambda:us-east-2:123456789012:function:resume-durable:1")],
+  ["foreign account", ["arn:aws:lambda:us-east-2:999900001111:function:resume-durable:1"]],
+  [
+    "foreign function",
+    [
+      "arn:aws:lambda:us-east-2:123456789012:function:resume-durable:1",
+      "arn:aws:lambda:us-east-2:123456789012:function:foreign-durable:2",
+    ],
+  ],
+  ["foreign region", ["arn:aws:lambda:us-west-2:123456789012:function:resume-durable:1"]],
+  ["alias", ["arn:aws:lambda:us-east-2:123456789012:function:resume-durable:development"]],
+])("rejects a %s observer inspection allowlist before secret access", async (_label, workflows) => {
+  const x = setup();
+  x.env.NATIVE_RESUME_EXECUTION_INSPECTION_ENABLED = "true";
+  x.env.NATIVE_RESUME_INSPECTION_WORKFLOWS_JSON = JSON.stringify(workflows);
+
+  await expect(
+    x.handler(
+      { schemaVersion: 1, action: "inspect_executions", workflowArn: target, afterEventId: null },
+      { invokedFunctionArn: target },
+    ),
+  ).rejects.toThrow("NativeResumeTaskObserverUnavailable");
+  expect(x.resolve).not.toHaveBeenCalled();
+  expect(x.runtime).not.toHaveBeenCalled();
 });
 
 it("requires exact inspection and queue configuration before scheduled reconciliation", async () => {
