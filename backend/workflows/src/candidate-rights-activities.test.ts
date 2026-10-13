@@ -275,6 +275,175 @@ describe("candidate-rights activity persistence boundary", () => {
   });
 });
 
+describe("candidate deletion portable export cleanup", () => {
+  const owner = "019c2b89-79b2-7000-8000-000000000004";
+  const exportId = (suffix: number) =>
+    `019c2b89-79b2-7000-8000-${String(suffix).padStart(12, "0")}`;
+  function fixture() {
+    const deletion = {
+      userId: owner,
+      resourceId: input.resourceId,
+      operationId: input.operationId,
+      policyVersion: input.policyVersion,
+      state: "quarantined",
+    };
+    const exports = ["ready", "ready", "queued", "building"].map((state, index) => ({
+      id: exportId(index + 21),
+      state,
+      objectKey:
+        state === "ready" ? `candidate-data-exports/${owner}/${exportId(index + 21)}.json` : null,
+      objectVersion: state === "ready" ? `synthetic-version-${index}` : null,
+    }));
+    const absent = new Set<string>();
+    const remote = new Map(
+      exports
+        .filter((row) => row.objectVersion)
+        .map((row) => [row.id, row.objectVersion as string]),
+    );
+    remote.set(exportId(24), "synthetic-unrecorded-version");
+    const deleted = vi.fn(async (_key: string, version: string) => {
+      absent.add(version);
+      for (const [id, stored] of remote) if (stored === version) remote.delete(id);
+      return true;
+    });
+    const calls: string[] = [];
+    const client = vi.fn(async (query: TemplateStringsArray) => {
+      const text = query.join("?");
+      if (text.includes("account_deletion_requests")) return [deletion];
+      if (text.includes("identity.external_identities")) return [];
+      if (text.includes("candidate_object_inventory")) return [{ data: [] }];
+      throw new Error("UnexpectedSyntheticQuery");
+    });
+    const transaction = vi.fn(async (query: TemplateStringsArray) => {
+      const text = query.join("?");
+      calls.push(text);
+      if (text.includes("ORDER BY id FOR UPDATE")) return exports.map((row) => ({ ...row }));
+      if (text.includes("UPDATE profile.candidate_data_exports")) {
+        for (const row of exports) {
+          if (text.includes("SET state = 'expired'") && row.state === "ready") {
+            Object.assign(row, { state: "expired", objectKey: null, objectVersion: null });
+          } else if (
+            text.includes("SET state = 'failed'") &&
+            ["queued", "building"].includes(row.state)
+          ) {
+            row.state = "failed";
+          }
+        }
+      }
+      if (text.includes("UPDATE profile.account_deletion_requests"))
+        deletion.state = "active_systems_deleted";
+      return [];
+    });
+    const begin = vi.fn(async (run: (sql: typeof transaction) => Promise<void>) => {
+      const before = structuredClone(exports);
+      try {
+        await run(transaction);
+      } catch (error) {
+        exports.splice(0, exports.length, ...before);
+        throw error;
+      }
+    });
+    const store = new PostgresCandidateRightsActivityStore({
+      database: { client: Object.assign(client, { begin }) } as unknown as DatabaseHandle,
+      policy: {
+        ownerInventory: [
+          "identity",
+          "profile",
+          "documents",
+          "jobs",
+          "matching",
+          "billing",
+          "trust",
+        ],
+        subprocessorInventory: [],
+      },
+      artifactStore: {
+        deleteExactVersion: deleted,
+        inventoryExactKey: async (key: string) => {
+          const id = key.split("/")[2]?.replace(".json", "") ?? "";
+          const version = remote.get(id);
+          return version ? [{ objectVersion: version, deleteMarker: false }] : [];
+        },
+      },
+      documentObjectStore: {
+        deleteAllVersionsAndMarkers: async () => ({ exactInventoryEmpty: true }),
+      },
+      identityProvider: { revokeAndDelete: async () => {} },
+      subprocessors: [],
+      recoveryLedger: {},
+    } as unknown as CandidateRightsActivityDependencies);
+    return { store, exports, deleted, deletion, absent, calls, begin, remote };
+  }
+
+  it("deletes every exact ready version, fences pending exports and replays idempotently", async () => {
+    const run = fixture();
+    await run.store.deleteActiveSystems(input);
+    expect(run.deleted.mock.calls.map(([, version]) => version)).toEqual([
+      "synthetic-version-0",
+      "synthetic-version-1",
+      "synthetic-unrecorded-version",
+    ]);
+    expect(run.remote.size).toBe(0);
+    expect(run.exports.map(({ state }) => state)).toEqual([
+      "expired",
+      "expired",
+      "failed",
+      "failed",
+    ]);
+    expect(
+      run.exports.every(
+        ({ objectKey, objectVersion }) => objectKey === null && objectVersion === null,
+      ),
+    ).toBe(true);
+    expect(run.deletion.state).toBe("active_systems_deleted");
+    await run.store.deleteActiveSystems(input);
+    expect(run.deleted).toHaveBeenCalledTimes(3);
+    expect(run.begin).toHaveBeenCalledOnce();
+  });
+
+  it("retains exact locators and quarantine after partial S3 failure, then retries safely", async () => {
+    const run = fixture();
+    const before = structuredClone(run.exports);
+    run.deleted.mockImplementationOnce(async (_key, version) => {
+      run.absent.add(version);
+      for (const [id, stored] of run.remote) if (stored === version) run.remote.delete(id);
+      return true;
+    });
+    run.deleted.mockRejectedValueOnce(new Error("SyntheticS3Failure"));
+    await expect(run.store.deleteActiveSystems(input)).rejects.toThrow("SyntheticS3Failure");
+    expect(run.exports).toEqual(before);
+    expect(run.deletion.state).toBe("quarantined");
+    expect(run.calls.some((query) => query.includes("profile.delete_candidate_data"))).toBe(false);
+    await run.store.deleteActiveSystems(input);
+    expect(run.deleted.mock.calls.map(([, version]) => version)).toEqual([
+      "synthetic-version-0",
+      "synthetic-version-1",
+      "synthetic-version-0",
+      "synthetic-version-1",
+      "synthetic-unrecorded-version",
+    ]);
+    expect(run.deletion.state).toBe("active_systems_deleted");
+  });
+
+  it("refuses an unconfirmed delete or foreign export key without clearing metadata", async () => {
+    const unconfirmed = fixture();
+    unconfirmed.deleted.mockResolvedValueOnce(false);
+    await expect(unconfirmed.store.deleteActiveSystems(input)).rejects.toThrow(
+      "CandidateExportArtifactStillPresent",
+    );
+    expect(unconfirmed.exports[0]?.state).toBe("ready");
+    expect(unconfirmed.deletion.state).toBe("quarantined");
+    const foreign = fixture();
+    if (foreign.exports[0])
+      foreign.exports[0].objectKey = "candidate-data-exports/foreign/export.json";
+    await expect(foreign.store.deleteActiveSystems(input)).rejects.toThrow(
+      "CandidateExportMaintenanceIdentityRejected",
+    );
+    expect(foreign.deleted).not.toHaveBeenCalled();
+    expect(foreign.deletion.state).toBe("quarantined");
+  });
+});
+
 describe("candidate-rights resume purge sweep (ADR-034)", () => {
   const user = "019c2b89-79b2-7000-8000-000000000011";
   const first = "019c2b89-79b2-7000-8000-000000000021";

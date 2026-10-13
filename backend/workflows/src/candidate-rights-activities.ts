@@ -33,7 +33,14 @@ export interface CandidateExportArtifactStore {
     sha256: string;
     expiresAt: Date;
   }): Promise<{ objectVersion: string }>;
-  deleteExactVersion?(objectKey: string, objectVersion: string): Promise<boolean>;
+  deleteExactVersion?(
+    objectKey: string,
+    objectVersion: string,
+    deleteMarker?: boolean,
+  ): Promise<boolean>;
+  inventoryExactKey?(
+    objectKey: string,
+  ): Promise<Array<{ objectVersion: string; deleteMarker: boolean }>>;
 }
 
 export interface CandidateDocumentObjectRef {
@@ -199,6 +206,8 @@ function isRetryable(error: unknown): boolean {
       "SlowDown",
       "ThrottlingException",
       "RestrictedAnswerExportSnapshotChanged",
+      "CandidateExportArtifactStillPresent",
+      "CandidateExportArtifactDeletionUnconfirmed",
     ].includes(code)
   );
 }
@@ -375,7 +384,9 @@ export class PostgresCandidateRightsActivityStore {
   }
 
   async beginExport(input: CandidateRightsActivityInputV1): Promise<void> {
+    const initial = await this.exportContext(input);
     await this.dependencies.database.client.begin(async (transaction) => {
+      await transaction`SELECT identity.require_active_candidate(${initial.userId}::uuid)`;
       const rows = await transaction<Record<string, unknown>[]>`
         SELECT user_id AS "userId", id AS "resourceId", operation_id AS "operationId",
                policy_version AS "policyVersion", state
@@ -548,16 +559,11 @@ export class PostgresCandidateRightsActivityStore {
       generatedAt.getTime() + this.dependencies.policy.exportArtifactLifetimeSeconds * 1_000,
     );
     const objectKey = exportObjectKey(context.userId, input.resourceId);
-    const stored = await this.dependencies.artifactStore.putIfAbsent({
-      objectKey,
-      body,
-      sha256,
-      expiresAt,
-    });
-    if (!stored.objectVersion) {
-      throw new CandidateRightsActivityRejected("CandidateExportArtifactVersionMissing");
-    }
     await this.dependencies.database.client.begin(async (transaction) => {
+      // Hold Identity's existing shared lease through both external publication and its
+      // metadata commit. Quarantine either wins before this lease, or deletion sees
+      // the exact version published here; no put can follow a completed deletion.
+      await transaction`SELECT identity.require_active_candidate(${context.userId}::uuid)`;
       const rows = await transaction<Record<string, unknown>[]>`
         SELECT user_id AS "userId", id AS "resourceId", operation_id AS "operationId",
                policy_version AS "policyVersion", state,
@@ -572,7 +578,8 @@ export class PostgresCandidateRightsActivityStore {
         const row = rows[0] ?? {};
         if (
           row.artifactObjectKey !== objectKey ||
-          row.artifactObjectVersion !== stored.objectVersion ||
+          typeof row.artifactObjectVersion !== "string" ||
+          !row.artifactObjectVersion ||
           row.artifactSha256 !== sha256
         ) {
           throw new CandidateRightsActivityRejected("CandidateExportArtifactConflict");
@@ -581,6 +588,15 @@ export class PostgresCandidateRightsActivityStore {
       }
       if (current.state !== "building") {
         throw new CandidateRightsActivityRejected("CandidateExportStateConflict");
+      }
+      const stored = await this.dependencies.artifactStore.putIfAbsent({
+        objectKey,
+        body,
+        sha256,
+        expiresAt,
+      });
+      if (!stored.objectVersion) {
+        throw new CandidateRightsActivityRejected("CandidateExportArtifactVersionMissing");
       }
       const now = this.clock().toISOString();
       await transaction`
@@ -661,6 +677,71 @@ export class PostgresCandidateRightsActivityStore {
     }
     const now = this.clock().toISOString();
     await this.dependencies.database.client.begin(async (transaction) => {
+      const exports = await transaction<
+        Array<{ id: string; state: string; objectKey: string | null; objectVersion: string | null }>
+      >`
+        SELECT id, state, artifact_object_key AS "objectKey",
+               artifact_object_version AS "objectVersion"
+        FROM profile.candidate_data_exports
+        WHERE user_id = ${context.userId}::uuid
+        ORDER BY id FOR UPDATE
+      `;
+      for (const item of exports) {
+        const objectKey = exportObjectKey(context.userId, item.id);
+        if (
+          !isUuid(item.id) ||
+          (item.state === "ready" &&
+            (item.objectKey !== objectKey || !item.objectVersion || item.objectVersion === "null"))
+        ) {
+          throw new CandidateRightsActivityRejected("CandidateExportMaintenanceIdentityRejected");
+        }
+        const { artifactStore } = this.dependencies;
+        if (!artifactStore.deleteExactVersion || !artifactStore.inventoryExactKey) {
+          throw new CandidateRightsActivityRejected("CandidateExportMaintenanceUnavailable");
+        }
+        // Deterministic keys also recover a successful put whose SQL commit/ack failed:
+        // queued/building/failed rows can own an unrecorded remote version.
+        const inventory = await artifactStore.inventoryExactKey(objectKey);
+        if (
+          item.state === "ready" &&
+          !inventory.some((version) => version.objectVersion === item.objectVersion)
+        ) {
+          inventory.push({ objectVersion: item.objectVersion as string, deleteMarker: false });
+        }
+        for (const version of inventory) {
+          const absent = await artifactStore.deleteExactVersion(
+            objectKey,
+            version.objectVersion,
+            version.deleteMarker,
+          );
+          if (!absent)
+            throw new CandidateRightsActivityRejected("CandidateExportArtifactStillPresent");
+        }
+        if ((await artifactStore.inventoryExactKey(objectKey)).length !== 0) {
+          throw new CandidateRightsActivityRejected("CandidateExportArtifactStillPresent");
+        }
+      }
+      // Keep every locator until the entire exact-version cleanup succeeds. A partial
+      // failure rolls back these transitions and the next attempt repeats safe deletes.
+      await transaction`
+        UPDATE profile.candidate_data_exports
+        SET state = 'expired', artifact_object_key = NULL, artifact_object_version = NULL,
+            artifact_sha256 = NULL, updated_at = ${now}::timestamptz
+        WHERE user_id = ${context.userId}::uuid AND state = 'ready'
+      `;
+      await transaction`
+        UPDATE profile.candidate_data_exports
+        SET state = 'failed', failure_code = 'owner_unavailable', updated_at = ${now}::timestamptz
+        WHERE user_id = ${context.userId}::uuid AND state IN ('queued', 'building')
+      `;
+      await transaction`
+        UPDATE platform.operations SET state = 'failed', result = NULL,
+          error_code = 'CandidateDataExportFailed', updated_at = ${now}::timestamptz
+        WHERE kind = 'candidate_data_export' AND id IN (
+          SELECT operation_id FROM profile.candidate_data_exports
+          WHERE user_id = ${context.userId}::uuid AND state = 'failed'
+        ) AND state IN ('queued', 'running', 'retryable_failure')
+      `;
       if (this.includesApplications) {
         await transaction`SELECT applications.delete_candidate_data(${context.userId}::uuid, ${input.resourceId}::uuid)`;
       }

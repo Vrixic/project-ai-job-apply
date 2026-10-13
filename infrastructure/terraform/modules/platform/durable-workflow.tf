@@ -143,6 +143,18 @@ data "aws_iam_policy_document" "candidate_rights_activity" {
   }
 
   statement {
+    sid       = "ListCandidateExportVersions"
+    effect    = "Allow"
+    actions   = ["s3:ListBucketVersions"]
+    resources = [aws_s3_bucket.candidate_data_exports[0].arn]
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["${local.candidate_data_export_prefix}*"]
+    }
+  }
+
+  statement {
     sid       = "DeleteExactCandidateDocumentVersions"
     effect    = "Allow"
     actions   = ["s3:DeleteObjectVersion"]

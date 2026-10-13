@@ -76,6 +76,7 @@ function harness(
   coverLetters?: unknown,
   coverLetterExport?: CandidateRightsActivityDependencies["coverLetterExport"],
   restrictedPacketExport?: CandidateRightsActivityDependencies["restrictedPacketExport"],
+  publication?: { active?: boolean; beforeLease?: () => void; put?: () => Promise<void> },
 ) {
   const queries: string[] = [];
   const stored: { body?: Buffer } = {};
@@ -118,6 +119,12 @@ function harness(
   const transaction = vi.fn(async (query: TemplateStringsArray) => {
     const text = query.join("?");
     queries.push(text);
+    if (text.includes("identity.require_active_candidate")) {
+      publication?.beforeLease?.();
+      if (publication?.active === false) throw new Error("SyntheticQuarantinedOwner");
+      return [];
+    }
+    if (text.includes("ORDER BY id FOR UPDATE")) return [];
     if (text.includes("FROM profile.candidate_data_exports")) return [exportRow];
     return [];
   });
@@ -133,6 +140,8 @@ function harness(
     },
     artifactStore: {
       putIfAbsent: vi.fn(async (value: { body: Buffer }) => {
+        queries.push("put-artifact");
+        await publication?.put?.();
         stored.body = value.body;
         return { objectVersion: "version-1" };
       }),
@@ -148,7 +157,12 @@ function harness(
     recoveryLedger: { recordConfirmed: vi.fn(), markCompleted: vi.fn() },
     clock: () => new Date(AT),
   } as unknown as CandidateRightsActivityDependencies;
-  return { store: new PostgresCandidateRightsActivityStore(dependencies), queries, stored };
+  return {
+    store: new PostgresCandidateRightsActivityStore(dependencies),
+    queries,
+    stored,
+    exportRow,
+  };
 }
 
 const input = (action: "export_assemble" | "deletion_delete_active_systems") =>
@@ -186,6 +200,68 @@ const letter = {
   model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
 };
 const paragraphs = [{ text: "I build reliable synthetic systems.", factIds: [REQUEST] }];
+
+describe("export publication quarantine fence", () => {
+  it("refuses queued start and building publication for an already quarantined owner", async () => {
+    const run = harness(BASE, undefined, undefined, undefined, undefined, undefined, undefined, {
+      active: false,
+    });
+    run.exportRow.state = "queued";
+    await expect(run.store.beginExport(input("export_assemble"))).rejects.toThrow(
+      "SyntheticQuarantinedOwner",
+    );
+    run.exportRow.state = "building";
+    await expect(run.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+      "SyntheticQuarantinedOwner",
+    );
+    expect(run.stored.body).toBeUndefined();
+  });
+
+  it("refuses a late completion when quarantine wins after owner reads", async () => {
+    const publication = {
+      active: true,
+      beforeLease: () => {
+        publication.active = false;
+      },
+    };
+    const run = harness(
+      BASE,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      publication,
+    );
+    await expect(run.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+      "SyntheticQuarantinedOwner",
+    );
+    expect(run.stored.body).toBeUndefined();
+    expect(run.queries).not.toContain("put-artifact");
+  });
+
+  it("holds the owner lease and exact export row before putting, and never puts terminal rows", async () => {
+    const run = harness(BASE);
+    await run.store.assembleExport(input("export_assemble"));
+    const lease = run.queries.findIndex((query) => query.includes("require_active_candidate"));
+    const locked = run.queries.findIndex((query) => query.includes("FOR UPDATE"));
+    const put = run.queries.indexOf("put-artifact");
+    const ready = run.queries.findIndex((query) => query.includes("SET state = 'ready'"));
+    expect(lease).toBeGreaterThan(-1);
+    expect(locked).toBeGreaterThan(lease);
+    expect(put).toBeGreaterThan(locked);
+    expect(ready).toBeGreaterThan(put);
+    for (const state of ["expired", "failed"]) {
+      const terminal = harness(BASE);
+      terminal.exportRow.state = state;
+      await expect(terminal.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+        "CandidateExportStateConflict",
+      );
+      expect(terminal.stored.body).toBeUndefined();
+    }
+  });
+});
 describe("restricted packet portable artifact composition", () => {
   const fieldKey = "authorization.us_authorized";
   const packet = {
