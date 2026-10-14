@@ -289,7 +289,10 @@ function validateVerifiedTokens(tokens, verified, expected, profile) {
     accessToken: tokens.access_token,
     idToken: tokens.id_token,
     ...(profile.refreshRequired
-      ? { refreshToken: tokens.refresh_token }
+      ? {
+          refreshToken: tokens.refresh_token,
+          idTokenExpiresAt: new Date(id.exp * 1000).toISOString(),
+        }
       : {
           purpose: profile.purpose,
           profile: profile.id,

@@ -409,6 +409,20 @@ test("ready root rebinds a new browser, rotates old form credentials and preserv
   assert.equal(f.results.length, 0);
 });
 
+test("rights confirmation retains verified ID expiry separately from access admission", async (t) => {
+  const f = await fixture(t, {
+    mutateClaims: ({ access, id }) => {
+      id.exp = access.exp + 35_400;
+    },
+  });
+  assert.equal((await f.confirm(await f.ready())).status, 200);
+  const access = JSON.parse(Buffer.from(f.issued.access_token.split(".")[1], "base64url"));
+  const id = JSON.parse(Buffer.from(f.issued.id_token.split(".")[1], "base64url"));
+  assert.equal(Date.parse(f.results[0].expiresAt), access.exp * 1000);
+  assert.equal(Date.parse(f.results[0].idTokenExpiresAt), id.exp * 1000);
+  assert.equal(id.exp - access.exp, 35_400);
+});
+
 test("normal S256 OAuth code exchange resolves only after same-browser explicit disposable confirmation", async (t) => {
   const f = await fixture(t);
   const auth = await f.authorize();
