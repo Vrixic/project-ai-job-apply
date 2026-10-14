@@ -230,6 +230,23 @@ run "candidate_deletion_restore_is_dedicated_and_read_only" {
 run "candidate_rights_boundary_accepts_explicit_timing_policy" {
   command = plan
 
+  override_resource {
+    target          = aws_s3_bucket.candidate_documents[0]
+    override_during = plan
+    values = {
+      arn = "arn:aws:s3:::ai-job-apply-staging-candidate-docs-111122223333"
+    }
+  }
+
+  override_resource {
+    target          = aws_iam_role.profile_readiness_activity[0]
+    override_during = plan
+    values = {
+      arn = "arn:aws:iam::111122223333:role/ai-job-apply-staging-profile-readiness-activity"
+      id  = "ai-job-apply-staging-profile-readiness-activity"
+    }
+  }
+
   variables {
     private_application_networking               = true
     deploy_document_intake                       = true
@@ -244,6 +261,11 @@ run "candidate_rights_boundary_accepts_explicit_timing_policy" {
     candidate_rights_backup_retention_days       = 7
     candidate_rights_recent_auth_max_age_seconds = 900
     candidate_rights_export_lifecycle_days       = 1
+    document_processing_deployment_stage         = "parser-dark"
+    document_parser_artifact_s3_key              = "lambda/parser.zip"
+    document_parser_artifact_s3_object_version   = "synthetic-parser-version"
+    document_parser_artifact_sha256              = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    document_parser_artifact_base64sha256        = "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo="
   }
 
   assert {
@@ -268,6 +290,36 @@ run "candidate_rights_boundary_accepts_explicit_timing_policy" {
       length(aws_iam_role_policy.candidate_rights_activity) == 1
     )
     error_message = "Only the private activity gets deletion privileges while the gateway receives the exact reviewed policy and bounded download grant."
+  }
+
+  assert {
+    condition = (
+      aws_iam_role_policy.candidate_rights_activity[0].role == aws_iam_role.profile_readiness_activity[0].id &&
+      length([for statement in data.aws_iam_policy_document.candidate_rights_activity[0].statement : statement if statement.sid == "DeleteExactCandidateDocumentVersions"]) == 1 &&
+      alltrue([for statement in data.aws_iam_policy_document.candidate_rights_activity[0].statement :
+        toset(statement.actions) == toset(["s3:DeleteObject", "s3:DeleteObjectVersion"]) &&
+        toset(statement.resources) == toset(["${aws_s3_bucket.candidate_documents[0].arn}/*"])
+        if statement.sid == "DeleteExactCandidateDocumentVersions"
+      ])
+    )
+    error_message = "Versioned bulk document deletion needs both delete actions on only the activity's candidate-document objects."
+  }
+
+  assert {
+    condition = (
+      length([for statement in data.aws_iam_policy_document.candidate_documents_s3_endpoint[0].statement : statement if statement.sid == "CandidateRightsDocumentVersionDeletion"]) == 1 &&
+      alltrue([for statement in data.aws_iam_policy_document.candidate_documents_s3_endpoint[0].statement :
+        toset(statement.actions) == toset(["s3:ListBucketVersions", "s3:DeleteObject", "s3:DeleteObjectVersion"]) &&
+        toset(statement.resources) == toset([aws_s3_bucket.candidate_documents[0].arn, "${aws_s3_bucket.candidate_documents[0].arn}/*"]) &&
+        length(statement.condition) == 1 &&
+        alltrue([for condition in statement.condition :
+          condition.test == "ArnEquals" && condition.variable == "aws:PrincipalArn" &&
+          toset(condition.values) == toset([aws_iam_role.profile_readiness_activity[0].arn])
+        ])
+        if statement.sid == "CandidateRightsDocumentVersionDeletion"
+      ])
+    )
+    error_message = "The S3 endpoint must permit the same bulk deletion only for the exact activity role and candidate-document bucket."
   }
 }
 

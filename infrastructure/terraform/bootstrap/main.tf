@@ -430,11 +430,25 @@ resource "aws_iam_policy" "workload_boundary" {
         # and account deletion). No other workload role's ceiling gains this action.
         Sid      = "PurgeDeletedCandidateDocumentVersions"
         Effect   = "Allow"
-        Action   = ["s3:DeleteObjectVersion"]
+        Action   = ["s3:DeleteObject", "s3:DeleteObjectVersion"]
         Resource = "${local.candidate_document_bucket_arn}/*"
         Condition = {
           ArnEquals = {
             "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-${var.environment}-profile-readiness-activity"
+          }
+        }
+      },
+      {
+        Sid      = "ListCandidateDataExportVersions"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucketVersions"]
+        Resource = "arn:aws:s3:::ai-job-apply-${var.environment}-candidate-exports-${data.aws_caller_identity.current.account_id}"
+        Condition = {
+          ArnEquals = {
+            "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-${var.environment}-profile-readiness-activity"
+          }
+          StringLike = {
+            "s3:prefix" = "candidate-data-exports/*"
           }
         }
       },
