@@ -50,9 +50,15 @@ components and the connected journey. Historical proof records remain historical
 reconciled-copy operators and physical restore rehearsals are not D3 dependencies. Independent
 D1/admin acceptance stays deferred.
 
-Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 2026-10-13.
+Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 2026-10-14.
 
 ## Task register
+
+D3-133 started 2026-10-14: repair the resume-rights lifecycle test's missing export-cleanup mock.
+The focused suite now verifies completed marker → export cleanup → resume-prefix cleanup → health,
+and refuses completion when export cleanup fails. This is test-harness verification only;
+document-inclusive live rights acceptance remains open.
+[Evidence](evidence/d3-rights-readiness-2026-10-14.md).
 
 D3-132 started 2026-10-13: settle one legacy missing-digest launch claim only with exact original
 AWS rejection evidence, preserving the absent request digest and normal launch/recovery paths.

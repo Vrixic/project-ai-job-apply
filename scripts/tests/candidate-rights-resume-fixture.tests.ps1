@@ -314,6 +314,11 @@ function Wait-DeletionCompletion {
   $script:events += 'marker'
   if ($script:lifecycleCase -ceq 'marker-failure') { throw 'Generated marker failure.' }
 }
+function Confirm-RightsExportDeletion {
+  $script:events += 'export-cleanup'
+  if ($script:lifecycleCase -ceq 'export-cleanup-failure') { throw 'Generated leftover export version.' }
+  return 1
+}
 function Confirm-RightsResumeDeletion($Resume, $Fixture) {
   $script:events += 'prefix'
   if ($script:lifecycleCase -ceq 'prefix-failure') { throw 'Generated leftover version.' }
@@ -325,12 +330,16 @@ function Assert-OperationalHealth {
 }
 $receipt = Invoke-FixedLifecycle $boundary ([pscustomobject]@{})
 Assert-Test ($receipt.schemaVersion -eq 3 -and $receipt.resumeCoverage.valid -eq $true) 'Missing resume receipt.'
+Assert-Test ($receipt.exportObjectsCleaned -eq 1) 'Missing verified export cleanup receipt.'
 Assert-Test ([Array]::IndexOf($script:events, 'fixture') -lt [Array]::IndexOf($script:events, '/me/data-exports')) 'Fixture started after export.'
+Assert-Test ([Array]::IndexOf($script:events, 'marker') -lt [Array]::IndexOf($script:events, 'export-cleanup') -and [Array]::IndexOf($script:events, 'export-cleanup') -lt [Array]::IndexOf($script:events, 'prefix')) 'Export cleanup proof is not between the completed marker and prefix proof.'
 Assert-Test ([Array]::IndexOf($script:events, 'marker') -lt [Array]::IndexOf($script:events, 'prefix') -and [Array]::IndexOf($script:events, 'prefix') -lt [Array]::IndexOf($script:events, 'health')) 'Prefix proof is not after the completed marker.'
-foreach ($case in @('marker-failure','prefix-failure')) {
+foreach ($case in @('marker-failure','export-cleanup-failure','prefix-failure')) {
   $script:lifecycleCase = $case; $script:events = @()
   Assert-Refused { Invoke-FixedLifecycle $boundary ([pscustomobject]@{}) }
   Assert-Test ($script:events -cnotcontains 'health' -and $null -eq $script:VerifiedResumeCoverage) 'Failure promoted to completed cleanup.'
+  if ($case -ceq 'marker-failure') { Assert-Test ($script:events -cnotcontains 'export-cleanup') 'Export cleanup proof preceded the marker.' }
+  if ($case -ceq 'export-cleanup-failure') { Assert-Test ($script:events -cnotcontains 'prefix') 'Resume prefix proof continued after export cleanup failure.' }
   if ($case -ceq 'marker-failure') { Assert-Test ($script:events -cnotcontains 'prefix') 'Prefix proof preceded the marker.' }
 }
 $receiptRoot = Join-Path ([IO.Path]::GetTempPath()) "resume-fixture-receipts-$([guid]::NewGuid().ToString('N'))"
