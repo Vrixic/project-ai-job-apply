@@ -76,6 +76,17 @@ if ($identityBoundaryIndex -lt 0 -or $identityBoundaryIndex -gt $backupBoundaryI
     $identityBoundaryIndex -gt $healthBoundaryIndex -or $identityBoundaryIndex -gt $driftBoundaryIndex) {
   throw 'The short-lived identity proof is not validated before the slow acceptance inspections.'
 }
+$refreshFunction = $ast.Find({
+    param($node)
+    $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Refresh-SyntheticIdentityContext'
+  }, $false)
+$refreshEnvironmentWrites = @($refreshFunction.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $node.Member.Extent.Text -ceq 'SetEnvironmentVariable'
+    }, $true) | ForEach-Object { $_.Arguments[0].Extent.Text } | Sort-Object)
+if (($refreshEnvironmentWrites -join '|') -cne '$refreshTokenEnvironmentName|$tokenEnvironmentName') {
+  throw 'Access-token refresh must retain the original ID token and fixed identity attestation.'
+}
 
 $env:CANDIDATE_RIGHTS_OPERATOR_TEST_ONLY = '1'
 . $operator `
@@ -129,10 +140,11 @@ try {
       [string[]]$Amr = @('pwd','mfa'),
       [int]$AuthAge = 30,
       [string]$Scope = 'profile:write',
-      [object]$Audience = 'candidate-web-client'
+      [object]$Audience = 'candidate-web-client',
+      [int]$ExpirationSeconds = 600
     )
     $header = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('{"alg":"RS256","typ":"JWT"}')).TrimEnd('=').Replace('+','-').Replace('/','_')
-    $payloadObject = [ordered]@{ iss = 'https://identity.example/'; sub = $Subject; aud = $Audience; scope = $Scope; amr = $Amr; auth_time = $now.AddSeconds(-$AuthAge).ToUnixTimeSeconds(); exp = $now.AddMinutes(10).ToUnixTimeSeconds() }
+    $payloadObject = [ordered]@{ iss = 'https://identity.example/'; sub = $Subject; aud = $Audience; scope = $Scope; amr = $Amr; auth_time = $now.AddSeconds(-$AuthAge).ToUnixTimeSeconds(); exp = $now.AddSeconds($ExpirationSeconds).ToUnixTimeSeconds() }
     $payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($payloadObject | ConvertTo-Json -Compress))).TrimEnd('=').Replace('+','-').Replace('/','_')
     return "$header.$payload.signature"
   }
@@ -230,6 +242,41 @@ try {
     Set-Item -LiteralPath Function:Get-FileSha256 -Value $originalAttestationFileHashFunction
     if ($null -eq $originalAttestationContentFunction) { Remove-Item -LiteralPath Function:Get-Content }
     else { Set-Item -LiteralPath Function:Get-Content -Value $originalAttestationContentFunction.ScriptBlock }
+  }
+
+  # A refreshed access token cannot renew the original signed ID/MFA/attestation lease.
+  $originalLeaseIdToken = New-TestJwt -AuthAge 660 -ExpirationSeconds 35340
+  $originalLeaseAttestation = [ordered]@{
+    schemaVersion = 1; classification = 'generated-synthetic-only'; issuer = 'https://identity.example/'
+    subjectSha256 = Get-TextSha256 'auth0|generated-synthetic'; authorizedOwner = 'authorized-operator'
+    createdAt = $now.AddSeconds(-660).ToString('o'); expiresAt = $now.AddSeconds(240).ToString('o')
+  }
+  try {
+    Remove-Item Env:CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH
+    $env:CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN = New-TestJwt -AuthAge 660
+    $env:CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN = $originalLeaseIdToken
+    [Environment]::SetEnvironmentVariable($attestationJsonEnvironmentName, ($originalLeaseAttestation | ConvertTo-Json -Compress), 'Process')
+    $refreshedAccessIdentity = Read-SyntheticIdentityContext 'https://identity.example/' 'candidate-web-client' 900
+    Assert-GeneratedAttestationCondition ($refreshedAccessIdentity.IdToken -ceq $originalLeaseIdToken) 'Refreshed access did not retain the exact original ID token.'
+    foreach ($case in @(
+        @{ IdToken = $originalLeaseIdToken; ExpiresAt = $now.AddSeconds(-60).ToString('o') },
+        @{ IdToken = New-TestJwt -AuthAge 660 -ExpirationSeconds 120; ExpiresAt = $originalLeaseAttestation.expiresAt },
+        @{ IdToken = New-TestJwt -AuthAge 901 -ExpirationSeconds 35340; ExpiresAt = $originalLeaseAttestation.expiresAt }
+      )) {
+      $invalidLeaseAttestation = [ordered]@{}
+      foreach ($entry in $originalLeaseAttestation.GetEnumerator()) { $invalidLeaseAttestation[$entry.Key] = $entry.Value }
+      $invalidLeaseAttestation.expiresAt = $case.ExpiresAt
+      $env:CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN = $case.IdToken
+      [Environment]::SetEnvironmentVariable($attestationJsonEnvironmentName, ($invalidLeaseAttestation | ConvertTo-Json -Compress), 'Process')
+      $failure = ''
+      try { $null = Read-SyntheticIdentityContext 'https://identity.example/' 'candidate-web-client' 900 }
+      catch { $failure = $_.Exception.Message }
+      Assert-GeneratedAttestationCondition ($failure -like 'The disposable identity is not an exact current*') 'Refreshed access bypassed expired attestation, original ID margin, or original MFA age.'
+    }
+  }
+  finally {
+    $env:CANDIDATE_RIGHTS_ACCEPTANCE_IDENTITY_ATTESTATION_PATH = $attestationPath
+    Remove-Item -LiteralPath "Env:$attestationJsonEnvironmentName" -ErrorAction SilentlyContinue
   }
 
   foreach ($case in @(

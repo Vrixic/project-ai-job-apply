@@ -52,6 +52,7 @@ const identity = () => ({
   authorizedOwner: "Generated Operator",
   authTime: new Date().toISOString(),
   expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+  idTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
   accessToken: "generated-access-secret",
   idToken: "generated-id-secret",
   refreshToken: "generated-refresh-secret",
@@ -406,6 +407,38 @@ test("in-memory attestation binds confirmed subject without retaining token or r
   }
 });
 
+test("access refresh retains the original ID and 900-second MFA attestation lease", () => {
+  const now = Date.parse("2026-10-14T19:35:00.000Z");
+  const confirmed = {
+    ...identity(),
+    authTime: new Date(now).toISOString(),
+    expiresAt: new Date(now + 600_000).toISOString(),
+    idTokenExpiresAt: new Date(now + 36_000_000).toISOString(),
+  };
+  const attestation = buildIdentityAttestation(confirmed, now);
+  assert.equal(Date.parse(attestation.expiresAt), now + 900_000);
+  assert.ok(Date.parse(attestation.expiresAt) > now + 660_000);
+  assert.throws(
+    () =>
+      buildIdentityAttestation(
+        { ...confirmed, expiresAt: new Date(now + 3_600_000).toISOString() },
+        now + 900_000,
+      ),
+    /disposable_identity_expired_or_unconfirmed/u,
+  );
+
+  const shortId = {
+    ...confirmed,
+    expiresAt: new Date(now + 540_000).toISOString(),
+    idTokenExpiresAt: new Date(now + 540_000).toISOString(),
+  };
+  assert.equal(Date.parse(buildIdentityAttestation(shortId, now).expiresAt), now + 540_000);
+  assert.throws(
+    () => buildIdentityAttestation(shortId, now + 540_000),
+    /disposable_identity_expired_or_unconfirmed/u,
+  );
+});
+
 test("unconfirmed, expired or excluded-owner attestations fail before file creation", () => {
   for (const changes of [
     { subject: "" },
@@ -414,7 +447,14 @@ test("unconfirmed, expired or excluded-owner attestations fail before file creat
     { authorizedOwner: "x".repeat(121) },
     { authTime: "invalid" },
     { authTime: new Date(Date.now() - 901_000).toISOString() },
+    { expiresAt: "invalid" },
     { expiresAt: new Date(Date.now() - 1).toISOString() },
+    { idTokenExpiresAt: undefined },
+    { idTokenExpiresAt: null },
+    { idTokenExpiresAt: "invalid" },
+    { idTokenExpiresAt: Date.now() + 3_600_000 },
+    { idTokenExpiresAt: new Date(Date.now() - 1).toISOString() },
+    { idTokenExpiresAt: new Date(Date.now() + 600_000).toISOString() },
   ]) {
     assert.throws(
       () => buildIdentityAttestation({ ...identity(), ...changes }),

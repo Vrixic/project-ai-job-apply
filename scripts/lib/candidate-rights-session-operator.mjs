@@ -254,8 +254,15 @@ export function buildIdentityAttestation(identity, now = Date.now()) {
   if (Object.hasOwn(identity, "purpose") || Object.hasOwn(identity, "profile")) {
     throw new Error("disposable_identity_expired_or_unconfirmed");
   }
-  const expires = Math.min(Date.parse(identity.expiresAt), Date.parse(identity.authTime) + 900_000);
+  const admissionExpires = Date.parse(identity.expiresAt);
+  const idTokenExpires = Date.parse(identity.idTokenExpiresAt);
+  const expires = Math.min(idTokenExpires, Date.parse(identity.authTime) + 900_000);
   if (
+    !Number.isFinite(admissionExpires) ||
+    admissionExpires <= now ||
+    typeof identity.idTokenExpiresAt !== "string" ||
+    !Number.isFinite(idTokenExpires) ||
+    idTokenExpires < admissionExpires ||
     !Number.isFinite(expires) ||
     expires <= now ||
     typeof identity.subject !== "string" ||
