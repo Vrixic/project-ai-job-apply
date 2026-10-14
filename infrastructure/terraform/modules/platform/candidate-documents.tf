@@ -897,7 +897,7 @@ data "aws_iam_policy_document" "candidate_documents_s3_endpoint" {
       sid    = "CandidateRightsDocumentVersionDeletion"
       effect = "Allow"
       actions = [
-        "s3:ListBucketVersions", "s3:DeleteObjectVersion"
+        "s3:ListBucketVersions", "s3:DeleteObject", "s3:DeleteObjectVersion"
       ]
       resources = [
         aws_s3_bucket.candidate_documents[0].arn,

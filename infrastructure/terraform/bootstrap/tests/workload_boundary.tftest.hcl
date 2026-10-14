@@ -154,3 +154,58 @@ run "original_route_boundary" {
     error_message = "Original DNS permissions must exclude UPSERT and leave the shared ceiling unchanged."
   }
 }
+
+run "candidate_rights_version_cleanup_is_activity_and_prefix_scoped" {
+  command = plan
+  variables { environment = "development" }
+
+  assert {
+    condition = one([
+      for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement
+      if statement.Sid == "ListCandidateDataExportVersions"
+      ]) == {
+      Sid      = "ListCandidateDataExportVersions"
+      Effect   = "Allow"
+      Action   = ["s3:ListBucketVersions"]
+      Resource = "arn:aws:s3:::ai-job-apply-development-candidate-exports-111122223333"
+      Condition = {
+        ArnEquals = {
+          "aws:PrincipalArn" = "arn:aws:iam::111122223333:role/ai-job-apply-development-profile-readiness-activity"
+        }
+        StringLike = { "s3:prefix" = "candidate-data-exports/*" }
+      }
+    }
+    error_message = "Export version inventory must be a read-only ceiling for the exact account bucket, activity role and owner export prefix."
+  }
+
+  assert {
+    condition = one([
+      for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement
+      if statement.Sid == "PurgeDeletedCandidateDocumentVersions"
+      ]) == {
+      Sid      = "PurgeDeletedCandidateDocumentVersions"
+      Effect   = "Allow"
+      Action   = ["s3:DeleteObject", "s3:DeleteObjectVersion"]
+      Resource = "arn:aws:s3:::ai-job-apply-development-candidate-docs-*/*"
+      Condition = {
+        ArnEquals = {
+          "aws:PrincipalArn" = "arn:aws:iam::111122223333:role/ai-job-apply-development-profile-readiness-activity"
+        }
+      }
+    }
+    error_message = "Versioned DeleteObjects must retain the exact activity principal and existing document object resources."
+  }
+
+  assert {
+    condition = length([
+      for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement
+      if contains(statement.Action, "s3:DeleteObject")
+    ]) == 1
+    error_message = "No other shared workload statement may gain document delete authority."
+  }
+
+  assert {
+    condition     = length(aws_iam_policy.workload_boundary.policy) <= 6144
+    error_message = "The complete rendered workload boundary must fit the AWS managed policy size limit."
+  }
+}

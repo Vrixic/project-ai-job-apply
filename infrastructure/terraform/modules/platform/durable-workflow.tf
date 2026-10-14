@@ -157,7 +157,7 @@ data "aws_iam_policy_document" "candidate_rights_activity" {
   statement {
     sid       = "DeleteExactCandidateDocumentVersions"
     effect    = "Allow"
-    actions   = ["s3:DeleteObjectVersion"]
+    actions   = ["s3:DeleteObject", "s3:DeleteObjectVersion"]
     resources = ["${aws_s3_bucket.candidate_documents[0].arn}/*"]
   }
 

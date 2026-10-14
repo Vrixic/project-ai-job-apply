@@ -33,7 +33,7 @@ foreach ($needle in @(
 }
 foreach ($needle in @(
     'Sid      = "PurgeDeletedCandidateDocumentVersions"',
-    'Action   = ["s3:DeleteObjectVersion"]',
+    'Action   = ["s3:DeleteObject", "s3:DeleteObjectVersion"]',
     'Resource = "${local.candidate_document_bucket_arn}/*"',
     '"aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-${var.environment}-profile-readiness-activity"'
   )) {
@@ -43,7 +43,7 @@ foreach ($needle in @(
 if ($operator.Contains('$expectedModifiedStatements[0]')) { throw "The operator still indexes a modified statement." }
 $passed++
 
-# ---- the exact delta guard accepts this statement and refuses every variant
+# ---- the historical v1 delta remains exact; the current bulk-delete repair uses a separately reviewed plan
 $account = "111122223333"; $environment = "development"
 $documents = "arn:aws:s3:::ai-job-apply-$environment-candidate-docs-*"
 $role = "arn:aws:iam::${account}:role/ai-job-apply-$environment-profile-readiness-activity"
