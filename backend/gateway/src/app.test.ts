@@ -3337,8 +3337,10 @@ describe("candidate API", () => {
       document: { ...payload, status: "awaiting_upload" },
       upload: { method: "POST" },
     });
+    expect(created.headers["cache-control"]).toBe("no-store");
     expect(created.json().document).not.toHaveProperty("sourceObjectKey");
     expect(listed.statusCode).toBe(200);
+    expect(listed.headers["cache-control"]).toBe("no-store");
     expect(listed.json().documents).toHaveLength(1);
 
     const missingScope = await issuer.issue("candidate-resume-no-scope", {

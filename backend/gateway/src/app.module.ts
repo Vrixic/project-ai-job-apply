@@ -2604,6 +2604,7 @@ class CandidateController {
   }
 
   @Get("/resumes")
+  @Header("cache-control", "no-store")
   async listResumes(@Req() request: AuthenticatedRequest): Promise<ResumeDocumentCollection> {
     const user = await this.identity.resolve(request, "documents:read");
     return this.documents.listResumeDocuments(user.id);
@@ -2638,6 +2639,7 @@ class CandidateController {
 
   @Post("/resumes/uploads")
   @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
   async createResumeUpload(
     @Req() request: AuthenticatedRequest,
     @Headers("idempotency-key") idempotencyKey: string | undefined,
