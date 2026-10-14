@@ -30,11 +30,15 @@ The old resume's source/normalized copies are absent. Profile activity 25/source
 and ordinary UI export download/schema/latest-vault comparison pass. Three failed export notices
 are archived and individually acknowledged; all thirteen queues were empty on readback. Capacity
 checks, sixteen published native artifacts and paused version 15 binding readback pass. Legacy
-claim settlement is implemented and locally verified; its reproducible migration image is
-published with zero High/Critical scan findings. Managed 0018 completion and live settlement remain
-unverified after one unacknowledged launch attempt; no retry occurred and fresh development SSO is
-pending. Account deletion has not started and the candidate memory session
-has expired. Account cleanup and final shutdown remain pending. Hosted Actions could not start
+claim settlement and managed migration 0018 now pass exact live readback: the migration task stopped
+with exit 0/all seven owners verified, and one original claim is `launch_rejected` with its missing
+request digest preserved and original head sealed. Temporary owner functions are absent. Normal
+source-purge maintenance, both scanner stages, pre-test zero-change plan and read-only D3 ResumeFixture
+Status pass. The rights session expired before identity confirmation, Plan, Execute or fixture
+creation; account deletion has not started. The earlier UI export was already absent before the
+planned deletion test. Live account cleanup remains untested. Development shutdown and encrypted
+144-field input archival pass; the fresh final plan has zero managed-resource/output changes and
+required no apply. Hosted Actions could not start
 because of account billing. Live AI stays off; authorized ATS QA/fixtures, installed-extension
 and accountable acceptance remain open. Independent D1/admin acceptance is
 deferred. [Evidence](evidence/d3-vault-native-rights-verification-2026-10-13.md).
@@ -171,19 +175,17 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 
 ## Current operating state
 
-2026-10-13: Development runtime intake is paused. Gateway 115 and native revision-2 version 15
-code, environment, IAM and qualified-recipient readback pass at 22:40 UTC: no public routes or new
-launches, with eight prior versions retained and no executions on current version 15. Profile
-activity 25/source `cc464385` is unchanged. An encrypted database safety snapshot is available from
-21:30 UTC. Migration image publication and the sole effective task-image update pass. One launch
-attempt was unacknowledged before SSO expiry; at 23:30:06 UTC a still-valid role found no matching
-running/stopped migration tasks, but SQL completion is unverified. Fresh development SSO is pending.
-The database, NAT/EIP and ten paid Interface endpoints remain on, with intake, maintenance and
-dispatch paused. AWS shutdown is mandatory incomplete work while the normal AWS profile reports
-SSO expiry. Docker/WSL were positively off at 23:07:15 UTC. The owned PostgreSQL fixture
-is stopped; optional recursive fixture deletion was blocked by automatic approval and its files
-are preserved. The PC stays on. Staging was
-not changed; its last verified-off observation remains 2026-10-11.
+2026-10-13 owner-local checkpoint (2026-10-14 UTC): development shutdown is verified at 02:05:48Z.
+Project databases, NATs, paid Interface endpoints and EIPs are absent; writers/queues are drained.
+Temporary replay, legacy and inspection functions and restore roles are absent. The exact
+database's final and safety snapshots are available/encrypted. All 144 current dormant inputs are
+archived with encrypted exact-version/checksum readback. The fresh final dormant plan has zero
+managed-resource/output changes; no apply was performed. Docker/WSL and the owned PostgreSQL
+fixture are off; the PC remains on. Optional
+recursive fixture deletion was blocked by automatic approval and the fixture files are preserved.
+The rights session expired unstarted; account deletion still requires a fresh live run. Staging was
+unchanged; its last verified-off observation remains 2026-10-11. Retained backups, S3/ECR, KMS,
+secrets and security/monitoring resources incur charges.
 [Current evidence](evidence/d3-vault-native-rights-verification-2026-10-13.md).
 
 The entries below are historical checkpoints.
