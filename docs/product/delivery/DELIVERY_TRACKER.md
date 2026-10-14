@@ -24,14 +24,25 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 
 ## D3 — High-quality application preparation
 
-D3-133 repairs the resume-rights test harness; focused synthetic checks pass. D3-134 follows a
-fresh restored-runtime and MFA-confirmed rights attempt. Its first resume-list GET succeeded but
-omitted the required `Cache-Control: no-store`; bounded request evidence shows no upload, export
-or deletion request. The narrow producer fix passes the actual-route red/green regression,
-Gateway build and scoped style checks; its immutable release and live lifecycle remain pending.
-The exact latest snapshot was restored, completed-marker reconciliation and temporary-authority
-cleanup passed, and reviewed D3 runtime readiness passed. Live account deletion remains unverified.
+D3-133/134's focused harness and resume no-store fixes pass; Gateway 117/source `a45c456c` is
+released and verified. D3-135 ([PR #682](https://github.com/Vrixic/project-ai-job-apply/pull/682))
+preserves the original identity/MFA lease across access refresh. D3-136
+([PR #684](https://github.com/Vrixic/project-ai-job-apply/pull/684)) repairs the scoped export-version
+inventory and document bulk-delete grants. Targeted checks, consequential review, both reviewed
+IAM applies and actual policy readback pass. Hosted CI executed zero steps because of billing.
+
+One continuation of the already-confirmed deletion completed all eight owners through unchanged
+Profile activity 25. SQL, document/export version absence, the original completed marker and
+unchanged retention are verified. Three original failure notices were archived and individually
+acknowledged; all thirteen queues and temporary authority are clear. The original canonical
+17-step run remains FAILED without a success receipt; full rights and expiry acceptance remain open.
+Development shutdown, credential rotation, the fresh zero-change plan and encrypted recovery-input
+archive pass. D3 remains In progress behind clean rights, installed-extension, AI retention,
+authorized Greenhouse QA and accountable acceptance gates. Live AI and employer submission stay
+off; independent D1/admin acceptance stays deferred.
 [Evidence](evidence/d3-rights-readiness-2026-10-14.md).
+
+Historical 2026-10-13 checkpoint:
 
 D3-126–132 are merged. Hosted synthetic vault deletion/reload and the current native preparation,
 separate sign-in, review, approval, PDF/DOCX and truthful not-submitted/cancellation journey pass.
@@ -183,6 +194,29 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 [Phase 7 tasks](phase-7-quality-and-expansion.md).
 
 ## Current operating state
+
+2026-10-14: development shutdown is verified at `23:37:37Z`. Database, NAT, EIP and paid Interface
+endpoint counts are zero; API routes, enabled triggers/consumers, ECS/durable work and all thirteen
+queues are drained. All temporary functions/versions/roles and restore-role uses are absent.
+Docker/WSL and owned PostgreSQL/rights listeners are off; the preserved fixture and unrelated
+system PostgreSQL service are untouched, and the PC remains on.
+
+New final snapshot `ai-job-apply-development-shutdown-20261014224151` and its `-safety` snapshot
+are available/encrypted from the exact database. Automated backups are retained; their 35-day
+configuration was verified before deletion. All 144 dormant inputs have encrypted exact-version,
+checksum and length archival. The exposed development database credential was rotated after
+database removal; current-secret metadata matches Terraform state. Historical encrypted snapshots
+and state versions were preserved. The post-rotation plan has zero resource/data/output changes
+and all 177 checks pass; no apply was needed.
+
+For a future restore, create NEW inputs selecting `ai-job-apply-development-shutdown-20261014224151`
+for BOTH final and restore snapshot selectors. Preserve archived bytes; the dormant archive keeps
+the historical `20261013213003` restore selector used while the database was live.
+Staging was untouched; its last verified-off observation remains October 11. Retained backups,
+S3/ECR, KMS, secrets, DNS, logs and security/monitoring resources incur charges.
+[Current evidence](evidence/d3-rights-readiness-2026-10-14.md).
+
+The entries below are historical checkpoints.
 
 2026-10-13 owner-local checkpoint (2026-10-14 UTC): development shutdown is verified at 02:05:48Z.
 Project databases, NATs, paid Interface endpoints and EIPs are absent; writers/queues are drained.
