@@ -24,10 +24,13 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 
 ## D3 — High-quality application preparation
 
-D3-133 repairs the resume-rights test harness after export cleanup became part of the lifecycle.
-Focused synthetic tests cover completed-marker/export/resume cleanup ordering and failure refusal;
-live account deletion remains unstarted. New private restore inputs preserve the archived baseline
-and select the latest final snapshot in both fields; no restore or activation is claimed.
+D3-133 repairs the resume-rights test harness; focused synthetic checks pass. D3-134 follows a
+fresh restored-runtime and MFA-confirmed rights attempt. Its first resume-list GET succeeded but
+omitted the required `Cache-Control: no-store`; bounded request evidence shows no upload, export
+or deletion request. The narrow producer fix passes the actual-route red/green regression,
+Gateway build and scoped style checks; its immutable release and live lifecycle remain pending.
+The exact latest snapshot was restored, completed-marker reconciliation and temporary-authority
+cleanup passed, and reviewed D3 runtime readiness passed. Live account deletion remains unverified.
 [Evidence](evidence/d3-rights-readiness-2026-10-14.md).
 
 D3-126–132 are merged. Hosted synthetic vault deletion/reload and the current native preparation,

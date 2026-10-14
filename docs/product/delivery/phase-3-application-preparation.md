@@ -54,6 +54,15 @@ Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 20
 
 ## Task register
 
+D3-134 started 2026-10-14: fix the resume list/upload producers' missing `Cache-Control: no-store`
+after the reviewed live rights run stopped on its first GET. The bounded Gateway audit records
+one GET 200 and no upload/export/deletion requests; the preserved deployed artifact confirms the
+missing headers. The two established header decorators and two actual-route assertions pass
+the focused red/green regression, Gateway build and scoped Biome checks.
+Fresh immutable release, new reviewed runtime plan/MFA and document-inclusive acceptance remain
+required; the failed attempt is preserved and will not be replayed.
+[Evidence](evidence/d3-rights-readiness-2026-10-14.md).
+
 D3-133 started 2026-10-14: repair the resume-rights lifecycle test's missing export-cleanup mock.
 The focused suite now verifies completed marker → export cleanup → resume-prefix cleanup → health,
 and refuses completion when export cleanup fails. This is test-harness verification only;
