@@ -50,8 +50,8 @@
     "@ai-job-apply/domain": "workspace:*",
     "@ai-job-apply/event-contracts": "workspace:*",
     "postgres": "3.4.9",
-    "uuid": "14.0.2",
-    "@aws-sdk/client-kms": "3.1133.0"
+    "uuid": "14.0.3",
+    "@aws-sdk/client-kms": "3.1149.0"
   },
   "devDependencies": {
     "@ai-job-apply/profile-service": "workspace:*"
