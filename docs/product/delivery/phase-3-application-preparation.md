@@ -6,12 +6,14 @@ approval and PDF/DOCX journey pass. Manual Apply remains truthfully not submitte
 drains the native task. Profile activity 25/source `cc464385` release/readback and ordinary UI
 export download/schema/latest-vault comparison pass. Three failed export notices are archived and
 individually acknowledged; all thirteen queues were empty on readback. Capacity publication and
-paused native version 15 bindings pass. Legacy claim settlement is implemented and locally
-verified; the reproducible migration image is published with zero High/Critical scan findings.
-Managed 0018 completion and live settlement remain unverified after one unacknowledged launch
-attempt, with no retry. Fresh development SSO is pending. Account
-deletion has not started; its candidate memory session has expired. Account cleanup and final
-shutdown remain pending. Live AI, authorized ATS QA/fixtures, installed-extension and accountable
+paused native version 15 bindings pass. Managed migration 0018 stopped successfully and the one
+legacy claim is verified `launch_rejected`, with its original missing digest preserved and original
+head sealed. Temporary owner functions are absent. Normal source-purge maintenance, both scanner
+stages, the pre-test zero-change plan and read-only D3 ResumeFixture Status pass. The rights session
+expired before identity confirmation, Plan, Execute or fixture creation; account deletion has not
+started. Live account cleanup remains untested. Development shutdown and encrypted 144-field input
+archival pass; the fresh final plan has zero managed-resource/output changes with no apply.
+Live AI, authorized ATS QA/fixtures, installed-extension and accountable
 acceptance remain open.
 Independent D1/admin acceptance stays deferred.
 [Current evidence](evidence/d3-vault-native-rights-verification-2026-10-13.md).
@@ -57,10 +59,13 @@ AWS rejection evidence, preserving the absent request digest and normal launch/r
 PR 675 is merged as `ab1de3c9`; 21 reviewed source hashes, 77 unit tests, 89 real PostgreSQL cases
 (eight new), 216 workflow tests, 27 migration tests, targeted packaging and three component
 typechecks pass. The two image builds match, hardened smoke and immutable publication/scan pass,
-and the sole effective task-image update is applied. One migration launch attempt was
-unacknowledged before SSO expiry and was not retried. A read-only 23:30:06 UTC check found no
-matching running/stopped tasks; managed SQL completion and live settlement remain unverified.
-Fresh development SSO is pending. The owner transition adds no task launch, public API or permanent permission.
+and the sole effective task-image update is applied. Managed source `ab1de3c9` migration stopped
+with exit 0, all seven owner/final markers and Documents 0018 verified. One live original claim is
+`launch_rejected`; exact proof/claim/head-seal readback passes and the original request digest stays
+NULL. Temporary Plan/Apply functions are absent. Qualified Profile 25 maintenance subsequently
+scanned/purged one source with zero failures or held work. The private runner's overlong-name correction
+passes focused name/self-binding/reproducibility checks and changes no public product source or
+managed native release. The owner transition adds no task launch, public API or permanent permission.
 [Evidence](evidence/d3-vault-native-rights-verification-2026-10-13.md).
 
 D3-131 started 2026-10-13: retain all eight prior recovery versions while admitting one current
@@ -214,8 +219,8 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Native packet recovery (D3-113) | Explicit packet replacement preserves revision/idempotency and requires fresh review. Material verification failures carry only safe phase-specific guidance. 95 focused tests and web typecheck pass. | Consequential review, hosted expiry controls and explicit replacement pass; native preview remains open. [Evidence](evidence/d3-native-packet-recovery-2026-10-11.md). |
 | Native API scope admission (D3-114) | Application scopes conditionally included; two Terraform mock plans, three controller tests, focused review and managed Gateway 102 readback pass. | Live native preview remains open. [Evidence](evidence/d3-native-api-scope-admission-2026-10-11.md). |
 | Retired-epoch reprepare (D3-115) | Guarded fresh-epoch replacement implemented; five real PostgreSQL cases, component build, focused review and simulated connected journey pass. | Managed native release, synthetic preview, approval and PDF/DOCX download pass; accountable output-quality/provider acceptance remains. [Evidence](evidence/d3-retired-epoch-reprepare-2026-10-12.md). |
-| Retained workflow capacity (D3-131) | Eight prior/nine total numeric versions, bounded execution inspection, focused tests and review pass. Sixteen immutable artifacts and paused native version 15 binding readback pass. | Final retained-work drain and shutdown remain; no new launch authority. [Evidence](evidence/d3-vault-native-rights-verification-2026-10-13.md). |
-| Legacy launch-claim settlement (D3-132) | Exact-evidence owner transition and additive migration 0018 are merged; original missing request digest stays absent. Targeted tests/typechecks, reproducible image, hardened smoke, immutable publication/scan and sole task-image update pass. | Managed 0018 completion and one live legacy-claim settlement remain unverified after an unacknowledged launch; no retry. Fresh development SSO is pending. [Evidence](evidence/d3-vault-native-rights-verification-2026-10-13.md). |
+| Retained workflow capacity (D3-131) | Eight prior/nine total numeric versions, bounded execution inspection, focused tests and review pass. Sixteen immutable artifacts, paused native version 15 bindings and final drain/shutdown pass. | D3 live acceptance remains separate; no new launch authority. [Evidence](evidence/d3-vault-native-rights-verification-2026-10-13.md). |
+| Legacy launch-claim settlement (D3-132) | Exact-evidence owner transition/migration 0018, targeted checks, reproducible image/publication and managed migration/single-claim settlement pass. Original missing request digest stays absent; head sealing and temporary-function absence are verified. | Document-inclusive account cleanup remains unstarted; no new task launch or D3 acceptance is inferred. [Evidence](evidence/d3-vault-native-rights-verification-2026-10-13.md). |
 
 ## Decisions and scope changes
 
@@ -524,4 +529,26 @@ intake/maintenance/dispatch paused; mandatory AWS shutdown is incomplete because
 Docker/WSL were off at 23:07:15 UTC, the owned PostgreSQL fixture is off and the PC remains on.
 Live AI/provider policy, ATS QA/fixtures, installed extension and accountable acceptance remain
 open; independent D1/admin acceptance stays deferred and formal recovery-proof gates stay removed.
+[Evidence](evidence/d3-vault-native-rights-verification-2026-10-13.md).
+
+2026-10-13 owner-local update (2026-10-14 UTC): managed source `ab1de3c9` migration stopped with
+exit 0/all seven owners/final marker including 0018 verified. One legacy claim settled as
+`launch_rejected`, preserving its NULL request digest with exact proof/claim/head-seal readback;
+temporary Plan/Apply functions are absent. The private runner's name/self-binding correction and
+reproducible artifact checks pass without a public source or managed native-release change.
+Normal qualified Profile 25 maintenance scanned 1/purged 1/failed 0/held 0 at 00:39:04Z. Both scanner
+stages and actual bindings pass; the pre-test refresh-backed source `b94e47a2` plan has zero managed
+changes at 00:50Z. D3 ResumeFixture Status passes at 00:55Z: empty queues, no active compute and
+healthy alarms with policy/backup/Auth0 owner bindings. The rights session expired automatically
+before identity confirmation, Plan, Execute or fixture creation; account deletion has not started.
+No listener remained on localhost port 3000 at 01:15Z. The earlier UI export had zero versions/markers and
+no local plaintext at 01:04Z before the planned deletion test, so its absence is not deletion evidence. Gateway
+preparation/new launches are disabled; the dispatch schedule is disabled while its handler flag
+remained plan-enabled during that test checkpoint. Development shutdown passes at 02:05:48Z:
+database/NAT/paid Interface/EIP counts are zero, writers/queues drained and temporary executors/
+restore roles absent. Exact final/safety snapshots are available/encrypted, and all 144 dormant
+inputs have encrypted exact-version/checksum archival. The fresh final dormant plan has zero
+managed-resource/output changes with no apply. Docker/WSL and the owned PostgreSQL fixture are
+off; the PC is on. Retained backup/storage/
+security resources incur charges; staging is unchanged from its October 11 verified-off checkpoint.
 [Evidence](evidence/d3-vault-native-rights-verification-2026-10-13.md).

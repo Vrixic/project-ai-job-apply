@@ -76,27 +76,43 @@ The sole effective task-image update is applied. Exact current-database, encrypt
 available safety snapshot and task/request preflight pass after a private optional-role
 normalization correction; no product-source change was needed.
 
-One migration launch CLI attempt was unacknowledged when SSO expired and was not retried. At
-2026-10-13T23:30:06Z a still-valid development role performed a read-only check and found no
-matching running/stopped migration tasks. This does not establish SQL completion. Managed 0018
-completion and the one live legacy settlement remain unverified; fresh development SSO is
-requested and pending. No managed settlement or account purge is claimed. Hosted CI executed
+The earlier unacknowledged migration attempt was unresolved at the prior checkpoint. Managed
+readback at 2026-10-14T00:16:39Z (owner-local October 13) now verifies the exact source `ab1de3c9`
+task stopped with exit 0, all seven owners/final markers and Documents 0018 applied. At
+2026-10-14T00:37:00Z the one original legacy claim is verified `launch_rejected`: its original
+request digest remains NULL, exact proof/claim readback passes and the original head is sealed.
+Temporary Plan/Apply functions are absent. The private runner's overlong-name failure occurred
+before invocation; focused name/self-binding and reproducible artifact checks pass after correction.
+This changes no public product code or managed native release and launches no replacement task.
+At 2026-10-14T00:39:04Z normal qualified Profile activity 25 maintenance scanned 1/purged 1/failed 0/
+held 0; its readback confirms the one source purge completed. Account deletion has not started. Hosted CI executed
 no steps because account billing/spending restrictions prevented scheduling.
 
 At 2026-10-13T21:58Z, the three failed export notices were conclusively archived and individually
 acknowledged. A later readback found all thirteen queues empty. The earlier notice backlog is
-resolved. **Account deletion has not started:** the prior candidate memory session has expired,
-and legacy settlement remains pending. Document-inclusive deletion and exact export cleanup still
-require live results.
+resolved. Both scanner stages are applied and actual bindings verified. At 2026-10-14T00:50Z the
+pre-test refresh-backed source `b94e47a2` Terraform plan has zero managed changes. Maintained D3
+ResumeFixture Status passes at 00:55Z: zero queued messages/active compute, healthy alarms and
+matching policy, backup and authorized Auth0 owner bindings. This is read-only runtime verification,
+not document-inclusive rights acceptance. **The rights session expired automatically without
+identity confirmation, Plan, Execute, fixture creation or account deletion.** No listener remained
+on localhost port 3000 at 2026-10-14T01:15Z. No new test export was created. A later rights test needs a fresh
+session and human disposable-account confirmation after runtime reactivation.
 
-**Final AWS shutdown pending:** runtime intake, maintenance and dispatch are paused, but the
-development database, one NAT, one
-EIP and ten paid Interface endpoints remain on. The 21:30 UTC encrypted database safety snapshot
-is available. Final deletion snapshot, retained-work drain, off-state and encrypted current-input
-archive results must be added after verification. The normal AWS profile reports SSO expiry;
-shutdown is mandatory incomplete work until access is renewed and cleanup is verified.
-Docker/WSL were positively off at 2026-10-13T23:07:15Z, preserving images/volumes. The owned
-PostgreSQL fixture is stopped. Automatic approval
+At 2026-10-14T01:04:42Z, before the planned deletion test, complete exact-key inventory found zero
+versions and delete markers for the earlier ordinary UI export; its local plaintext download was
+also absent. This pre-deletion absence does not establish account-deletion cleanup.
+
+**Development shutdown verified at 2026-10-14T02:05:48Z:** project database/NAT/paid Interface
+endpoint/EIP counts are zero, writers/queues are drained, and temporary replay/legacy/inspection
+functions and restore roles are absent. The exact database's encrypted final and safety snapshots
+are available. At 02:05:59Z all 144 current dormant inputs passed encrypted exact-version/checksum
+archive readback. The fresh final refresh-backed dormant plan has zero managed-resource and
+output changes; no apply was performed. Docker/WSL are off, preserving images/volumes; the owned
+PostgreSQL fixture is stopped and the PC stays on.
+During the earlier active test, Gateway resume preparation/new launches were off, the dispatch
+schedule was disabled and its handler flag was plan-enabled; those observations are not the final
+off-state claim. Automatic approval
 rejected optional recursive fixture deletion as “blocked by policy”; it did not execute, was not
 retried through another mechanism, and the stopped fixture files/logs are preserved. Leave the PC
 on. Staging was not changed; its last
@@ -107,13 +123,21 @@ Remaining live result slots:
 
 | Result | Evidence to record when executed |
 |---|---|
-| Managed legacy settlement | Image publication is verified; record actual migration 0018 completion, exact owner transition/replay and preserved missing request digest after development SSO renewal. |
-| Account cleanup | Fresh candidate sign-in, document-inclusive deletion result and exact ordinary/failed-export object-version absence. |
-| Final shutdown | Local Docker/WSL/PostgreSQL off and PC on are verified; record final snapshot, retained-work drain, database/paid-network absence and current-input archive after development SSO renewal. |
+| Account cleanup | Unstarted. After runtime reactivation, obtain fresh candidate sign-in/confirmation, then verify document-inclusive deletion and that new test export's cleanup. Earlier UI-export absence predates deletion. |
 
-Live AI stays off without a qualifying 30-minute all-copy provider retention policy. Authorized
-ATS QA destinations/fixtures, installed-extension acceptance in connected Chrome/Edge and
-accountable candidate/output-quality/accessibility/security/privacy acceptance remain open.
+Remaining work has both prerequisites and agent-owned execution; merged source and local checks
+do not establish complete live behavior or acceptance.
+
+| Prerequisite / owner | Agent-owned work after it is available |
+|---|---|
+| Candidate: fresh MFA and explicit disposable-account confirmation. | Run the D3 document-inclusive rights lifecycle and verify all eight owners, the new export and document cleanup; fix failures. |
+| Test environment/owner: installed, connected Chrome/Edge extension with the exact grants. | Verify manual handoff and observed-form saved-answer selection, correction, withdrawal, reuse and expiry; fix failures. |
+| Provider/account owner: qualifying 30-minute all-copy AI retention policy and capability authority. The owner confirms no such policy exists; live AI stays off. | Complete provider composition/configuration, grounded output evaluation, preview and expiry/cleanup verification. |
+| Accountable owner: authorized Greenhouse QA destination/fixtures and exact-variant policy/QA authority. The bridge remains default off. | Complete live bridge integration, approved attachment/submission and positive confirmation/history verification; fix failures. |
+
+Final candidate/output-quality, accessibility and accountable product/security/privacy/legal
+capability acceptance remain open. The agent supplies current evidence and fixes findings; this
+record does not claim all engineering complete. Lever/Ashby follow the accepted first-Greenhouse scope.
 Hosted Actions did not start because account payment/spending limits prevented scheduling;
 the billing annotation is retained privately. No hosted CI pass is claimed.
 Independent D1/admin acceptance is deferred. Formal database recovery-proof gates remain removed;
@@ -122,6 +146,7 @@ backups, exact targets and completed-deletion safeguards remain. D3 is not accep
 Private aggregate receipts remain in the ignored operator directory: vault/native/download,
 old-resume deletion, safe export failure, rights cleanup, finite metadata, safe diagnostics and
 Profile export-contract verification, notice disposition, retained workflow capacity and legacy
-claim source verification. Managed migration/settlement, account-deletion/exact-export cleanup and
-final-shutdown receipt results are pending and must be recorded separately when executed.
+claim source/managed migration/settlement/maintenance, scanner binding, final plan/Status and
+pre-deletion UI-export absence and final shutdown/archive verification. Account-deletion/new-test-
+export cleanup remain unstarted live work and must be recorded separately when executed.
 No candidate values, tokens, grants or downloaded artifacts are included in this delivery record.
