@@ -59,6 +59,22 @@ describe("restricted-answer export decrypt-only boundary", () => {
     expect(cipher).not.toHaveProperty("encrypt");
   });
 
+  it("omits an empty context exactly as the vault encrypted it, since KMS rejects empty values", async () => {
+    const kms = {
+      send: vi.fn(async () => ({ KeyId: KEY, Plaintext: new TextEncoder().encode("No") })),
+    };
+    const cipher = new KmsRestrictedAnswerExportCipher(KEY, kms);
+    await expect(cipher.decrypt({ ...input, context: "" })).resolves.toBe("No");
+    expect(
+      (kms.send.mock.calls as unknown as Array<[{ input: { EncryptionContext: unknown } }]>)[0]?.[0]
+        .input.EncryptionContext,
+    ).toEqual({
+      purpose: "restricted-answer-vault-v1",
+      userId: input.userId,
+      fieldKey: input.fieldKey,
+    });
+  });
+
   it("refuses a different stored key before KMS I/O", async () => {
     const kms = { send: vi.fn() };
     await expect(
