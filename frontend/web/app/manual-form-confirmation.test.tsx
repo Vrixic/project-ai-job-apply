@@ -2,6 +2,7 @@
 import { webcrypto } from "node:crypto";
 import type { Application } from "@ai-job-apply/api-contracts";
 import { formStructureHash } from "@ai-job-apply/ats-sdk";
+import { CHALLENGE_SUBMISSION_NOTICE } from "@ai-job-apply/ats-sdk/observed-form";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -155,7 +156,7 @@ describe("fresh form confirmation before manual Apply", () => {
     "changed",
     "expired",
     "future",
-    "challenge",
+    "challenge_against_unchallenged_packet",
     "inactive",
   ] as const)("refuses %s captures", async (kind) => {
     if (kind === "application") observed.applicationId = JOB;
@@ -168,12 +169,41 @@ describe("fresh form confirmation before manual Apply", () => {
     }
     if (kind === "expired") observed.capturedAt -= 60_000;
     if (kind === "future") observed.capturedAt += 10_000;
-    if (kind === "challenge") observed.form.challengePresent = true;
+    if (kind === "challenge_against_unchallenged_packet") observed.form.challengePresent = true;
     if (kind === "inactive") job.status = "inactive";
     await paste();
     await click("Check current form");
     expect(container.querySelector('input[type="checkbox"]')).toBeNull();
     expect(changed.mock.calls.every((call) => call[0] === undefined)).toBe(true);
+  });
+  it("confirms a challenge page bound in its packet and tells the candidate to submit themselves", async () => {
+    observed.form.challengePresent = true;
+    await act(async () =>
+      root.render(
+        <ManualFormConfirmation
+          application={
+            {
+              id: APP,
+              canonicalJobId: JOB,
+              revision: 4,
+              currentPacket: {
+                form: {
+                  adapterId: "generic-assisted-v1",
+                  variantId: "generic",
+                  formHash: formStructureHash(observed.form),
+                },
+              },
+            } as Application
+          }
+          fetchImplementation={send as typeof fetch}
+          onChange={changed}
+        />,
+      ),
+    );
+    await paste();
+    await click("Check current form");
+    expect(container.querySelector('input[type="checkbox"]')).not.toBeNull();
+    expect(container.textContent).toContain(CHALLENGE_SUBMISSION_NOTICE);
   });
   it("fences late completion after clear", async () => {
     let release!: (value: Response) => void;
