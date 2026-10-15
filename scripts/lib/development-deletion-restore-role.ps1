@@ -80,10 +80,9 @@ function Get-RestoreRoleBootstrapStatements {
   $role = "arn:aws:iam::${AccountId}:role/ai-job-apply-development-deletion-restore"
   $bucket = 'arn:aws:s3:::ai-job-apply-development-candidate-del-recovery-*'
   return @(
-    @{ Sid='RestoreOnlyListRetainedVersions'; Effect='Allow'; Action=@('s3:ListBucketVersions'); Resource=$bucket
-      Condition=@{ ArnEquals=@{ 'aws:PrincipalArn'=$role }; StringEquals=@{ 's3:prefix'='candidate-deletion-recovery/' } } },
-    @{ Sid='RestoreOnlyReadRetainedVersions'; Effect='Allow'; Action=@('s3:GetObjectVersion','s3:GetObjectRetention'); Resource="$bucket/candidate-deletion-recovery/*"
-      Condition=@{ ArnEquals=@{ 'aws:PrincipalArn'=$role } } }
+    # One combined ceiling statement fits the IAM size limit; the role policy keeps the list prefix.
+    @{ Sid='RestoreOnlyReadRetainedVersions'; Effect='Allow'; Action=@('s3:ListBucketVersions','s3:GetObjectVersion','s3:GetObjectRetention')
+      Resource=@($bucket,"$bucket/candidate-deletion-recovery/*"); Condition=@{ ArnEquals=@{ 'aws:PrincipalArn'=$role } } }
   )
 }
 function Assert-RestoreRoleStatementDelta {

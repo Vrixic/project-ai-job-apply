@@ -231,10 +231,9 @@ function Get-ReplayRoleBoundary([object]$Plan, [string]$AccountId) {
   if ((ConvertTo-DeletionReplayCanonicalJson $policy) -cne (ConvertTo-DeletionReplayCanonicalJson (Read-ReplayPolicy $expectedPolicy.policy))) { throw 'DeletionReplayRolePolicyChanged' }
   $boundary = (Invoke-ReplayAws @('iam','get-policy','--policy-arn',$expected.permissions_boundary)).Policy
   $boundaryPolicy = Read-ReplayPolicy (Invoke-ReplayAws @('iam','get-policy-version','--policy-arn',$expected.permissions_boundary,'--version-id',$boundary.DefaultVersionId)).PolicyVersion.Document
-  foreach ($sid in @('RestoreOnlyListRetainedVersions','RestoreOnlyReadRetainedVersions')) {
-    $statement = @($boundaryPolicy.Statement | Where-Object { $_.Sid -ceq $sid })
-    if ($statement.Count -ne 1 -or $statement[0].Effect -cne 'Allow' -or $statement[0].Condition.ArnEquals.'aws:PrincipalArn' -cne $role.Arn) { throw 'DeletionReplayBoundaryCapabilityMissing' }
-  }
+  $statement = @($boundaryPolicy.Statement | Where-Object { $_.Sid -ceq 'RestoreOnlyReadRetainedVersions' })
+  if ($statement.Count -ne 1 -or $statement[0].Effect -cne 'Allow' -or $statement[0].Condition.ArnEquals.'aws:PrincipalArn' -cne $role.Arn -or
+      @(Compare-Object @($statement[0].Action) @('s3:ListBucketVersions','s3:GetObjectVersion','s3:GetObjectRetention') -CaseSensitive).Count -ne 0) { throw 'DeletionReplayBoundaryCapabilityMissing' }
   $endpointDigests = [ordered]@{}
   foreach ($address in @('module.platform.aws_vpc_endpoint.candidate_documents_s3[0]','module.platform.aws_vpc_endpoint.secretsmanager[0]')) {
     $expectedEndpoint = Get-ReplayPlanResource $Plan $address

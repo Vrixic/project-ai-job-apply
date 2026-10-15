@@ -485,21 +485,21 @@ resource "aws_iam_policy" "workload_boundary" {
       }
       ], var.candidate_deletion_restore_role_enabled ? [
       {
-        Sid      = "RestoreOnlyListRetainedVersions", Effect = "Allow", Action = ["s3:ListBucketVersions"],
-        Resource = local.candidate_deletion_recovery_bucket_arn,
-        Condition = {
-          ArnEquals    = { "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-development-deletion-restore" },
-          StringEquals = { "s3:prefix" = "candidate-deletion-recovery/" }
-        }
-      },
-      {
+        # One statement keeps the complete development boundary within the IAM size limit. The
+        # restore role's own policy still requires the exact `candidate-deletion-recovery/` list prefix.
         Sid       = "RestoreOnlyReadRetainedVersions", Effect = "Allow",
-        Action    = ["s3:GetObjectVersion", "s3:GetObjectRetention"],
-        Resource  = "${local.candidate_deletion_recovery_bucket_arn}/candidate-deletion-recovery/*",
+        Action    = ["s3:ListBucketVersions", "s3:GetObjectVersion", "s3:GetObjectRetention"],
+        Resource  = [local.candidate_deletion_recovery_bucket_arn, "${local.candidate_deletion_recovery_bucket_arn}/candidate-deletion-recovery/*"],
         Condition = { ArnEquals = { "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-development-deletion-restore" } }
       }
     ] : [], local.gateway_packet_boundary_statements, local.gateway_disposal_boundary_statements, local.native_cleanup_boundary_statements)
   })
+  lifecycle {
+    postcondition {
+      condition     = length(self.policy) <= 6144
+      error_message = "Workload boundary exceeds IAM size; review policy composition before applying."
+    }
+  }
 }
 
 resource "aws_iam_policy" "github_deploy_boundary" {
