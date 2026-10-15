@@ -89,6 +89,21 @@ export function extractGenericForm(root: ParentNode = document): ApplicationForm
     }
   }
 
+  /** A legend-less fieldset's own heading label: a direct child naming no control inside it. */
+  function groupHeading(fieldset: HTMLFieldSetElement | null): Element | undefined {
+    if (!fieldset) return undefined;
+    const controlIds = new Set(
+      Array.from(fieldset.querySelectorAll("input, textarea, select"), (element) =>
+        element.getAttribute("id"),
+      ),
+    );
+    return Array.from(fieldset.children).find(
+      (child) =>
+        child.tagName.toLowerCase() === "label" &&
+        !child.querySelector("input, textarea, select") &&
+        !controlIds.has(child.getAttribute("for")),
+    );
+  }
   function isRequired(element: Element): boolean {
     return (
       element.hasAttribute("required") ||
@@ -127,6 +142,7 @@ export function extractGenericForm(root: ParentNode = document): ApplicationForm
         ref: `f${index++}`,
         label:
           clean(structureText(control.closest("fieldset")?.querySelector("legend") ?? undefined)) ||
+          clean(structureText(groupHeading(control.closest("fieldset")))) ||
           optionLabel,
         name,
         type: "radio",
