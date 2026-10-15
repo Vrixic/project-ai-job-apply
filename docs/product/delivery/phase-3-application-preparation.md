@@ -54,6 +54,20 @@ Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 20
 
 ## Task register
 
+D3-138 started 2026-10-14: correct the document-intake mocked runtime test's stale scope set.
+Its existing global `deploy_applications=true` and per-run document intake require the five base
+scopes plus two Applications and two Documents scopes. Exact set equality now includes all nine;
+no production policy changes. The isolated actual run fails before and passes after (0/1 then
+1/0), with the original mock providers/global variables and scoped Terraform formatting passing.
+Only that run executes, with no AWS access, runtime startup or full-suite claim.
+
+D3-137 started 2026-10-14: refresh the [engineering approval packet](../../security/d3-application-approval-packet.md)
+against merged source `7fa98b29` and the dated October 13/14 evidence. Replace stale native
+sign-in/download and rights statements, preserve the FAILED/open canonical acceptance result,
+and distinguish prerequisite-blocked agent execution from human authority/acceptance. Review
+dispositions, activation gates and all five exit checkboxes remain unchanged. Documentation-only
+verification and independent review are recorded with this batch; no runtime is started.
+
 D3-135 started 2026-10-14: [PR #682](https://github.com/Vrixic/project-ai-job-apply/pull/682)
 separates original verified ID-token expiry from current access admission and caps confirmation
 at the original ID expiry/MFA 900-second lease. Refresh renews neither proof nor MFA authority.
@@ -596,3 +610,15 @@ a fresh zero-change plan with all 177 checks passing. Owned local runtimes are o
 stays on. Live AI, authorized ATS QA, installed-extension and accountable acceptance remain open;
 independent D1/admin acceptance stays deferred.
 [Evidence](evidence/d3-rights-readiness-2026-10-14.md).
+
+2026-10-14: D3-137 refreshes the engineering review packet with the verified native journey and
+recovered deletion, preserving the missing full rights/expiry receipt and external gates. The
+ownership table identifies agent test/fix work awaiting account, installed-browser, AI-policy or
+authorized ATS inputs separately from accountable decisions. D3 remains In progress; independent
+D1/admin acceptance stays deferred. No product behavior or runtime configuration changes.
+
+2026-10-14: D3-138 closes the documented document-intake test expectation mismatch with an exact
+nine-scope assertion and focused mocked red/green evidence. D3-137 also corrects the Greenhouse
+worker README's stale implementation description. Production generation-quiescence composition
+remains unfinished agent engineering; positive writer/provider proof and reviewed runtime/IAM
+are required before activation. These offline corrections supply no additional live acceptance.

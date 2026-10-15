@@ -1018,7 +1018,7 @@ run "document_intake_is_private_encrypted_and_malware_scanned" {
       aws_guardduty_malware_protection_plan.candidate_documents[0].protected_resource[0].s3_bucket[0].object_prefixes == toset(["quarantine/"]) &&
       aws_guardduty_malware_protection_plan.candidate_documents[0].actions[0].tagging[0].status == "ENABLED" &&
       toset(aws_apigatewayv2_route.gateway[0].authorization_scopes) == toset([
-        "documents:read", "documents:write", "jobs:moderate", "jobs:read", "jobs:write", "profile:read", "profile:write"
+        "documents:read", "documents:write", "jobs:moderate", "jobs:read", "jobs:write", "profile:read", "profile:write", "applications:read", "applications:write"
       ]) &&
       contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "DOCUMENT_UPLOAD_BUCKET") &&
       contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "DOCUMENT_UPLOAD_KMS_KEY_ARN")

@@ -6,7 +6,8 @@
 - Task: D3-012. Release gates: LR-D3-01 (application preparation) and LR-D3-02 (application
   submission) in the [legal review register](../product/foundation/legal-review-register.md).
 - Prepared: 2026-09-18. Owner positions recorded 2026-09-19. Engineering inventory refreshed
-  2026-10-10 against merged source `8e663f9f` and the linked delivery evidence.
+  2026-10-14 against merged repository source `7fa98b29` and the dated release evidence below.
+  Repository, candidate-host and managed-runtime sources are distinct; this refresh grants no activation.
 - Live ATS effects, automated form actions, and any real AI provider stay disabled until every
   disposition here is recorded. Foundational counsel review is separately deferred to D6-016
   ([ADR-019](../adr/019-defer-foundational-counsel-review-to-public-launch.md)).
@@ -36,12 +37,17 @@ They are not a legal, security, or privacy disposition, and every reviewer recor
 | 5 | The record must show who submitted: when the platform's adapter did not submit, the candidate did. | Attempts already carry the adapter and version, and history separates adapter attempts from candidate takeover and candidate attestation (`taken_over`, `user_attested_submitted`). Whether an explicit submitter field is needed is an engineering follow-up under D3-008; reviewers assess the evidence kinds. |
 | 6 | The engineering defaults below are accepted. | Product owner acknowledgement recorded; reviewers may still add conditions. |
 
-## Current engineering inventory (2026-10-10)
+## Current engineering inventory (2026-10-14)
 
 Local tests use synthetic candidates and simulated external transports unless the linked evidence
 explicitly records managed or human acceptance. Historical SQL/managed evidence is dated; it is
-not a fresh live run of the current connected journey. Current verification and runtime shutdown:
-[October 9 evidence](../product/delivery/evidence/d3-connected-candidate-journey-2026-10-09.md).
+not a fresh live run of the current connected journey. The
+[October 13 checkpoint](../product/delivery/evidence/d3-vault-native-rights-verification-2026-10-13.md)
+records candidate source `55f8b7bc`, Gateway 114 and native artifact `e72f5535`: synthetic search,
+preparation, separate in-memory sign-in, exact preview/review, approval and PDF/DOCX downloads pass.
+The [October 14 rights evidence](../product/delivery/evidence/d3-rights-readiness-2026-10-14.md)
+records Gateway 117/source `a45c456c`, Profile activity 25/source `cc464385`, recovered deletion and
+verified shutdown. Neither checkpoint establishes live AI, installed-extension or ATS acceptance.
 
 | Control | Where | Evidence |
 |---|---|---|
@@ -55,8 +61,8 @@ not a fresh live run of the current connected journey. Current verification and 
 | Assisted-manual fallback: no page action, no automated submission | ATS SDK | Tests |
 | Review resets for each packet; restricted booleans preserve explicit false; exact generated preview plus fresh acknowledgement required; explicit cover-letter opt-in, stable admission retries, bounded status checks and cancellation | [Web](../../frontend/web/README.md) | D3-080/081 regressions and actual Chromium synthetic keyboard/axe journey; cover-letter UI flag remains off |
 | Privacy-safe versioned measurement | Applications metrics | Tests proving no value or identifier is emitted |
-| Job-specific resume deterministically reorders/trims the candidate's own bullets, with hash binding and PDF/DOCX rendering; generated content belongs in the original memory-only native process | Accepted [ADR-031](../adr/031-deterministic-resume-tailoring-in-documents-runtime.md), [ADR-038](../adr/038-one-off-generated-application-materials.md), Documents/native runtime | Local rendering/process/transport evidence; direct browser-native generation/preview/download acceptance remains |
-| Manual Apply opens the canonical employer page, exposes approved answers and starts a candidate-owned `taken_over` attempt; reconciliation distinguishes candidate attestation from provider confirmation and refreshes terminal history | Web and Applications | Existing development manual acceptance is preserved; October 9 connected browser checks use synthetic BFF/native responses and make no external submission |
+| Job-specific resume deterministically reorders/trims the candidate's own bullets, with hash binding and PDF/DOCX rendering; generated content belongs in the original memory-only native process | Accepted [ADR-031](../adr/031-deterministic-resume-tailoring-in-documents-runtime.md), [ADR-038](../adr/038-one-off-generated-application-materials.md), Documents/native runtime | October 13 managed synthetic generation/preview/approval/direct downloads and PDF appearance inspection pass; accountable output quality and all-copy expiry acceptance remain |
+| Manual Apply opens the canonical employer page, exposes approved answers and starts a candidate-owned `taken_over` attempt; reconciliation distinguishes candidate attestation from provider confirmation and refreshes terminal history | Web and Applications | October 13 managed synthetic manual Apply truthfully records `NOT_SUBMITTED`; Applied history has no confirmed applications. No employer submission occurred; positive confirmation/history remains unverified |
 | Automatic proposals only from exactly one confirmed, type-fitting fact; restricted answers never inferred | Applications packet source | Fact-source regressions; selected saved answers use the separate explicit-selection path |
 | Separate encrypted answer vault, metadata-only public listing and exact-version private reads; correction/deletion/quarantine/expiry checks and metadata locks at admission | [Profile vault](../../backend/services/profile/src/restricted-answer-vault.ts), [saved-answer packet binding](../product/delivery/evidence/d3-vault-packet-binding-2026-10-04.md) | Local source/SQL/restore evidence; no public plaintext read; D3-087 observed-form selection/review and fresh manual-form confirmation pass local SQL/browser checks; live connected reuse remains unfinished |
 | Identifier-only preparation workflow/starter/recovery plus native activity; generated bodies excluded from durable state, packets, queues and ordinary Gateway content routes | [Workflows](../../backend/workflows/README.md), [native preparation evidence](../product/delivery/evidence/d3-native-application-preparation-release-2026-10-07.md) | Local isolation/replay tests and dormant managed resource evidence; complete activation/drain/cleanup acceptance remains |
@@ -77,20 +83,49 @@ not a fresh live run of the current connected journey. Current verification and 
 - Saved-answer storage/backend reuse and D3-087 observed-form selection/review source exist;
   compatible current release and live correction/expiry/reuse acceptance remain. Do not infer context
   or question hashes from a job description or silently select the newest answer version.
-- The owner selected separate in-memory Auth0 popup PKCE ([ADR-044](../adr/044-browser-native-material-identity.md)). Default-off browser-native resume/cover-letter previews and approved downloads have local source and synthetic Chromium evidence. The separate SPA registration is configured and its saved grant/origin settings were inspected. Live sign-in, native HTTPS/CORS and exact-owner acceptance remain unverified. No confidential web token is returned and generated content does not cross the BFF.
+- The owner selected separate in-memory Auth0 popup PKCE ([ADR-044](../adr/044-browser-native-material-identity.md)). The October 13 managed synthetic journey verifies separate sign-in, native preview, review, approval and direct PDF/DOCX downloads on its recorded sources. Live cover-letter/provider acceptance and the full installed-browser journey remain open. No confidential web token is returned and generated content does not cross the BFF.
 - D3-086 manual extension handoff and D3-087 explicit question capture are locally verified and
   default off. D3-101 implements the bounded automated execution path; provider fidelity,
   installed-extension operation and live submission acceptance remain unverified.
-- Candidate export/deletion/restore and native withdrawal have local and partial managed evidence.
-  Current primary completed-deletion replay passes with two already-reconciled subjects and no new
-  deletion or external writes. Current-release rights/native-withdrawal acceptance, original-writer
-  drain and material disposal remain. Formal database recovery-proof gates were removed by the owner;
-  encrypted backups and basic data-loss/deletion safeguards remain. Use the [current phase register](../product/delivery/phase-3-application-preparation.md)
-  and [managed release record](../product/delivery/evidence/d3-native-application-disposal-2026-10-07.md)
-  for exact dated scope; test infrastructure is dormant, not a live accepted release.
+- Candidate export and vault CRUD have October 13 managed synthetic evidence. On October 14, one
+  reviewed continuation recovered the original confirmed deletion: all eight owners complete,
+  saved document/export versions absent, the original completed marker/retention preserved, and
+  three failure notices archived and individually acknowledged. The original canonical 17-step
+  run remains FAILED without a success receipt; full export/grant-expiry and rights acceptance
+  remain open. No Execute retry or new deletion request is authorized by that recovery. Original-writer
+  drain, all-copy material disposal and the live ambiguous-cancellation UI retest remain separate.
+  Formal database recovery-proof gates were removed by the owner; encrypted backups, exact targets
+  and completed-deletion safeguards remain. The October 14 evidence records dormant development,
+  credential rotation and preserved encrypted historical copies; it does not establish a future
+  restore or historical-copy erasure. Use the [current phase register](../product/delivery/phase-3-application-preparation.md)
+  for exact dated scope and remaining gates.
+- Generated-content account cleanup still lacks a production quiescence proof implementation.
+  The [private proof contract](../../backend/workflows/src/candidate-rights-aws.ts) requires positive
+  evidence bound to every original writer/provider execution; the
+  [production composition](../../backend/workflows/src/profile-readiness-lambda.ts) supplies no such
+  port and generation cleanup fails closed. This is unfinished engineering, separate from the
+  recovered ordinary-resume deletion. Implementing owner fences/drain and reviewed runtime/IAM
+  composition remains agent work; elapsed time, local cancellation or a test-only true port is no proof.
 - Accessibility was checked by automated jsdom axe rules and a real-Chromium keyboard run of the real
   components against a mocked API, including the manual attempt and candidate attestation transition
   (no assistive technology or live end-to-end run).
+
+## Remaining work and its owners
+
+| Work | Agent execution | Required external input or human decision |
+|---|---|---|
+| Engineering review packet | Refresh source/evidence inventory and prepare review materials; this refresh completes that documentation work | Accountable reviewers decide the dispositions; an engineering refresh supplies no approval |
+| Full rights/expiry acceptance | Prepare fresh runtime/plans, run the maintained tests, fix demonstrated failures, collect receipts and shut down | A new disposable synthetic account, fresh candidate MFA and explicit exact-account deletion confirmation; never reuse the recovered request's confirmation |
+| Live vault/reuse and cancellation retests | Exercise the current managed routes and UI, fix demonstrated failures and record bounded results | A controlled synthetic account and fresh authentication; deletion confirmation applies only if that account enters the rights deletion test |
+| Installed-extension handoff, answer correction/withdrawal/reuse/expiry | Exercise the installed extension and fix demonstrated failures | Connected Chrome/Edge with the exact installed extension and grants; an in-app browser does not supply this evidence |
+| Live AI/cover-letter integration and cleanup | Configure the approved provider, test grounded output, recovery and every platform/provider copy's expiry | Qualifying provider/account terms and accountable processing/disclosure authority under ADR-038; live AI remains off |
+| Production generation-cleanup quiescence | Implement and test the original-writer fence/drain proof and compose its private runtime/IAM boundary | Positive evidence from the reviewed writer/provider controls before live activation; the missing port continues to deny cleanup |
+| Greenhouse integration and confirmed submission/history | Integrate accepted variants and test attachment/fill, one-shot submission, confirmation, duplicates, ambiguity and takeover | Authorized QA destinations, accepted provider-derived fixtures and exact-variant capability authority; capture/sanitization/representativeness decisions follow D3-013 |
+| Quality, accessibility and capability acceptance | Supply automated checks, scoped fixes and evidence for the actual connected journey | Accountable product/output-quality, accessibility and legal/security/privacy review; simulated checks cannot substitute for those decisions |
+
+No additional standalone extension/ATS implementation gap is established by the current evidence.
+Prerequisite-blocked test execution remains agent work after access and authority exist. Independent
+D1/admin acceptance stays deferred. No paid runtime should be started merely to wait for these inputs.
 
 ## Owner-accepted defaults and current material policy
 
@@ -133,9 +168,9 @@ trigger, and the product owner's acknowledgement of conditions, as required by t
 
 ## Engineering delta: owner material withdrawal (2026-10-08)
 
-This dated delta records the withdrawal implementation; the engineering inventory above was
-refreshed on October 9. [The D3 phase record](../product/delivery/phase-3-application-preparation.md)
-owns current implementation/release/acceptance state. This is not an accountable approval.
+This dated delta records the withdrawal implementation; use the current engineering inventory above
+and [the D3 phase record](../product/delivery/phase-3-application-preparation.md) for later verification.
+The phase record owns current implementation/release/acceptance state. This is not an accountable approval.
 
 The new `PUT /v1/material-withdrawals/{requestId}` derives the candidate from authenticated
 `applications:write` context; `GET` requires `applications:read`. The UUIDv7 path is the replay key.

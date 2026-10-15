@@ -42,6 +42,14 @@ authorized Greenhouse QA and accountable acceptance gates. Live AI and employer 
 off; independent D1/admin acceptance stays deferred.
 [Evidence](evidence/d3-rights-readiness-2026-10-14.md).
 
+D3-137 refreshes the [engineering approval packet](../../security/d3-application-approval-packet.md)
+against the dated native and rights evidence. Remaining tests/fixes are agent work after their
+access/authority prerequisites; accountable approvals remain human decisions. This documentation
+refresh changes no disposition, activation gate or exit criterion; D3 stays In progress.
+D3-138 repairs the known document-intake mock's stale scope expectation; the isolated actual
+run fails before and passes after, with scoped formatting passing and no production-policy change.
+Production generation-quiescence proof remains unfinished engineering and continues to fail closed.
+
 Historical 2026-10-13 checkpoint:
 
 D3-126–132 are merged. Hosted synthetic vault deletion/reload and the current native preparation,
