@@ -72,8 +72,29 @@ run "restore_reads_only_exact_development_role" {
     error_message = "No existing role may inherit the new retained-version reads."
   }
   assert {
-    condition     = one([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement if statement.Sid == "RestoreOnlyReadRetainedVersions"]).Action == ["s3:GetObjectVersion", "s3:GetObjectRetention"]
+    condition     = one([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement if statement.Sid == "RestoreOnlyReadRetainedVersions"]).Action == ["s3:ListBucketVersions", "s3:GetObjectVersion", "s3:GetObjectRetention"]
     error_message = "Restore boundary additions must never include a mutation or wildcard action."
+  }
+  assert {
+    condition     = length([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement if startswith(statement.Sid, "RestoreOnly")]) == 1 && one([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement if statement.Sid == "RestoreOnlyReadRetainedVersions"]).Resource == ["arn:aws:s3:::ai-job-apply-development-candidate-del-recovery-*", "arn:aws:s3:::ai-job-apply-development-candidate-del-recovery-*/candidate-deletion-recovery/*"]
+    error_message = "Restore reads must stay limited to the retained recovery bucket and its marker prefix."
+  }
+}
+
+run "restore_reads_fit_complete_development_boundary" {
+  command = plan
+  variables {
+    environment                             = "development"
+    github_environment                      = "development"
+    state_bucket_name                       = "ai-job-apply-development-terraform-state-111122223333"
+    candidate_deletion_restore_role_enabled = true
+    gateway_packet_fingerprint_key_arn      = "arn:aws:kms:us-east-2:111122223333:key/32345678-1234-4234-8234-123456789012"
+    gateway_native_disposal_clusters        = ["arn:aws:ecs:us-east-2:111122223333:cluster/ai-job-apply-development"]
+    native_cleanup_clusters                 = ["arn:aws:ecs:us-east-2:111122223333:cluster/ai-job-apply-development"]
+  }
+  assert {
+    condition     = length(aws_iam_policy.workload_boundary.policy) <= 6144
+    error_message = "The complete development boundary with restore reads must fit the IAM managed-policy size limit."
   }
 }
 

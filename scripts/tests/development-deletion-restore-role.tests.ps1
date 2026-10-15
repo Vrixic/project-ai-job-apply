@@ -94,7 +94,7 @@ foreach($field in @('complete','errored')){
   $p=Clone $fixture.Plan;$p.PSObject.Properties.Remove($field)
   Reject {Assert-RestoreRolePlanEnvelope $p} 'explicit current plan completeness metadata required'
 }
-foreach($index in 0..1){
+foreach($index in 0..0){
   foreach($mutate in @(
     {$s.Action=@('s3:*')},{$s.Resource='*'},{$s.Effect='Deny'},
     {$s.Condition.ArnEquals.'aws:PrincipalArn'='*'},{$s.Sid='Other'},
