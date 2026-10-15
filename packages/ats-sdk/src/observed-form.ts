@@ -25,6 +25,37 @@ export function questionStructureDigestInput(field: FormField): string {
   return formStructureDigestInput({ fields: [field], challengePresent: false });
 }
 
+/** Provider application subpages of one exact posting (ADR-045 amendment, 2026-10-15). */
+const APPLICATION_SUBPAGES: Readonly<Record<string, string>> = {
+  "jobs.ashbyhq.com": "/application",
+  "jobs.lever.co": "/apply",
+};
+
+/**
+ * Returns the employer page bound to a canonical job source, or undefined. The page must be the
+ * exact source URL, or that same posting's provider application subpage on the same origin. A
+ * subpage is returned without its query string (provider tracking), so no query is recorded.
+ */
+export function employerPageForSource(sourceUrl: string, pageUrl: string): string | undefined {
+  let source: URL;
+  let page: URL;
+  try {
+    source = new URL(sourceUrl);
+    page = new URL(pageUrl);
+  } catch {
+    return undefined;
+  }
+  for (const url of [source, page])
+    if (url.protocol !== "https:" || url.username || url.password || url.hash) return undefined;
+  if (page.href === source.href) return source.href;
+  const suffix = APPLICATION_SUBPAGES[source.hostname];
+  if (!suffix || source.search || page.origin !== source.origin) return undefined;
+  const posting = source.pathname.replace(/\/$/u, "");
+  return posting && page.pathname === `${posting}${suffix}`
+    ? `${page.origin}${page.pathname}`
+    : undefined;
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 function object(value: unknown, keys: string[]): value is Record<string, unknown> {
   return Boolean(

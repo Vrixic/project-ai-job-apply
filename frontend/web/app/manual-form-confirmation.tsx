@@ -5,6 +5,7 @@ import type {
   StartManualApplicationSubmissionRequest,
 } from "@ai-job-apply/api-contracts";
 import {
+  employerPageForSource,
   formStructureDigestInput,
   parseObservedApplicationForm,
 } from "@ai-job-apply/ats-sdk/observed-form";
@@ -119,7 +120,11 @@ export function ManualFormConfirmation({
             job.id !== captured.jobId ||
             Date.parse(job.expiresAt) <= Date.now() ||
             (job.validThrough && Date.parse(job.validThrough) <= Date.now()) ||
-            !job.sources.some((source) => source.canonicalUrl === captured.destination) ||
+            !job.sources.some(
+              (source) =>
+                employerPageForSource(source.canonicalUrl, captured.destination) ===
+                captured.destination,
+            ) ||
             hash !== binding.formHash ||
             !parseObservedApplicationForm(JSON.stringify(captured), Date.now())
           )

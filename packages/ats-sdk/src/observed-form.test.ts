@@ -3,7 +3,11 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { extractGenericForm } from "./extract.js";
 import { formStructureHash } from "./form-model.js";
-import { formStructureDigestInput, parseObservedApplicationForm } from "./observed-form.js";
+import {
+  employerPageForSource,
+  formStructureDigestInput,
+  parseObservedApplicationForm,
+} from "./observed-form.js";
 
 const now = 1_800_000_000_000;
 function fixture() {
@@ -120,5 +124,50 @@ describe("bounded observed structure", () => {
     expect(JSON.stringify(form)).not.toContain("PRIVATE_VALUE");
     expect(JSON.stringify(form)).not.toContain("PRIVATE_PASSWORD");
     expect(form.fields.at(-1)?.label).not.toContain("PRIVATE_OPTION_IN_LABEL");
+  });
+});
+
+describe("employerPageForSource", () => {
+  const ashby = "https://jobs.ashbyhq.com/Mintlify/ec55d98f-6e94-4ffb-9a55-4adad39297c3";
+  it("binds the exact source page unchanged", () => {
+    expect(employerPageForSource(ashby, ashby)).toBe(ashby);
+    expect(
+      employerPageForSource(
+        "https://boards.greenhouse.io/x/jobs/1",
+        "https://boards.greenhouse.io/x/jobs/1",
+      ),
+    ).toBe("https://boards.greenhouse.io/x/jobs/1");
+  });
+  it("binds the same posting's Ashby and Lever application subpage without its query", () => {
+    expect(employerPageForSource(ashby, `${ashby}/application?jr_id=tracking`)).toBe(
+      `${ashby}/application`,
+    );
+    expect(
+      employerPageForSource(
+        "https://jobs.lever.co/acme/123",
+        "https://jobs.lever.co/acme/123/apply",
+      ),
+    ).toBe("https://jobs.lever.co/acme/123/apply");
+  });
+  it("refuses other postings, providers, origins, schemes, fragments and credentials", () => {
+    for (const page of [
+      "https://jobs.ashbyhq.com/Mintlify/00000000-0000-0000-0000-000000000000/application",
+      `${ashby}/applications`,
+      `${ashby}/application/extra`,
+      `${ashby}/apply`,
+      `https://evil.example/Mintlify/ec55d98f-6e94-4ffb-9a55-4adad39297c3/application`,
+      `http://jobs.ashbyhq.com/Mintlify/ec55d98f-6e94-4ffb-9a55-4adad39297c3/application`,
+      `${ashby}/application#x`,
+      `https://user@jobs.ashbyhq.com/Mintlify/ec55d98f-6e94-4ffb-9a55-4adad39297c3/application`,
+      "not a url",
+    ])
+      expect(employerPageForSource(ashby, page)).toBeUndefined();
+    expect(
+      employerPageForSource(
+        "https://boards.greenhouse.io/x/jobs/1",
+        "https://boards.greenhouse.io/x/jobs/1/application",
+      ),
+    ).toBeUndefined();
+    expect(employerPageForSource(`${ashby}?src=a`, `${ashby}/application`)).toBeUndefined();
   });
 });

@@ -43,3 +43,15 @@ exercise production handoff code and real clipboard behavior under restrictive s
 do not accept installed Chrome/Edge identity, live native expiry, provider forms or submission.
 Saved-answer selection UI and the first provider adapter remain separate unfinished D3 work.
 Accountable privacy/security/product release gates and independent D1 deferral remain unchanged.
+
+## Amendment: provider application subpages (2026-10-15)
+
+Owner-approved after the installed-extension test. Ashby and Lever host the application form on a
+subpage of the posting (`<posting>/application`, `<posting>/apply`), usually with a tracking query,
+so the exact source-URL rule refused every handoff and question capture for those providers.
+The bound employer page is now the exact HTTPS source URL, or that same posting's provider
+application subpage on the same origin (Ashby `jobs.ashbyhq.com` and global Lever `jobs.lever.co`
+only). A subpage is recorded without its query; fragments, credentials, other paths, postings,
+providers and origins still refuse. One shared `employerPageForSource` check in
+`@ai-job-apply/ats-sdk/observed-form` serves the extension and web. The Greenhouse execution
+path keeps its exact-URL binding.

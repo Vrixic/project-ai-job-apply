@@ -147,6 +147,21 @@ describe("manual handoff background trust boundary", () => {
     ).toHaveLength(3);
     expect(worker.local.size + worker.session.size).toBe(0);
   });
+  it("captures from the same posting's Ashby application subpage and records it without the query", async () => {
+    const worker = await background();
+    const posting = "https://jobs.ashbyhq.com/Synthetic/00000000-0000-4000-8000-000000000009";
+    worker.fixture.job.sources[0].canonicalUrl = posting;
+    worker.browser.tabs.query.mockResolvedValue([
+      { id: 7, url: `${posting}/application?jr_id=synthetic` },
+    ]);
+    worker.browser.tabs.get.mockResolvedValue({
+      id: 7,
+      url: `${posting}/application?jr_id=synthetic`,
+    });
+    const result = await worker.send({ action: "application_form_capture", reviewLink: LINK });
+    expect(result.ok).toBe(true);
+    expect(JSON.parse(result.observedForm ?? "{}").destination).toBe(`${posting}/application`);
+  });
   it.each(["disabled", "destination", "owner", "challenge", "values", "active_attempt"])(
     "refuses %s form capture",
     async (kind) => {
