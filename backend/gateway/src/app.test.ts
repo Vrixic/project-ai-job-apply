@@ -2063,6 +2063,8 @@ describe("candidate API", () => {
     });
 
     expect(accepted.statusCode).toBe(200);
+    // The installed extension's strict reader requires this exact policy on authenticated reads.
+    expect(accepted.headers["cache-control"]).toBe("no-store");
     expect(accepted.json()).toMatchObject({
       id: catalog.job.id,
       status: "active",
