@@ -48,7 +48,8 @@ export class KmsRestrictedAnswerExportCipher implements Pick<RestrictedAnswerCip
             purpose: "restricted-answer-vault-v1",
             userId: input.userId,
             fieldKey: input.fieldKey,
-            context: input.context,
+            // Matches the vault writer: KMS rejects empty values, so no context omits the pair.
+            ...(input.context ? { context: input.context } : {}),
           },
         }),
       );

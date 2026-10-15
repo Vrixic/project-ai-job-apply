@@ -19,11 +19,13 @@ function encryptionContext(input: {
   fieldKey: string;
   context: string;
 }): Record<string, string> {
+  // KMS rejects an empty context value, so an answer saved without a context omits that pair.
+  // Supplied contexts are nonempty validated keys, so the two forms cannot collide.
   return {
     purpose: "restricted-answer-vault-v1",
     userId: input.userId,
     fieldKey: input.fieldKey,
-    context: input.context,
+    ...(input.context ? { context: input.context } : {}),
   };
 }
 
