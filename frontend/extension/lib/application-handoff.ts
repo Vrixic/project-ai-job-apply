@@ -5,6 +5,7 @@ import {
   validateCanonicalJobDetail,
 } from "@ai-job-apply/api-contracts/browser-validators";
 import { activeJobRevisionDigestInput } from "@ai-job-apply/api-contracts/job-revision-canonical";
+import { employerPageForSource } from "@ai-job-apply/ats-sdk/observed-form";
 import { safeApiOrigin } from "./config";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -260,7 +261,7 @@ export async function readApprovedHandoff(
     job.id !== link.jobId ||
     Date.parse(job.expiresAt) <= Date.now() ||
     (job.validThrough && Date.parse(job.validThrough) <= Date.now()) ||
-    !job.sources.some((source) => plainHttpsUrl(source.canonicalUrl) === plainHttpsUrl(tabUrl))
+    !job.sources.some((source) => employerPageForSource(source.canonicalUrl, tabUrl))
   )
     throw new Error(HANDOFF_FAILURE);
   const digest = await crypto.subtle.digest(

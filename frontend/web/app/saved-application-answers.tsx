@@ -7,6 +7,7 @@ import type {
 } from "@ai-job-apply/api-contracts";
 import { mapFormFields } from "@ai-job-apply/ats-sdk/mapping";
 import {
+  employerPageForSource,
   formStructureDigestInput,
   type ObservedApplicationForm,
   parseObservedApplicationForm,
@@ -145,7 +146,11 @@ export function SavedApplicationAnswers({
         job.id !== structure.jobId ||
         Date.parse(job.expiresAt) <= Date.now() ||
         (job.validThrough && Date.parse(job.validThrough) <= Date.now()) ||
-        !job.sources.some((source) => source.canonicalUrl === structure.destination) ||
+        !job.sources.some(
+          (source) =>
+            employerPageForSource(source.canonicalUrl, structure.destination) ===
+            structure.destination,
+        ) ||
         !parseObservedApplicationForm(JSON.stringify(structure), Date.now())
       )
         throw new Error();

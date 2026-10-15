@@ -4,7 +4,10 @@ import {
   validateCanonicalJobDetail,
 } from "@ai-job-apply/api-contracts/browser-validators";
 import { extractGenericForm } from "@ai-job-apply/ats-sdk/extract";
-import { parseObservedApplicationForm } from "@ai-job-apply/ats-sdk/observed-form";
+import {
+  employerPageForSource,
+  parseObservedApplicationForm,
+} from "@ai-job-apply/ats-sdk/observed-form";
 import { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 import { safeActionErrorMessage } from "../lib/action-error";
 import {
@@ -111,8 +114,8 @@ async function captureApplicationForm(reviewLink: string, generation: number) {
   try {
     assertIdentityGeneration(generation);
     const tab = await activeBrowserTab();
-    const destination = tab?.url && plainHttpsUrl(tab.url);
-    if (tab?.id === undefined || !destination) throw new Error(HANDOFF_FAILURE);
+    const tabUrl = tab?.url && plainHttpsUrl(tab.url);
+    if (tab?.id === undefined || !tabUrl) throw new Error(HANDOFF_FAILURE);
     const session = await authenticatedApiSession();
     const readApplication = () =>
       readJson(
@@ -141,9 +144,12 @@ async function captureApplicationForm(reviewLink: string, generation: number) {
       job.id !== link.jobId ||
       Date.parse(job.expiresAt) <= Date.now() ||
       (job.validThrough && Date.parse(job.validThrough) <= Date.now()) ||
-      !job.sources.some((source) => plainHttpsUrl(source.canonicalUrl) === destination)
+      !job.sources.some((source) => employerPageForSource(source.canonicalUrl, tabUrl))
     )
       throw new Error(HANDOFF_FAILURE);
+    const destination = job.sources
+      .map((source) => employerPageForSource(source.canonicalUrl, tabUrl))
+      .find(Boolean);
     const capturedAt = Date.now();
     const executions = await Promise.race([
       chrome.scripting.executeScript({ func: extractGenericForm, target: { tabId: tab.id } }),
