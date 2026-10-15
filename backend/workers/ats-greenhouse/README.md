@@ -13,11 +13,15 @@ Implements and tests Greenhouse-specific job/form detection, inspection, field m
 
 Public Job Board API ingestion is separate from application execution; direct API submission requires employer authorization.
 
-The current application implementation is being built in the owning active-tab client under
-`frontend/extension/lib/greenhouse/`; no separate worker deployment is needed for that path.
-Bounded structural inspection and ordinary field execution reuse the SDK and remain unreachable
-from the extension UI while the complete approval/file/submission bridge is unfinished. No file
-upload, submit click or provider confirmation is implemented by those primitives. The action
-registry remains default off with no accepted application variants. Proposed ADR-049 records the
-remaining identity, transport, one-shot dispatch and acceptance requirements; synthetic tests do
+The current application implementation lives in the owning active-tab client under
+[frontend/extension/lib/greenhouse/](../../../frontend/extension/lib/greenhouse/); no separate worker
+deployment is needed for that path. The connected source implements approved native file transfer,
+registry-gated field/file execution, one-shot submission and attempt-bound confirmation/result/history
+integration. Its locally verified synthetic scope is recorded in the
+[D3-101 bridge evidence](../../../docs/product/delivery/evidence/d3-greenhouse-bridge-implementation-2026-10-10.md).
+
+Production profiles remain empty and the registry stays default off with no accepted application
+variants. The connected installed-extension/native/provider journey, live delegated grants,
+authorized provider fixtures, exact-variant QA/live-effect approval and real submission/confirmed
+history acceptance remain unverified. Proposed ADR-049 records the boundaries; synthetic tests do
 not establish provider fidelity or authorize employer effects.
