@@ -2354,6 +2354,7 @@ class CandidateController {
   }
 
   @Get("/jobs/:jobId")
+  @Header("cache-control", "no-store")
   async getCanonicalJob(
     @Req() request: AuthenticatedRequest,
     @Param("jobId") jobId: string,
