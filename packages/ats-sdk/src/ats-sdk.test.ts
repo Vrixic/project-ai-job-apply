@@ -55,6 +55,23 @@ describe("generic form extraction", () => {
     expect(form.challengePresent).toBe(false);
   });
 
+  it("labels a legend-less radio group from its fieldset heading label", () => {
+    // Synthetic markup shaped like a provider group whose question is a heading label, not a legend.
+    const grouped = extractGenericForm(
+      page(`<fieldset><label for="q-1">Will you now or in the future require visa sponsorship?</label>
+        <div><input type="radio" id="o1_q-1" name="q-1"><label for="o1_q-1">No</label></div>
+        <div><input type="radio" id="o2_q-1" name="q-1"><label for="o2_q-1">Yes</label></div>
+      </fieldset>`),
+    );
+    expect(grouped.fields).toEqual([
+      expect.objectContaining({
+        label: "Will you now or in the future require visa sponsorship?",
+        type: "radio",
+        options: ["No", "Yes"],
+      }),
+    ]);
+  });
+
   it("detects a CAPTCHA challenge without interacting with it", () => {
     for (const html of [
       '<div class="g-recaptcha" data-sitekey="k"></div>',
