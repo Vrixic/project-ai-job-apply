@@ -56,3 +56,15 @@ ADR-045's unpacked-only default-off handoff configuration. Backend reuse remains
 separately authorized/configured. Installed browser, live identity/owner checks and accountable
 legal/privacy/security acceptance remain required before activation. No provider fixture or
 adapter acceptance is claimed. Independent D1 acceptance remains deferred.
+
+## Amendment: challenge pages (2026-10-15)
+
+Owner direction after the installed-extension test: applications are prepared and filled even
+when the employer page presents a challenge, and the candidate is told to complete the challenge
+and submit themselves. Ashby loads reCAPTCHA on every application page, so the earlier refusal
+blocked saved-answer selection and form-confirmed manual Apply for all current catalog jobs.
+Read-only question capture now records `challengePresent` instead of refusing it. The web shows
+`CHALLENGE_SUBMISSION_NOTICE` whenever a captured page carries a challenge. The flag remains part
+of the form-structure hash, so a packet bound on a challenged page is confirmed only against a
+matching capture. Nothing solves, bypasses or interacts with a challenge. Filling despite a
+challenge in the automated planner and Greenhouse path is tracked as separate follow-up work.

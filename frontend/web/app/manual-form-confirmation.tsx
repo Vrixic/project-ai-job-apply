@@ -5,6 +5,7 @@ import type {
   StartManualApplicationSubmissionRequest,
 } from "@ai-job-apply/api-contracts";
 import {
+  CHALLENGE_SUBMISSION_NOTICE,
   employerPageForSource,
   formStructureDigestInput,
   parseObservedApplicationForm,
@@ -140,7 +141,7 @@ export function ManualFormConfirmation({
       if (token !== generation.current || controller.signal.aborted) return;
       setObservation({ form: binding, capturedAtEpochMs: captured.capturedAt, confirmed: true });
       setNotice(
-        "The question structure matches your approved packet. Confirm below before continuing.",
+        `The question structure matches your approved packet. Confirm below before continuing.${captured.form.challengePresent ? ` ${CHALLENGE_SUBMISSION_NOTICE}` : ""}`,
       );
     } catch {
       if (token === generation.current) clear(FAILURE);

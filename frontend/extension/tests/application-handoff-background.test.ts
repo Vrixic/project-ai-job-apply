@@ -162,14 +162,30 @@ describe("manual handoff background trust boundary", () => {
     expect(result.ok).toBe(true);
     expect(JSON.parse(result.observedForm ?? "{}").destination).toBe(`${posting}/application`);
   });
-  it.each(["disabled", "destination", "owner", "challenge", "values", "active_attempt"])(
+  it("captures questions on a challenge page and records the challenge for the candidate", async () => {
+    const worker = await background();
+    worker.browser.scripting.executeScript.mockResolvedValue([
+      {
+        result: {
+          challengePresent: true,
+          fields: [
+            { ref: "f0", name: "email", label: "Email", type: "text", required: true, options: [] },
+          ],
+        },
+      },
+    ]);
+    const result = await worker.send({ action: "application_form_capture", reviewLink: LINK });
+    expect(result.ok).toBe(true);
+    expect(JSON.parse(result.observedForm ?? "{}").form.challengePresent).toBe(true);
+  });
+  it.each(["disabled", "destination", "owner", "no_questions", "values", "active_attempt"])(
     "refuses %s form capture",
     async (kind) => {
       const worker = await background(kind !== "disabled");
       if (kind === "destination")
         worker.browser.tabs.query.mockResolvedValue([{ id: 7, url: "https://other.example/" }]);
       if (kind === "owner") worker.fixture.application.id = "00000000-0000-7000-8000-000000000099";
-      if (kind === "challenge")
+      if (kind === "no_questions")
         worker.browser.scripting.executeScript.mockResolvedValue([
           { result: { challengePresent: true, fields: [] } },
         ]);

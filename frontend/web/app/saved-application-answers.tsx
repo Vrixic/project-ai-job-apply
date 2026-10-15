@@ -7,6 +7,7 @@ import type {
 } from "@ai-job-apply/api-contracts";
 import { mapFormFields } from "@ai-job-apply/ats-sdk/mapping";
 import {
+  CHALLENGE_SUBMISSION_NOTICE,
   employerPageForSource,
   formStructureDigestInput,
   type ObservedApplicationForm,
@@ -165,7 +166,7 @@ export function SavedApplicationAnswers({
       );
       setObserved(structure);
       setNotice(
-        "Choose exact saved versions and confirm each question's meaning and context. Values appear in the new packet for final review.",
+        `Choose exact saved versions and confirm each question's meaning and context. Values appear in the new packet for final review.${structure.form.challengePresent ? ` ${CHALLENGE_SUBMISSION_NOTICE}` : ""}`,
       );
     } catch {
       if (current === generation.current) discard(FAILURE);

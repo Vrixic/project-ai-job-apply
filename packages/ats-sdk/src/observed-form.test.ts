@@ -60,7 +60,7 @@ describe("bounded observed structure", () => {
       expect(parseObservedApplicationForm(JSON.stringify(value), now)).toBeUndefined();
     },
   );
-  it("refuses stale/future/challenge/duplicate/oversized/unknown structures", () => {
+  it("refuses stale/future/non-boolean challenge/duplicate/oversized/unknown structures", () => {
     for (const mutate of [
       (v: ReturnType<typeof fixture>) => {
         v.capturedAt = now - 60_000;
@@ -69,7 +69,7 @@ describe("bounded observed structure", () => {
         v.capturedAt = now + 1;
       },
       (v: ReturnType<typeof fixture>) => {
-        v.form.challengePresent = true;
+        (v.form as { challengePresent: unknown }).challengePresent = "true";
       },
       (v: ReturnType<typeof fixture>) => {
         v.destination += "#application";
@@ -124,6 +124,16 @@ describe("bounded observed structure", () => {
     expect(JSON.stringify(form)).not.toContain("PRIVATE_VALUE");
     expect(JSON.stringify(form)).not.toContain("PRIVATE_PASSWORD");
     expect(form.fields.at(-1)?.label).not.toContain("PRIVATE_OPTION_IN_LABEL");
+  });
+});
+
+describe("challenge pages", () => {
+  it("accepts a read-only capture that records a challenge", () => {
+    const value = fixture();
+    value.form.challengePresent = true;
+    expect(parseObservedApplicationForm(JSON.stringify(value), now)?.form.challengePresent).toBe(
+      true,
+    );
   });
 });
 
