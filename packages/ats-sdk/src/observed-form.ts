@@ -25,6 +25,10 @@ export function questionStructureDigestInput(field: FormField): string {
   return formStructureDigestInput({ fields: [field], challengePresent: false });
 }
 
+/** Shown whenever a captured employer page carries a challenge the candidate must complete. */
+export const CHALLENGE_SUBMISSION_NOTICE =
+  "This employer page has a challenge, such as a CAPTCHA. Complete it yourself, then submit the employer form yourself.";
+
 /** Provider application subpages of one exact posting (ADR-045 amendment, 2026-10-15). */
 const APPLICATION_SUBPAGES: Readonly<Record<string, string>> = {
   "jobs.ashbyhq.com": "/application",
@@ -92,7 +96,9 @@ export function parseObservedApplicationForm(
       value.capturedAt > now ||
       now >= value.capturedAt + 60_000 ||
       !object(value.form, ["fields", "challengePresent"]) ||
-      value.form.challengePresent !== false ||
+      // A challenge is recorded, not refused: capture reads labels only, and the candidate
+      // completes the challenge and submits (ADR-046 amendment, 2026-10-15).
+      typeof value.form.challengePresent !== "boolean" ||
       !Array.isArray(value.form.fields) ||
       value.form.fields.length < 1 ||
       value.form.fields.length > 200

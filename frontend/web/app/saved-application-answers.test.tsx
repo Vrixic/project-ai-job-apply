@@ -2,6 +2,7 @@
 import { webcrypto } from "node:crypto";
 import type { Application } from "@ai-job-apply/api-contracts";
 import { formStructureHash } from "@ai-job-apply/ats-sdk";
+import { CHALLENGE_SUBMISSION_NOTICE } from "@ai-job-apply/ats-sdk/observed-form";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -139,6 +140,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("explicit observed-question saved-answer selection", () => {
+  it("accepts a challenge page and tells the candidate to complete it and submit themselves", async () => {
+    data.observed.form.challengePresent = true;
+    await load();
+    expect(container.textContent).toContain(CHALLENGE_SUBMISSION_NOTICE);
+    expect(container.querySelector("select")).not.toBeNull();
+  });
   it("does not infer US jurisdiction from generic work-authorization wording", async () => {
     const field = data.observed.form.fields[0];
     if (!field) throw new Error();
