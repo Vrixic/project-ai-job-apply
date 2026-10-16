@@ -178,6 +178,12 @@ export function approvedHandoff(
     kinds.add(material.kind);
     deadline = Math.min(deadline, material.expiresAtMs);
   }
+  // A generated document field may carry only its exact bound artifact digest, never content.
+  // Document fields are never copied below; the file is downloaded from the native workspace.
+  const boundDocumentDigest = (field: (typeof packet.fields)[number]) =>
+    (field.fieldKey === "documents.resume" && field.value === packet.artifactHashes.resume) ||
+    (field.fieldKey === "documents.cover_letter" &&
+      field.value === packet.artifactHashes.coverLetter);
   const keys = new Set<string>();
   const fields: ApprovedHandoff["fields"] = [];
   for (const field of packet.fields) {
@@ -187,7 +193,7 @@ export function approvedHandoff(
       field.origin === "answer_vault";
     if (
       keys.has(field.fieldKey) ||
-      (field.origin === "generated" && field.value !== null) ||
+      (field.origin === "generated" && field.value !== null && !boundDocumentDigest(field)) ||
       ((field.requiresReview || restricted) &&
         !approval.acknowledgedFieldKeys.includes(field.fieldKey)) ||
       (restricted && !field.requiresReview)

@@ -51,6 +51,30 @@ describe("manual application handoff", () => {
     material.expiresAtMs = Date.now();
     expect(() => approvedHandoff(application, Date.now())).toThrow();
   });
+  it("accepts a native generated resume field bound to its artifact digest without copying it", () => {
+    const { application } = handoffFixture();
+    const packet = application.currentPacket;
+    const approval = application.approval;
+    assert(packet && approval);
+    const digestField: (typeof packet.fields)[number] = {
+      fieldKey: "documents.resume",
+      value: packet.artifactHashes.resume ?? null,
+      origin: "generated",
+      sourceFactIds: [],
+      confidence: 1,
+      disposition: "review",
+      reasons: ["explicit_each_time"],
+      requiresReview: true,
+    };
+    packet.fields.push(digestField);
+    approval.acknowledgedFieldKeys.push("documents.resume");
+    expect(approvedHandoff(application, Date.now()).fields.map((field) => field.fieldKey)).toEqual([
+      "contact.email",
+      "authorization.us_authorized",
+    ]);
+    digestField.value = "c".repeat(64);
+    expect(() => approvedHandoff(application, Date.now())).toThrow();
+  });
   it.each([
     "status",
     "hash",
