@@ -271,6 +271,17 @@ for (const [name, mutate] of Object.entries({
   });
 }
 
+test("accepts an authentication time within the bounded clock-skew tolerance", async (t) => {
+  // A local clock a few seconds behind the identity provider must not refuse a fresh sign-in.
+  const f = await fixture(t, (c) => {
+    c.id.auth_time = Math.floor(Date.now() / 1000) + 5;
+    c.id.iat = c.id.auth_time + 1;
+  });
+  const result = await f.callback();
+  assert.deepEqual(f.diagnostics, []);
+  assert.equal(result.status, 303);
+});
+
 test("verified MFA proof disagreement emits only the fixed mismatch diagnostic", async (t) => {
   const f = await fixture(t, () => {}, { authenticatedAt: 1 });
   const result = await f.callback();

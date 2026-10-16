@@ -192,6 +192,9 @@ async function defaultTokenVerifier({ issuer, audience, clientId, accessToken, i
   return { accessPrincipal, idProof };
 }
 
+/** Bounded future skew for provider-issued iat/auth_time; freshness still uses provider time. */
+const AUTH_TIME_CLOCK_SKEW_SECONDS = 30;
+
 /** Decode only the exact JWTs already checked by the shared signature/issuer/audience verifiers. */
 function validateVerifiedTokens(tokens, verified, expected, profile) {
   const { accessPrincipal, idProof } = verified ?? {};
@@ -210,7 +213,9 @@ function validateVerifiedTokens(tokens, verified, expected, profile) {
   )
     reject("token_lifetime_insufficient");
   if (!Number.isSafeInteger(id.auth_time)) reject("token_auth_time_invalid");
-  if (id.auth_time > now) reject("token_auth_time_future");
+  // Bounded skew: a local clock slightly behind the identity provider must not refuse a fresh
+  // sign-in. Freshness and the 15-minute MFA lease still use the provider's own auth_time.
+  if (id.auth_time > now + AUTH_TIME_CLOCK_SKEW_SECONDS) reject("token_auth_time_future");
   if (now - id.auth_time > 900) reject("token_auth_time_stale");
   if (id.auth_time < Math.floor(expected.startedAt / 1000) - 5)
     reject("token_auth_time_predates_session");
@@ -252,9 +257,9 @@ function validateVerifiedTokens(tokens, verified, expected, profile) {
     access.exp <= now + profile.minimumLifetimeSeconds ||
     id.exp <= now + profile.minimumLifetimeSeconds ||
     !Number.isSafeInteger(id.iat) ||
-    id.iat > now + 5 ||
+    id.iat > now + AUTH_TIME_CLOCK_SKEW_SECONDS ||
     !Number.isSafeInteger(id.auth_time) ||
-    id.auth_time > now ||
+    id.auth_time > now + AUTH_TIME_CLOCK_SKEW_SECONDS ||
     id.auth_time < Math.floor(expected.startedAt / 1000) - 5 ||
     now - id.auth_time > 900 ||
     idProof.authenticatedAt !== id.auth_time ||
