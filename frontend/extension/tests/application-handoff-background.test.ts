@@ -150,7 +150,9 @@ describe("manual handoff background trust boundary", () => {
   it("captures from the same posting's Ashby application subpage and records it without the query", async () => {
     const worker = await background();
     const posting = "https://jobs.ashbyhq.com/Synthetic/00000000-0000-4000-8000-000000000009";
-    worker.fixture.job.sources[0].canonicalUrl = posting;
+    const source = worker.fixture.job.sources[0];
+    if (!source) throw new Error("Missing fixture source");
+    source.canonicalUrl = posting;
     worker.browser.tabs.query.mockResolvedValue([
       { id: 7, url: `${posting}/application?jr_id=synthetic` },
     ]);
