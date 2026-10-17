@@ -1,4 +1,5 @@
 import { createNativeCoverLetterExportReader } from "@ai-job-apply/documents-service/cover-letter-export";
+import { createNativeGenerationQuiescenceProof } from "@ai-job-apply/documents-service/generation-quiescence";
 import type { DatabaseHandle, ProfileStore } from "@ai-job-apply/profile-service";
 import {
   createDatabase,
@@ -302,7 +303,12 @@ async function getRuntimeCandidateRightsStore(): Promise<PostgresCandidateRights
     database,
     policy,
     artifactStore: new AwsCandidateExportArtifactStore(exportBucket, exportKmsKeyArn),
-    documentObjectStore: new AwsCandidateDocumentObjectStore(documentBucket),
+    // Generation cleanup proceeds only on positive writer-ledger evidence (never on elapsed time).
+    documentObjectStore: new AwsCandidateDocumentObjectStore(
+      documentBucket,
+      undefined,
+      createNativeGenerationQuiescenceProof(runtimeDatabaseUrl as string).proof,
+    ),
     resumeProposals: new PostgresResumeProposalWriter(),
     ...(packetExport ? { restrictedPacketExport: packetExport.reader } : {}),
     ...(coverLetterExportEnabled && runtimeDatabaseUrl && documentKmsKeyArn
