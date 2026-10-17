@@ -5,6 +5,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   buildIdentityAttestation,
+  OPERATOR_FAILURE_CHECKS,
+  OPERATOR_FAILURE_STEPS,
   sanitizeMissingCoverage,
   sanitizeOperatorFailure,
   sanitizeOperatorResult,
@@ -240,6 +242,91 @@ test("PowerShell missing-coverage parser rejects altered or sensitive diagnostic
     outcome: "failed",
     reason: "d2_coverage_missing",
     missingCoverage: ["consentCount", "contributionCount"],
+  });
+  for (const result of results.slice(2))
+    assert.deepEqual(result, { outcome: "failed", reason: "operator_failed_check_recovery" });
+});
+
+test("operator failures expose only an allowlisted step and check, never text", () => {
+  const error = sanitizeOperatorFailure({
+    outcome: "failed",
+    reason: "operator_failed_at_step",
+    step: "operational-health",
+    check: "alarm_not_ok",
+  });
+  assert.equal(error.message, "operator_failed_at_step");
+  assert.deepEqual([error.step, error.check], ["operational-health", "alarm_not_ok"]);
+  for (const value of [
+    {
+      outcome: "failed",
+      reason: "operator_failed_at_step",
+      step: "generated-secret",
+      check: "alarm_not_ok",
+    },
+    {
+      outcome: "failed",
+      reason: "operator_failed_at_step",
+      step: "receipt",
+      check: "generated-secret",
+    },
+    { outcome: "failed", reason: "operator_failed_at_step", step: "receipt" },
+    {
+      outcome: "failed",
+      reason: "operator_failed_at_step",
+      step: "receipt",
+      check: "unclassified",
+      detail: "x",
+    },
+  ]) {
+    const rejected = sanitizeOperatorFailure(value);
+    assert.equal(rejected.message, "operator_failed_check_recovery");
+    assert.equal(Object.hasOwn(rejected, "step"), false);
+  }
+  assert.equal(OPERATOR_FAILURE_STEPS.includes("export-cleanup"), true);
+  assert.equal(OPERATOR_FAILURE_CHECKS.includes("unclassified"), true);
+});
+
+test("PowerShell bridge forwards only allowlisted lifecycle step and check tokens", () => {
+  const messages = [
+    "RightsLifecycleFailed:operational-health:alarm_not_ok",
+    "RightsLifecycleFailed:export-cleanup:unclassified",
+    "RightsLifecycleFailed:generated-secret:alarm_not_ok",
+    "RightsLifecycleFailed:receipt:generated-secret",
+    "RightsLifecycleFailed:receipt:alarm_not_ok generated-secret",
+    "prefix RightsLifecycleFailed:receipt:alarm_not_ok",
+  ];
+  const script = `$tokens = $null; $errors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path (Get-Location) 'scripts/lib/invoke-candidate-rights-session-action.ps1'), [ref]$tokens, [ref]$errors)
+    if ($errors.Count -ne 0) { throw 'Parse failure' }
+    $function = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'ConvertTo-SafeSessionFailure' }, $false)
+    . ([scriptblock]::Create($function.Extent.Text))
+    $messages = [Console]::In.ReadToEnd() | ConvertFrom-Json
+    @($messages | ForEach-Object { ConvertTo-SafeSessionFailure $_ }) | ConvertTo-Json -Depth 4 -Compress`;
+  const run = spawnSync(
+    process.platform === "win32" ? "pwsh.exe" : "pwsh",
+    ["-NoProfile", "-Command", script],
+    {
+      cwd: root,
+      encoding: "utf8",
+      input: JSON.stringify(messages),
+      windowsHide: true,
+      timeout: 10000,
+    },
+  );
+  assert.equal(run.status, 0);
+  assert.equal(`${run.stdout}${run.stderr}`.includes("generated-secret"), false);
+  const results = JSON.parse(run.stdout);
+  assert.deepEqual(results[0], {
+    outcome: "failed",
+    reason: "operator_failed_at_step",
+    step: "operational-health",
+    check: "alarm_not_ok",
+  });
+  assert.deepEqual(results[1], {
+    outcome: "failed",
+    reason: "operator_failed_at_step",
+    step: "export-cleanup",
+    check: "unclassified",
   });
   for (const result of results.slice(2))
     assert.deepEqual(result, { outcome: "failed", reason: "operator_failed_check_recovery" });
