@@ -44,12 +44,11 @@ export async function fillGreenhouseFields(
     deadline <= Date.now() + 60_000 &&
     authority.registry.status("greenhouse-application-v1", variantId, new Date()).mode ===
       "autofill";
-  if (!current() || inspection.form.challengePresent) return { filled, reviewRequired: true };
+  if (!current()) return { filled, reviewRequired: true };
   const plan = buildFillPlan(inspection.form, structuredClone(packet), {
     resume: false,
     coverLetter: false,
   });
-  if (plan.requiresTakeover) return { filled, reviewRequired: true };
   let rejectWait: (() => void) | undefined;
   const stopped = new Promise<never>((_, reject) => {
     rejectWait = () => reject(new Error("GreenhouseFillUnavailable"));
@@ -137,7 +136,8 @@ export async function fillGreenhouseFields(
     }
     return {
       filled,
-      reviewRequired: plan.actions.some((action) => action.kind === "require_user"),
+      reviewRequired:
+        plan.requiresTakeover || plan.actions.some((action) => action.kind === "require_user"),
     };
   } catch {
     if (authority.throwOnFailure) throw new Error("GreenhouseFillUnavailable");

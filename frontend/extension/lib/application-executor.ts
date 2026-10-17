@@ -342,7 +342,6 @@ export async function executeApprovedApplication(options: {
     if (
       !validateApplicationExecutionInspection(inspection) ||
       inspection.nonce !== nonce ||
-      inspection.challengePresent ||
       inspection.formHash !== originalPacket.form?.formHash
     )
       throw unavailable();

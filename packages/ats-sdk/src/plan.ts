@@ -93,11 +93,9 @@ export function buildFillPlan(
       if (field.required) unresolved.push(field.ref);
     };
 
-    // A challenge stops every page action, including otherwise safe fills and attachments.
-    if (form.challengePresent) {
-      requireUser("unsupported_control", mapping.fieldKey);
-      continue;
-    }
+    // A challenge never blocks preparing the form: ordinary fills and attachments are still planned
+    // (ADR-046 amendment). It only forces takeover, so the candidate completes the challenge and
+    // submits themselves; `requiresTakeover` below forbids any automated submission.
 
     if (mapping.reason === "unmapped" || mapping.reason === "ambiguous") {
       if (field.required) {
