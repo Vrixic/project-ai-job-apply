@@ -73,6 +73,12 @@ zero resource/data/output changes and 177 passing checks. Staging was not access
 create NEW inputs selecting `ai-job-apply-development-shutdown-20261017204046` for BOTH selectors.
 The stable candidate alias is on an automatic `main` deployment without the D3 test flags.
 
+## Later merges (implemented and locally tested, not accepted)
+
+- #696 reports the failing rights lifecycle step and check, so the next canonical run shows where it fails.
+- #697 adds the documents-owned generation quiescence proof for deletion (real-PostgreSQL test); not yet released to development.
+- #698 fills and attaches a Greenhouse form even when a challenge is present, never clicks submit and returns `challenge_required` (attempt `taken_over`). Chromium harness `challenge-at-start` and an independent review passed. The one-shot claim is spent on that path.
+
 ## Still open
 
 Live AI (no qualifying 30-minute all-copy provider policy), authorized Greenhouse fixtures and
