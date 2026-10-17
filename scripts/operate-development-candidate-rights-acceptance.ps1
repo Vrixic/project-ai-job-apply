@@ -1042,6 +1042,43 @@ function Confirm-RightsExportDeletion {
   return 1
 }
 
+# Fixed, nonsensitive failure vocabulary. Only these tokens ever leave the lifecycle on failure; raw error
+# text may contain provider details and is never forwarded (see ConvertTo-SafeSessionFailure).
+$script:RightsLifecycleSteps = @('resume-fixture','export-request','export-ready','export-download','export-coverage','grant-expiry','identity-refresh','deletion-cancel','recent-mfa','deletion-confirm','deletion-completion','export-cleanup','resume-cleanup','operational-health','receipt')
+$script:RightsStep = 'preflight'
+function Get-RightsFailureCheck {
+  param([string]$Message)
+  $checks = [ordered]@{
+    'marker_not_completed' = 'did not reach completed'
+    'export_version_remains' = 'exported object version remains'
+    'export_inventory_invalid' = 'deleted export version inventory'
+    'export_binding_invalid' = 'does not bind the exact state-owned'
+    'active_ecs_tasks' = 'zero active ECS tasks'
+    'queue_not_empty' = 'state-managed queue is not'
+    'alarm_not_ok' = 'development alarm must'
+    'aws_session' = 'IAM Identity Center session'
+  }
+  foreach ($name in $checks.Keys) { if ($Message -like "*$($checks[$name])*") { return $name } }
+  # Only the resume-prefix absence check is attributable to this step; never label other failures with it.
+  if ($script:RightsStep -ceq 'resume-cleanup' -and $Message -match '(?i)resume') { return 'resume_cleanup_incomplete' }
+  return 'unclassified'
+}
+function Invoke-FixedLifecycleReported {
+  param([Parameter(Mandatory)][object]$Boundary, [Parameter(Mandatory)][object]$Plan)
+  $script:RightsStep = 'preflight'
+  try { return (Invoke-FixedLifecycle $Boundary $Plan) }
+  catch {
+    $message = [string]$_.Exception.Message
+    # Preserve the reviewed pre-deletion refusals that the session bridge already classifies.
+    if ($message.StartsWith('D2 acceptance stopped before account deletion:') -or $message.StartsWith('D3 acceptance stopped before account deletion:') -or
+        $message -like 'The disposable identity is not an exact current*' -or $message -ceq 'Acceptance requires clean main exactly matching origin/main and SourceSha.') { throw }
+    $step = if ($script:RightsStep -cin $script:RightsLifecycleSteps) { $script:RightsStep } else { 'preflight' }
+    # Nothing has been requested yet: keep the original fixed prerequisite message.
+    if ($step -ceq 'preflight') { throw }
+    throw "RightsLifecycleFailed:$step`:$(Get-RightsFailureCheck $message)"
+  }
+}
+
 function Invoke-FixedLifecycle {
   param([Parameter(Mandatory)][object]$Boundary, [Parameter(Mandatory)][object]$Plan)
   $script:VerifiedExportCoverage = $null
@@ -1053,20 +1090,27 @@ function Invoke-FixedLifecycle {
   $token = $Boundary.Identity.Token
   $idToken = $Boundary.Identity.IdToken
   $started = [DateTimeOffset]::UtcNow
+  $script:RightsStep = 'resume-fixture'
   $resumeFixture = if ($ResumeFixture) { New-RightsResumeFixture $token $Boundary.Resume } else { $null }
   $restrictedSnapshot = if ($RestrictedAnswerFixture) { @(New-RestrictedAnswerFixture $token) } else { $null }
   $exportKey = "rights-export-$([guid]::NewGuid().ToString('N'))"
   $exportBody = [ordered]@{ format = 'candidate-data-export-v1' }
+  $script:RightsStep = 'export-request'
   $first = Invoke-CandidateApi POST '/me/data-exports' $token $exportBody @{ 'idempotency-key' = $exportKey; 'x-ai-job-apply-reauthentication' = $idToken } @(202)
   $replay = Invoke-CandidateApi POST '/me/data-exports' $token $exportBody @{ 'idempotency-key' = $exportKey; 'x-ai-job-apply-reauthentication' = $idToken } @(202)
   if ([string]$first.Body.id -cne [string]$replay.Body.id -or [string]$first.Body.policyVersion -cne $ExpectedPolicyVersion) { throw "Candidate export idempotency or policy binding failed." }
+  $script:RightsStep = 'export-ready'
   $ready = Wait-ExportReady ([string]$first.Body.id) $token
+  $script:RightsStep = 'export-download'
   $download = if ($RestrictedAnswerFixture) { Test-ExactVersionGrant $ready ([string]$first.Body.id) -ExpectedRestrictedAnswers $restrictedSnapshot } else { Test-ExactVersionGrant $ready ([string]$first.Body.id) }
+  $script:RightsStep = 'export-coverage'
   $null = Assert-CandidateRightsAcceptanceCoverage $download.ExportCoverage
   $script:VerifiedExportCoverage = $download.ExportCoverage
   $grantUri = [Uri]([string]$ready.download.url)
+  $script:RightsStep = 'grant-expiry'
   $null = Wait-GrantExpiry ([string]$first.Body.id) $token $grantUri $download.GrantExpiresAt $download.ArtifactExpiresAt
 
+  $script:RightsStep = 'identity-refresh'
   $refreshedIdentity = Refresh-SyntheticIdentityContext $Boundary.Runtime.Issuer $Boundary.Runtime.IdTokenAudience $ExpectedRecentAuthMaxAgeSeconds
   if ([string]$refreshedIdentity.SubjectSha256 -cne [string]$Boundary.Identity.SubjectSha256) {
     throw "The in-memory token refresh changed the reviewed generated-synthetic identity."
@@ -1074,6 +1118,7 @@ function Invoke-FixedLifecycle {
   $token = $refreshedIdentity.Token
   $idToken = $refreshedIdentity.IdToken
 
+  $script:RightsStep = 'deletion-cancel'
   $cancelKey = "rights-delete-cancel-$([guid]::NewGuid().ToString('N'))"
   $deletionBody = [ordered]@{ acknowledgement = 'ACCOUNT_DELETION_IS_IRREVERSIBLE' }
   $cancelRequest = Invoke-CandidateApi POST '/me/account-deletion-requests' $token $deletionBody @{ 'idempotency-key' = $cancelKey; 'x-ai-job-apply-reauthentication' = $idToken } @(201)
@@ -1081,22 +1126,29 @@ function Invoke-FixedLifecycle {
   if ([string]$cancelRequest.Body.id -cne [string]$cancelReplay.Body.id) { throw "Deletion-request idempotency failed." }
   $null = Invoke-CandidateApi DELETE "/me/account-deletion-requests/$($cancelRequest.Body.id)" $token $null @{ 'idempotency-key' = "rights-cancel-$([guid]::NewGuid().ToString('N'))"; 'if-match' = "`"$($cancelRequest.Body.version)`""; 'x-ai-job-apply-reauthentication' = $idToken } @(204)
 
+  $script:RightsStep = 'recent-mfa'
   $freshIdentity = Read-SyntheticIdentityContext $Boundary.Runtime.Issuer $Boundary.Runtime.IdTokenAudience $ExpectedRecentAuthMaxAgeSeconds
   if ([string]$freshIdentity.SubjectSha256 -cne [string]$Boundary.Identity.SubjectSha256) { throw "The recent-MFA refresh changed the reviewed generated-synthetic identity." }
   $token = $freshIdentity.Token
   $idToken = $freshIdentity.IdToken
+  $script:RightsStep = 'deletion-confirm'
   $confirmRequest = Invoke-CandidateApi POST '/me/account-deletion-requests' $token $deletionBody @{ 'idempotency-key' = "rights-delete-$([guid]::NewGuid().ToString('N'))"; 'x-ai-job-apply-reauthentication' = $idToken } @(201)
   $confirmation = [ordered]@{ expectedVersion = [int]$confirmRequest.Body.version; confirmation = 'DELETE_MY_ACCOUNT' }
   $confirmed = Invoke-CandidateApi POST "/me/account-deletion-requests/$($confirmRequest.Body.id)/confirm" $token $confirmation @{ 'idempotency-key' = "rights-confirm-$([guid]::NewGuid().ToString('N'))"; 'x-ai-job-apply-reauthentication' = $idToken } @(202)
   if ([string]$confirmed.Body.state -cne 'quarantined') { throw "Deletion confirmation did not atomically quarantine the generated-synthetic identity." }
   $expectedSubjectDigest = Get-CandidateDeletionSubjectDigest $Boundary.Runtime.Issuer $Boundary.Identity.Subject
+  $script:RightsStep = 'deletion-completion'
   $null = Wait-DeletionCompletion ([string]$confirmRequest.Body.id) $expectedSubjectDigest
+  $script:RightsStep = 'export-cleanup'
   $exportsCleaned = Confirm-RightsExportDeletion $grantUri ([string]$first.Body.id)
+  $script:RightsStep = 'resume-cleanup'
   if ($ResumeFixture) {
     $script:VerifiedResumeCoverage = Confirm-RightsResumeDeletion $Boundary.Resume $resumeFixture
     Assert-RightsResumeCoverage $script:VerifiedResumeCoverage
   }
+  $script:RightsStep = 'operational-health'
   $post = Assert-OperationalHealth $Boundary.Snapshot
+  $script:RightsStep = 'receipt'
   $receipt = [ordered]@{
     schemaVersion = 1; kind = 'development-candidate-rights-acceptance-receipt'; phase = 'verified-cleaned'; sourceSha = $SourceSha
     executionPlanSha256 = $ReviewedExecutionPlanSha256; policySha256 = $ReviewedPolicySha256; subjectSha256 = $Boundary.Identity.SubjectSha256
@@ -1191,7 +1243,7 @@ if (-not $script:TestOnly) {
           $currentRestorable -lt $reviewedRestorable) {
         throw "The live backup disposition regressed after plan review."
       }
-      $receipt = Invoke-FixedLifecycle $boundary $reviewed.Value
+      $receipt = Invoke-FixedLifecycleReported $boundary $reviewed.Value
       $path = Join-Path $operatorRoot "receipt-$($ReviewedExecutionPlanSha256.Substring(0,12)).json"
       Write-ExclusiveJson $path $receipt
       $result = [ordered]@{ Outcome = 'verified-and-cleaned'; ReceiptPath = $path; ReceiptSha256 = Get-FileSha256 $path; ExportsRequested = 1; DeletionMarkersCompleted = 1; PersistentSyntheticIdentities = 0; ExportCoverage = $script:VerifiedExportCoverage }

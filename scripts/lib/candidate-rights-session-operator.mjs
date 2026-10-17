@@ -45,6 +45,38 @@ export function sanitizeMissingCoverage(value, applicationsInventory = false) {
     : null;
 }
 
+/** Fixed, nonsensitive vocabulary; the operator never forwards raw error text (it may hold credentials). */
+export const OPERATOR_FAILURE_STEPS = Object.freeze([
+  "resume-fixture",
+  "export-request",
+  "export-ready",
+  "export-download",
+  "export-coverage",
+  "grant-expiry",
+  "identity-refresh",
+  "deletion-cancel",
+  "recent-mfa",
+  "deletion-confirm",
+  "deletion-completion",
+  "export-cleanup",
+  "resume-cleanup",
+  "operational-health",
+  "receipt",
+  "preflight",
+]);
+export const OPERATOR_FAILURE_CHECKS = Object.freeze([
+  "marker_not_completed",
+  "export_version_remains",
+  "export_inventory_invalid",
+  "export_binding_invalid",
+  "active_ecs_tasks",
+  "queue_not_empty",
+  "alarm_not_ok",
+  "aws_session",
+  "resume_cleanup_incomplete",
+  "unclassified",
+]);
+
 export function sanitizeOperatorFailure(value) {
   if (
     exactKeys(value, ["outcome", "reason", "missingCoverage"]) &&
@@ -60,6 +92,18 @@ export function sanitizeOperatorFailure(value) {
       error.missingCoverage = Object.freeze(missingCoverage);
       return error;
     }
+  }
+  if (
+    exactKeys(value, ["outcome", "reason", "step", "check"]) &&
+    value.outcome === "failed" &&
+    value.reason === "operator_failed_at_step" &&
+    OPERATOR_FAILURE_STEPS.includes(value.step) &&
+    OPERATOR_FAILURE_CHECKS.includes(value.check)
+  ) {
+    const error = new Error("operator_failed_at_step");
+    error.step = value.step;
+    error.check = value.check;
+    return error;
   }
   const reasons = ["identity_not_fresh", "source_not_ready", "operator_failed_check_recovery"];
   return new Error(

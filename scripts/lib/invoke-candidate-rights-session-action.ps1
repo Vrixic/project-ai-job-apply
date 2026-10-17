@@ -23,6 +23,13 @@ function ConvertTo-SafeSessionFailure {
       $failure.missingCoverage = $names
     }
   }
+  elseif ($Message -cmatch '\ARightsLifecycleFailed:(?<step>[a-z-]{1,32}):(?<check>[a-z_]{1,32})\z' -and
+      $Matches.step -cin @('resume-fixture','export-request','export-ready','export-download','export-coverage','grant-expiry','identity-refresh','deletion-cancel','recent-mfa','deletion-confirm','deletion-completion','export-cleanup','resume-cleanup','operational-health','receipt','preflight') -and
+      $Matches.check -cin @('marker_not_completed','export_version_remains','export_inventory_invalid','export_binding_invalid','active_ecs_tasks','queue_not_empty','alarm_not_ok','aws_session','resume_cleanup_incomplete','unclassified')) {
+    $failure.reason = 'operator_failed_at_step'
+    $failure.step = $Matches.step
+    $failure.check = $Matches.check
+  }
   elseif ($Message -like 'The disposable identity is not an exact current*') { $failure.reason = 'identity_not_fresh' }
   elseif ($Message -ceq 'Acceptance requires clean main exactly matching origin/main and SourceSha.') { $failure.reason = 'source_not_ready' }
   return [pscustomobject]$failure

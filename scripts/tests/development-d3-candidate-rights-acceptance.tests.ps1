@@ -93,4 +93,25 @@ try {
   if ($target.Name -cnotmatch '^d3-rights-acceptance-[a-f0-9]{32}$' -or $target.Parent.FullName -cne $expectedParent) { throw 'Unsafe test cleanup target.' }
   Remove-Item -LiteralPath $target.FullName -Recurse
 }
+# Lifecycle failures after the first request expose only an allowlisted step and check, never the raw text.
+function Get-ReportedLifecycleFailure([string]$Step, [string]$Message) {
+  $script:reportStep = $Step; $script:reportMessage = $Message
+  function Invoke-FixedLifecycle { param($Boundary, $Plan) $script:RightsStep = $script:reportStep; throw $script:reportMessage }
+  try { $null = Invoke-FixedLifecycleReported ([pscustomobject]@{}) ([pscustomobject]@{}); return '' }
+  catch { return [string]$_.Exception.Message }
+}
+Assert-Test ((Get-ReportedLifecycleFailure 'operational-health' 'Every development alarm must be OK secret-detail.') -ceq 'RightsLifecycleFailed:operational-health:alarm_not_ok') 'Alarm failure was not tagged.'
+Assert-Test ((Get-ReportedLifecycleFailure 'export-cleanup' 'The exact exported object version remains after account deletion.') -ceq 'RightsLifecycleFailed:export-cleanup:export_version_remains') 'Export cleanup failure was not tagged.'
+Assert-Test ((Get-ReportedLifecycleFailure 'resume-cleanup' 'provider said generated-secret') -ceq 'RightsLifecycleFailed:resume-cleanup:unclassified') 'Unknown text was not reduced to unclassified.'
+Assert-Test ((Get-ReportedLifecycleFailure 'deletion-confirm' 'Deletion confirmation did not atomically quarantine the generated-synthetic identity.') -ceq 'RightsLifecycleFailed:deletion-confirm:unclassified') 'Deletion confirmation failure was not tagged.'
+Assert-Test ((Get-ReportedLifecycleFailure 'deletion-completion' 'The candidate deletion recovery marker did not reach completed.') -ceq 'RightsLifecycleFailed:deletion-completion:marker_not_completed') 'Deletion completion failure was not tagged.'
+Assert-Test ((Get-ReportedLifecycleFailure 'resume-cleanup' 'The saved resume prefix still holds a version.') -ceq 'RightsLifecycleFailed:resume-cleanup:resume_cleanup_incomplete') 'Resume cleanup failure was not tagged.'
+Assert-Test ((Get-ReportedLifecycleFailure 'operational-health' 'Unrelated resume wording here.') -ceq 'RightsLifecycleFailed:operational-health:unclassified') 'The resume label must apply only to the resume cleanup step.'
+Assert-Test ((Get-ReportedLifecycleFailure 'not-a-step' 'generated-secret') -ceq 'generated-secret') 'An unknown step must keep the original pre-mutation error.'
+Assert-Test ((Get-ReportedLifecycleFailure 'preflight' 'generated-fixed-prerequisite') -ceq 'generated-fixed-prerequisite') 'Pre-mutation errors must stay unchanged.'
+$coverageMessage = "D3 acceptance stopped before account deletion: nonempty Applications export coverage is required for historyCount. Prepare the authorized disposable account's missing D3 test records, then obtain fresh MFA and a new reviewed run. The existing export remains subject to its configured expiry and cleanup."
+Assert-Test ((Get-ReportedLifecycleFailure 'export-coverage' $coverageMessage) -ceq $coverageMessage) 'Reviewed coverage refusal must be preserved for the bridge.'
+foreach ($tagged in @('operational-health','export-cleanup','receipt')) {
+  Assert-Test (-not ((Get-ReportedLifecycleFailure $tagged 'token generated-secret') -match 'generated-secret')) 'Raw text leaked through the step tag.'
+}
 Write-Output "PASS $script:checks focused D3 rights acceptance assertions; no cloud calls."

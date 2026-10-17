@@ -7,6 +7,8 @@ import {
 } from "./lib/candidate-rights-session.mjs";
 import {
   buildIdentityAttestation,
+  OPERATOR_FAILURE_CHECKS,
+  OPERATOR_FAILURE_STEPS,
   runSessionOperator,
   sanitizeMissingCoverage,
   validateSessionCommand,
@@ -148,6 +150,7 @@ input.on("line", async (line) => {
       "operator_interrupted_check_recovery",
       "operator_unavailable",
       "operator_failed_check_recovery",
+      "operator_failed_at_step",
       "d2_coverage_missing",
       "d3_coverage_missing",
       "identity_not_fresh",
@@ -156,9 +159,15 @@ input.on("line", async (line) => {
     const missingCoverage = ["d2_coverage_missing", "d3_coverage_missing"].includes(error.message)
       ? sanitizeMissingCoverage(error.missingCoverage, error.message === "d3_coverage_missing")
       : null;
+    const failedAt =
+      error.message === "operator_failed_at_step" &&
+      OPERATOR_FAILURE_STEPS.includes(error.step) &&
+      OPERATOR_FAILURE_CHECKS.includes(error.check)
+        ? { step: error.step, check: error.check }
+        : {};
     report(
       safe.includes(error.message) ? error.message : "session-command-failed",
-      missingCoverage ? { missingCoverage } : {},
+      missingCoverage ? { missingCoverage } : failedAt,
     );
     if (executionAttempted) await close();
   } finally {
