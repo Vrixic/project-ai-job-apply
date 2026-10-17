@@ -1,5 +1,12 @@
 # D3 — High-Quality Application Preparation
 
+2026-10-17: installed-Chrome and hosted testing found and fixed eight defects (D3-139 to D3-146, below);
+see [evidence](evidence/d3-installed-extension-and-rights-2026-10-17.md). Capture, saved-answer selection, approved handoff, correction, withdrawal, reuse
+and a not-submitted outcome passed on a synthetic account. The canonical rights run is still FAILED/open
+(confirmed deletion completed, operator failed at an unidentified step, Auth0 deletion unverified).
+Development is shut down and verified. Live AI, authorized Greenhouse, Edge/expiry checks and
+accountable acceptance remain open.
+
 2026-10-14: Gateway 117's no-store correction and PR #682's original identity/MFA lease fix are
 verified. PR #684's scoped IAM repair is applied and independently verified. One continuation of
 the already-confirmed deletion completed all eight owners through unchanged Profile activity 25.
@@ -50,9 +57,25 @@ components and the connected journey. Historical proof records remain historical
 reconciled-copy operators and physical restore rehearsals are not D3 dependencies. Independent
 D1/admin acceptance stays deferred.
 
-Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 2026-10-14.
+Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 2026-10-17.
 
 ## Task register
+
+D3-139 to D3-146 started 2026-10-15 and merged 2026-10-15/17 with before/after regressions, targeted
+runs and independent review where consequential (hosted CI executed zero steps because of billing):
+D3-139 [#687](https://github.com/Vrixic/project-ai-job-apply/pull/687) single restore boundary statement
+within the IAM size limit; D3-140 [#688](https://github.com/Vrixic/project-ai-job-apply/pull/688) omit empty
+KMS context for context-free saved answers (Gateway 119, Profile activity 26); D3-141
+[#689](https://github.com/Vrixic/project-ai-job-apply/pull/689) provider application subpages (ADR-045
+amended); D3-142 [#690](https://github.com/Vrixic/project-ai-job-apply/pull/690) record challenges in
+read-only capture (ADR-046 amended); D3-143 [#691](https://github.com/Vrixic/project-ai-job-apply/pull/691)
+job detail no-store (Gateway 120); D3-144 [#692](https://github.com/Vrixic/project-ai-job-apply/pull/692)
+heading labels for legend-less radio groups; D3-145 [#693](https://github.com/Vrixic/project-ai-job-apply/pull/693)
+accept the bound native resume digest in approved handoff; D3-146
+[#694](https://github.com/Vrixic/project-ai-job-apply/pull/694) bounded clock skew in the rights session.
+Open from this session: surface the rights operator's failing step, then read-only verification of owner
+SQL and Auth0 deletion before any new run; automated fill despite a challenge; installed Edge; D2-only
+workload operator keeps zero skew.
 
 D3-138 started 2026-10-14: correct the document-intake mocked runtime test's stale scope set.
 Its existing global `deploy_applications=true` and per-run document intake require the five base
