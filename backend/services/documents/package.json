@@ -96,6 +96,10 @@
       "types": "./dist/src/cover-letter-export.d.ts",
       "default": "./dist/src/cover-letter-export.js"
     },
+    "./generation-quiescence": {
+      "types": "./dist/src/generation-quiescence.d.ts",
+      "default": "./dist/src/generation-quiescence.js"
+    },
     "./native-material-registry": {
       "types": "./dist/src/native-material-registry.d.ts",
       "default": "./dist/src/native-material-registry.js"

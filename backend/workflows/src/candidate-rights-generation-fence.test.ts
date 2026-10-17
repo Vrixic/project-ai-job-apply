@@ -1,3 +1,4 @@
+import { GenerationQuiescenceProof } from "@ai-job-apply/documents-service/generation-quiescence";
 import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
@@ -174,6 +175,41 @@ describe("cover-letter generation purge fences (offline versioned S3)", () => {
     );
     expect(fixture.removed).toEqual([]);
     expect(fixture.createdFences).toEqual([]);
+  });
+  it("deletes generation history only when the real Documents proof sees settled writers", async () => {
+    const quiet = (
+      workStates: string[],
+      responseStates: string[],
+      ownerAccountState = "quarantined",
+    ) =>
+      new GenerationQuiescenceProof({
+        read: async () => ({ letter: { ownerAccountState }, workStates, responseStates }),
+      });
+    for (const [proof, expected] of [
+      [quiet(["settled", "revoked"], ["disposed"]), true],
+      [quiet(["running"], []), false],
+      [quiet(["settled"], ["acknowledged"]), false],
+      [quiet(["settled"], ["disposed"], "active"), false],
+    ] as const) {
+      const fixture = bucket();
+      const store = new AwsCandidateDocumentObjectStore(
+        "synthetic-bucket",
+        { send: fixture.send },
+        proof,
+      );
+      if (expected) {
+        await expect(store.purgeDocumentPrefixes(documentId)).resolves.toMatchObject({
+          remaining: 0,
+        });
+        expect(fixture.removed.length).toBeGreaterThan(0);
+      } else {
+        await expect(store.purgeDocumentPrefixes(documentId)).rejects.toThrow(
+          "CandidateGenerationQuiescenceUnconfirmed",
+        );
+        expect(fixture.removed).toEqual([]);
+        expect(fixture.createdFences).toEqual([]);
+      }
+    }
   });
   it.each([undefined, false, "true", 1, new Error("synthetic private diagnostic")])(
     "refuses empty-prefix pending reservation cleanup on absent/invalid/failed proof %s",
