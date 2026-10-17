@@ -50,6 +50,7 @@ const modes = [
   "kill-during-file",
   "cancel-during-file",
   "challenge-during-file",
+  "challenge-at-start",
   "confirmation-and-challenge",
   "challenge-during-final-proof",
   "stalled-confirmation-hash",
@@ -124,6 +125,12 @@ try {
       assert.equal(result.effects, 0, mode);
     if (["confirmation-and-challenge", "challenge-during-final-proof"].includes(mode))
       assert.equal(result.result.kind, "challenge_required", mode);
+    if (mode === "challenge-at-start") {
+      // Everything is prepared for the candidate, but the submit control is never used.
+      assert.equal(result.result.kind, "challenge_required", mode);
+      assert.equal(result.submits, 0, mode);
+      assert.ok(result.effects > 0, "challenge-at-start must prepare the form");
+    }
   }
   assert.deepEqual(unexpected, []);
   console.log(

@@ -263,12 +263,15 @@ describe("fill plan", () => {
     expect(plan.unresolvedRequired).toContain("f6");
   });
 
-  it("requires takeover when a challenge is present and never plans around it", () => {
+  it("still prepares the form but forces takeover when a challenge is present", () => {
     const challenged = extractGenericForm(page(`${BASIC}<div class="g-recaptcha"></div>`));
     const plan = buildFillPlan(challenged, packet, { resume: true, coverLetter: false });
+    const ordinary = buildFillPlan(form, packet, { resume: true, coverLetter: false });
     expect(plan.requiresTakeover).toBe(true);
-    expect(plan.actions.every((action) => action.kind === "require_user")).toBe(true);
-    expect(plan.unresolvedRequired).toEqual(["f0", "f1", "f2", "f4", "f6", "f7"]);
+    expect(ordinary.requiresTakeover).toBe(false);
+    expect(plan.actions).toEqual(ordinary.actions);
+    expect(plan.unresolvedRequired).toEqual(ordinary.unresolvedRequired);
+    expect(plan.actions.some((action) => action.kind === "attach_artifact")).toBe(true);
   });
 
   it("refuses duplicate option labels after normalization instead of choosing the first", () => {

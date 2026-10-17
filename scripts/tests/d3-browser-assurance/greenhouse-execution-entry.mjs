@@ -103,6 +103,9 @@ window.runGreenhouseExecutionFixture = async (mode) => {
       document.body.insertAdjacentHTML("beforeend", '<input type="password">');
   });
   if (mode === "preexisting-confirmation") confirm();
+  // A challenge present from the start is prepared completely but never submitted.
+  if (mode === "challenge-at-start")
+    document.body.insertAdjacentHTML("beforeend", '<div class="g-recaptcha"></div>');
   const inspected = inspectGreenhouseApplication(document, location.href);
   const encoded = new TextEncoder().encode(inspected.structure);
   const formHash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", encoded))]

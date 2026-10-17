@@ -123,7 +123,6 @@ export async function executeGreenhouseApplication(options: {
     if (!view || document.querySelectorAll(profile.confirmationSelector).length !== 0)
       throw unavailable();
     inspection = inspectGreenhouseApplication(document, options.employerUrl);
-    if (inspection.form.challengePresent) return { kind: "challenge_required" };
     const bytes = new TextEncoder().encode(inspection.structure);
     const digest = new Uint8Array(
       await Promise.race([crypto.subtle.digest("SHA-256", bytes), stopped]),
@@ -144,7 +143,9 @@ export async function executeGreenhouseApplication(options: {
       resume: files.some((file) => file.kind === "tailored_resume"),
       coverLetter: files.some((file) => file.kind === "cover_letter"),
     });
-    if (plan.requiresTakeover) return { kind: "challenge_required" };
+    // A challenge page is prepared completely but never submitted: the candidate completes the
+    // challenge and submits themselves (ADR-046 amendment). The click below is unreachable for it.
+    const takeover = plan.requiresTakeover;
     const plannedAttachments = plan.actions.filter((action) => action.kind === "attach_artifact");
     if (
       plannedAttachments.length !== files.length ||
@@ -161,7 +162,7 @@ export async function executeGreenhouseApplication(options: {
     const root = document.querySelector("form#application_form, form#application-form");
     if (!(root instanceof view.HTMLFormElement)) throw unavailable();
     // Required candidate-only controls may already be completed; inspect validity, never values.
-    for (const action of plan.actions) {
+    for (const action of takeover ? [] : plan.actions) {
       if (action.kind !== "require_user") continue;
       for (const control of inspection.resolve(action.ref)) {
         if (
@@ -311,7 +312,7 @@ export async function executeGreenhouseApplication(options: {
     for (const field of inspection.form.fields) inspection.resolve(field.ref);
     if (
       !root.isConnected ||
-      !root.checkValidity() ||
+      (!takeover && !root.checkValidity()) ||
       document.querySelectorAll(profile.confirmationSelector).length !== 0 ||
       root.querySelectorAll(profile.submitSelector).length !== 1 ||
       root.querySelector(profile.submitSelector) !== button
@@ -319,6 +320,7 @@ export async function executeGreenhouseApplication(options: {
       throw unavailable();
     actionable(button);
     current();
+    if (takeover) return { kind: "challenge_required" };
     // Spend synchronously before click. No later code path invokes click again.
     submitted = true;
     const clickedAt = Date.now();
