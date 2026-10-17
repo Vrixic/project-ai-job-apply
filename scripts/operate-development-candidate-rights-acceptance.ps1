@@ -1057,9 +1057,10 @@ function Get-RightsFailureCheck {
     'queue_not_empty' = 'state-managed queue is not'
     'alarm_not_ok' = 'development alarm must'
     'aws_session' = 'IAM Identity Center session'
-    'resume_cleanup_incomplete' = 'resume'
   }
   foreach ($name in $checks.Keys) { if ($Message -like "*$($checks[$name])*") { return $name } }
+  # Only the resume-prefix absence check is attributable to this step; never label other failures with it.
+  if ($script:RightsStep -ceq 'resume-cleanup' -and $Message -match '(?i)resume') { return 'resume_cleanup_incomplete' }
   return 'unclassified'
 }
 function Invoke-FixedLifecycleReported {
