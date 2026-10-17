@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-10-14. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
+Last updated: 2026-10-17. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
 
 ## Summary
 
@@ -23,6 +23,15 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 [Implemented and remaining capabilities](phase-1-web-and-job-catalog.md).
 
 ## D3 — High-quality application preparation
+
+2026-10-17: D3-139 to D3-146 (PRs #687-#694)
+fix eight defects found in installed Chrome and hosted testing (boundary size, empty KMS context,
+Ashby/Lever form pages, challenge pages, job no-store, radio labels, native digest handoff, clock skew).
+Installed Chrome passed capture, saved-answer selection, approved handoff, correction, withdrawal, reuse
+and a truthful not-submitted outcome on a synthetic account; Edge, expiry, Greenhouse and live AI were not
+run. The document-inclusive rights run still has no success receipt: the confirmed deletion completed
+(marker, buckets, queues) but the operator failed at an unidentified step and Auth0 deletion is
+unverified. Development is shut down and verified. D3 stays In progress. [Evidence](evidence/d3-installed-extension-and-rights-2026-10-17.md).
 
 D3-133/134's focused harness and resume no-store fixes pass; Gateway 117/source `a45c456c` is
 released and verified. D3-135 ([PR #682](https://github.com/Vrixic/project-ai-job-apply/pull/682))
@@ -202,6 +211,13 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 [Phase 7 tasks](phase-7-quality-and-expansion.md).
 
 ## Current operating state
+
+2026-10-17: development shutdown is verified (database, NAT, EIP, interface endpoints, routes, rules,
+mappings, tasks and queues all zero; Docker/WSL off; PC on). Final snapshot
+`ai-job-apply-development-shutdown-20261017204046` and its safety snapshot are available/encrypted with
+retained automated backups; the 144 dormant inputs are archived encrypted and the final plan has zero
+changes. For a future restore, create NEW inputs selecting that snapshot for BOTH final and restore
+selectors. Staging was not accessed. [Evidence](evidence/d3-installed-extension-and-rights-2026-10-17.md).
 
 2026-10-14: development shutdown is verified at `23:37:37Z`. Database, NAT, EIP and paid Interface
 endpoint counts are zero; API routes, enabled triggers/consumers, ECS/durable work and all thirteen
