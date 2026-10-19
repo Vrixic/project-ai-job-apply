@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildResumeAst, flattenAst } from "../resume-ast/build.js";
 import { SYNTHETIC_RESUME, syntheticDocument } from "../resume-ast/test-support.js";
 import {
+  canonicalRenderText,
   describeDiff,
   extractTerms,
   materializeTailoredResume,
@@ -133,5 +134,42 @@ describe("verifyTailoredFactuality", () => {
     const otherBase = structuredClone(tailored);
     otherBase.base.sourceSha256 = "f".repeat(64);
     expect(verifyTailoredFactuality(ast, otherBase).map((i) => i.code)).toContain("base_mismatch");
+  });
+});
+
+describe("visual bullet markers", () => {
+  const circle = String.fromCodePoint(0x25cf);
+  const bullet = String.fromCodePoint(0x2022);
+
+  it("draws only a leading visual bullet marker as the supported bullet", () => {
+    for (const code of [0x25cf, 0x25e6, 0x2043, 0x2219, 0x25aa, 0x25a0, 0x25cb, 0x2023]) {
+      expect(canonicalRenderText(`${String.fromCodePoint(code)} Led a team`)).toBe(
+        `${bullet} Led a team`,
+      );
+    }
+  });
+
+  it("leaves everything else exactly as written", () => {
+    for (const text of [
+      `${bullet} Led a team`,
+      "- Led a team",
+      `Shipped ${circle} and ${circle}`,
+      `${circle}Led a team`,
+      `Led a team ${circle}`,
+      "",
+    ]) {
+      expect(canonicalRenderText(text)).toBe(text);
+    }
+  });
+
+  it("materializes a resume with visual bullets identically to one with supported bullets", () => {
+    const circled = SYNTHETIC_RESUME.map((text) =>
+      text.startsWith(`${bullet} `) ? `${circle}${text.slice(1)}` : text,
+    );
+    expect(circled.some((text) => text.startsWith(circle))).toBe(true);
+    const circledAst = buildResumeAst(syntheticDocument(circled));
+    const render = (value: typeof ast) =>
+      materializeTailoredResume(value, tailorResume(value, job));
+    expect(render(circledAst)).toEqual(render(ast));
   });
 });
