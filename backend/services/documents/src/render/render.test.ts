@@ -90,3 +90,27 @@ describe("rendering verification", () => {
     );
   });
 });
+
+describe("resumes with visual bullet markers", () => {
+  it("render and verify in both formats instead of being refused", async () => {
+    const circle = String.fromCodePoint(0x25cf);
+    const circled = SYNTHETIC_RESUME.map((text) =>
+      text.startsWith("• ") ? `${circle}${text.slice(1)}` : text,
+    );
+    expect(circled.some((text) => text.startsWith(circle))).toBe(true);
+    const circledAst = buildResumeAst(syntheticDocument(circled));
+    const circledBlocks = materializeTailoredResume(
+      circledAst,
+      tailorResume(circledAst, { title: "Backend Engineer", description: "TypeScript PostgreSQL" }),
+    );
+    expect(circledBlocks.some((block) => block.text.includes(circle))).toBe(false);
+    expect(await verifyRenderedResume(renderPdf(circledBlocks), circledBlocks)).toMatchObject({
+      ok: true,
+    });
+    expect(
+      await verifyRenderedResume(await renderDocx(circledBlocks), circledBlocks),
+    ).toMatchObject({
+      ok: true,
+    });
+  });
+});

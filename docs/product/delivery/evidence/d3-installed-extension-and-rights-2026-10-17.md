@@ -79,6 +79,8 @@ The stable candidate alias is on an automatic `main` deployment without the D3 t
 - #697 adds the documents-owned generation quiescence proof for deletion (real-PostgreSQL test); not yet released to development.
 - #698 fills and attaches a Greenhouse form even when a challenge is present, never clicks submit and returns `challenge_required` (attempt `taken_over`). Chromium harness `challenge-at-start` and an independent review passed. The one-shot claim is spent on that path.
 
+- 2026-10-19 restore finding: a real resume whose bullets use the black-circle glyph (U+25CF) could never be prepared. The PDF font cannot encode it, so the dedicated native process ended itself (exit 137, no container logs) before any material existed, and the UI only said the resume was "not available yet". Reproduced locally on the stored normalized resume; swapping the glyph for the supported bullet rendered and verified both formats. The source fix draws a leading visual bullet marker as the supported bullet (other text untouched; still-unencodable characters remain refused). It is implemented and tested, not deployed: the deployed generator is the pinned native-resume image, so a governed image release (new task-definition revision and RPC versions) is still required. Until then, a resume must use supported bullets. The UI still reports a failed preparation as "may still be preparing"; that is a separate open defect.
+
 ## Still open
 
 Live AI (no qualifying 30-minute all-copy provider policy), authorized Greenhouse fixtures and

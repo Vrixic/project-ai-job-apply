@@ -238,6 +238,18 @@ export interface RenderBlock {
   nodeId: string;
 }
 
+// The standard PDF font cannot encode these visual bullet glyphs, and an unencodable character ends the
+// dedicated native process before any material exists. A leading marker is a layout symbol, not candidate
+// wording, so it is drawn as the supported bullet. Every other character is left exactly as the candidate
+// wrote it; anything the font still cannot encode is refused by the renderer, never substituted.
+const LEADING_VISUAL_BULLET =
+  /^[\u25cf\u25e6\u2043\u2219\u25aa\u25a0\u25cb\u2023\u25c6\u27a2\u25ba\u25b6](?=\s)/u;
+
+/** Text as drawn in generated documents: only a leading visual bullet marker is canonicalized. */
+export function canonicalRenderText(text: string): string {
+  return text.replace(LEADING_VISUAL_BULLET, "\u2022");
+}
+
 export function materializeTailoredResume(ast: ResumeAst, tailored: TailoredResume): RenderBlock[] {
   const nodes = new Map<string, AstNode>();
   for (const section of ast.sections) {
@@ -249,7 +261,7 @@ export function materializeTailoredResume(ast: ResumeAst, tailored: TailoredResu
   const resolve = (nodeId: string, kind: RenderBlock["kind"]): RenderBlock => {
     const node = nodes.get(nodeId);
     if (!node) throw new Error("Tailored resume references a node outside its base tree");
-    return { kind, text: node.text, nodeId };
+    return { kind, text: canonicalRenderText(node.text), nodeId };
   };
   return tailored.sections.flatMap((section) => [
     ...(section.headingNodeId ? [resolve(section.headingNodeId, "heading")] : []),
