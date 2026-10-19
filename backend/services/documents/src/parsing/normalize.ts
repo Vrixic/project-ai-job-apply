@@ -1,3 +1,4 @@
+import { canonicalizeLeadingBullet } from "../leading-bullet.js";
 import { DOCUMENT_LIMITS, InvalidDocumentError, ParseLimitError } from "./limits.js";
 
 export interface ParsedTextBlock {
@@ -39,10 +40,12 @@ export function normalizeBlocks(blocks: readonly ParsedTextBlock[]): NormalizedR
   const normalized: NormalizedResumeBlock[] = [];
   let documentOffset = 0;
   for (const candidate of blocks) {
-    const text = removeUnsupportedControlCharacters(candidate.text)
-      .replace(/[\t ]+/gu, " ")
-      .replace(/\s*\r?\n\s*/gu, " ")
-      .trim();
+    const text = canonicalizeLeadingBullet(
+      removeUnsupportedControlCharacters(candidate.text)
+        .replace(/[\t ]+/gu, " ")
+        .replace(/\s*\r?\n\s*/gu, " ")
+        .trim(),
+    );
     if (!text) continue;
     if (text.length > DOCUMENT_LIMITS.blockCharacters) {
       throw new ParseLimitError("BLOCK_CHARACTER_LIMIT");
