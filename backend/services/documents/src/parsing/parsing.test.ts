@@ -127,6 +127,24 @@ describe("normalization safety controls", () => {
     ]);
   });
 
+  it("writes a leading visual bullet marker as the standard bullet and changes nothing else", () => {
+    const circle = String.fromCodePoint(0x25cf);
+    const bullet = String.fromCodePoint(0x2022);
+    expect(
+      normalizeBlocks([
+        { text: `${circle} Built payments` },
+        { text: `${bullet} Already standard` },
+        { text: `Shipped ${circle} and ${circle}` },
+        { text: `${circle}NoSpace` },
+      ]),
+    ).toEqual([
+      { index: 0, text: `${bullet} Built payments`, startOffset: 0, endOffset: 16 },
+      { index: 1, text: `${bullet} Already standard`, startOffset: 17, endOffset: 35 },
+      { index: 2, text: `Shipped ${circle} and ${circle}`, startOffset: 36, endOffset: 51 },
+      { index: 3, text: `${circle}NoSpace`, startOffset: 52, endOffset: 60 },
+    ]);
+  });
+
   it("rejects documents without usable text", () => {
     expect(() => normalizeBlocks([{ text: " \t\r\n " }])).toThrowError(
       expect.objectContaining<Partial<InvalidDocumentError>>({ reasonCode: "NO_USABLE_TEXT" }),

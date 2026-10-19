@@ -1,3 +1,4 @@
+import { canonicalizeLeadingBullet } from "../leading-bullet.js";
 import type { AstEntry, AstNode, AstSection, ResumeAst } from "../resume-ast/types.js";
 
 export const TAILORING_VERSION = "tailoring.v1" as const;
@@ -238,16 +239,9 @@ export interface RenderBlock {
   nodeId: string;
 }
 
-// The standard PDF font cannot encode these visual bullet glyphs, and an unencodable character ends the
-// dedicated native process before any material exists. A leading marker is a layout symbol, not candidate
-// wording, so it is drawn as the supported bullet. Every other character is left exactly as the candidate
-// wrote it; anything the font still cannot encode is refused by the renderer, never substituted.
-const LEADING_VISUAL_BULLET =
-  /^[\u25cf\u25e6\u2043\u2219\u25aa\u25a0\u25cb\u2023\u25c6\u27a2\u25ba\u25b6](?=\s)/u;
-
 /** Text as drawn in generated documents: only a leading visual bullet marker is canonicalized. */
 export function canonicalRenderText(text: string): string {
-  return text.replace(LEADING_VISUAL_BULLET, "\u2022");
+  return canonicalizeLeadingBullet(text);
 }
 
 export function materializeTailoredResume(ast: ResumeAst, tailored: TailoredResume): RenderBlock[] {
