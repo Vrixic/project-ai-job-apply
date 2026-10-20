@@ -647,15 +647,12 @@ describe("ApplicationsWorkspace: Apply", () => {
     );
   });
 
-  it("keeps just the word Submitted once the submission is logged, and reports it", async () => {
+  it("keeps just the word Submitted once the submission is logged", async () => {
     const bff = new FakeBff();
-    const onApplied = vi.fn();
-    await mount(bff, { onApplied });
+    await mount(bff);
     await click("Apply");
     await click("I submitted it");
     expect(container.textContent).toBe("Submitted");
-    expect(onApplied).toHaveBeenLastCalledWith(true);
-    expect(container.textContent).not.toMatch(/Apply to this job|Before you apply|Record/u);
   });
 
   it("hands the submitted state to its caller instead of drawing it", async () => {
