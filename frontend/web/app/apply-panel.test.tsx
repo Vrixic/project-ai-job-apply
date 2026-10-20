@@ -228,6 +228,16 @@ describe("ApplyPanel", () => {
     },
   );
 
+  it("opens the outcome dialog by itself once Apply was pressed, and only then", async () => {
+    await mount();
+    expect(dialog()).toBeNull();
+    await mount({ promptOutcome: true });
+    expect(dialog()?.textContent).toContain("Did you submit the application");
+    await act(async () => button("Cancel").click());
+    expect(dialog()).toBeNull();
+    expect(button("Record submission").disabled).toBe(false);
+  });
+
   it("closes the dialog with Cancel or Escape and returns focus to the trigger", async () => {
     await mount();
     await act(async () => button("Record submission").click());

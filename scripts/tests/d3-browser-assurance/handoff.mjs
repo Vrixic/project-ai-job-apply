@@ -233,7 +233,6 @@ try {
   const employerTab = web.context().waitForEvent("page");
   await applySaved.click();
   await (await employerTab).close();
-  await web.getByRole("button", { name: "Record submission", exact: true }).click();
   await web.getByRole("dialog").waitFor();
   // A form-bound packet cannot be recorded until the current form is explicitly confirmed.
   assert.equal(

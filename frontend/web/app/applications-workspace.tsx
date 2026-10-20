@@ -130,6 +130,8 @@ function JobApplicationWorkspace({
     packetHash: string;
     state: ExtensionHandoffState;
   }>();
+  // The packet the candidate just applied with: its outcome prompt opens by itself.
+  const [appliedPacketHash, setAppliedPacketHash] = useState<string>();
   const handoffPacket = useRef<string | undefined>(undefined);
   const prepareIntent = useRef<{ signature: string; key: string } | undefined>(undefined);
   const reconciliationIntent = useRef<{ signature: string; body: unknown } | undefined>(undefined);
@@ -598,6 +600,7 @@ function JobApplicationWorkspace({
           current = next;
         }
         current = await approveForApply(current, displayedHash, chosen.resume);
+        setAppliedPacketHash(current.currentPacket?.packetHash);
         if (href && employerTab && !employerTab.closed) employerTab.location.replace(href);
         employerTab = null;
         await startHandoff(current, chosen.resume);
@@ -945,6 +948,9 @@ function JobApplicationWorkspace({
               application={application}
               applyUrl={applyUrl}
               handoff={handoff}
+              promptOutcome={
+                appliedPacketHash !== undefined && appliedPacketHash === packet?.packetHash
+              }
               {...(fetchImplementation ? { fetchImplementation } : {})}
               onRecordSubmission={({ outcome, observation }) =>
                 recordSubmission(outcome, observation)

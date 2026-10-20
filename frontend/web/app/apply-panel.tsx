@@ -36,12 +36,18 @@ export function ApplyPanel({
   application,
   applyUrl,
   handoff = { phase: "none" },
+  promptOutcome = false,
   onRecordSubmission,
   fetchImplementation,
 }: {
   application: Application;
   applyUrl?: string | undefined;
   handoff?: ExtensionHandoffState;
+  /**
+   * True once the candidate pressed Apply and was sent to the employer's page: the outcome dialog
+   * is then waiting when they come back, so they never have to find the button.
+   */
+  promptOutcome?: boolean;
   /** Records what the candidate says happened on the employer's page. One step, no second panel. */
   onRecordSubmission(input: {
     outcome: "submitted" | "not_submitted";
@@ -74,6 +80,10 @@ export function ApplyPanel({
   useEffect(() => {
     if (open) dialog.current?.focus();
   }, [open]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: open once when Apply is pressed.
+  useEffect(() => {
+    if (promptOutcome && !expired) setOpen(true);
+  }, [promptOutcome]);
 
   const formUnconfirmed = Boolean(
     starting &&

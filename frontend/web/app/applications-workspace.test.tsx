@@ -617,6 +617,16 @@ describe("ApplicationsWorkspace: Apply", () => {
     expect(openedTab.location.replace).toHaveBeenCalledWith(APPLY_URL);
   });
 
+  it("opens the outcome dialog by itself after Apply, with no button to find", async () => {
+    const bff = new FakeBff();
+    await mount(bff);
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    await click("Apply");
+    expect(container.querySelector('[role="dialog"]')?.textContent).toContain(
+      "Did you submit the application",
+    );
+  });
+
   it("blocks Apply until empty answers are given and sensitive answers are checked", async () => {
     const bff = new FakeBff();
     bff.needsInput = true;

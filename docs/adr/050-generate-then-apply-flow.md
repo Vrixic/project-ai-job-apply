@@ -59,6 +59,8 @@ use.
    - The cancel action and the replace-while-running checkbox leave the UI; the routes remain for
      reconciliation and API clients. The panel after Apply is minimal: the employer link, one line
      naming the resume the extension will use, and a Record submission button that opens a dialog.
+     The dialog opens by itself when Apply sends the candidate to the employer's page, so it is
+     waiting when they return; Cancel dismisses it and the button reopens it.
      The dialog records the outcome in one step (I submitted it / It was not submitted); the earlier
      second "Before you apply" panel and its duplicate-risk checkbox are gone. The duplicate-risk
      acknowledgement the server requires for "not submitted" is now a line of text in the dialog and
