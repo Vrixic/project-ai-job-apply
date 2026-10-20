@@ -6,7 +6,6 @@ import type {
   ApplicationResumePreview,
   ApplicationTemporaryMaterial,
 } from "@ai-job-apply/api-contracts";
-import { COVER_LETTER_DISCLOSURE_TEXT } from "@ai-job-apply/api-contracts";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { materialDeadline } from "../lib/application-material-lifetime";
 import { fetchResumeFile, fetchResumePreview, sha256OfBytes } from "../lib/applications-client";
@@ -456,9 +455,8 @@ export function GeneratedCoverLetterPanel({
 
 /**
  * The optional cover letter, laid out like the resume step: a short description and one Generate
- * button before it exists, then its own preview. Pressing Generate is the candidate's explicit
- * permission to send their confirmed career facts and the job text to the model provider; the full
- * terms sit under Details and the same disclosure version is sent with the request.
+ * button before it exists, then its own preview. The request still carries the disclosure version
+ * the Gateway requires; the page itself states only what the step does.
  */
 export function CoverLetterSection({
   application,
@@ -492,13 +490,8 @@ export function CoverLetterSection({
     <section aria-labelledby={headingId} className="resume-step">
       <h3 id={headingId}>Cover letter (optional)</h3>
       <p id={descriptionId}>
-        Drafted by OpenAI from your confirmed career facts and this job's text. You review it before
-        it is used.
+        Generates a cover letter based on your resume and the job description.
       </p>
-      <details>
-        <summary>Details</summary>
-        <p>{COVER_LETTER_DISCLOSURE_TEXT}</p>
-      </details>
       <button type="button" aria-describedby={descriptionId} disabled={busy} onClick={onGenerate}>
         Generate cover letter
       </button>

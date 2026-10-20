@@ -386,14 +386,17 @@ describe("CoverLetterSection", () => {
     );
   }
 
-  it("is a minimal step like the resume one: a line, collapsed details and one button", async () => {
+  it("is a minimal step like the resume one: one short line and one button", async () => {
     const onGenerate = vi.fn();
     await mountSection({ onGenerate });
     expect(container.querySelector("h3")?.textContent).toBe("Cover letter (optional)");
     expect(container.querySelectorAll("button")).toHaveLength(1);
     expect(container.querySelector("input")).toBeNull();
-    expect(container.querySelector("details")?.hasAttribute("open")).toBe(false);
-    expect(container.querySelector("details")?.textContent).toContain("OpenAI");
+    expect(container.querySelector("p")?.textContent).toBe(
+      "Generates a cover letter based on your resume and the job description.",
+    );
+    expect(container.querySelector("details")).toBeNull();
+    expect(container.textContent).not.toMatch(/OpenAI|retain|training/u);
     await act(async () => container.querySelector("button")?.click());
     expect(onGenerate).toHaveBeenCalledOnce();
     expect((await axe.run(container)).violations).toEqual([]);
