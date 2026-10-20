@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Generate-then-apply playground</title>
+    <link rel="stylesheet" href="/bundle.css" />
+    <style>
+      .pg { font: 14px system-ui, sans-serif; padding: 12px 16px; background: #f4f6f8; border-bottom: 1px solid #c9d1d9; }
+      .pg h1 { font-size: 16px; margin: 0 0 4px; }
+      .pg p { margin: 4px 0 8px; color: #44505c; max-width: 80ch; }
+      .pg button { margin: 0 6px 6px 0; padding: 6px 10px; cursor: pointer; }
+      .pg pre { max-height: 180px; overflow: auto; background: #fff; border: 1px solid #c9d1d9; padding: 8px; margin: 6px 0 0; }
+    </style>
+  </head>
+  <body>
+    <section class="pg" aria-label="Scenario controls">
+      <h1>Generate-then-apply playground (synthetic data only)</h1>
+      <p>
+        Everything below the bar is the production candidate workspace. Sign-in, the Gateway, the
+        native resume process and the extension are simulated; no network request leaves this
+        machine. Pick a scenario (it searches and opens the job for you), then use the page as a candidate would. "Apply" opens a blank
+        synthetic employer tab (it will not load a real site).
+      </p>
+      <div>
+        <button type="button" data-scenario="ready" data-polls="2">Generate succeeds (after ~2 polls)</button>
+        <button type="button" data-scenario="ready" data-polls="8">Generate succeeds slowly (~8 polls)</button>
+        <button type="button" data-scenario="failed" data-polls="2">Generate fails (retry)</button>
+        <button type="button" data-scenario="no_resume" data-polls="2">No uploaded resume</button>
+        <button type="button" data-scenario="never" data-polls="2">Generation never finishes</button>
+      </div>
+      <div>
+        <button type="button" id="calls">Show recorded requests</button>
+        <button type="button" id="ext-on">Extension installed (default)</button>
+        <button type="button" id="ext-off">Extension not installed</button>
+        <button type="button" id="ext-select">Extension: I confirmed on the employer tab</button>
+      </div>
+      <pre id="log" hidden></pre>
+    </section>
+    <main>
+      <div id="root"></div>
+    </main>
+    <script type="module" src="/bundle.js"></script>
+    <script type="module">
+      const log = document.getElementById("log");
+      // Picking a scenario resets the synthetic backend and opens the job, as a candidate would
+      // after searching, so the Generate / Apply step is on screen straight away.
+      async function pressWhenShown(name) {
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          // The tab and the form submit share the label "Search"; the submit is the last one.
+          const match = [...document.querySelectorAll("#root button")]
+            .filter((button) => button.textContent.trim() === name && !button.disabled)
+            .at(-1);
+          if (match) return match.click();
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
+      async function start(scenario, polls) {
+        log.hidden = true;
+        window.showD3ApplyJourney(scenario, polls);
+        // Let the fresh workspace replace the previous one before pressing anything in it.
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        await pressWhenShown("Search");
+        await pressWhenShown("View details and sources");
+      }
+      for (const button of document.querySelectorAll("[data-scenario]"))
+        button.addEventListener("click", () =>
+          start(button.dataset.scenario, Number(button.dataset.polls)),
+        );
+      document.getElementById("calls").addEventListener("click", () => {
+        const calls = window.readD3AssuranceCalls();
+        log.hidden = false;
+        log.textContent = calls
+          .map((call) => `${call.method ?? "GET"} ${call.url.replace(location.origin, "")}`)
+          .join("\n") || "(none yet)";
+      });
+      document.getElementById("ext-on").addEventListener("click", () => window.setD3ExtensionAnswers(true));
+      document.getElementById("ext-off").addEventListener("click", () => window.setD3ExtensionAnswers(false));
+      document
+        .getElementById("ext-select")
+        .addEventListener("click", () => window.setD3ExtensionSelected(true));
+    </script>
+  </body>
+</html>
