@@ -3,7 +3,6 @@
 import {
   type Application,
   type ApplicationPacketPreparation,
-  COVER_LETTER_DISCLOSURE_TEXT,
   COVER_LETTER_DISCLOSURE_VERSION,
   type PrepareApplicationPacketRequest,
 } from "@ai-job-apply/api-contracts";
@@ -51,11 +50,7 @@ import {
   reviewGroups,
 } from "./application-review-state";
 import { ApplyPanel, type ExtensionHandoffState, safeApplyUrl } from "./apply-panel";
-import {
-  GeneratedCoverLetterPanel,
-  GeneratedResumePanel,
-  useTicker,
-} from "./generated-resume-panel";
+import { CoverLetterSection, GeneratedResumePanel, useTicker } from "./generated-resume-panel";
 import type { ManualFormObservation } from "./manual-form-confirmation";
 import {
   type SavedApplicationAnswerSelection,
@@ -126,7 +121,6 @@ function JobApplicationWorkspace({
   const [checking, setChecking] = useState(true);
   const [lookupFailed, setLookupFailed] = useState(false);
   const [lookupAttempt, setLookupAttempt] = useState(0);
-  const [coverLetterRequested, setCoverLetterRequested] = useState(false);
   const [preparation, setPreparation] = useState<ApplicationPacketPreparation>();
   const [acknowledged, setAcknowledged] = useState<ReadonlySet<string>>(new Set());
   const [shownResumeHash, setShownResumeHash] = useState<string>();
@@ -189,7 +183,6 @@ function JobApplicationWorkspace({
     (operation: ApplicationPacketPreparation, current: Application) => {
       acceptApplication(current);
       setPreparation(undefined);
-      setCoverLetterRequested(false);
       setNotice(
         operation.state === "failed"
           ? preparationFailureCopy(operation.errorCode)
@@ -520,7 +513,6 @@ function JobApplicationWorkspace({
     if (lifetime.current.signal.aborted) return undefined;
     if (result.ok && result.kind === "preparation") {
       setPreparation(result.preparation);
-      setCoverLetterRequested(false);
       return undefined;
     }
     return settle(result.ok ? { ok: true, application: result.application } : result, current.id);
@@ -541,13 +533,13 @@ function JobApplicationWorkspace({
     }
   }
 
-  function generate() {
+  function generate(withCoverLetter = false) {
     void run(async () => {
       let current = await ensureApplication();
       current = await ensureEditable(current);
       const next = await prepare(current, {
         resume: "generate",
-        includeCoverLetter: Boolean(coverLetterRequested && coverLetterPreparationEnabled),
+        includeCoverLetter: withCoverLetter && Boolean(coverLetterPreparationEnabled),
       });
       if (
         next &&
@@ -848,21 +840,6 @@ function JobApplicationWorkspace({
         <>
           {!terminal && !inFlight && !approvedReady ? (
             <>
-              {coverLetterPreparationEnabled && !preparation ? (
-                <fieldset disabled={busy || checking}>
-                  <legend>Optional cover letter</legend>
-                  <p>{COVER_LETTER_DISCLOSURE_TEXT}</p>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={coverLetterRequested}
-                      onChange={(event) => setCoverLetterRequested(event.target.checked)}
-                    />{" "}
-                    Prepare a cover letter with OpenAI using these terms
-                  </label>
-                  <p>A new draft requires a new choice.</p>
-                </fieldset>
-              ) : null}
               {preparation ? (
                 <ApplicationPreparationProgress
                   key={preparation.id}
@@ -877,16 +854,19 @@ function JobApplicationWorkspace({
                   nativeMaterials={nativeMaterials}
                   nowMs={clock}
                   busy={busy}
-                  onGenerate={generate}
+                  onGenerate={() => generate()}
                   onApplyWithUploaded={() => apply(true)}
                   onPreviewShown={setShownResumeHash}
                   {...(fetchImplementation ? { fetchImplementation } : {})}
                 />
               )}
-              {application && nativeMaterials && !preparation ? (
-                <GeneratedCoverLetterPanel
-                  key={`${application.id}:${packet?.id}:${packet?.packetHash}`}
+              {!preparation ? (
+                <CoverLetterSection
+                  key={`${application?.id}:${packet?.id}:${packet?.packetHash}`}
                   application={application}
+                  enabled={Boolean(coverLetterPreparationEnabled)}
+                  busy={busy || checking}
+                  onGenerate={() => generate(true)}
                   {...(fetchImplementation ? { fetchImplementation } : {})}
                 />
               ) : null}

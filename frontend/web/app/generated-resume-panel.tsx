@@ -6,6 +6,7 @@ import type {
   ApplicationResumePreview,
   ApplicationTemporaryMaterial,
 } from "@ai-job-apply/api-contracts";
+import { COVER_LETTER_DISCLOSURE_TEXT } from "@ai-job-apply/api-contracts";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { materialDeadline } from "../lib/application-material-lifetime";
 import { fetchResumeFile, fetchResumePreview, sha256OfBytes } from "../lib/applications-client";
@@ -364,9 +365,14 @@ export function useTicker(active: boolean, intervalMs = 1000): number {
  */
 export function GeneratedCoverLetterPanel({
   application,
+  busy = false,
+  onGenerate,
   fetchImplementation,
 }: {
   application: Application;
+  busy?: boolean;
+  /** Drafts a new cover letter. Each draft is its own explicit request. */
+  onGenerate?: (() => void) | undefined;
   fetchImplementation?: typeof globalThis.fetch;
 }) {
   const packet = application.currentPacket;
@@ -411,12 +417,17 @@ export function GeneratedCoverLetterPanel({
   if (!packet || !material) return null;
   if (expired)
     return (
-      <section aria-label="Your cover letter">
+      <section aria-label="Your cover letter" className="resume-step">
         <p role="alert">Your cover letter expired and was deleted. Generate it again.</p>
+        {onGenerate ? (
+          <button type="button" disabled={busy} onClick={onGenerate}>
+            Generate cover letter
+          </button>
+        ) : null}
       </section>
     );
   return (
-    <section aria-label="Your cover letter">
+    <section aria-label="Your cover letter" className="resume-step">
       <h3>Your cover letter</h3>
       {state.phase === "loading" ? <p role="status">Loading your cover letter...</p> : null}
       {state.phase === "error" ? (
@@ -432,6 +443,65 @@ export function GeneratedCoverLetterPanel({
             <p key={key}>{item}</p>
           ))
         : null}
+      {onGenerate && state.phase === "ready" ? (
+        <p>
+          <button type="button" className="link-button" disabled={busy} onClick={onGenerate}>
+            Generate again
+          </button>
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * The optional cover letter, laid out like the resume step: a short description and one Generate
+ * button before it exists, then its own preview. Pressing Generate is the candidate's explicit
+ * permission to send their confirmed career facts and the job text to the model provider; the full
+ * terms sit under Details and the same disclosure version is sent with the request.
+ */
+export function CoverLetterSection({
+  application,
+  enabled,
+  busy,
+  onGenerate,
+  fetchImplementation,
+}: {
+  application: Application | undefined;
+  enabled: boolean;
+  busy: boolean;
+  onGenerate(): void;
+  fetchImplementation?: typeof globalThis.fetch;
+}) {
+  const headingId = useId();
+  const descriptionId = useId();
+  const hasLetter = application?.currentPacket?.temporaryMaterials?.some(
+    (item) => item.kind === "cover_letter",
+  );
+  if (application && hasLetter)
+    return (
+      <GeneratedCoverLetterPanel
+        application={application}
+        busy={busy}
+        onGenerate={enabled ? onGenerate : undefined}
+        {...(fetchImplementation ? { fetchImplementation } : {})}
+      />
+    );
+  if (!enabled) return null;
+  return (
+    <section aria-labelledby={headingId} className="resume-step">
+      <h3 id={headingId}>Cover letter (optional)</h3>
+      <p id={descriptionId}>
+        Drafted by OpenAI from your confirmed career facts and this job's text. You review it before
+        it is used.
+      </p>
+      <details>
+        <summary>Details</summary>
+        <p>{COVER_LETTER_DISCLOSURE_TEXT}</p>
+      </details>
+      <button type="button" aria-describedby={descriptionId} disabled={busy} onClick={onGenerate}>
+        Generate cover letter
+      </button>
     </section>
   );
 }

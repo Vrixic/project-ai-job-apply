@@ -280,13 +280,9 @@ try {
 
   // ---- 6. The optional cover letter keeps its own explicit flow, with no approval ceremony.
   await page.evaluate(() => window.showD3CoverLetterPreparation());
-  await page
-    .getByRole("checkbox", {
-      name: "Prepare a cover letter with OpenAI using these terms",
-      exact: true,
-    })
-    .check();
-  await page.getByRole("button", { name: "Generate resume", exact: true }).press("Enter");
+  assert.equal(await page.getByRole("checkbox").count(), 0);
+  await shot(page, "09-cover-letter-step");
+  await page.getByRole("button", { name: "Generate cover letter", exact: true }).press("Enter");
   await page.getByText("Preparing your resume and cover letter.", { exact: true }).waitFor();
   await page.clock.runFor(2100);
   await page.clock.runFor(2100);

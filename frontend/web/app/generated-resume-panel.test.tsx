@@ -6,7 +6,11 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GenerationView } from "../lib/apply-flow";
-import { GeneratedCoverLetterPanel, GeneratedResumePanel } from "./generated-resume-panel";
+import {
+  CoverLetterSection,
+  GeneratedCoverLetterPanel,
+  GeneratedResumePanel,
+} from "./generated-resume-panel";
 
 const APP = "00000000-0000-7000-8000-000000000001";
 const JOB = "00000000-0000-7000-8000-000000000002";
@@ -364,5 +368,58 @@ describe("GeneratedCoverLetterPanel", () => {
         ?.click(),
     );
     expect(send).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("CoverLetterSection", () => {
+  async function mountSection(props: Partial<Parameters<typeof CoverLetterSection>[0]> = {}) {
+    await act(async () =>
+      root.render(
+        <CoverLetterSection
+          application={application()}
+          enabled
+          busy={false}
+          onGenerate={() => undefined}
+          {...props}
+        />,
+      ),
+    );
+  }
+
+  it("is a minimal step like the resume one: a line, collapsed details and one button", async () => {
+    const onGenerate = vi.fn();
+    await mountSection({ onGenerate });
+    expect(container.querySelector("h3")?.textContent).toBe("Cover letter (optional)");
+    expect(container.querySelectorAll("button")).toHaveLength(1);
+    expect(container.querySelector("input")).toBeNull();
+    expect(container.querySelector("details")?.hasAttribute("open")).toBe(false);
+    expect(container.querySelector("details")?.textContent).toContain("OpenAI");
+    await act(async () => container.querySelector("button")?.click());
+    expect(onGenerate).toHaveBeenCalledOnce();
+    expect((await axe.run(container)).violations).toEqual([]);
+  });
+
+  it("is disabled while busy and absent when the feature is off", async () => {
+    await mountSection({ busy: true });
+    expect(container.querySelector("button")?.disabled).toBe(true);
+    await mountSection({ enabled: false });
+    expect(container.textContent).toBe("");
+  });
+
+  it("offers to generate again after the cover letter expired", async () => {
+    const expired = {
+      schemaVersion: 1,
+      kind: "cover_letter",
+      generationId: GEN,
+      version: 1,
+      contentSha256: CONTENT_HASH,
+      completedAtMs: NOW - 3_600_000,
+      expiresAtMs: NOW - 1_800_000,
+    } as ApplicationTemporaryMaterial;
+    const onGenerate = vi.fn();
+    await mountSection({ application: application({ temporaryMaterials: [expired] }), onGenerate });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("expired");
+    await act(async () => container.querySelector("button")?.click());
+    expect(onGenerate).toHaveBeenCalledOnce();
   });
 });

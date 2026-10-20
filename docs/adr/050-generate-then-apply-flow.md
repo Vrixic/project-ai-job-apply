@@ -66,6 +66,12 @@ use.
      The pasted-link "Continue with the extension" panel, the copy-by-hand answer list, "Stop
      waiting" and "Choose a different resume" are removed from it; reopening still invalidates the
      approval as before.
+   - The optional cover letter is its own step laid out like the resume step (one line, collapsed
+     Details with the full provider terms, one Generate cover letter button). The consent checkbox
+     is gone: pressing Generate is the candidate's permission to send their confirmed career facts
+     and the job text to the model provider, and the same disclosure version is still sent with the
+     request. Each draft is a new click. Because the Gateway builds the cover letter with a generated
+     resume in one packet, generating a cover letter also generates the resume.
 3. **Generation state is honest and server-derived.** Applications exposes an additive
    `resumeGeneration` (`not_requested | preparing | ready | failed | expired`, with an error code and
    request time) derived only from owner metadata (the current packet's generated material and the

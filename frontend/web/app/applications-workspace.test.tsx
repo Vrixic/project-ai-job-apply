@@ -523,6 +523,27 @@ describe("ApplicationsWorkspace: generate, then apply", () => {
   });
 });
 
+describe("ApplicationsWorkspace: cover letter", () => {
+  it("has its own Generate step with no consent checkbox, and sends the disclosure on that click", async () => {
+    const bff = new FakeBff();
+    await mount(bff, { coverLetterPreparationEnabled: true });
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+    expect(container.textContent).toContain("Cover letter (optional)");
+    expect(container.textContent).not.toMatch(/using these terms|requires a new choice/u);
+    await click("Generate cover letter");
+    expect(bff.packetRequests().at(-1)).toMatchObject({
+      coverLetter: { disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true } },
+    });
+  });
+
+  it("does not request a cover letter when only the resume is generated", async () => {
+    const bff = new FakeBff();
+    await mount(bff, { coverLetterPreparationEnabled: true });
+    await click("Generate resume");
+    expect(bff.packetRequests().at(-1)).not.toHaveProperty("coverLetter");
+  });
+});
+
 describe("ApplicationsWorkspace: Apply", () => {
   it("applies directly with the uploaded resume: packet, approval, then the employer page", async () => {
     const bff = new FakeBff();
