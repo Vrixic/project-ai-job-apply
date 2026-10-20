@@ -90,8 +90,8 @@ export function ApplicationsWorkspace({
   fetchImplementation?: typeof globalThis.fetch;
   coverLetterPreparationEnabled?: boolean;
   savedAnswerSelectionEnabled?: boolean;
-  /** Reports whether the candidate's submission for this job has been logged. */
-  onApplied?: (applied: boolean) => void;
+  /** Called once the candidate's submission is logged. The caller then owns showing it. */
+  onApplied?: () => void;
 }) {
   return (
     <JobApplicationWorkspace
@@ -815,9 +815,11 @@ function JobApplicationWorkspace({
     : undefined;
 
   const applied = application?.status === "applied";
+  const onAppliedRef = useRef(onApplied);
+  onAppliedRef.current = onApplied;
   useEffect(() => {
-    onApplied?.(applied);
-  }, [applied, onApplied]);
+    if (applied) onAppliedRef.current?.();
+  }, [applied]);
   const terminal = application?.status === "applied" || application?.status === "cancelled";
   const approvedReady =
     application?.status === "approved" &&
@@ -834,9 +836,10 @@ function JobApplicationWorkspace({
       (attempt) => attempt.status === "ambiguous" || attempt.status === "taken_over",
     );
 
-  // Once the submission is logged the page keeps one word and nothing else.
+  // Once the submission is logged this step keeps one word and nothing else, unless the caller
+  // shows the submitted state itself.
   if (application?.status === "applied")
-    return (
+    return onApplied ? null : (
       <p role="status" className="apply-submitted">
         Submitted
       </p>

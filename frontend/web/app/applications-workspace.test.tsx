@@ -658,6 +658,16 @@ describe("ApplicationsWorkspace: Apply", () => {
     expect(container.textContent).not.toMatch(/Apply to this job|Before you apply|Record/u);
   });
 
+  it("hands the submitted state to its caller instead of drawing it", async () => {
+    const bff = new FakeBff();
+    const onApplied = vi.fn();
+    await mount(bff, { onApplied });
+    await click("Apply");
+    await click("I submitted it");
+    expect(onApplied).toHaveBeenCalled();
+    expect(container.textContent).toBe("");
+  });
+
   it("blocks Apply until empty answers are given and sensitive answers are checked", async () => {
     const bff = new FakeBff();
     bff.needsInput = true;

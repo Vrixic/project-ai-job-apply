@@ -62,9 +62,14 @@ function failureMessage(status: number): string {
 export function JobDetailPanel({
   jobId,
   authenticated,
+  submitted = false,
+  onSubmitted,
 }: {
   jobId: string;
   authenticated: boolean;
+  /** The candidate's submission for this job is logged: the Apply step and sources are removed. */
+  submitted?: boolean;
+  onSubmitted?: () => void;
 }) {
   const panelId = useId();
   const headingId = `${panelId}-heading`;
@@ -76,8 +81,6 @@ export function JobDetailPanel({
   const activeRequest = useRef<DetailRequest | undefined>(undefined);
   const scopeRef = useRef<DetailScope>({ jobId, authenticated });
   const [state, setState] = useState<DetailState>();
-  // After the candidate's submission is logged the sources section goes away with the Apply step.
-  const [submitted, setSubmitted] = useState(false);
 
   // Fence rendering as well as callbacks before passive effect cleanup can run.
   if (scopeRef.current.jobId !== jobId || scopeRef.current.authenticated !== authenticated) {
@@ -311,11 +314,14 @@ export function JobDetailPanel({
                     </ul>
                   </>
                 )}
-                {authenticated && applicationsUiEnabled && result.detail.status === "active" ? (
+                {authenticated &&
+                applicationsUiEnabled &&
+                !submitted &&
+                result.detail.status === "active" ? (
                   <ApplicationsWorkspace
                     jobId={result.detail.id}
                     applyUrl={result.detail.sources[0]?.canonicalUrl}
-                    onApplied={setSubmitted}
+                    {...(onSubmitted ? { onApplied: onSubmitted } : {})}
                   />
                 ) : null}
               </>

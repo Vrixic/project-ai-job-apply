@@ -97,6 +97,8 @@ export function JobSearchForm({
   const [submittedFields, setSubmittedFields] = useState<JobSearchFields>();
   const [items, setItems] = useState<CanonicalJobSummary[]>([]);
   const [appliedJobIds, setAppliedJobIds] = useState<ReadonlySet<string>>(() => new Set());
+  // Jobs submitted during this visit: shown as Submitted in place of Save job.
+  const [submittedJobIds, setSubmittedJobIds] = useState<ReadonlySet<string>>(() => new Set());
   const [cursor, setCursor] = useState<string>();
   const [searching, setSearching] = useState(false);
   const [savingJobId, setSavingJobId] = useState<string>();
@@ -522,15 +524,30 @@ export function JobSearchForm({
                 </p>
                 <p>{job.locations.length > 0 ? job.locations.join(" · ") : "Location flexible"}</p>
                 <small>Verified {new Date(job.lastVerifiedAt).toLocaleDateString()}</small>
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={() => void saveJob(job.id)}
-                  disabled={!authenticated || Boolean(savingJobId)}
-                >
-                  {savingJobId === job.id ? "Saving…" : "Save job"}
-                </button>
-                <JobDetailPanel jobId={job.id} authenticated={authenticated} />
+                {submittedJobIds.has(job.id) ? (
+                  <strong role="status" className="job-submitted">
+                    Submitted
+                  </strong>
+                ) : (
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => void saveJob(job.id)}
+                    disabled={!authenticated || Boolean(savingJobId)}
+                  >
+                    {savingJobId === job.id ? "Saving…" : "Save job"}
+                  </button>
+                )}
+                <JobDetailPanel
+                  jobId={job.id}
+                  authenticated={authenticated}
+                  submitted={submittedJobIds.has(job.id)}
+                  onSubmitted={() =>
+                    setSubmittedJobIds((current) =>
+                      current.has(job.id) ? current : new Set(current).add(job.id),
+                    )
+                  }
+                />
                 <JobReportControl jobId={job.id} />
                 <MatchAssessmentPanel jobId={job.id} />
               </article>

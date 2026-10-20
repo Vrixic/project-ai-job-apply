@@ -191,6 +191,9 @@ try {
   await page.getByRole("dialog").waitFor();
   await page.getByRole("button", { name: "I submitted it", exact: true }).press("Enter");
   await page.getByText("Submitted", { exact: true }).waitFor();
+  // It sits where Save job was, and Save job is gone.
+  assert.equal(await page.getByRole("button", { name: "Save job", exact: true }).count(), 0);
+  assert.equal(await page.getByText("Submitted", { exact: true }).count(), 1);
   // Nothing else is left of the apply step or the sources once the submission is logged.
   assert.equal(await page.getByText("Apply to this job", { exact: true }).count(), 0);
   assert.equal(await page.getByText("Sources and provenance", { exact: true }).count(), 0);
