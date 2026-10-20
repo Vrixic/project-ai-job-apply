@@ -44,11 +44,8 @@ try {
   });
   assert.equal(await page.getByText(/Approve this packet|Reopen for preparation/).count(), 0);
   await page.evaluate(() => window.showD3WithdrawalRecovery("takeover"));
-  await page.getByRole("button", { name: "I submitted it", exact: true }).waitFor();
-  assert.equal(
-    await page.getByRole("button", { name: "It was not submitted", exact: true }).isDisabled(),
-    true,
-  );
+  await page.getByRole("button", { name: "Record submission", exact: true }).click();
+  await page.getByRole("button", { name: "It was not submitted", exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "Generate resume" }).count(), 0);
   await page.getByRole("button", { name: "I submitted it", exact: true }).click();
   await page.getByText("Submitted and confirmed.", { exact: true }).waitFor();

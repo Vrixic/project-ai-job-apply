@@ -12,17 +12,9 @@ import {
 
 export interface ApplicationReviewActions {
   onProvideEntry(entry: { fieldKey: string; value: string | boolean }): Promise<void> | void;
-  onReconcile(
-    input:
-      | { attemptId: string; kind: "submitted" }
-      | { attemptId: string; kind: "not_submitted"; acknowledgesDuplicateRisk: true },
-  ): Promise<void> | void;
 }
 
 const STATUS_COPY: Partial<Record<Application["status"], string>> = {
-  takeover: "Finish this step yourself in the browser. We never bypass verification steps.",
-  reconciliation_required:
-    "We could not confirm whether this was submitted. Do not submit again until you confirm below.",
   applied: "Submitted and confirmed.",
   cancelled: "This application was cancelled.",
 };
@@ -152,13 +144,9 @@ function PacketReview({
   const headingId = useId();
   const active = useRef(false);
   const [busy, setBusy] = useState(false);
-  const [duplicateRisk, setDuplicateRisk] = useState(false);
   const [message, setMessage] = useState<string>();
   const groups = reviewGroups(application);
   const confirm = explicitReviewFields(groups);
-  const openAttempt = application.attempts.find(
-    (attempt) => attempt.status === "ambiguous" || attempt.status === "taken_over",
-  );
   const editable = application.status === "review_required" || application.status === "approved";
 
   async function run(action: () => Promise<void> | void, success: string) {
@@ -240,47 +228,6 @@ function PacketReview({
           </section>
         ) : null}
 
-        {(application.status === "reconciliation_required" || application.status === "takeover") &&
-        openAttempt ? (
-          <section aria-label="Confirm the submission status">
-            <label>
-              <input
-                type="checkbox"
-                checked={duplicateRisk}
-                onChange={(event) => setDuplicateRisk(event.target.checked)}
-              />{" "}
-              I understand that submitting again could create a duplicate application.
-            </label>
-            <button
-              type="button"
-              onClick={() =>
-                run(
-                  () => actions.onReconcile({ attemptId: openAttempt.id, kind: "submitted" }),
-                  "Recorded as submitted.",
-                )
-              }
-            >
-              I submitted it
-            </button>
-            <button
-              type="button"
-              disabled={!duplicateRisk}
-              onClick={() =>
-                run(
-                  () =>
-                    actions.onReconcile({
-                      attemptId: openAttempt.id,
-                      kind: "not_submitted",
-                      acknowledgesDuplicateRisk: true,
-                    }),
-                  "Recorded as not submitted.",
-                )
-              }
-            >
-              It was not submitted
-            </button>
-          </section>
-        ) : null}
         <p role="status" aria-live="polite">
           {message}
         </p>

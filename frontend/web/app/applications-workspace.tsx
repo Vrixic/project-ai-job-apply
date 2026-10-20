@@ -56,6 +56,7 @@ import {
   GeneratedResumePanel,
   useTicker,
 } from "./generated-resume-panel";
+import type { ManualFormObservation } from "./manual-form-confirmation";
 import {
   type SavedApplicationAnswerSelection,
   SavedApplicationAnswers,
@@ -740,6 +741,64 @@ function JobApplicationWorkspace({
       });
   }
 
+  /** Reports the candidate's own statement of what happened. The same body is retried on a replay. */
+  async function reconcile(
+    current: Application,
+    attemptId: string,
+    kind: "submitted" | "not_submitted",
+  ) {
+    const path = `/api/platform/applications/${current.id}/attempts/${attemptId}/reconciliation`;
+    const signature = `${attemptId}:${kind}`;
+    if (reconciliationIntent.current?.signature !== signature) {
+      const observedAt = new Date().toISOString();
+      const body =
+        kind === "submitted"
+          ? {
+              kind: "user_attested_submitted",
+              observedAt,
+              fingerprintSha256: await sha256Hex(`user-attested:${attemptId}:${observedAt}`),
+            }
+          : { kind: "user_attested_not_submitted", acknowledgesDuplicateRisk: true };
+      reconciliationIntent.current = { signature, body };
+    }
+    await settle(
+      await applicationsCall("POST", path, {
+        ...options,
+        body: reconciliationIntent.current.body,
+        idempotencyKey: commandKey(`reconcile-${kind}`, current.id, current.revision),
+      }),
+      current.id,
+    );
+  }
+
+  /** Starts the manual attempt when none is open, then records the candidate's outcome. */
+  async function recordSubmission(
+    outcome: "submitted" | "not_submitted",
+    observation?: ManualFormObservation,
+  ) {
+    if (!application) return;
+    let current = application;
+    if (current.status === "approved") {
+      const result = await startManualApplicationSubmission(
+        current.id,
+        current.revision,
+        options,
+        observation,
+      );
+      // A lost response may already have started takeover. Read it before offering another capture.
+      if (!result.ok && observation) await refresh(current.id);
+      current = await settle(result, current.id);
+    }
+    const attempt = current.attempts.find(
+      (candidate) => candidate.status === "ambiguous" || candidate.status === "taken_over",
+    );
+    if (!attempt) {
+      setNotice("That action is not available in the current state.");
+      throw new Error("No open attempt");
+    }
+    await reconcile(current, attempt.id, outcome);
+  }
+
   const actions: ApplicationReviewActions | undefined = application
     ? {
         async onProvideEntry({ fieldKey, value }) {
@@ -751,36 +810,6 @@ function JobApplicationWorkspace({
             resume: source === "uploaded" || source === "none" ? "uploaded" : "generate",
             answers: next,
           });
-        },
-        async onReconcile(input) {
-          const path = `/api/platform/applications/${application.id}/attempts/${input.attemptId}/reconciliation`;
-          const signature = `${input.attemptId}:${input.kind}`;
-          if (reconciliationIntent.current?.signature !== signature) {
-            const observedAt = new Date().toISOString();
-            const body =
-              input.kind === "submitted"
-                ? {
-                    kind: "user_attested_submitted",
-                    observedAt,
-                    fingerprintSha256: await sha256Hex(
-                      `user-attested:${input.attemptId}:${observedAt}`,
-                    ),
-                  }
-                : { kind: "user_attested_not_submitted", acknowledgesDuplicateRisk: true };
-            reconciliationIntent.current = { signature, body };
-          }
-          await settle(
-            await applicationsCall("POST", path, {
-              ...options,
-              body: reconciliationIntent.current.body,
-              idempotencyKey: commandKey(
-                `reconcile-${input.kind}`,
-                application.id,
-                application.revision,
-              ),
-            }),
-            application.id,
-          );
         },
       }
     : undefined;
@@ -794,6 +823,12 @@ function JobApplicationWorkspace({
     application?.status === "submitting" ||
     application?.status === "takeover" ||
     application?.status === "reconciliation_required";
+  // The candidate is on the employer's page with an attempt open and only the outcome is missing.
+  const awaitingOutcome =
+    (application?.status === "takeover" || application?.status === "reconciliation_required") &&
+    application.attempts.some(
+      (attempt) => attempt.status === "ambiguous" || attempt.status === "taken_over",
+    );
 
   return (
     <section aria-labelledby={headingId} className="apply-flow">
@@ -925,36 +960,16 @@ function JobApplicationWorkspace({
               </section>
             </>
           ) : null}
-          {application && (approvedReady || inFlight) ? (
-            <>
-              {inFlight && actions ? (
-                <ApplicationReviewPanel
-                  application={application}
-                  actions={actions}
-                  acknowledged={acknowledged}
-                  onToggle={() => undefined}
-                />
-              ) : null}
-              {approvedReady ? (
-                <ApplyPanel
-                  application={application}
-                  applyUrl={applyUrl}
-                  handoff={handoff}
-                  {...(fetchImplementation ? { fetchImplementation } : {})}
-                  onRecordManualSubmission={async (observation) => {
-                    const result = await startManualApplicationSubmission(
-                      application.id,
-                      application.revision,
-                      options,
-                      observation,
-                    );
-                    // A lost response may already have started takeover. Read it before offering another capture.
-                    if (!result.ok && observation) await refresh(application.id);
-                    await settle(result, application.id);
-                  }}
-                />
-              ) : null}
-            </>
+          {application && (approvedReady || awaitingOutcome) ? (
+            <ApplyPanel
+              application={application}
+              applyUrl={applyUrl}
+              handoff={handoff}
+              {...(fetchImplementation ? { fetchImplementation } : {})}
+              onRecordSubmission={({ outcome, observation }) =>
+                recordSubmission(outcome, observation)
+              }
+            />
           ) : null}
           {application && terminal ? (
             <ApplicationReviewPanel
@@ -962,7 +977,6 @@ function JobApplicationWorkspace({
               actions={
                 actions ?? {
                   onProvideEntry: () => undefined,
-                  onReconcile: () => undefined,
                 }
               }
               acknowledged={acknowledged}

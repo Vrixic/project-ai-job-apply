@@ -36,13 +36,17 @@ export function ApplyPanel({
   application,
   applyUrl,
   handoff = { phase: "none" },
-  onRecordManualSubmission,
+  onRecordSubmission,
   fetchImplementation,
 }: {
   application: Application;
   applyUrl?: string | undefined;
   handoff?: ExtensionHandoffState;
-  onRecordManualSubmission(observation?: ManualFormObservation): Promise<void> | void;
+  /** Records what the candidate says happened on the employer's page. One step, no second panel. */
+  onRecordSubmission(input: {
+    outcome: "submitted" | "not_submitted";
+    observation?: ManualFormObservation | undefined;
+  }): Promise<void> | void;
   fetchImplementation?: typeof globalThis.fetch;
 }) {
   const headingId = useId();
@@ -56,7 +60,10 @@ export function ApplyPanel({
   const packet = application.currentPacket;
   const href = safeApplyUrl(applyUrl);
   const source = packetResumeSource(packet);
-  const expired = materialsExpired(packet?.temporaryMaterials);
+  // Before recording starts, the generated resume must still be valid. Once an attempt is open
+  // (the candidate is already on the employer's page) only the outcome is asked for.
+  const starting = application.status === "approved";
+  const expired = starting && materialsExpired(packet?.temporaryMaterials);
 
   function close() {
     setOpen(false);
@@ -68,16 +75,19 @@ export function ApplyPanel({
     if (open) dialog.current?.focus();
   }, [open]);
 
-  async function recordManualSubmission() {
-    if (
-      expired ||
-      (packet?.form && (!observation || Date.now() >= observation.capturedAtEpochMs + 60_000))
-    )
-      return;
+  const formUnconfirmed = Boolean(
+    starting &&
+      packet?.form &&
+      (!observation || Date.now() >= observation.capturedAtEpochMs + 60_000),
+  );
+
+  async function recordSubmission(outcome: "submitted" | "not_submitted") {
+    if (expired || formUnconfirmed) return;
     setRecording(true);
     setMessage(undefined);
     try {
-      await onRecordManualSubmission(observation);
+      await onRecordSubmission({ outcome, observation });
+      setOpen(false);
     } catch {
       setMessage("That did not go through. Check the application state and try again.");
     } finally {
@@ -113,7 +123,9 @@ export function ApplyPanel({
     }
   }
 
-  if (application.packetAvailability === "withheld") return null;
+  // A withheld packet grants nothing. With an attempt already open only the outcome is asked for.
+  const withheld = application.packetAvailability === "withheld";
+  if (withheld && starting) return null;
 
   const resumeName = source === "generated" ? "generated resume (PDF)" : "uploaded resume";
 
@@ -124,20 +136,24 @@ export function ApplyPanel({
         <p role="alert">
           Your generated resume expired. Generate it again, or apply with your uploaded resume.
         </p>
-      ) : handoff.phase === "unavailable" ? (
+      ) : application.status === "reconciliation_required" ? (
+        <p role="alert">
+          We could not confirm whether this was submitted. Do not submit again until you record it.
+        </p>
+      ) : !starting ? null : handoff.phase === "unavailable" ? (
         <p role="status">The extension did not answer. Finish on the employer's page by hand.</p>
       ) : handoff.phase !== "none" ? (
         <p role="status">
           Open the ApplyDash extension on the employer's page. It will use your {resumeName}.
         </p>
       ) : null}
-      {href && !expired ? (
+      {href && !expired && !withheld ? (
         <p>
           <a href={href} target="_blank" rel="noopener noreferrer">
             Open the employer's page (new tab)
           </a>
         </p>
-      ) : !href ? (
+      ) : !href && !withheld ? (
         <p>
           We do not have a safe link to this application page. Find the job on the employer's site.
         </p>
@@ -159,11 +175,11 @@ export function ApplyPanel({
           >
             <h4 id={dialogHeadingId}>Record submission</h4>
             <p>
-              {packet?.form
-                ? "Confirm the current form below, then continue. You submit on the employer's site yourself."
-                : "Continue to tell us whether you submitted the application on the employer's site."}
+              {starting && packet?.form
+                ? "Confirm the current form below, then tell us what happened on the employer's site."
+                : "Did you submit the application on the employer's site?"}
             </p>
-            {packet?.form ? (
+            {starting && packet?.form ? (
               <ManualFormConfirmation
                 key={`${application.id}:${application.revision}`}
                 application={application}
@@ -174,13 +190,21 @@ export function ApplyPanel({
             <p role="status" aria-live="polite">
               {message}
             </p>
+            <p>If it was not submitted, submitting again later could create a duplicate.</p>
             <div className="modal-actions">
               <button
                 type="button"
-                disabled={recording || Boolean(packet?.form && !observation)}
-                onClick={() => void recordManualSubmission()}
+                disabled={recording || formUnconfirmed}
+                onClick={() => void recordSubmission("submitted")}
               >
-                {recording ? "Opening..." : "Continue"}
+                I submitted it
+              </button>
+              <button
+                type="button"
+                disabled={recording || formUnconfirmed}
+                onClick={() => void recordSubmission("not_submitted")}
+              >
+                It was not submitted
               </button>
               <button type="button" onClick={close}>
                 Cancel

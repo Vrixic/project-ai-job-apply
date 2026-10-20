@@ -104,7 +104,6 @@ afterEach(() => {
 function actions() {
   return {
     onProvideEntry: vi.fn<ApplicationReviewActions["onProvideEntry"]>(),
-    onReconcile: vi.fn<ApplicationReviewActions["onReconcile"]>(),
   };
 }
 
@@ -220,36 +219,9 @@ describe("ApplicationReviewPanel", () => {
     expect(onToggle).toHaveBeenCalledWith("authorization.work_in_country");
   });
 
-  it("keeps reconciliation of an ambiguous submission available", async () => {
-    const handlers = await render(
-      application([resumeField], {
-        status: "reconciliation_required",
-        attempts: [
-          {
-            id: "00000000-0000-7000-8000-000000000004",
-            sequence: 1,
-            status: "ambiguous",
-            adapterId: "manual",
-            adapterVersion: "none",
-            startedAt: AT,
-          },
-        ] as unknown as Application["attempts"],
-      }),
-    );
-    expect(container.textContent).toContain("Do not submit again until you confirm");
-    const notSubmitted = Array.from(container.querySelectorAll("button")).find(
-      (element) => element.textContent === "It was not submitted",
-    );
-    expect(notSubmitted?.disabled).toBe(true);
-    await act(async () =>
-      Array.from(container.querySelectorAll("button"))
-        .find((element) => element.textContent === "I submitted it")
-        ?.click(),
-    );
-    expect(handlers.onReconcile).toHaveBeenCalledWith({
-      attemptId: "00000000-0000-7000-8000-000000000004",
-      kind: "submitted",
-    });
+  it("leaves an open submission outcome to the Apply panel", async () => {
+    await render(application([resumeField], { status: "reconciliation_required" }));
+    expect(container.textContent).toBe("");
   });
 
   it("explains a withheld packet", async () => {

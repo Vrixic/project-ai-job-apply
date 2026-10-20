@@ -99,7 +99,7 @@ async function mount(props: Partial<Parameters<typeof ApplyPanel>[0]> = {}) {
       <ApplyPanel
         application={approved()}
         applyUrl="https://boards.example.test/jobs/1"
-        onRecordManualSubmission={() => undefined}
+        onRecordSubmission={() => undefined}
         {...props}
       />,
     );
@@ -187,17 +187,46 @@ describe("ApplyPanel", () => {
     expect(button("Record submission").disabled).toBe(true);
   });
 
-  it("opens recording in a dialog and begins it only on explicit confirmation", async () => {
-    const onRecordManualSubmission = vi.fn(async () => undefined);
-    await mount({ onRecordManualSubmission });
+  it("opens recording in a dialog and records the outcome in that one step", async () => {
+    const onRecordSubmission = vi.fn(async () => undefined);
+    await mount({ onRecordSubmission });
     await act(async () => button("Record submission").click());
     const open = dialog();
     expect(open?.getAttribute("aria-modal")).toBe("true");
-    expect(open?.textContent).toContain("whether you submitted the application");
-    expect(onRecordManualSubmission).not.toHaveBeenCalled();
-    await act(async () => button("Continue").click());
-    expect(onRecordManualSubmission).toHaveBeenCalledOnce();
+    expect(open?.textContent).toContain("Did you submit the application");
+    expect(onRecordSubmission).not.toHaveBeenCalled();
+    await act(async () => button("It was not submitted").click());
+    expect(onRecordSubmission).toHaveBeenCalledWith({
+      outcome: "not_submitted",
+      observation: undefined,
+    });
+    expect(dialog()).toBeNull();
+    await act(async () => button("Record submission").click());
+    await act(async () => button("I submitted it").click());
+    expect(onRecordSubmission).toHaveBeenLastCalledWith({
+      outcome: "submitted",
+      observation: undefined,
+    });
   });
+
+  it.each(["takeover", "reconciliation_required"] as const)(
+    "asks only for the outcome once an attempt is open (%s)",
+    async (status) => {
+      const application = { ...approved({ generated: true }), status } as Application;
+      const material = application.currentPacket?.temporaryMaterials?.[0];
+      if (!material) throw Error("Missing fixture material");
+      // An expired generated resume no longer matters: nothing is attached any more.
+      material.completedAtMs = Date.now() - 3_600_000;
+      material.expiresAtMs = material.completedAtMs + 1_800_000;
+      const onRecordSubmission = vi.fn(async () => undefined);
+      await mount({ application, onRecordSubmission });
+      expect(button("Record submission").disabled).toBe(false);
+      expect(container.textContent).not.toContain("generated resume expired");
+      await act(async () => button("Record submission").click());
+      await act(async () => button("I submitted it").click());
+      expect(onRecordSubmission).toHaveBeenCalledOnce();
+    },
+  );
 
   it("closes the dialog with Cancel or Escape and returns focus to the trigger", async () => {
     await mount();
@@ -214,12 +243,12 @@ describe("ApplyPanel", () => {
 
   it("shows fixed copy in the dialog when recording cannot start", async () => {
     await mount({
-      onRecordManualSubmission: async () => {
+      onRecordSubmission: async () => {
         throw new Error("SECRET upstream detail");
       },
     });
     await act(async () => button("Record submission").click());
-    await act(async () => button("Continue").click());
+    await act(async () => button("I submitted it").click());
     expect(dialog()?.querySelector("[role=status]")?.textContent).toContain(
       "That did not go through",
     );
@@ -231,6 +260,15 @@ describe("ApplyPanel", () => {
     (application as { packetAvailability?: string }).packetAvailability = "withheld";
     await mount({ application });
     expect(container.textContent).toBe("");
+  });
+
+  it("still asks for the outcome of an open attempt when the packet is withheld", async () => {
+    const application = { ...approved(), status: "takeover" } as Application;
+    (application as { packetAvailability?: string }).packetAvailability = "withheld";
+    await mount({ application });
+    expect(container.querySelector("a")).toBeNull();
+    await act(async () => button("Record submission").click());
+    expect(button("I submitted it").disabled).toBe(false);
   });
 
   it("has no automated accessibility violations, closed or open", async () => {
@@ -251,10 +289,11 @@ it("requires a fresh explicit form match before recording a form-bound approved 
     formHash: HASH,
   };
   const record = vi.fn();
-  await mount({ application, onRecordManualSubmission: record });
+  await mount({ application, onRecordSubmission: record });
   await act(async () => button("Record submission").click());
-  expect(button("Continue").disabled).toBe(true);
-  await act(async () => button("Continue").click());
+  expect(button("I submitted it").disabled).toBe(true);
+  expect(button("It was not submitted").disabled).toBe(true);
+  await act(async () => button("I submitted it").click());
   expect(record).not.toHaveBeenCalled();
   expect(dialog()?.textContent).toContain("Before submitting on the employer site");
 });

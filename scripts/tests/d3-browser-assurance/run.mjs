@@ -190,7 +190,6 @@ try {
   // Recording opens a small dialog; the panel itself stays minimal.
   await page.getByRole("button", { name: "Record submission", exact: true }).press("Enter");
   await page.getByRole("dialog").waitFor();
-  await page.getByRole("button", { name: "Continue", exact: true }).press("Enter");
   await page.getByRole("button", { name: "I submitted it", exact: true }).press("Enter");
   await page.getByText("Submitted and confirmed.", { exact: true }).waitFor();
   await page.getByRole("tab", { name: "Applied", exact: true }).click();
