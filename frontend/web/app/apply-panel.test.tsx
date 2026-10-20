@@ -131,15 +131,22 @@ describe("safeApplyUrl", () => {
   });
 });
 
+function dialog(): HTMLElement | null {
+  return container.querySelector('[role="dialog"]');
+}
+
 describe("ApplyPanel", () => {
-  it("opens the employer's page in a new tab and leaves submission to the candidate", async () => {
+  it("is minimal: a heading, the employer link and one record action", async () => {
     await mount();
     const link = container.querySelector("a");
     expect(link?.getAttribute("href")).toBe("https://boards.example.test/jobs/1");
     expect(link?.getAttribute("target")).toBe("_blank");
     expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
-    expect(container.textContent).toContain("confirm sensitive answers and the final submit");
-    expect(container.textContent).not.toMatch(/applied successfully|Download Word|DOCX/iu);
+    expect(container.querySelectorAll("button")).toHaveLength(1);
+    expect(container.textContent).not.toMatch(
+      /Stop waiting|different resume|review link|copy by hand|Record what happened|DOCX|Download Word/iu,
+    );
+    expect(dialog()).toBeNull();
   });
 
   it("says so plainly when there is no safe link", async () => {
@@ -151,39 +158,22 @@ describe("ApplyPanel", () => {
   it.each([
     ["armed", "uploaded resume", approved()],
     ["armed", "generated resume (PDF)", approved({ generated: true })],
-    ["waiting_for_extension", "Waiting for you", approved({ generated: true })],
+    ["waiting_for_extension", "generated resume (PDF)", approved({ generated: true })],
+    ["resume_sent", "generated resume (PDF)", approved({ generated: true })],
   ] as const)(
     "tells the candidate which resume the extension will use (%s)",
     async (phase, copy, application) => {
       await mount({ application, handoff: { phase } as ExtensionHandoffState });
       expect(container.querySelector("[role=status]")?.textContent).toContain(copy);
-      expect(container.textContent).toContain("it already knows this application");
     },
   );
 
-  it("confirms the generated resume reached the extension", async () => {
-    await mount({ application: approved({ generated: true }), handoff: { phase: "resume_sent" } });
-    expect(container.textContent).toContain("Your generated resume reached the extension");
-  });
-
-  it("lets the candidate stop waiting for the extension", async () => {
-    const stop = vi.fn();
-    await mount({
-      application: approved({ generated: true }),
-      handoff: { phase: "waiting_for_extension" },
-      onStopWaiting: stop,
-    });
-    await act(async () => button("Stop waiting for the extension").click());
-    expect(stop).toHaveBeenCalledOnce();
-  });
-
-  it("falls back to the manual path when the extension did not answer", async () => {
+  it("falls back to a plain instruction when the extension did not answer", async () => {
     await mount({ handoff: { phase: "unavailable" } });
     expect(container.textContent).toContain("The extension did not answer");
-    expect(container.textContent).toContain("Your answers, to copy by hand");
   });
 
-  it("shows a generated resume that expired and offers no employer link", async () => {
+  it("shows a generated resume that expired, with no employer link or record action", async () => {
     const application = approved({ generated: true });
     const material = application.currentPacket?.temporaryMaterials?.[0];
     if (!material) throw Error("Missing fixture material");
@@ -194,77 +184,43 @@ describe("ApplyPanel", () => {
       "generated resume expired",
     );
     expect(container.querySelector("a")).toBeNull();
-    expect(button("Record submission status").disabled).toBe(true);
+    expect(button("Record submission").disabled).toBe(true);
   });
 
-  it("lists the approved answers and copies one on request", async () => {
-    const writeText = vi.fn(async () => undefined);
-    vi.stubGlobal("navigator", { clipboard: { writeText } });
-    await mount();
-    expect(container.textContent).toContain("Contact email:");
-    expect(container.textContent).toContain("candidate@example.test");
-    expect(container.textContent).not.toContain("Documents resume");
-    await act(async () => {
-      button("Copy Contact email").click();
-    });
-    expect(writeText).toHaveBeenCalledWith("candidate@example.test");
-    expect(container.querySelector("[role=status]")?.textContent).toBe("Contact email copied.");
-  });
-
-  it("explains a blocked clipboard instead of failing silently", async () => {
-    vi.stubGlobal("navigator", {
-      clipboard: {
-        writeText: async () => {
-          throw new Error("denied");
-        },
-      },
-    });
-    await mount();
-    await act(async () => {
-      button("Copy Contact email").click();
-    });
-    expect(container.querySelector("[role=status]")?.textContent).toContain(
-      "did not allow copying",
-    );
-  });
-
-  it("never offers an unresolved answer as the literal text null", async () => {
-    const application = approved();
-    application.currentPacket?.fields.push({
-      fieldKey: "questions.why_company",
-      value: null,
-      origin: "confirmed_fact",
-      sourceFactIds: [],
-      confidence: 0.4,
-      disposition: "user_action",
-      reasons: ["unsupported_value"],
-      requiresReview: true,
-    });
-    await mount({ application });
-    expect(container.textContent).not.toContain("null");
-  });
-
-  it("begins the candidate confirmation flow only on explicit request", async () => {
+  it("opens recording in a dialog and begins it only on explicit confirmation", async () => {
     const onRecordManualSubmission = vi.fn(async () => undefined);
     await mount({ onRecordManualSubmission });
-    expect(container.textContent).toContain("whether the application was submitted");
+    await act(async () => button("Record submission").click());
+    const open = dialog();
+    expect(open?.getAttribute("aria-modal")).toBe("true");
+    expect(open?.textContent).toContain("whether you submitted the application");
     expect(onRecordManualSubmission).not.toHaveBeenCalled();
-    await act(async () => {
-      button("Record submission status").click();
-    });
+    await act(async () => button("Continue").click());
     expect(onRecordManualSubmission).toHaveBeenCalledOnce();
   });
 
-  it("shows fixed copy when recording cannot start", async () => {
+  it("closes the dialog with Cancel or Escape and returns focus to the trigger", async () => {
+    await mount();
+    await act(async () => button("Record submission").click());
+    await act(async () => button("Cancel").click());
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(button("Record submission"));
+    await act(async () => button("Record submission").click());
+    await act(async () => {
+      dialog()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(dialog()).toBeNull();
+  });
+
+  it("shows fixed copy in the dialog when recording cannot start", async () => {
     await mount({
       onRecordManualSubmission: async () => {
         throw new Error("SECRET upstream detail");
       },
     });
-    await act(async () => {
-      button("Record submission status").click();
-    });
-    expect(container.querySelector("[role=status]")?.textContent).toContain(
+    await act(async () => button("Record submission").click());
+    await act(async () => button("Continue").click());
+    expect(dialog()?.querySelector("[role=status]")?.textContent).toContain(
       "That did not go through",
     );
     expect(container.textContent).not.toContain("SECRET");
@@ -277,10 +233,12 @@ describe("ApplyPanel", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("has no automated accessibility violations", async () => {
+  it("has no automated accessibility violations, closed or open", async () => {
     await mount({ handoff: { phase: "armed" } });
-    const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
-    expect(results.violations.map((v) => v.id)).toEqual([]);
+    const rules = { rules: { "color-contrast": { enabled: false } } };
+    expect((await axe.run(container, rules)).violations.map((v) => v.id)).toEqual([]);
+    await act(async () => button("Record submission").click());
+    expect((await axe.run(container, rules)).violations.map((v) => v.id)).toEqual([]);
   });
 });
 
@@ -294,29 +252,9 @@ it("requires a fresh explicit form match before recording a form-bound approved 
   };
   const record = vi.fn();
   await mount({ application, onRecordManualSubmission: record });
-  expect(button("Record submission status").disabled).toBe(true);
-  await act(async () => button("Record submission status").click());
+  await act(async () => button("Record submission").click());
+  expect(button("Continue").disabled).toBe(true);
+  await act(async () => button("Continue").click());
   expect(record).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("Before submitting on the employer site");
-});
-
-it("displays and copies an approved false answer as No during manual Apply", async () => {
-  const application = approved();
-  if (!application.currentPacket) throw new Error("Missing fixture packet");
-  application.currentPacket.fields.push({
-    fieldKey: "authorization.us_authorized",
-    value: false,
-    origin: "user_entered",
-    sourceFactIds: [],
-    confidence: 1,
-    disposition: "review",
-    reasons: [],
-    requiresReview: true,
-  });
-  const writeText = vi.fn(async () => undefined);
-  vi.stubGlobal("navigator", { clipboard: { writeText } });
-  await mount({ application });
-  expect(container.textContent).toContain("Authorization us authorized: No");
-  await act(async () => button("Copy Authorization us authorized").click());
-  expect(writeText).toHaveBeenCalledWith("No");
+  expect(dialog()?.textContent).toContain("Before submitting on the employer site");
 });

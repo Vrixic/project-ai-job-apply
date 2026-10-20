@@ -326,8 +326,9 @@ activation or phase-completion claim follows from the source flag or local mock-
 
 ## Manual extension handoff (default off)
 
-`NEXT_PUBLIC_APPLICATION_EXTENSION_HANDOFF=enabled` offers an opaque application/job review link
-only for a current approved, unexpired packet. The separately configured unpacked extension reads
+`NEXT_PUBLIC_APPLICATION_EXTENSION_HANDOFF=enabled` allows the jobs page to reopen an opaque
+application/job review link. The workspace no longer shows a copy-link panel after Apply (the
+extension is armed by the apply intent instead, ADR-050). The separately configured unpacked extension reads
 that packet with its own account and copies candidate-approved answers on the matching employer
 page. Generated documents remain in this native browser workspace. The extension never submits.
 An exact `/jobs?application=UUID&job=UUID` link reopens that owner-scoped application; a failed or

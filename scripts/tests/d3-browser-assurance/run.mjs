@@ -149,7 +149,7 @@ try {
   const employer = await opened;
   await employer.waitForURL(EMPLOYER);
   assert.equal(await employer.evaluate(() => window.opener), null);
-  await page.getByText("Waiting for you", { exact: false }).waitFor();
+  await page.getByText("Open the ApplyDash extension", { exact: false }).waitFor();
   await shot(page, "04-apply-waiting-for-extension");
   let calls = await callsOf();
   const approval = calls.find((call) => call.url.endsWith("/approval"));
@@ -169,7 +169,11 @@ try {
   // The candidate opens the extension on the employer page; the next retry delivers the PDF.
   await page.evaluate(() => window.setD3ExtensionSelected(true));
   await page.clock.runFor(2100);
-  await page.getByText("Your generated resume reached the extension", { exact: false }).waitFor();
+  await page.waitForFunction(() =>
+    window
+      .readD3ExtensionMessages()
+      .some((message) => message.schema === "application-native-transfer-commit.v1"),
+  );
   messages = await messagesOf();
   assert.deepEqual(
     [...new Set(messages.map((message) => message.schema))],
@@ -183,7 +187,10 @@ try {
   await a11y("apply");
   await storage("generated journey");
 
-  await page.getByRole("button", { name: "Record submission status", exact: true }).press("Enter");
+  // Recording opens a small dialog; the panel itself stays minimal.
+  await page.getByRole("button", { name: "Record submission", exact: true }).press("Enter");
+  await page.getByRole("dialog").waitFor();
+  await page.getByRole("button", { name: "Continue", exact: true }).press("Enter");
   await page.getByRole("button", { name: "I submitted it", exact: true }).press("Enter");
   await page.getByText("Submitted and confirmed.", { exact: true }).waitFor();
   await page.getByRole("tab", { name: "Applied", exact: true }).click();
@@ -255,7 +262,7 @@ try {
     calls.find((call) => call.url.endsWith("/approval"))?.body.acknowledgedFieldKeys,
     ["documents.resume"],
   );
-  await page.getByText("Open the ApplyDash extension on it", { exact: false }).waitFor();
+  await page.getByText("It will use your uploaded resume", { exact: false }).waitFor();
   await shot(page, "08-applied-directly");
   await a11y("direct apply");
   await direct.close();
@@ -305,12 +312,14 @@ try {
   const waitingTab = context.waitForEvent("page");
   await page.getByRole("button", { name: "Apply", exact: true }).press("Enter");
   await (await waitingTab).close();
-  await page.getByText("Waiting for you", { exact: false }).waitFor();
+  await page.getByText("Open the ApplyDash extension", { exact: false }).waitFor();
   const signedOutTab = await context.newPage();
   try {
     await signedOutTab.goto(server.origin);
     await signedOutTab.evaluate(() => window.showD3SignedOut());
-    await page.waitForFunction(() => !document.body.innerText.includes("Waiting for you"));
+    await page.waitForFunction(
+      () => !document.body.innerText.includes("Open the ApplyDash extension"),
+    );
   } finally {
     await signedOutTab.close();
   }

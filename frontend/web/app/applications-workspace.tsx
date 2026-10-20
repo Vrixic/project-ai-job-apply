@@ -940,14 +940,6 @@ function JobApplicationWorkspace({
                   application={application}
                   applyUrl={applyUrl}
                   handoff={handoff}
-                  onStopWaiting={withdrawTransfer}
-                  onChangeResume={() =>
-                    void run(async () => {
-                      withdrawTransfer();
-                      setHandoffState(undefined);
-                      await ensureEditable(application);
-                    })
-                  }
                   {...(fetchImplementation ? { fetchImplementation } : {})}
                   onRecordManualSubmission={async (observation) => {
                     const result = await startManualApplicationSubmission(

@@ -57,8 +57,11 @@ use.
      only when the resume identity is shown beside the button and, for a generated resume, its exact
      preview was displayed to the candidate in this session. The uploaded resume is named at Apply.
    - The cancel action and the replace-while-running checkbox leave the UI; the routes remain for
-     reconciliation and API clients. A different resume is chosen by reopening, which invalidates
-     the approval as before.
+     reconciliation and API clients. The panel after Apply is minimal: the employer link, one line
+     naming the resume the extension will use, and a Record submission button that opens a dialog.
+     The pasted-link "Continue with the extension" panel, the copy-by-hand answer list, "Stop
+     waiting" and "Choose a different resume" are removed from it; reopening still invalidates the
+     approval as before.
 3. **Generation state is honest and server-derived.** Applications exposes an additive
    `resumeGeneration` (`not_requested | preparing | ready | failed | expired`, with an error code and
    request time) derived only from owner metadata (the current packet's generated material and the

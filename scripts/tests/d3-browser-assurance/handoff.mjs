@@ -233,11 +233,10 @@ try {
   const employerTab = web.context().waitForEvent("page");
   await applySaved.click();
   await (await employerTab).close();
-  await web.getByRole("button", { name: "Record submission status", exact: true }).waitFor();
-  assert.equal(
-    await web.getByRole("button", { name: "Record submission status", exact: true }).isEnabled(),
-    false,
-  );
+  await web.getByRole("button", { name: "Record submission", exact: true }).click();
+  await web.getByRole("dialog").waitFor();
+  // A form-bound packet cannot be recorded until the current form is explicitly confirmed.
+  assert.equal(await web.getByRole("button", { name: "Continue", exact: true }).isEnabled(), false);
   await page.bringToFront();
   await page.getByLabel("Application review link").fill(LINK);
   await page.getByRole("button", { name: "Copy employer question structure", exact: true }).click();
@@ -252,7 +251,7 @@ try {
       exact: true,
     })
     .check();
-  await web.getByRole("button", { name: "Record submission status", exact: true }).click();
+  await web.getByRole("button", { name: "Continue", exact: true }).click();
   await web.getByRole("button", { name: "I submitted it", exact: true }).click();
   await web.getByText("Submitted and confirmed.", { exact: true }).waitFor();
   await web.getByText("Submission confirmed by you.", { exact: true }).waitFor();

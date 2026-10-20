@@ -537,7 +537,7 @@ describe("ApplicationsWorkspace: Apply", () => {
     expect(openedTab.opener).toBeNull();
     expect(openedTab.location.replace).toHaveBeenCalledWith(APPLY_URL);
     expect(container.textContent).toContain("Finish on the employer's page");
-    expect(container.textContent).toContain("final submit on the employer's page");
+    expect(container.textContent).toContain("Record submission");
     expectNoRemovedCopy();
   });
 
@@ -790,7 +790,7 @@ describe("ApplicationsWorkspace: extension hand-off", () => {
     await click("Generate resume");
     await advance(6_500);
     await click("Apply");
-    expect(container.textContent).toContain("Waiting for you");
+    expect(container.textContent).toContain("Open the ApplyDash extension");
     await advance(2_100);
     await advance(2_100);
     await advance(2_100);
@@ -806,10 +806,10 @@ describe("ApplicationsWorkspace: extension hand-off", () => {
     expect(files).toHaveLength(1);
     expect(files[0]).toMatchObject({ format: "pdf", mediaType: "application/pdf" });
     expect(JSON.stringify(messages)).not.toMatch(/docx|wordprocessingml/iu);
-    expect(container.textContent).toContain("Your generated resume reached the extension");
+    expect(container.textContent).toContain("It will use your generated resume (PDF)");
   });
 
-  it("falls back to the manual path when no extension answers", async () => {
+  it("tells the candidate to finish by hand when no extension answers", async () => {
     currentBff = new FakeBff();
     Object.defineProperty(window, "chrome", {
       configurable: true,

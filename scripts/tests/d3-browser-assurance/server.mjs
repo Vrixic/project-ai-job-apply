@@ -16,7 +16,7 @@ function assertOutputBoundary() {
 
 export async function startD3BrowserAssuranceServer(options = {}) {
   const indexFile = options.indexFile ?? "index.html";
-  const port = options.port ?? 4177;
+  const port = options.port ?? Number(process.env.D3_BROWSER_ASSURANCE_PORT ?? 4177);
   assertOutputBoundary();
   await rm(output, { recursive: true, force: true });
   await mkdir(output, { recursive: true });
