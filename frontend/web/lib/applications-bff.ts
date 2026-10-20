@@ -47,7 +47,7 @@ interface OperationSpec {
   needsApplication: boolean;
   needsAttempt: boolean;
   historyQuery?: boolean;
-  /** The single allowed `format` query parameter (`docx` or `pdf`). */
+  /** The single allowed `format` query parameter (generated resumes are PDF only). */
   formatQuery?: boolean;
   generationQuery?: boolean;
   materialKind?: "tailored_resume" | "cover_letter";
@@ -338,12 +338,12 @@ export function historySearch(search: string): string | undefined {
   return `?${kept.join("&")}`;
 }
 
-/** The resume file route takes exactly one `format` parameter, `docx` or `pdf`, and nothing else. */
+/** The resume file route takes exactly one `format` parameter, `pdf`, and nothing else. */
 export function formatSearch(search: string): string | undefined {
   const parameters = [...new URLSearchParams(search)];
   const only = parameters[0];
   if (parameters.length !== 1 || !only || only[0] !== "format") return undefined;
-  return only[1] === "docx" || only[1] === "pdf" ? `?format=${only[1]}` : undefined;
+  return only[1] === "pdf" ? "?format=pdf" : undefined;
 }
 
 export interface ApplicationsRouteDependencies {

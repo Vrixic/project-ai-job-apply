@@ -1043,6 +1043,8 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
         return await nativeTransfer.apply(message.reviewLink);
       }
       if (message.action === "application_native_clear") return { ok: true };
+      if (message.action === "application_pending_intent")
+        return nativeTransfer?.pendingIntent() ?? { ok: true };
       if (message.action === "application_form_capture")
         return await captureApplicationForm(message.reviewLink, generation);
       if (message.action === "application_handoff_clear") return { ok: true };

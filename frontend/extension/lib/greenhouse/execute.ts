@@ -140,7 +140,9 @@ export async function executeGreenhouseApplication(options: {
     )
       throw unavailable();
     const plan = buildFillPlan(inspection.form, options.packet, {
-      resume: files.some((file) => file.kind === "tailored_resume"),
+      resume: files.some(
+        (file) => file.kind === "tailored_resume" || file.kind === "uploaded_resume",
+      ),
       coverLetter: files.some((file) => file.kind === "cover_letter"),
     });
     // A challenge page is prepared completely but never submitted: the candidate completes the
@@ -154,7 +156,7 @@ export async function executeGreenhouseApplication(options: {
           plannedAttachments.filter(
             (action) =>
               action.fieldKey ===
-              (file.kind === "tailored_resume" ? "documents.resume" : "documents.cover_letter"),
+              (file.kind === "cover_letter" ? "documents.cover_letter" : "documents.resume"),
           ).length !== 1,
       )
     )
@@ -261,9 +263,15 @@ export async function executeGreenhouseApplication(options: {
       )
         throw unavailable();
       actionable(control);
-      const kind = action.fieldKey === "documents.resume" ? "tailored_resume" : "cover_letter";
-      const file = files.find((candidate) => candidate.kind === kind);
-      if (!file || file.bytes.byteLength < 1 || file.bytes.byteLength > 300_000)
+      const file = files.find((candidate) =>
+        action.fieldKey === "documents.resume"
+          ? candidate.kind === "tailored_resume" || candidate.kind === "uploaded_resume"
+          : candidate.kind === "cover_letter",
+      );
+      const kind = file?.kind ?? "cover_letter";
+      // A generated file is at most 300 KB; the candidate's own original may be up to 2 MiB.
+      const maximumBytes = kind === "uploaded_resume" ? 2 * 1024 * 1024 : 300_000;
+      if (!file || file.bytes.byteLength < 1 || file.bytes.byteLength > maximumBytes)
         throw unavailable();
       const suffix = file.format === "pdf" ? ".pdf" : ".docx";
       const accept = control.accept
@@ -279,7 +287,11 @@ export async function executeGreenhouseApplication(options: {
       const transfer = new view.DataTransfer();
       const copy = new Uint8Array(file.bytes);
       try {
-        transfer.items.add(new view.File([copy], `${kind}${suffix}`, { type: file.mediaType }));
+        transfer.items.add(
+          new view.File([copy], `${kind === "uploaded_resume" ? "resume" : kind}${suffix}`, {
+            type: file.mediaType,
+          }),
+        );
       } finally {
         copy.fill(0);
       }

@@ -29,6 +29,8 @@ const COPY: Readonly<Record<string, string>> = {
   application_limit_reached: "You have reached the application limit.",
   application_packet_stale:
     "The job, form, or documents changed. Prepare the application again to review the new version.",
+  application_resume_too_large:
+    "Your uploaded resume is larger than 2 MB, which is too large to attach automatically. Upload a smaller copy in your profile, or generate a resume for this job.",
   application_approval_refused: "That approval was not accepted. Review the highlighted answers.",
   application_state_conflict: "That action is not available in the current state.",
   application_attempt_refused: "That submission step is not allowed right now.",

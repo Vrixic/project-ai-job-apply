@@ -29,7 +29,17 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function setup(mode = "success") {
+const ORIGINAL = new TextEncoder().encode("%PDF-1.4 the candidate's own original resume");
+const ORIGINAL_SHA = createHash("sha256").update(ORIGINAL).digest("hex");
+const UPLOADED_DOCUMENT = "00000000-0000-7000-8000-000000000030";
+
+/** `original` is the candidate's file the packet binds; `file` is what the executor is handed. */
+function setup(
+  mode = "success",
+  uploaded?: { original?: Uint8Array; file?: { sha256?: string; bytes?: Uint8Array } },
+) {
+  const originalBytes = uploaded?.original ?? ORIGINAL;
+  const originalSha = createHash("sha256").update(originalBytes).digest("hex");
   const fixture = handoffFixture();
   const application = fixture.application;
   const packet = application.currentPacket;
@@ -46,6 +56,21 @@ function setup(mode = "success") {
     variantId: profile.variantId,
     formHash: "e".repeat(64),
   };
+  if (uploaded) {
+    delete packet.temporaryMaterials;
+    packet.artifactHashes = { resume: originalSha };
+    packet.fields.push({
+      fieldKey: "documents.resume",
+      value: originalSha,
+      origin: "confirmed_fact",
+      sourceFactIds: [UPLOADED_DOCUMENT],
+      confidence: 1,
+      disposition: "review",
+      reasons: ["explicit_each_time"],
+      requiresReview: true,
+    });
+    approval.acknowledgedFieldKeys.push("documents.resume");
+  }
   const selection: NativeTransferSelection = {
     applicationId: APP,
     packetId: packet.id,
@@ -53,7 +78,8 @@ function setup(mode = "success") {
     approvalId: approval.id,
     revision: application.revision,
     approvalExpiresAtMs: Date.parse(approval.expiresAt),
-    materials: [structuredClone(material)],
+    materials: uploaded ? [] : [structuredClone(material)],
+    ...(uploaded ? { uploadedResume: { documentId: UPLOADED_DOCUMENT, sha256: originalSha } } : {}),
     reviewLink: LINK,
     jobId: application.canonicalJobId,
     ownerFence: "synthetic-owner",
@@ -161,7 +187,9 @@ function setup(mode = "success") {
       wireCommands.push(structuredClone(command));
       expect(posts.filter((path) => path.endsWith("/dispatch"))).toHaveLength(1);
       expect(command.fields.map((field) => field.fieldKey)).toEqual(["contact.email"]);
-      expect(command.deadline).toBeLessThanOrEqual(material.expiresAtMs);
+      expect(command.deadline).toBeLessThanOrEqual(
+        uploaded ? Date.parse(approval.expiresAt) : material.expiresAtMs,
+      );
       expect(application.approval).toBeUndefined();
       if (mode === "lost-command") throw Error("Lost page command acknowledgement");
       if (mode === "worker-loss") {
@@ -253,16 +281,26 @@ function setup(mode = "success") {
           signal: controller.signal,
           deadline: Date.now() + 30_000,
           selection,
-          files: [
-            {
-              kind: "tailored_resume",
-              generationId: material.generationId,
-              format: "pdf",
-              mediaType: "application/pdf",
-              sha256: material.contentSha256,
-              bytes: new TextEncoder().encode("%PDF-SYNTHETIC"),
-            },
-          ],
+          files: uploaded
+            ? [
+                {
+                  kind: "uploaded_resume" as const,
+                  format: "pdf" as const,
+                  mediaType: "application/pdf",
+                  sha256: uploaded.file?.sha256 ?? originalSha,
+                  bytes: new Uint8Array(uploaded.file?.bytes ?? originalBytes),
+                },
+              ]
+            : [
+                {
+                  kind: "tailored_resume" as const,
+                  generationId: material.generationId,
+                  format: "pdf" as const,
+                  mediaType: "application/pdf",
+                  sha256: material.contentSha256,
+                  bytes: new TextEncoder().encode("%PDF-SYNTHETIC"),
+                },
+              ],
         },
       }),
   };
@@ -318,4 +356,40 @@ it("refuses a changed owning attempt before dispatch or any page action", async 
   expect(await fixture.run()).toMatchObject({ ok: false, outcome: "review_required" });
   expect(fixture.posts).toHaveLength(1);
   expect(fixture.commands).toEqual([]);
+});
+
+it("sends the candidate's own original as an uploaded resume, with no generation, then confirms", async () => {
+  const fixture = setup("success", {});
+  expect(await fixture.run()).toMatchObject({ ok: true, outcome: "confirmed" });
+  const file = fixture.wireCommands[0]?.files[0];
+  expect(file).toMatchObject({
+    kind: "uploaded_resume",
+    format: "pdf",
+    mediaType: "application/pdf",
+    sha256: ORIGINAL_SHA,
+  });
+  expect(file).not.toHaveProperty("generationId");
+  expect(Buffer.from(file?.contentBase64 ?? "", "base64")).toEqual(Buffer.from(ORIGINAL));
+  expect(fixture.commands[0]?.files.every((entry) => entry.contentBase64 === "")).toBe(true);
+  expect(fixture.posts).toHaveLength(3);
+});
+
+it.each([
+  ["another digest than the approved packet binds", { sha256: "d".repeat(64) }],
+  ["bytes that are not the bound original", { bytes: new TextEncoder().encode("%PDF-1.4 other") }],
+])("refuses an uploaded resume with %s before any attempt exists", async (_name, file) => {
+  const fixture = setup("success", { file });
+  expect(await fixture.run()).toMatchObject({ ok: false });
+  // Nothing was started, dispatched, sent to the page, or recorded.
+  expect(fixture.posts).toEqual([]);
+  expect(fixture.commands).toEqual([]);
+  expect(fixture.results).toEqual([]);
+});
+
+it("carries a candidate original above the generated-file limit within the wire limit", async () => {
+  const big = new Uint8Array(1_500_000);
+  big.set(new TextEncoder().encode("%PDF-1.4"));
+  const fixture = setup("success", { original: big });
+  expect(await fixture.run()).toMatchObject({ ok: true, outcome: "confirmed" });
+  expect(fixture.wireCommands[0]?.files[0]?.contentBase64.length).toBeGreaterThan(1_900_000);
 });

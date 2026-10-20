@@ -61,7 +61,7 @@ ADRs are immutable historical records after acceptance. A new ADR supersedes an 
 
 - [ADR-043: Protected legacy application receipts](043-protected-legacy-application-receipts.md) (proposed; local protection component, atomic transition and replay wiring pending)
 
-- [ADR-044: Separate browser identity for native material reads](044-browser-native-material-identity.md) (owner-selected design; default-off browser implementation, live activation pending)
+- [ADR-044: Separate browser identity for native material reads](044-browser-native-material-identity.md) (superseded by ADR-050)
 
 - [ADR-045: Manual approved application handoff](045-manual-approved-application-handoff.md) (proposed; default-off source, installed-extension and live acceptance pending)
 
@@ -72,3 +72,4 @@ ADRs are immutable historical records after acceptance. A new ADR supersedes an 
 - [ADR-048: Privacy-reconciled development recovery](048-privacy-reconciled-development-recovery.md) (proposed; transactional preservation source, promotion and managed acceptance pending)
 
 - [ADR-049: Greenhouse approved application execution](049-greenhouse-approved-application-execution.md) (proposed; default-off adapter and connected execution work)
+- [ADR-050: Generate-then-apply flow, server-side material reads and PDF-only delivery](050-generate-then-apply-flow.md) (proposed; owner-directed, locally verified, live acceptance pending)

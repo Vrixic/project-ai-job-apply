@@ -54,7 +54,9 @@ export function mountApplicationHandoff() {
         if (!response.ok) throw Error();
         status.textContent =
           action === "select"
-            ? "Employer tab selected for one minute. Return to the approved workspace to send files. Transfer availability still depends on adapter acceptance."
+            ? response.resume === "uploaded"
+              ? "Employer tab selected. Your own uploaded resume is ready to attach. Transfer availability still depends on adapter acceptance."
+              : "Employer tab selected for one minute. Your generated resume is sent from the application workspace tab automatically; keep that tab open. Transfer availability still depends on adapter acceptance."
             : "Approved file transfer cleared. If Apply had started, review the workspace before any further submission.";
       } catch {
         status.textContent =
@@ -66,6 +68,19 @@ export function mountApplicationHandoff() {
         button.disabled = false;
       }
     });
+  }
+  // After Apply on the website the extension already holds the application's identifiers. Opening
+  // it on the employer page selects that tab with no pasted link; the candidate then confirms.
+  if (extensionConfiguration.applicationExecutionEnabled) {
+    void chrome.runtime
+      .sendMessage({ action: "application_pending_intent" })
+      .then((response: { ok?: boolean; reviewLink?: unknown } | undefined) => {
+        if (!response?.ok || typeof response.reviewLink !== "string" || input.value) return;
+        input.value = response.reviewLink;
+        status.textContent = "Preparing your application for this page...";
+        section.querySelector<HTMLButtonElement>("[data-native-select]")?.click();
+      })
+      .catch(() => undefined);
   }
   function discard(message = "") {
     generation++;

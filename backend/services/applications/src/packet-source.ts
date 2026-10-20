@@ -10,6 +10,11 @@ import { ApplicationsUnavailableError } from "./service.js";
 import type { ApplicationRecord } from "./store.js";
 import { StalePacketError } from "./store.js";
 import {
+  UPLOADED_RESUME_MAXIMUM_BYTES,
+  type UploadedResumeSource,
+  UploadedResumeTooLargeError,
+} from "./uploaded-resume.js";
+import {
   decodeVaultValue,
   type VaultReader,
   type VaultSelection,
@@ -107,6 +112,8 @@ export interface FactBackedPacketSourceDependencies {
   jobRevision(application: ApplicationRecord): Promise<string>;
   /** Hashes of the resume and cover-letter versions the candidate chose. */
   artifacts(ownerUserId: string, application: ApplicationRecord): Promise<ArtifactHashes>;
+  /** The candidate's own current uploaded resume, for packets built with `resume: "uploaded"`. */
+  uploadedResume?: UploadedResumeSource["descriptor"];
   temporaryMaterials?: (
     ownerUserId: string,
     application: ApplicationRecord,
@@ -143,6 +150,7 @@ export class FactBackedPacketSource implements PacketPreparationSource {
     userEntries: readonly UserEntry[];
     vaultSelections?: readonly VaultSelection[];
     form: PacketPreparation["form"];
+    resume?: "generate" | "uploaded";
   }): Promise<PacketPreparation> {
     input = structuredClone(input);
     const selections = input.vaultSelections ?? [];
@@ -245,11 +253,37 @@ export class FactBackedPacketSource implements PacketPreparationSource {
         confidence: 1,
       });
     }
+    let artifactHashes: ArtifactHashes;
+    if (input.resume === "uploaded") {
+      // The candidate's own file, byte for byte. It is never tailored or generated, so nothing
+      // temporary is bound and the hash is the digest of the original bytes.
+      if (!this.dependencies.uploadedResume) throw new ApplicationsUnavailableError();
+      let uploaded: Awaited<ReturnType<UploadedResumeSource["descriptor"]>>;
+      try {
+        uploaded = await this.dependencies.uploadedResume(input.ownerUserId);
+      } catch {
+        throw new ApplicationsUnavailableError();
+      }
+      if (uploaded && uploaded.sizeBytes > UPLOADED_RESUME_MAXIMUM_BYTES)
+        throw new UploadedResumeTooLargeError();
+      artifactHashes = uploaded ? { resume: uploaded.sha256 } : {};
+      if (uploaded && !entered.has("documents.resume"))
+        fields.push({
+          fieldKey: "documents.resume",
+          value: uploaded.sha256,
+          origin: "confirmed_fact",
+          sourceFactIds: [uploaded.documentId],
+          sourceConfirmed: true,
+          confidence: 1,
+        });
+    } else {
+      artifactHashes = await this.dependencies.artifacts(input.ownerUserId, input.application);
+    }
     return {
       jobRevision: await this.dependencies.jobRevision(input.application),
       form: input.form,
       fields,
-      artifactHashes: await this.dependencies.artifacts(input.ownerUserId, input.application),
+      artifactHashes,
       ...(this.dependencies.temporaryMaterials
         ? {
             temporaryMaterials: await this.dependencies.temporaryMaterials(

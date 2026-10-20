@@ -5,13 +5,33 @@ import axe from "axe-core";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApplyPanel, safeApplyUrl } from "./apply-panel";
+import { ApplyPanel, type ExtensionHandoffState, safeApplyUrl } from "./apply-panel";
 
 const APP = "00000000-0000-7000-8000-000000000001";
 const HASH = "a".repeat(64);
-const AT = "2026-09-19T12:00:00.000Z";
+const AT = "2026-10-20T12:00:00.000Z";
 
-function approved(withResume = true): Application {
+const uploadedField = {
+  fieldKey: "documents.resume",
+  value: HASH,
+  origin: "confirmed_fact",
+  sourceFactIds: ["00000000-0000-7000-8000-000000000030"],
+  confidence: 1,
+  disposition: "review",
+  reasons: ["explicit_each_time"],
+  requiresReview: true,
+};
+
+function approved(overrides: { generated?: boolean; fields?: unknown[] } = {}): Application {
+  const material = {
+    schemaVersion: 1,
+    kind: "tailored_resume",
+    generationId: "00000000-0000-7000-8000-000000000020",
+    version: 1,
+    contentSha256: HASH,
+    completedAtMs: Date.now() - 60_000,
+    expiresAtMs: Date.now() - 60_000 + 1_800_000,
+  };
   return {
     id: APP,
     canonicalJobId: "00000000-0000-7000-8000-000000000002",
@@ -26,8 +46,9 @@ function approved(withResume = true): Application {
       version: 1,
       packetHash: HASH,
       jobRevision: HASH,
-      artifactHashes: withResume ? { resume: HASH } : {},
-      fields: [
+      artifactHashes: { resume: HASH },
+      ...(overrides.generated ? { temporaryMaterials: [material] } : {}),
+      fields: overrides.fields ?? [
         {
           fieldKey: "contact.email",
           value: "candidate@example.test",
@@ -48,6 +69,7 @@ function approved(withResume = true): Application {
           reasons: [],
           requiresReview: true,
         },
+        ...(overrides.generated ? [] : [uploadedField]),
       ],
       createdAt: AT,
     },
@@ -92,106 +114,32 @@ function button(label: string): HTMLButtonElement {
   return found;
 }
 
-/** The download hashes bytes asynchronously, so wait for the visible outcome, not a fixed delay. */
-async function statusText(): Promise<string> {
-  // React flushes updates when `act` exits, so let it settle in short slices until a message shows.
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    });
-    const text = container.querySelector("[role=status]")?.textContent ?? "";
-    if (text !== "") return text;
-  }
-  return "";
-}
-
-const bytes = new TextEncoder().encode("synthetic resume bytes");
-async function sha(data: Uint8Array) {
-  const digest = await crypto.subtle.digest("SHA-256", data.buffer as ArrayBuffer);
-  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
-}
-const fileBody = async (overrides: Record<string, unknown> = {}) => ({
-  format: "pdf",
-  mediaType: "application/pdf",
-  fileName: "resume-tailored.pdf",
-  sha256: await sha(bytes),
-  sizeBytes: bytes.byteLength,
-  contentSha256: HASH,
-  contentBase64: btoa(String.fromCharCode(...bytes)),
-  ...overrides,
-});
-
 describe("safeApplyUrl", () => {
   it("offers only a plain https link", () => {
     expect(safeApplyUrl("https://boards.example.test/jobs/1")).toBe(
       "https://boards.example.test/jobs/1",
     );
-    for (const bad of [
+    for (const unsafe of [
       undefined,
       "",
       "javascript:alert(1)",
       "http://boards.example.test/jobs/1",
-      "https://user:pass@boards.example.test/",
+      "https://user:pass@boards.example.test/jobs/1",
       "not a url",
-      "data:text/html,<script>1</script>",
-    ]) {
-      expect(safeApplyUrl(bad)).toBeUndefined();
-    }
+    ])
+      expect(safeApplyUrl(unsafe)).toBeUndefined();
   });
-});
-
-it("refuses correctly hashed bytes from a different approved resume", async () => {
-  const createObjectURL = vi.fn(() => "blob:unexpected");
-  Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
-  const fetchImplementation = vi.fn(
-    async () => new Response(JSON.stringify(await fileBody({ contentSha256: "b".repeat(64) }))),
-  ) as typeof fetch;
-  await mount({ fetchImplementation });
-  await act(async () => button("Download PDF").click());
-  expect(await statusText()).toContain("changed or expired");
-  expect(createObjectURL).not.toHaveBeenCalled();
-});
-
-it("never offers an unresolved answer as the literal text null", async () => {
-  const value = approved(false);
-  if (!value.currentPacket) throw new Error("Missing fixture packet");
-  value.currentPacket.fields[0] = {
-    ...value.currentPacket.fields[0],
-    value: null,
-  } as (typeof value.currentPacket.fields)[number];
-  await mount({ application: value });
-  expect(container.textContent).not.toContain("null");
-  expect(container.textContent).not.toContain("Contact email:");
-});
-
-it("does not download a held result after leaving the approved application", async () => {
-  let resolve: ((response: Response) => void) | undefined;
-  const createObjectURL = vi.fn(() => "blob:unexpected");
-  Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
-  const body = await fileBody();
-  await mount({
-    fetchImplementation: vi.fn(
-      () =>
-        new Promise<Response>((done) => {
-          resolve = done;
-        }),
-    ) as typeof fetch,
-  });
-  await act(async () => button("Download PDF").click());
-  act(() => root.render(<div />));
-  await act(async () => resolve?.(new Response(JSON.stringify(body))));
-  expect(createObjectURL).not.toHaveBeenCalled();
 });
 
 describe("ApplyPanel", () => {
-  it("opens the employer's page in a new tab and never claims anything was sent", async () => {
+  it("opens the employer's page in a new tab and leaves submission to the candidate", async () => {
     await mount();
     const link = container.querySelector("a");
     expect(link?.getAttribute("href")).toBe("https://boards.example.test/jobs/1");
     expect(link?.getAttribute("target")).toBe("_blank");
     expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
-    expect(container.textContent).toContain("Nothing is sent for you yet");
-    expect(container.textContent).not.toMatch(/applied successfully/i);
+    expect(container.textContent).toContain("confirm sensitive answers and the final submit");
+    expect(container.textContent).not.toMatch(/applied successfully|Download Word|DOCX/iu);
   });
 
   it("says so plainly when there is no safe link", async () => {
@@ -200,13 +148,62 @@ describe("ApplyPanel", () => {
     expect(container.textContent).toContain("We do not have a safe link");
   });
 
+  it.each([
+    ["armed", "uploaded resume", approved()],
+    ["armed", "generated resume (PDF)", approved({ generated: true })],
+    ["waiting_for_extension", "Waiting for you", approved({ generated: true })],
+  ] as const)(
+    "tells the candidate which resume the extension will use (%s)",
+    async (phase, copy, application) => {
+      await mount({ application, handoff: { phase } as ExtensionHandoffState });
+      expect(container.querySelector("[role=status]")?.textContent).toContain(copy);
+      expect(container.textContent).toContain("it already knows this application");
+    },
+  );
+
+  it("confirms the generated resume reached the extension", async () => {
+    await mount({ application: approved({ generated: true }), handoff: { phase: "resume_sent" } });
+    expect(container.textContent).toContain("Your generated resume reached the extension");
+  });
+
+  it("lets the candidate stop waiting for the extension", async () => {
+    const stop = vi.fn();
+    await mount({
+      application: approved({ generated: true }),
+      handoff: { phase: "waiting_for_extension" },
+      onStopWaiting: stop,
+    });
+    await act(async () => button("Stop waiting for the extension").click());
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it("falls back to the manual path when the extension did not answer", async () => {
+    await mount({ handoff: { phase: "unavailable" } });
+    expect(container.textContent).toContain("The extension did not answer");
+    expect(container.textContent).toContain("Your answers, to copy by hand");
+  });
+
+  it("shows a generated resume that expired and offers no employer link", async () => {
+    const application = approved({ generated: true });
+    const material = application.currentPacket?.temporaryMaterials?.[0];
+    if (!material) throw Error("Missing fixture material");
+    material.completedAtMs = Date.now() - 3_600_000;
+    material.expiresAtMs = material.completedAtMs + 1_800_000;
+    await mount({ application, handoff: { phase: "armed" } });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "generated resume expired",
+    );
+    expect(container.querySelector("a")).toBeNull();
+    expect(button("Record submission status").disabled).toBe(true);
+  });
+
   it("lists the approved answers and copies one on request", async () => {
     const writeText = vi.fn(async () => undefined);
     vi.stubGlobal("navigator", { clipboard: { writeText } });
     await mount();
     expect(container.textContent).toContain("Contact email:");
     expect(container.textContent).toContain("candidate@example.test");
-    expect(container.textContent).toContain("Job notice period:");
+    expect(container.textContent).not.toContain("Documents resume");
     await act(async () => {
       button("Copy Contact email").click();
     });
@@ -231,72 +228,20 @@ describe("ApplyPanel", () => {
     );
   });
 
-  it("downloads the tailored resume only when its bytes match the verified hash", async () => {
-    const created: Blob[] = [];
-    Object.assign(URL, {
-      createObjectURL: (blob: Blob) => {
-        created.push(blob);
-        return "blob:synthetic";
-      },
-      revokeObjectURL: () => undefined,
+  it("never offers an unresolved answer as the literal text null", async () => {
+    const application = approved();
+    application.currentPacket?.fields.push({
+      fieldKey: "questions.why_company",
+      value: null,
+      origin: "confirmed_fact",
+      sourceFactIds: [],
+      confidence: 0.4,
+      disposition: "user_action",
+      reasons: ["unsupported_value"],
+      requiresReview: true,
     });
-    const fetchImplementation = vi.fn(
-      async () => new Response(JSON.stringify(await fileBody()), { status: 200 }),
-    ) as unknown as typeof globalThis.fetch;
-    await mount({ fetchImplementation });
-    await act(async () => {
-      button("Download PDF").click();
-    });
-    expect(fetchImplementation).toHaveBeenCalledWith(
-      `/api/platform/applications/${APP}/resume/file?format=pdf`,
-      expect.objectContaining({ method: "GET" }),
-    );
-    expect(await statusText()).toBe("resume-tailored.pdf downloaded.");
-    expect(created).toHaveLength(1);
-    expect(created[0]?.type).toBe("application/pdf");
-  });
-
-  it("refuses a file whose bytes do not match, and explains a changed resume", async () => {
-    const created: Blob[] = [];
-    Object.assign(URL, {
-      createObjectURL: (blob: Blob) => {
-        created.push(blob);
-        return "blob:x";
-      },
-      revokeObjectURL: () => undefined,
-    });
-    const tampered = vi.fn(
-      async () =>
-        new Response(JSON.stringify(await fileBody({ sha256: "0".repeat(64) })), { status: 200 }),
-    ) as unknown as typeof globalThis.fetch;
-    await mount({ fetchImplementation: tampered });
-    await act(async () => {
-      button("Download PDF").click();
-    });
-    expect(await statusText()).toContain("did not pass its check");
-    expect(created).toHaveLength(0);
-
-    const stale = vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({ code: "application_packet_stale", title: "SECRET upstream" }),
-          { status: 409 },
-        ),
-    ) as unknown as typeof globalThis.fetch;
-    act(() => root.unmount());
-    root = createRoot(container);
-    await mount({ fetchImplementation: stale });
-    await act(async () => {
-      button("Download Word (DOCX)").click();
-    });
-    expect(await statusText()).toContain("Prepare the application again");
-    expect(container.textContent).not.toContain("SECRET");
-  });
-
-  it("offers no resume download when the packet carries no resume", async () => {
-    await mount({ application: approved(false) });
-    expect(container.textContent).not.toContain("Your tailored resume");
-    expect(container.textContent).toContain("Your approved answers");
+    await mount({ application });
+    expect(container.textContent).not.toContain("null");
   });
 
   it("begins the candidate confirmation flow only on explicit request", async () => {
@@ -325,8 +270,15 @@ describe("ApplyPanel", () => {
     expect(container.textContent).not.toContain("SECRET");
   });
 
+  it("renders nothing for a withheld packet", async () => {
+    const application = approved();
+    (application as { packetAvailability?: string }).packetAvailability = "withheld";
+    await mount({ application });
+    expect(container.textContent).toBe("");
+  });
+
   it("has no automated accessibility violations", async () => {
-    await mount();
+    await mount({ handoff: { phase: "armed" } });
     const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
     expect(results.violations.map((v) => v.id)).toEqual([]);
   });
@@ -349,7 +301,7 @@ it("requires a fresh explicit form match before recording a form-bound approved 
 });
 
 it("displays and copies an approved false answer as No during manual Apply", async () => {
-  const application = approved(false);
+  const application = approved();
   if (!application.currentPacket) throw new Error("Missing fixture packet");
   application.currentPacket.fields.push({
     fieldKey: "authorization.us_authorized",

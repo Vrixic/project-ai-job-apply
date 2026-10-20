@@ -42,7 +42,7 @@ Each tenant contains:
 | Moderation admin | Separate Regular Web Application | Server-held session; only `jobs:moderate`; no candidate scopes or token in browser storage; MFA and accountable operator assignment required before deployment |
 | Expo mobile | Native Application | System browser; authorization code with PKCE; secure OS credential storage; rotating refresh token |
 | Chrome/Edge extension | Public client, finalized by conformance test | `chrome.identity.launchWebAuthFlow`; authorization code with PKCE; no client secret; minimum extension permissions |
-| Native-material browser access | Separate Single Page Application | Owner-selected popup authorization code/PKCE; memory-only token, no refresh/silent renewal; only `openid applications:read`; default off pending exact registration and live acceptance ([ADR-044](../adr/044-browser-native-material-identity.md)) |
+| Native-material browser access | None (retired) | Superseded by [ADR-050](../adr/050-generate-then-apply-flow.md): generated material is read through the BFF with the confidential web session; the separate SPA of [ADR-044](../adr/044-browser-native-material-identity.md) is no longer used and may be retired |
 | Platform API | Auth0 API/resource server | Identifier `ai-job-apply-api`; RS256 access tokens; explicit platform scopes |
 | Identity administration | Machine-to-machine application | Backend only; minimum Management API scopes; credential in the environment's managed secret store |
 

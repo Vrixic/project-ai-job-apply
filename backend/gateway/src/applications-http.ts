@@ -16,6 +16,7 @@ import {
   PreparationNotFoundError,
   RestrictedPacketStoreUnavailableError,
   StalePacketError,
+  UploadedResumeTooLargeError,
   VaultBindingsUnavailableError,
 } from "@ai-job-apply/applications-service";
 import { HttpStatus } from "@nestjs/common";
@@ -94,6 +95,13 @@ export function projectApplicationsFailure(exception: unknown): ApplicationsFail
       "application_limit_reached",
       "Application limit reached",
       "The application limit has been reached",
+    );
+  }
+  if (exception instanceof UploadedResumeTooLargeError) {
+    return conflict(
+      "application_resume_too_large",
+      "Uploaded resume is too large",
+      "The uploaded resume is too large to attach automatically",
     );
   }
   if (exception instanceof StalePacketError) {
@@ -191,6 +199,11 @@ export function parseResumeFormatQuery(query: unknown): "docx" | "pdf" | null {
   const only = entries[0];
   if (entries.length !== 1 || !only || only[0] !== "format") return null;
   return only[1] === "docx" || only[1] === "pdf" ? only[1] : null;
+}
+
+/** Generated resumes are delivered only as PDF: exactly `format=pdf` and nothing else. */
+export function parseGeneratedResumeFormatQuery(query: unknown): "pdf" | null {
+  return parseResumeFormatQuery(query) === "pdf" ? "pdf" : null;
 }
 
 /** Strict bounded query parsing: unknown, repeated, or non-integer parameters are invalid. */

@@ -1,28 +1,17 @@
 "use client";
 
-import type { Application, ApplicationTemporaryMaterial } from "@ai-job-apply/api-contracts";
+import type { Application } from "@ai-job-apply/api-contracts";
 import { useId, useRef, useState } from "react";
-import {
-  materialDeadline,
-  materialsExpired,
-  sameMaterial,
-} from "../lib/application-material-lifetime";
 import { restrictedAnswerField } from "../lib/restricted-answer-fields";
 import {
-  APPROVAL_EXPIRY_NOTE,
-  approvalBlockers,
-  canApprove,
+  explicitReviewFields,
   formatFieldValue,
   REASON_COPY,
   reviewGroups,
 } from "./application-review-state";
-import { useMaterialExpiry } from "./use-material-expiry";
 
 export interface ApplicationReviewActions {
-  onApprove(input: { packetHash: string; acknowledgedFieldKeys: string[] }): Promise<void> | void;
   onProvideEntry(entry: { fieldKey: string; value: string | boolean }): Promise<void> | void;
-  onReopen(): Promise<void> | void;
-  onCancel(): Promise<void> | void;
   onReconcile(
     input:
       | { attemptId: string; kind: "submitted" }
@@ -30,17 +19,15 @@ export interface ApplicationReviewActions {
   ): Promise<void> | void;
 }
 
-const STATUS_COPY: Record<Application["status"], string> = {
-  preparing: "Preparing your application packet.",
-  review_required: "Review what will be sent. Nothing is submitted until you approve.",
-  approved: "Approved. Your application is ready to complete.",
-  submitting: "A submission is in progress.",
+const STATUS_COPY: Partial<Record<Application["status"], string>> = {
   takeover: "Finish this step yourself in the browser. We never bypass verification steps.",
   reconciliation_required:
     "We could not confirm whether this was submitted. Do not submit again until you confirm below.",
   applied: "Submitted and confirmed.",
   cancelled: "This application was cancelled.",
 };
+
+type PacketField = NonNullable<Application["currentPacket"]>["fields"][number];
 
 function FieldRow({
   application,
@@ -50,7 +37,7 @@ function FieldRow({
   onProvide,
 }: {
   application: Application;
-  field: NonNullable<Application["currentPacket"]>["fields"][number];
+  field: PacketField;
   acknowledged: boolean;
   onToggle(): void;
   onProvide(value: string | boolean): void;
@@ -77,7 +64,7 @@ function FieldRow({
         <p>
           Saved answer version {field.vaultReference.version}. Context:{" "}
           {field.vaultReference.context || "none specified"}. Check this answer against the
-          employer's exact question before approving.
+          employer's exact question before applying.
         </p>
       ) : field.origin === "confirmed_fact" && field.sourceFactIds.length > 0 ? (
         <p>Based on {field.sourceFactIds.length} confirmed fact(s) in your profile.</p>
@@ -115,7 +102,7 @@ function FieldRow({
       ) : null}
       {editable && field.requiresReview && !empty ? (
         <label>
-          <input type="checkbox" checked={acknowledged} onChange={onToggle} /> I reviewed{" "}
+          <input type="checkbox" checked={acknowledged} onChange={onToggle} /> I checked{" "}
           {field.fieldKey}
         </label>
       ) : null}
@@ -123,21 +110,30 @@ function FieldRow({
   );
 }
 
+/**
+ * What the candidate must still decide before Apply, and nothing else: answers only they can give,
+ * and sensitive or uncertain answers to confirm. The generated resume is not listed here; its
+ * identity and exact preview are shown beside the Apply button. Reconciliation of an ambiguous
+ * submission also lives here so the candidate can never be left without a way to resolve it.
+ */
 export function ApplicationReviewPanel({
   application,
   actions,
-  availableMaterials = [],
+  acknowledged,
+  onToggle,
 }: {
   application: Application;
   actions: ApplicationReviewActions;
-  availableMaterials?: readonly ApplicationTemporaryMaterial[];
+  acknowledged: ReadonlySet<string>;
+  onToggle(fieldKey: string): void;
 }) {
   return (
     <PacketReview
       key={`${application.id}:${application.revision}:${application.currentPacket?.id}:${application.currentPacket?.packetHash}`}
       application={application}
       actions={actions}
-      availableMaterials={availableMaterials}
+      acknowledged={acknowledged}
+      onToggle={onToggle}
     />
   );
 }
@@ -145,56 +141,25 @@ export function ApplicationReviewPanel({
 function PacketReview({
   application,
   actions,
-  availableMaterials,
+  acknowledged,
+  onToggle,
 }: {
   application: Application;
   actions: ApplicationReviewActions;
-  availableMaterials: readonly ApplicationTemporaryMaterial[];
+  acknowledged: ReadonlySet<string>;
+  onToggle(fieldKey: string): void;
 }) {
   const headingId = useId();
   const active = useRef(false);
   const [busy, setBusy] = useState(false);
-  const [acknowledged, setAcknowledged] = useState<ReadonlySet<string>>(new Set());
-  const [reviewedMaterials, setReviewedMaterials] = useState<
-    readonly ApplicationTemporaryMaterial[]
-  >([]);
-  const [showAutomatic, setShowAutomatic] = useState(false);
   const [duplicateRisk, setDuplicateRisk] = useState(false);
   const [message, setMessage] = useState<string>();
   const groups = reviewGroups(application);
-  const packet = application.currentPacket;
-  const deadlines = packet?.temporaryMaterials?.map(materialDeadline) ?? [];
-  const materialExpired = useMaterialExpiry(deadlines.length ? Math.min(...deadlines) : undefined);
-  const vaultDeadlines =
-    packet?.fields.flatMap((field) =>
-      field.vaultReference?.validUntilEpochMs === null ||
-      field.vaultReference?.validUntilEpochMs === undefined
-        ? []
-        : [field.vaultReference.validUntilEpochMs],
-    ) ?? [];
-  const vaultExpired = useMaterialExpiry(
-    vaultDeadlines.length ? Math.min(...vaultDeadlines) : undefined,
-  );
-  const expired = materialExpired || vaultExpired;
-  const blockers = approvalBlockers(groups, acknowledged);
-  const approvable = canApprove(groups, acknowledged);
-  const materialsReviewed = (packet?.temporaryMaterials ?? []).every(
-    (material) =>
-      availableMaterials.some((available) => sameMaterial(available, material)) &&
-      reviewedMaterials.some((reviewed) => sameMaterial(reviewed, material)),
-  );
+  const confirm = explicitReviewFields(groups);
   const openAttempt = application.attempts.find(
     (attempt) => attempt.status === "ambiguous" || attempt.status === "taken_over",
   );
-
-  function toggle(fieldKey: string) {
-    setAcknowledged((current) => {
-      const next = new Set(current);
-      if (next.has(fieldKey)) next.delete(fieldKey);
-      else next.add(fieldKey);
-      return next;
-    });
-  }
+  const editable = application.status === "review_required" || application.status === "approved";
 
   async function run(action: () => Promise<void> | void, success: string) {
     if (active.current) return;
@@ -212,175 +177,67 @@ function PacketReview({
     }
   }
 
+  const statusCopy = STATUS_COPY[application.status];
+  const showAnswers = editable && (groups.needsInput.length > 0 || confirm.length > 0);
+  if (!statusCopy && !showAnswers && application.packetAvailability !== "withheld") return null;
+
   return (
     <section aria-labelledby={headingId}>
-      <h2 id={headingId}>Application review</h2>
-      <p>
-        {application.packetAvailability === "withheld" && application.status === "approved"
-          ? "Your previous approval cannot be used. Reopen and prepare a new packet."
-          : STATUS_COPY[application.status]}
-      </p>
+      <h3 id={headingId}>Before you apply</h3>
+      {statusCopy ? <p>{statusCopy}</p> : null}
       {application.packetAvailability === "withheld" ? (
         <p role="status">
           A saved answer changed, was removed or expired. The previous packet is withheld.
-          {["preparing", "review_required", "approved"].includes(application.status)
-            ? " Prepare a new packet and review every answer before approving again."
+          {editable
+            ? " Generate or apply again to build a new packet with your current answers."
             : " Your submission status is retained below."}
         </p>
       ) : null}
       <fieldset disabled={busy}>
-        <legend>Application actions</legend>
-
-        {application.status === "review_required" && packet ? (
-          <>
-            <p>{APPROVAL_EXPIRY_NOTE}</p>
-            {(packet.temporaryMaterials ?? []).map((material) => (
-              <label key={material.generationId}>
-                <input
-                  type="checkbox"
-                  disabled={
-                    !availableMaterials.some((available) => sameMaterial(available, material)) ||
-                    expired
+        <legend>Answers and checks</legend>
+        {showAnswers && groups.needsInput.length > 0 ? (
+          <section aria-label="Answers that need your input">
+            <h4>We need your answer</h4>
+            <ul>
+              {groups.needsInput.map((field) => (
+                <FieldRow
+                  key={field.fieldKey}
+                  application={application}
+                  field={field}
+                  acknowledged={false}
+                  onToggle={() => undefined}
+                  onProvide={(value) =>
+                    run(
+                      () => actions.onProvideEntry({ fieldKey: field.fieldKey, value }),
+                      "Answer saved.",
+                    )
                   }
-                  checked={reviewedMaterials.some((reviewed) => sameMaterial(reviewed, material))}
-                  onChange={(event) => {
-                    const checked = event.target.checked;
-                    setReviewedMaterials((current) => {
-                      const next = current.filter((reviewed) => !sameMaterial(reviewed, material));
-                      return checked ? [...next, material] : next;
-                    });
-                  }}
                 />
-                I reviewed this generated{" "}
-                {material.kind === "tailored_resume" ? "resume" : "cover letter"}.
-                {!availableMaterials.some((available) => sameMaterial(available, material))
-                  ? " Its exact preview is unavailable; approval is blocked."
-                  : ""}
-              </label>
-            ))}
-            {groups.needsInput.length > 0 ? (
-              <section aria-label="Answers that need your input">
-                <h3>Needs your input</h3>
-                <ul>
-                  {groups.needsInput.map((field) => (
-                    <FieldRow
-                      key={field.fieldKey}
-                      application={application}
-                      field={field}
-                      acknowledged={false}
-                      onToggle={() => undefined}
-                      onProvide={(value) =>
-                        run(
-                          () => actions.onProvideEntry({ fieldKey: field.fieldKey, value }),
-                          "Answer saved. A new packet was prepared.",
-                        )
-                      }
-                    />
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-            <section aria-label="Items to confirm">
-              <h3>Confirm before approving</h3>
-              {groups.needsReview.filter((field) => field.value !== null).length === 0 ? (
-                <p>Nothing else needs a decision.</p>
-              ) : (
-                <ul>
-                  {groups.needsReview
-                    .filter((field) => field.value !== null)
-                    .map((field) => (
-                      <FieldRow
-                        key={field.fieldKey}
-                        application={application}
-                        field={field}
-                        acknowledged={acknowledged.has(field.fieldKey)}
-                        onToggle={() => toggle(field.fieldKey)}
-                        onProvide={(value) =>
-                          run(
-                            () => actions.onProvideEntry({ fieldKey: field.fieldKey, value }),
-                            "Answer saved. A new packet was prepared.",
-                          )
-                        }
-                      />
-                    ))}
-                </ul>
-              )}
-            </section>
-            <section aria-label="Automatically filled fields">
-              <button
-                type="button"
-                aria-expanded={showAutomatic}
-                onClick={() => setShowAutomatic((v) => !v)}
-              >
-                {showAutomatic ? "Hide" : "Show"} {groups.automatic.length} automatically filled
-                field(s)
-              </button>
-              {showAutomatic ? (
-                <ul>
-                  {groups.automatic.map((field) => (
-                    <li key={field.fieldKey}>
-                      <strong>{field.fieldKey}</strong>: {formatFieldValue(field.value)}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </section>
-            <p>
-              Resume: {packet.artifactHashes.resume ? "attached" : "not attached"}. Cover letter:{" "}
-              {packet.artifactHashes.coverLetter ? "attached" : "not attached"}.
-            </p>
-            {blockers.length > 0 ? (
-              <ul aria-label="Why you cannot approve yet">
-                {blockers.map((blocker) => (
-                  <li key={blocker}>{blocker}</li>
-                ))}
-              </ul>
-            ) : null}
-            <button
-              type="button"
-              disabled={!approvable || !materialsReviewed || expired}
-              onClick={() =>
-                run(
-                  () =>
-                    materialsExpired(packet.temporaryMaterials) ||
-                    vaultDeadlines.some((deadline) => Date.now() >= deadline)
-                      ? Promise.reject(new Error("Material expired"))
-                      : actions.onApprove({
-                          packetHash: packet.packetHash,
-                          acknowledgedFieldKeys: groups.needsReview
-                            .map((field) => field.fieldKey)
-                            .sort(),
-                        }),
-                  "Approved.",
-                )
-              }
-            >
-              Approve this packet
-            </button>
-          </>
+              ))}
+            </ul>
+          </section>
         ) : null}
-
-        {expired && application.status !== "applied" ? (
-          <p role="alert">
-            {vaultExpired
-              ? "Saved answers expired. Prepare again and review current answers before approving or applying."
-              : "Generated materials expired. Prepare again and review the new packet before approving or applying."}
-          </p>
-        ) : null}
-
-        {application.status === "approved" && application.packetAvailability === "withheld" ? (
-          <button type="button" onClick={() => run(actions.onReopen, "Reopened for editing.")}>
-            Reopen for preparation
-          </button>
-        ) : null}
-
-        {application.status === "approved" && application.approval ? (
-          <>
-            <p>Approval expires {new Date(application.approval.expiresAt).toUTCString()}.</p>
-            <button type="button" onClick={() => run(actions.onReopen, "Reopened for editing.")}>
-              Edit again
-            </button>
-          </>
+        {showAnswers && confirm.length > 0 ? (
+          <section aria-label="Items to confirm">
+            <h4>Check these answers</h4>
+            <ul>
+              {confirm.map((field) => (
+                <FieldRow
+                  key={field.fieldKey}
+                  application={application}
+                  field={field}
+                  acknowledged={acknowledged.has(field.fieldKey)}
+                  onToggle={() => onToggle(field.fieldKey)}
+                  onProvide={(value) =>
+                    run(
+                      () => actions.onProvideEntry({ fieldKey: field.fieldKey, value }),
+                      "Answer saved.",
+                    )
+                  }
+                />
+              ))}
+            </ul>
+          </section>
         ) : null}
 
         {(application.status === "reconciliation_required" || application.status === "takeover") &&
@@ -424,13 +281,6 @@ function PacketReview({
             </button>
           </section>
         ) : null}
-
-        {["preparing", "review_required", "approved"].includes(application.status) ? (
-          <button type="button" onClick={() => run(actions.onCancel, "Application cancelled.")}>
-            Cancel application
-          </button>
-        ) : null}
-
         <p role="status" aria-live="polite">
           {message}
         </p>

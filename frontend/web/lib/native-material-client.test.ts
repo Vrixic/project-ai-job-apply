@@ -1,221 +1,234 @@
-import type { ApplicationTemporaryMaterial } from "@ai-job-apply/api-contracts";
-import { afterEach, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { nativeMaterialReadFailureCopy, readNativeMaterial } from "./native-material-client";
-import type { NativeMaterialSession } from "./native-material-session";
 
-const id = (n: number) => `00000000-0000-7000-8000-${String(n).padStart(12, "0")}`;
-function setup() {
-  const material: ApplicationTemporaryMaterial = {
-    schemaVersion: 1,
-    kind: "tailored_resume",
-    generationId: id(3),
+const APP = "00000000-0000-7000-8000-000000000001";
+const PACKET = "00000000-0000-7000-8000-000000000003";
+const GEN = "00000000-0000-7000-8000-000000000020";
+const PACKET_HASH = "b".repeat(64);
+const CONTENT_HASH = "a".repeat(64);
+
+function material(overrides: Record<string, unknown> = {}) {
+  const completedAtMs = Date.now() - 60_000;
+  return {
+    schemaVersion: 1 as const,
+    kind: "tailored_resume" as const,
+    generationId: GEN,
     version: 1,
-    contentSha256: "a".repeat(64),
-    completedAtMs: Date.now(),
-    expiresAtMs: Date.now() + 1_800_000,
+    contentSha256: CONTENT_HASH,
+    completedAtMs,
+    expiresAtMs: completedAtMs + 1_800_000,
+    ...overrides,
   };
-  const binding = { applicationId: id(1), packetId: id(2), packetHash: "b".repeat(64), material };
-  // Routing allocation and original generation IDs are intentionally distinct.
-  const origin = `https://${id(5)}.materials.example.test:8443`;
-  const location = {
-    schemaVersion: 1,
-    packetId: binding.packetId,
-    packetHash: binding.packetHash,
-    temporaryMaterial: material,
-    origin,
-  };
-  const preview = {
+}
+
+const binding = () => ({
+  applicationId: APP,
+  packetId: PACKET,
+  packetHash: PACKET_HASH,
+  material: material(),
+});
+
+const body = (value: unknown, status = 200, headers: Record<string, string> = {}) =>
+  new Response(JSON.stringify(value), {
+    status,
+    headers: {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      ...headers,
+    },
+  });
+
+function preview(bound: ReturnType<typeof binding>, overrides: Record<string, unknown> = {}) {
+  return {
     status: "ready",
     matchesPacket: true,
-    contentSha256: material.contentSha256,
-    temporaryMaterial: material,
+    tailoringVersion: "1",
+    contentSha256: CONTENT_HASH,
+    temporaryMaterial: bound.material,
     sections: [],
+    ...overrides,
   };
-  const response = (value: unknown) =>
-    Response.json(value, { headers: { "cache-control": "no-store" } });
-  const send = vi.fn<typeof fetch>().mockImplementation(async () => response(location));
-  const read = vi.fn().mockImplementation(async () => response(preview));
-  const session = {
-    ready: true,
-    revision: 1,
-    configuration: { baseHost: "materials.example.test" },
-    read,
-  } as unknown as NativeMaterialSession;
-  const run = () => readNativeMaterial(session, binding, "preview", { fetch: send });
-  return { binding, location, preview, response, send, read, session, run };
 }
-afterEach(() => vi.useRealTimers());
-it.each(["packet", "location", "transport", "content", "second-location"])(
-  "reports only a safe actionable message for %s verification failures",
-  async (phase) => {
-    const f = setup();
-    const sensitive = "private-upstream-response-token";
-    if (phase === "packet") f.binding.applicationId = "invalid";
-    if (phase === "location") f.send.mockRejectedValueOnce(new Error(sensitive));
-    if (phase === "transport") f.read.mockRejectedValueOnce(new Error(sensitive));
-    if (phase === "content")
-      f.read.mockResolvedValueOnce(f.response({ ...f.preview, contentSha256: "c".repeat(64) }));
-    if (phase === "second-location")
-      f.send
-        .mockResolvedValueOnce(f.response(f.location))
-        .mockRejectedValueOnce(new Error(sensitive));
-    const error = await f.run().catch((failure: unknown) => failure);
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe("MaterialReadUnavailable");
-    expect((error as Error).cause).toBeUndefined();
-    expect(JSON.stringify(error)).not.toContain(sensitive);
-    const message = nativeMaterialReadFailureCopy(error);
-    expect(message).not.toContain(sensitive);
-    expect(message).toContain(
-      phase === "packet"
-        ? "packet"
-        : phase.includes("location")
-          ? "availability"
-          : phase === "transport"
-            ? "connection"
-            : "Prepare a new packet",
+
+function pdf(bound: ReturnType<typeof binding>, overrides: Record<string, unknown> = {}) {
+  return {
+    format: "pdf",
+    mediaType: "application/pdf",
+    fileName: "tailored-resume.pdf",
+    sha256: "c".repeat(64),
+    sizeBytes: 4,
+    contentSha256: CONTENT_HASH,
+    contentBase64: "JVBERg==",
+    temporaryMaterial: bound.material,
+    ...overrides,
+  };
+}
+
+describe("generated material client", () => {
+  it("reads through the same-origin BFF with no credential of its own", async () => {
+    const bound = binding();
+    const send = vi.fn<typeof fetch>().mockResolvedValue(body(preview(bound)));
+    const value = await readNativeMaterial(bound, "preview", { fetch: send });
+    expect(value).toMatchObject({ status: "ready" });
+    expect(send).toHaveBeenCalledTimes(1);
+    const [url, init] = send.mock.calls[0] ?? [];
+    expect(url).toBe(
+      `/api/platform/applications/${APP}/resume/content?generationId=${GEN}&packetHash=${PACKET_HASH}&format=preview`,
     );
-  },
-);
-it("does not expose arbitrary upstream error messages", () => {
-  expect(nativeMaterialReadFailureCopy(new Error("private-token"))).toBe(
-    "Materials could not be verified. Prepare a new packet and review it again.",
-  );
-});
-it("binds native content between two scalar proofs without forwarding a BFF bearer token", async () => {
-  const f = setup();
-  expect(await f.run()).toEqual(f.preview);
-  expect(f.send).toHaveBeenCalledTimes(2);
-  expect(f.send.mock.calls[0]?.[1]).toMatchObject({
-    credentials: "same-origin",
-    redirect: "error",
-    cache: "no-store",
+    expect(init).toMatchObject({
+      method: "GET",
+      cache: "no-store",
+      credentials: "same-origin",
+      redirect: "error",
+    });
+    expect(JSON.stringify(init)).not.toMatch(/authorization|bearer/iu);
   });
-  expect(f.send.mock.calls[0]?.[1]?.headers).toBeUndefined();
-  expect(f.read.mock.calls[0]?.[0].origin).toBe(f.location.origin);
-});
-it.each(["packet", "version", "expiry", "content", "unknown"])(
-  "refuses changed %s bindings",
-  async (mode) => {
-    const f = setup();
-    const changed = structuredClone(f.preview) as typeof f.preview & { unexpected?: string };
-    if (mode === "packet")
-      f.send.mockResolvedValueOnce(f.response({ ...f.location, packetHash: "c".repeat(64) }));
-    if (mode === "version") changed.temporaryMaterial.version++;
-    if (mode === "expiry") changed.temporaryMaterial.expiresAtMs++;
-    if (mode === "content") changed.contentSha256 = "c".repeat(64);
-    if (mode === "unknown") changed.unexpected = "unexpected";
-    f.read.mockResolvedValueOnce(f.response(changed));
-    await expect(f.run()).rejects.toThrow("MaterialReadUnavailable");
-  },
-);
-it("refuses a packet changed after reading content", async () => {
-  const f = setup();
-  f.send
-    .mockResolvedValueOnce(f.response(f.location))
-    .mockResolvedValueOnce(f.response({ ...f.location, packetId: id(9) }));
-  await expect(f.run()).rejects.toThrow("MaterialReadUnavailable");
-});
-it("refuses disconnect and renewed credentials during a held read", async () => {
-  const f = setup();
-  f.read.mockImplementation(async () => {
-    Object.assign(f.session, { revision: 2 });
-    return f.response(f.preview);
-  });
-  await expect(f.run()).rejects.toThrow("MaterialReadUnavailable");
-});
-it("bounds a fetch that ignores cancellation to fifteen seconds", async () => {
-  vi.useFakeTimers();
-  const f = setup();
-  f.send.mockImplementation(() => new Promise(() => undefined));
-  const result = expect(f.run()).rejects.toThrow("MaterialReadUnavailable");
-  await vi.advanceTimersByTimeAsync(15_000);
-  await result;
-});
-it.each(["cache", "oversized", "utf8"])("refuses %s response bodies", async (mode) => {
-  const f = setup();
-  const bytes = mode === "oversized" ? new Uint8Array(512 * 1024 + 1) : new Uint8Array([0xff]);
-  f.read.mockResolvedValueOnce(
-    mode === "cache"
-      ? Response.json(f.preview)
-      : new Response(bytes, {
-          headers: { "content-type": "application/json", "cache-control": "no-store" },
-        }),
-  );
-  await expect(f.run()).rejects.toThrow("MaterialReadUnavailable");
-});
 
-it("never renews material expiry while a read is held", async () => {
-  vi.useFakeTimers();
-  const f = setup();
-  const expiresAtMs = Date.now() + 1000;
-  f.binding.material.completedAtMs = expiresAtMs - 1_800_000;
-  f.binding.material.expiresAtMs = expiresAtMs;
-  let cancelled = false;
-  f.read.mockResolvedValueOnce(
-    new Response(
-      new ReadableStream({
-        cancel() {
-          cancelled = true;
-        },
-      }),
-      { headers: { "content-type": "application/json", "cache-control": "no-store" } },
-    ),
-  );
-  const result = expect(f.run()).rejects.toThrow("MaterialReadUnavailable");
-  await vi.advanceTimersByTimeAsync(1000);
-  await result;
-  expect(cancelled).toBe(true);
-  expect(f.send).toHaveBeenCalledTimes(1);
-});
-
-it("refuses malformed application paths before any network read", async () => {
-  const f = setup();
-  f.binding.applicationId = "../../other";
-  await expect(f.run()).rejects.toThrow("MaterialReadUnavailable");
-  expect(f.send).not.toHaveBeenCalled();
-});
-
-it("enforces the read deadline when the clock jumps before its timer executes", async () => {
-  vi.useFakeTimers();
-  const f = setup();
-  f.read.mockImplementation(async () => {
-    vi.setSystemTime(Date.now() + 15_001);
-    return f.response(f.preview);
-  });
-  await expect(f.run()).rejects.toThrow("MaterialReadUnavailable");
-});
-
-it("rejects a PDF-labelled response carrying DOCX media metadata", async () => {
-  const f = setup();
-  f.read.mockResolvedValueOnce(
-    f.response({
+  it("asks for the PDF only and refuses a Word file", async () => {
+    const bound = binding();
+    const send = vi.fn<typeof fetch>().mockResolvedValue(body(pdf(bound)));
+    expect(await readNativeMaterial(bound, "pdf", { fetch: send })).toMatchObject({
       format: "pdf",
-      mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      fileName: "synthetic.pdf",
-      sha256: "c".repeat(64),
-      sizeBytes: 4,
-      contentSha256: f.binding.material.contentSha256,
-      contentBase64: btoa("test"),
-      temporaryMaterial: f.binding.material,
-    }),
-  );
-  await expect(readNativeMaterial(f.session, f.binding, "pdf", { fetch: f.send })).rejects.toThrow(
-    "MaterialReadUnavailable",
-  );
-});
-
-it.each([401, 403, 409, 503])(
-  "reports safe access or service refusal without retaining response contents",
-  async (status) => {
-    const f = setup();
-    f.read.mockResolvedValueOnce(new Response("private-upstream-body", { status }));
-    const error = await f.run().catch((failure: unknown) => failure);
-    expect((error as Error).message).toBe("MaterialReadUnavailable");
-    expect(JSON.stringify(error)).not.toContain("private-upstream-body");
-    expect(nativeMaterialReadFailureCopy(error)).toContain(
-      status === 401 || status === 403 ? "access was refused" : "service could not verify",
+    });
+    expect(String(send.mock.calls[0]?.[0])).toContain("format=pdf");
+    const word = vi.fn<typeof fetch>().mockResolvedValue(
+      body(
+        pdf(bound, {
+          format: "docx",
+          mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }),
+      ),
     );
-    expect(f.send).toHaveBeenCalledTimes(1);
-  },
-);
+    await expect(readNativeMaterial(bound, "pdf", { fetch: word })).rejects.toThrow(
+      "MaterialReadUnavailable",
+    );
+    // @ts-expect-error DOCX is no longer a readable format.
+    await expect(readNativeMaterial(bound, "docx", { fetch: send })).rejects.toThrow();
+  });
+
+  it("reads a cover letter from its own route", async () => {
+    const letter = { ...binding(), material: material({ kind: "cover_letter" }) };
+    const send = vi.fn<typeof fetch>().mockResolvedValue(
+      body({
+        status: "ready",
+        documentId: APP,
+        version: 1,
+        contentSha256: CONTENT_HASH,
+        matchesPacket: true,
+        reviewRequired: true,
+        paragraphs: [{ text: "Hello", factIds: [PACKET] }],
+        model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+        promptVersion: "1",
+        temporaryMaterial: letter.material,
+      }),
+    );
+    await readNativeMaterial(letter, "preview", { fetch: send });
+    expect(String(send.mock.calls[0]?.[0])).toContain("/cover-letter/content?");
+  });
+
+  it.each([
+    [
+      "another generation",
+      (b: ReturnType<typeof binding>) =>
+        preview(b, { temporaryMaterial: { ...b.material, generationId: PACKET } }),
+    ],
+    [
+      "another content hash",
+      (b: ReturnType<typeof binding>) => preview(b, { contentSha256: "d".repeat(64) }),
+    ],
+    ["a packet mismatch", (b: ReturnType<typeof binding>) => preview(b, { matchesPacket: false })],
+    [
+      "another expiry",
+      (b: ReturnType<typeof binding>) =>
+        preview(b, {
+          temporaryMaterial: {
+            ...b.material,
+            completedAtMs: b.material.completedAtMs + 1,
+            expiresAtMs: b.material.expiresAtMs + 1,
+          },
+        }),
+    ],
+    ["an unknown field", (b: ReturnType<typeof binding>) => ({ ...preview(b), extra: true })],
+  ])("refuses a response with %s", async (_name, make) => {
+    const bound = binding();
+    const send = vi.fn<typeof fetch>().mockResolvedValue(body(make(bound)));
+    await expect(readNativeMaterial(bound, "preview", { fetch: send })).rejects.toThrow(
+      "MaterialReadUnavailable",
+    );
+  });
+
+  it("refuses an expired material without any request", async () => {
+    const expired = {
+      ...binding(),
+      material: material({
+        completedAtMs: Date.now() - 3_600_000,
+        expiresAtMs: Date.now() - 1_800_000,
+      }),
+    };
+    const send = vi.fn<typeof fetch>();
+    await expect(readNativeMaterial(expired, "preview", { fetch: send })).rejects.toThrow();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("refuses malformed identifiers without any request", async () => {
+    const send = vi.fn<typeof fetch>();
+    await expect(
+      readNativeMaterial({ ...binding(), applicationId: "nope" }, "preview", { fetch: send }),
+    ).rejects.toThrow();
+    await expect(
+      readNativeMaterial({ ...binding(), packetHash: "zz" }, "preview", { fetch: send }),
+    ).rejects.toThrow();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("refuses cacheable, wrongly typed and oversized responses", async () => {
+    const bound = binding();
+    for (const response of [
+      body(preview(bound), 200, { "cache-control": "max-age=60" }),
+      body(preview(bound), 200, { "content-type": "text/html" }),
+      new Response(JSON.stringify({ padding: "x".repeat(600 * 1024) }), {
+        status: 200,
+        headers: { "content-type": "application/json", "cache-control": "no-store" },
+      }),
+    ]) {
+      const send = vi.fn<typeof fetch>().mockResolvedValue(response);
+      await expect(readNativeMaterial(bound, "preview", { fetch: send })).rejects.toThrow();
+    }
+  });
+
+  it("classifies refusals into fixed copy without upstream text", async () => {
+    const bound = binding();
+    const failures: unknown[] = [];
+    for (const status of [401, 403, 503]) {
+      const send = vi.fn<typeof fetch>().mockResolvedValue(body({ code: "secret-detail" }, status));
+      await readNativeMaterial(bound, "preview", { fetch: send }).catch((error: unknown) =>
+        failures.push(error),
+      );
+    }
+    const copies = failures.map(nativeMaterialReadFailureCopy);
+    expect(copies[0]).toContain("Sign in again");
+    expect(copies[1]).toContain("Sign in again");
+    expect(copies[2]).toContain("could not be loaded right now");
+    expect(copies.join(" ")).not.toContain("secret-detail");
+    expect(nativeMaterialReadFailureCopy(new Error("x"))).toContain("Generate it again");
+  });
+
+  it("stops reading when the caller aborts", async () => {
+    const bound = binding();
+    const controller = new AbortController();
+    const send = vi.fn<typeof fetch>(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), {
+            once: true,
+          });
+        }),
+    );
+    const pending = readNativeMaterial(bound, "preview", {
+      fetch: send,
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(pending).rejects.toThrow("MaterialReadUnavailable");
+  });
+});

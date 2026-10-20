@@ -67,6 +67,7 @@ import {
   nativeMaterialLocationsFromEnvironment,
   nativeResumeLocationsFromEnvironment,
 } from "./native-material-location-runtime.js";
+import { LambdaOriginalResumeClient } from "./original-resume-client.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
 import { KmsRestrictedAnswerCipher } from "./restricted-answer-kms-cipher.js";
 import { resumeLimitsFromEntitlements } from "./resume-limits.js";
@@ -249,6 +250,14 @@ const applications =
               tailoring: new LambdaResumeTailoringClient(
                 process.env.DOCUMENT_TAILORING_FUNCTION_ARN,
               ),
+              // Default off: attaching the candidate's own original file is a separate release gate.
+              ...(process.env.UPLOADED_RESUME_ATTACHMENT_ENABLED === "true"
+                ? {
+                    uploadedResumes: new LambdaOriginalResumeClient(
+                      process.env.DOCUMENT_TAILORING_FUNCTION_ARN,
+                    ),
+                  }
+                : {}),
             }
           : {}),
         catalog,

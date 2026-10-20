@@ -5,7 +5,7 @@ import {
   type NormalizedResumeDocument,
   parseNormalizedResumeDocument,
 } from "./parsing/normalize.js";
-import { renderDocx, renderPdf } from "./render/render.js";
+import { renderPdf } from "./render/render.js";
 import { verifyRenderedResume } from "./render/verify.js";
 import { buildResumeAst } from "./resume-ast/build.js";
 import { buildTailoredView, tailoredContentSha256 } from "./resume-tailoring.js";
@@ -227,20 +227,18 @@ export function createNativeResumeSession(options: NativeResumeSessionOptions) {
           await admission.verify(async (borrowed, leaseSignal) => {
             const value = JSON.parse(new TextDecoder().decode(borrowed)) as HeldResume;
             try {
-              for (const format of ["pdf", "docx"] as const) {
-                const artifact =
-                  format === "pdf" ? renderPdf(value.blocks) : await renderDocx(value.blocks);
-                try {
-                  if (
-                    artifact.bytes.byteLength > 300_000 ||
-                    !(await verifyRenderedResume(artifact, value.blocks)).ok
-                  )
-                    throw unavailable();
-                  await check(signal);
-                  leaseSignal.throwIfAborted();
-                } finally {
-                  artifact.bytes.fill(0);
-                }
+              // Generated resumes are delivered only as PDF, so only the PDF is verified.
+              const artifact = renderPdf(value.blocks);
+              try {
+                if (
+                  artifact.bytes.byteLength > 300_000 ||
+                  !(await verifyRenderedResume(artifact, value.blocks)).ok
+                )
+                  throw unavailable();
+                await check(signal);
+                leaseSignal.throwIfAborted();
+              } finally {
+                artifact.bytes.fill(0);
               }
             } finally {
               clear(value);
@@ -265,12 +263,8 @@ export function createNativeResumeSession(options: NativeResumeSessionOptions) {
         if (held) clear(held);
       }
     },
-    async read(
-      input: TemporaryMaterialReference,
-      format: "preview" | "pdf" | "docx",
-      signal?: AbortSignal,
-    ) {
-      if (!["preview", "pdf", "docx"].includes(format)) throw unavailable();
+    async read(input: TemporaryMaterialReference, format: "preview" | "pdf", signal?: AbortSignal) {
+      if (!["preview", "pdf"].includes(format)) throw unavailable();
       if (!validateTemporaryMaterialReference(input)) throw unavailable();
       const fixed = { ...input };
       await check(signal);
@@ -291,8 +285,7 @@ export function createNativeResumeSession(options: NativeResumeSessionOptions) {
           format === "preview"
             ? { sections: held.sections, matchedTerms: held.matchedTerms }
             : await (async () => {
-                const artifact =
-                  format === "pdf" ? renderPdf(captured.blocks) : await renderDocx(captured.blocks);
+                const artifact = renderPdf(captured.blocks);
                 artifactBytes = artifact.bytes;
                 if (
                   artifactBytes.byteLength > 300_000 ||
@@ -301,7 +294,7 @@ export function createNativeResumeSession(options: NativeResumeSessionOptions) {
                   throw unavailable();
                 return {
                   bytes: artifactBytes,
-                  mediaType: artifact.mediaType,
+                  mediaType: "application/pdf" as const,
                   sha256: artifact.sha256,
                 };
               })();

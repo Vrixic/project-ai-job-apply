@@ -289,11 +289,18 @@ use and a separately reviewed deployment enables the panel.
 
 ## Native material sign-out cleanup
 
-Application BFF preparation reads and resume/cover-letter location reads return validated scalar
-metadata only. A 202 packet response is accepted only for an explicit cover-letter request and
-is validated as a preparation operation. Browser-native identity transport and cover-letter
-preview/download UI remain unfinished. Generated-material review requires an exact available
-preview; expiry blocks approval and material use without renewing the original deadline.
+Application BFF preparation reads return validated scalar metadata only. A 202 packet response
+is accepted only for an explicit cover-letter request and is validated as a preparation operation.
+
+Generate-then-apply ([ADR-050](../../docs/adr/050-generate-then-apply-flow.md)): the job page offers
+**Generate resume** (a loading step that follows the server `resumeGeneration` state to ready, failed
+with retry, or expired with one-click regenerate) or **Apply** directly with the uploaded resume.
+Apply opens the employer page and arms the extension; the candidate never picks a file. Generated
+resume and cover-letter content is read through the same-origin BFF routes
+`/api/platform/applications/{id}/{resume|cover-letter}/content`, which use the server-held session
+token, so there is no popup sign-in or browser-held material credential. Set the server-only
+`NATIVE_MATERIAL_BASE_HOST` (reviewed native DNS/TLS base host) to enable them. Generated resumes
+are PDF only. Expiry blocks material use without renewing the original deadline.
 
 NATIVE_MATERIAL_LOGOUT_ENABLED defaults off. Enable it only after the managed owner-withdrawal
 route and durable cleanup worker are accepted, with AUTH0_APPLICATIONS_SCOPES=enabled and the

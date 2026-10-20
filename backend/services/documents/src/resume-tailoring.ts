@@ -1,12 +1,14 @@
 import type { ParsedResumeSource } from "./parsed-resume-source.js";
+
 export {
   type ParsedResumeRecord,
   type ParsedResumeSource,
   PostgresParsedResumeSource,
 } from "./parsed-resume-source.js";
+
 import { createHash } from "node:crypto";
 import type { NormalizedDocumentReader } from "./normalized-document-reader.js";
-import { RenderError, renderDocx, renderPdf } from "./render/render.js";
+import { RenderError, renderPdf } from "./render/render.js";
 import { verifyRenderedResume } from "./render/verify.js";
 import { buildResumeAst } from "./resume-ast/build.js";
 import type { AstNode, ResumeAst } from "./resume-ast/types.js";
@@ -179,14 +181,14 @@ export function createResumeTailoringService(dependencies: ResumeTailoringDepend
 
     try {
       const format = request.format as ResumeArtifactFormat;
-      const rendered = format === "docx" ? await renderDocx(blocks) : renderPdf(blocks);
+      const rendered = renderPdf(blocks);
       const verification = await verifyRenderedResume(rendered, blocks);
       if (!verification.ok) return unavailable("render_failed");
       // The response carries the file inline, so it stays within the contract's size ceiling.
       if (rendered.bytes.byteLength > MAXIMUM_ARTIFACT_BYTES) return unavailable("render_failed");
       ready.artifact = {
         format,
-        mediaType: rendered.mediaType,
+        mediaType: "application/pdf",
         sha256: rendered.sha256,
         sizeBytes: rendered.bytes.byteLength,
         contentBase64: Buffer.from(rendered.bytes).toString("base64"),

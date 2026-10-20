@@ -3700,7 +3700,7 @@
             "oidc": ["applications:read"]
           }
         ],
-        "description": "One verified DOCX or PDF rendering of the tailored resume the current packet carries. It is refused with a stale-packet conflict unless the rendering's content hash equals the packet's resume hash, so the file a candidate downloads is exactly the one they reviewed.",
+        "description": "One verified PDF rendering of the tailored resume the current packet carries. Generated resumes are delivered only as PDF. It is refused with a stale-packet conflict unless the rendering's content hash equals the packet's resume hash, so the file a candidate downloads is exactly the one they reviewed.",
         "parameters": [
           {
             "in": "path",
@@ -3717,7 +3717,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "enum": ["docx", "pdf"]
+              "enum": ["pdf"]
             }
           }
         ],
@@ -3743,6 +3743,64 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/applications/{applicationId}/resume/uploaded": {
+      "get": {
+        "operationId": "getApplicationUploadedResume",
+        "security": [
+          {
+            "oidc": ["applications:read"]
+          }
+        ],
+        "description": "The candidate's own original uploaded resume in its original format, for the employer attachment. Owner-scoped and bound to the current packet: it is refused with a stale-packet conflict unless the file's SHA-256 equals the packet's resume hash, and with a conflict when the packet carries a generated resume instead. Files above 2 MiB are refused. The response is not cacheable and must not be persisted, logged or placed in a URL.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "applicationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner-scoped uploaded resume file",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationUploadedResumeFile"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -9647,6 +9705,9 @@
           "approval": {
             "$ref": "#/components/schemas/ApplicationApproval"
           },
+          "resumeGeneration": {
+            "$ref": "#/components/schemas/ApplicationResumeGeneration"
+          },
           "attempts": {
             "type": "array",
             "maxItems": 100,
@@ -9921,14 +9982,11 @@
         "properties": {
           "format": {
             "type": "string",
-            "enum": ["docx", "pdf"]
+            "enum": ["pdf"]
           },
           "mediaType": {
             "type": "string",
-            "enum": [
-              "application/pdf",
-              "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            ]
+            "enum": ["application/pdf"]
           },
           "fileName": {
             "type": "string",
@@ -9962,6 +10020,101 @@
         },
         "additionalProperties": false
       },
+      "ApplicationResumeGeneration": {
+        "type": "object",
+        "required": ["state"],
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": ["not_requested", "preparing", "ready", "failed", "expired"],
+            "description": "not_requested: no generation was asked for the current packet. preparing: queued or running; a cold start typically takes one to two minutes. ready: a generated PDF is available until its fixed expiry. failed: generation ended without a resume or exceeded its bound; request it again. expired: the generated resume passed its fixed 30-minute expiry."
+          },
+          "errorCode": {
+            "type": "string",
+            "enum": ["no_resume", "generation_failed", "generation_timed_out"],
+            "description": "Present only when state is failed. no_resume: the candidate has no uploaded resume to tailor."
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When generation was requested for the current packet lineage. Absent when state is not_requested."
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": { "properties": { "state": { "const": "failed" } }, "required": ["state"] },
+            "then": {
+              "required": ["errorCode"],
+              "properties": { "errorCode": { "type": "string" } }
+            },
+            "else": { "properties": { "errorCode": false } }
+          },
+          {
+            "if": {
+              "properties": { "state": { "const": "not_requested" } },
+              "required": ["state"]
+            },
+            "then": { "properties": { "requestedAt": false } }
+          }
+        ],
+        "description": "Honest, value-free status of the generated resume for the current application packet. Derived from owner metadata only; it never carries content, task identifiers or provider detail."
+      },
+      "ApplicationUploadedResumeFile": {
+        "type": "object",
+        "required": [
+          "documentId",
+          "fileName",
+          "format",
+          "mediaType",
+          "sha256",
+          "sizeBytes",
+          "contentBase64"
+        ],
+        "properties": {
+          "documentId": { "type": "string", "format": "uuid" },
+          "fileName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[^\\u0000-\\u001f\\u007f/\\\\]+$"
+          },
+          "format": { "type": "string", "enum": ["pdf", "docx"] },
+          "mediaType": { "$ref": "#/components/schemas/ResumeMediaType" },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 of the original file bytes. Equals the current packet's resume hash."
+          },
+          "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 2097152 },
+          "contentBase64": { "type": "string", "minLength": 4, "maxLength": 2796212 }
+        },
+        "additionalProperties": false,
+        "description": "The candidate's own original uploaded resume, byte for byte, in its original format. Files above 2 MiB are refused rather than attached."
+      },
+      "ApplicationApplyIntent": {
+        "type": "object",
+        "required": ["schema", "applicationId", "jobId", "packetId", "packetHash"],
+        "properties": {
+          "schema": { "const": "application-apply-intent.v1", "type": "string" },
+          "applicationId": { "type": "string", "format": "uuid" },
+          "jobId": { "type": "string", "format": "uuid" },
+          "packetId": { "type": "string", "format": "uuid" },
+          "packetHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        },
+        "additionalProperties": false,
+        "description": "First-party website-to-extension arming message sent when the candidate presses Apply. It carries identifiers only: no credential, file, answer or URL. The extension reads the packet itself with its own session and derives which resume to use from the packet."
+      },
+      "ApplicationApplyIntentReceipt": {
+        "type": "object",
+        "required": ["schema", "expiresAtMs"],
+        "properties": {
+          "schema": { "const": "application-apply-intent-receipt.v1", "type": "string" },
+          "expiresAtMs": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+        },
+        "additionalProperties": false,
+        "description": "Acknowledges that the extension holds the identifiers in memory until this deadline. Not submission evidence."
+      },
       "ApplicationNativeTransferBegin": {
         "type": "object",
         "required": ["schema", "applicationId", "packetId", "packetHash", "format"],
@@ -9970,7 +10123,7 @@
           "applicationId": { "type": "string", "format": "uuid" },
           "packetId": { "type": "string", "format": "uuid" },
           "packetHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-          "format": { "type": "string", "enum": ["pdf", "docx"] }
+          "format": { "type": "string", "const": "pdf" }
         },
         "additionalProperties": false,
         "description": "Default-off first-party website-to-extension transport only; no REST route, credentials or submission authority."
@@ -9998,7 +10151,7 @@
           "packetHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
           "approvalId": { "type": "string", "format": "uuid" },
           "revision": { "type": "integer", "minimum": 1 },
-          "format": { "type": "string", "enum": ["pdf", "docx"] },
+          "format": { "type": "string", "const": "pdf" },
           "materials": {
             "type": "array",
             "minItems": 1,
@@ -10468,6 +10621,11 @@
           "coverLetter": {
             "$ref": "#/components/schemas/RequestedApplicationCoverLetter"
           },
+          "resume": {
+            "type": "string",
+            "enum": ["generate", "uploaded"],
+            "description": "generate (default) also requests the one-off generated resume. uploaded builds the packet with the candidate's own uploaded resume and requests no generation."
+          },
           "vaultSelections": {
             "type": "array",
             "maxItems": 20,
@@ -10913,11 +11071,12 @@
       },
       "ApplicationExecutionFile": {
         "type": "object",
-        "required": ["kind", "generationId", "format", "mediaType", "sha256", "contentBase64"],
+        "required": ["kind", "format", "mediaType", "sha256", "contentBase64"],
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["tailored_resume", "cover_letter"]
+            "enum": ["tailored_resume", "cover_letter", "uploaded_resume"],
+            "description": "uploaded_resume is the candidate's own original file in its original format; generated kinds are temporary and carry their generation ID."
           },
           "generationId": {
             "type": "string",
@@ -10939,11 +11098,24 @@
           "contentBase64": {
             "type": "string",
             "minLength": 4,
-            "maxLength": 400000,
+            "maxLength": 2800000,
             "pattern": "^[A-Za-z0-9+/]*={0,2}$"
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": { "kind": { "const": "uploaded_resume" } },
+              "required": ["kind"]
+            },
+            "then": { "properties": { "generationId": false } },
+            "else": {
+              "required": ["generationId"],
+              "properties": { "generationId": { "type": "string" } }
+            }
+          }
+        ]
       },
       "ApplicationExecutionInspect": {
         "type": "object",

@@ -19,9 +19,11 @@ import {
   type LiveBindingsSource,
   type MetricSink,
   PostgresApplicationStore,
+  packetUsesUploadedResume,
   type ResumeFileBody,
   type ResumePreviewBody,
   type ResumePreviewSource,
+  type UploadedResumeSource,
   type VaultCurrentReference,
   type VaultReader,
 } from "@ai-job-apply/applications-service";
@@ -45,6 +47,8 @@ export interface ApplicationsRuntimeOptions {
   profile: { listProfileFacts(userId: string): Promise<{ facts: ProfileFact[] }> };
   /** The Documents runtime; without it packets carry no resume and the preview is unavailable. */
   tailoring?: ResumeTailoringClient;
+  /** The candidate's own uploaded resume, read from its Documents owner. Absent: fallback off. */
+  uploadedResumes?: UploadedResumeSource;
   nativeResumePreparationEnabled?: () => boolean;
   /** Owned Documents context/read port only; no live provider is composed inside the Gateway. */
   coverLetters?: ApplicationCoverLetters;
@@ -318,10 +322,22 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
           throw new ApplicationsUnavailableError();
         }
       }
-      const resume = expectedMaterials.some((reference) => reference.kind === "tailored_resume")
-        ? temporaryMaterials.find((reference) => reference.kind === "tailored_resume")
-            ?.contentSha256
-        : (await artifacts(ownerUserId, application.canonicalJobId)).resume;
+      let resume: string | undefined;
+      if (expectedMaterials.some((reference) => reference.kind === "tailored_resume")) {
+        resume = temporaryMaterials.find(
+          (reference) => reference.kind === "tailored_resume",
+        )?.contentSha256;
+      } else if (packetUsesUploadedResume(view.currentPacket)) {
+        // The candidate's own file: current only while the same bytes are still their resume.
+        if (!options.uploadedResumes) throw new ApplicationsUnavailableError();
+        try {
+          resume = (await options.uploadedResumes.descriptor(ownerUserId))?.sha256;
+        } catch {
+          throw new ApplicationsUnavailableError();
+        }
+      } else {
+        resume = (await artifacts(ownerUserId, application.canonicalJobId)).resume;
+      }
       return {
         jobRevision: await jobRevision(application.canonicalJobId, clock()),
         formHash,
@@ -343,6 +359,9 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
     jobRevision: (application: ApplicationRecord) =>
       jobRevision(application.canonicalJobId, clock()),
     artifacts: (ownerUserId, application) => artifacts(ownerUserId, application.canonicalJobId),
+    ...(options.uploadedResumes
+      ? { uploadedResume: options.uploadedResumes.descriptor.bind(options.uploadedResumes) }
+      : {}),
     clock,
   });
 
@@ -368,6 +387,7 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
     bindings,
     jobs,
     resumes,
+    ...(options.uploadedResumes ? { uploadedResumes: options.uploadedResumes } : {}),
     ...(options.coverLetters ? { coverLetters: options.coverLetters } : {}),
     ...(options.temporaryMaterials || options.nativeMaterialDisposal
       ? {

@@ -9,6 +9,7 @@ import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import type { ResumeUploadSigner } from "./upload-signer.js";
 
+export * from "./original-resume-contract.js";
 export * from "./resume-tailoring-contract.js";
 export type {
   ResumeUploadGrantInput,

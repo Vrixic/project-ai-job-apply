@@ -84,8 +84,9 @@ if (!Object.hasOwn(globalThis, installed)) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       let state: NonNullable<typeof active> | undefined;
       try {
+        const hasUploaded = message.files.some((file) => file.kind === "uploaded_resume");
         let wire = JSON.stringify(message);
-        if (new TextEncoder().encode(wire).byteLength > 850_000)
+        if (new TextEncoder().encode(wire).byteLength > (hasUploaded ? 3_700_000 : 850_000))
           throw Error("ApplicationExecutionUnavailable");
         wire = "";
         const profile = greenhouseExecutionProfile(message.variantId, message.adapterVersion);
@@ -134,9 +135,12 @@ if (!Object.hasOwn(globalThis, installed)) {
           const bytes = Uint8Array.from(atob(file.contentBase64), (character) =>
             character.charCodeAt(0),
           );
+          // Generated files are PDF only; only the candidate's own original keeps its format.
+          if (file.kind !== "uploaded_resume" && file.format !== "pdf")
+            throw Error("ApplicationExecutionUnavailable");
           state.files.push({
             kind: file.kind,
-            generationId: file.generationId,
+            ...(file.generationId ? { generationId: file.generationId } : {}),
             format: file.format,
             mediaType: file.mediaType,
             sha256: file.sha256,
@@ -146,8 +150,8 @@ if (!Object.hasOwn(globalThis, installed)) {
           total += bytes.byteLength;
           if (
             bytes.byteLength < 1 ||
-            bytes.byteLength > 300_000 ||
-            total > 600_000 ||
+            bytes.byteLength > (file.kind === "uploaded_resume" ? 2 * 1024 * 1024 : 300_000) ||
+            total > (hasUploaded ? 2 * 1024 * 1024 + 300_000 : 600_000) ||
             (file.format === "pdf"
               ? new TextDecoder().decode(bytes.subarray(0, 5)) !== "%PDF-" ||
                 file.mediaType !== "application/pdf"

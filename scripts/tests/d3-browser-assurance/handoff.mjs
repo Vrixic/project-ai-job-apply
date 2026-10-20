@@ -215,13 +215,25 @@ try {
   );
   await prepareSaved.click();
   await web.getByText(/Saved answer version 7. Context: us.explicit./u).waitFor();
-  const approveSaved = web.getByRole("button", { name: "Approve this packet", exact: true });
-  assert.equal(await approveSaved.isEnabled(), false);
-  await web.getByRole("checkbox", { name: "I reviewed contact.email", exact: true }).check();
+  // Sensitive and reviewable answers stay explicit: Apply is blocked until each is checked.
+  const applySaved = web.getByRole("button", { name: "Apply", exact: true });
+  assert.equal(await applySaved.isEnabled(), false);
+  await web.getByRole("checkbox", { name: "I checked contact.email", exact: true }).check();
+  assert.equal(await applySaved.isEnabled(), false);
   await web
-    .getByRole("checkbox", { name: "I reviewed authorization.us_authorized", exact: true })
+    .getByRole("checkbox", { name: "I checked authorization.us_authorized", exact: true })
     .check();
-  await approveSaved.click();
+  assert.equal(await applySaved.isEnabled(), true);
+  // The employer page is a local stub; nothing leaves this machine.
+  await web
+    .context()
+    .route(/^https:\/\/employer\.example\//u, (route) =>
+      route.fulfill({ status: 200, headers: { "content-type": "text/html" }, body: "<p>stub</p>" }),
+    );
+  const employerTab = web.context().waitForEvent("page");
+  await applySaved.click();
+  await (await employerTab).close();
+  await web.getByRole("button", { name: "Record submission status", exact: true }).waitFor();
   assert.equal(
     await web.getByRole("button", { name: "Record submission status", exact: true }).isEnabled(),
     false,

@@ -16,6 +16,7 @@ import type {
   ApplicationSubmissionStart,
   ApplicationTemporaryMaterialAuthorization,
   ApplicationTemporaryMaterialLocation,
+  ApplicationUploadedResumeFile,
   ApproveApplicationPacketRequest,
   CandidateDataExport,
   CandidateDataExportAccess,
@@ -207,6 +208,7 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   type ApplicationsFailure,
+  parseGeneratedResumeFormatQuery,
   parseHistoryQuery,
   parseResumeFormatQuery,
   projectApplicationsFailure,
@@ -364,6 +366,7 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/applications/:applicationId/history",
   "/v1/applications/:applicationId/resume",
   "/v1/applications/:applicationId/resume/file",
+  "/v1/applications/:applicationId/resume/uploaded",
   "/v1/applications/:applicationId/packets",
   "/v1/applications/:applicationId/approval",
   "/v1/applications/:applicationId/reopen",
@@ -2779,11 +2782,24 @@ class ApplicationsController {
   ): Promise<ApplicationResumeFile> {
     const user = await this.identity.resolve(request, "applications:read");
     requireApplicationPath(applicationId);
-    const format = parseResumeFormatQuery(request.query);
+    const format = parseGeneratedResumeFormatQuery(request.query);
     if (request.body !== undefined || format === null) {
       throw new HttpException("The Applications request is invalid", HttpStatus.BAD_REQUEST);
     }
     return this.applications.resumeFile(user.id, applicationId, format);
+  }
+
+  @Get("/:applicationId/resume/uploaded")
+  @Header("cache-control", "no-store")
+  async uploadedResumeFile(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+  ): Promise<ApplicationUploadedResumeFile> {
+    const user = await this.identity.resolve(request, "applications:read");
+    requireApplicationsRead(request);
+    requireApplicationPath(applicationId);
+    if (!this.applications.uploadedResumeFile) throw new ApplicationsUnavailableError();
+    return this.applications.uploadedResumeFile(user.id, applicationId);
   }
 
   @Get("/:applicationId/cover-letter")
@@ -2956,6 +2972,9 @@ class ApplicationsController {
       validatePrepareApplicationPacket,
     );
     if (body.coverLetter) {
+      // A cover-letter operation always uses the one-off generated resume path.
+      if (body.resume === "uploaded")
+        throw new HttpException("The Applications request is invalid", HttpStatus.BAD_REQUEST);
       const operation = await this.applications.prepareCoverLetter(
         user.id,
         applicationId,
@@ -2973,6 +2992,7 @@ class ApplicationsController {
         ...(body.userEntries ? { userEntries: body.userEntries } : {}),
         ...(body.vaultSelections ? { vaultSelections: body.vaultSelections } : {}),
         ...(body.form ? { form: body.form } : {}),
+        ...(body.resume ? { resume: body.resume } : {}),
       },
       commandKey,
     );

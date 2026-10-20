@@ -62,22 +62,15 @@ describe("candidate web deployment headers", () => {
     );
   });
 
-  it("preserves popup communication only on the configured native workspace route", async () => {
+  it("keeps the strict opener policy on every route, with no popup exception", async () => {
     vi.stubEnv("NEXT_PUBLIC_NATIVE_MATERIAL_UI", "enabled");
-    vi.stubEnv("NEXT_PUBLIC_NATIVE_AUTH0_DOMAIN", "identity.example.test");
-    vi.stubEnv("NEXT_PUBLIC_NATIVE_AUTH0_CLIENT_ID", "synthetic-client");
-    vi.stubEnv("NEXT_PUBLIC_NATIVE_MATERIAL_BASE_HOST", "materials.example.test");
     const headers = await nextConfig.headers?.();
-    expect(headers).toHaveLength(2);
-    expect(headers?.[1]).toEqual({
-      source: "/jobs",
-      headers: [{ key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" }],
-    });
+    expect(headers).toHaveLength(1);
+    expect(headers?.[0]?.source).toBe("/:path*");
     expect(headers?.[0]?.headers).toContainEqual({
       key: "Cross-Origin-Opener-Policy",
       value: "same-origin",
     });
-    vi.stubEnv("NEXT_PUBLIC_NATIVE_AUTH0_CLIENT_ID", "");
-    expect(await nextConfig.headers?.()).toHaveLength(1);
+    expect(JSON.stringify(headers)).not.toContain("allow-popups");
   });
 });

@@ -1,16 +1,11 @@
 "use client";
 
-import type { Application, ApplicationResumeFile } from "@ai-job-apply/api-contracts";
-import { useEffect, useId, useRef, useState } from "react";
-import {
-  materialDeadline,
-  materialsExpired,
-  sameMaterial,
-} from "../lib/application-material-lifetime";
-import { fetchResumeFile, sha256OfBytes } from "../lib/applications-client";
+import type { Application } from "@ai-job-apply/api-contracts";
+import { useId, useState } from "react";
+import { materialsExpired } from "../lib/application-material-lifetime";
+import { packetResumeSource } from "../lib/apply-flow";
 import { ExtensionApplicationHandoff } from "./extension-application-handoff";
 import { ManualFormConfirmation, type ManualFormObservation } from "./manual-form-confirmation";
-import { useMaterialExpiry } from "./use-material-expiry";
 
 /** Only a plain https link with no credentials is ever offered as the place to apply. */
 export function safeApplyUrl(value: string | undefined): string | undefined {
@@ -33,58 +28,52 @@ function answerText(value: unknown): string {
   return typeof value === "boolean" ? (value ? "Yes" : "No") : String(value);
 }
 
-function fileFrom(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
-}
-
-const FORMAT_LABEL = { pdf: "PDF", docx: "Word (DOCX)" } as const;
+/** What the website knows about handing the application to the extension. */
+export type ExtensionHandoffState =
+  | { phase: "none" }
+  | { phase: "armed" }
+  | { phase: "waiting_for_extension" }
+  | { phase: "resume_sent" }
+  | { phase: "unavailable" };
 
 /**
- * Shown once a packet is approved. It does not submit anything: it opens the employer's page and
- * puts the approved answers and the tailored resume within reach so the candidate can complete the
- * application by hand until browser-extension filling exists for the site. Every answer and file is
- * exactly what was approved; a resume that no longer matches the packet is refused, not downloaded.
+ * Shown once the candidate pressed Apply. The employer page is open and, when the extension is
+ * installed, it already knows this application and which resume to use. Nothing is submitted from
+ * here or by the extension: the candidate confirms every sensitive answer and the final submit on
+ * the employer page. A manual path stays available when the extension is not.
  */
 export function ApplyPanel({
   application,
   applyUrl,
-  fetchImplementation,
+  handoff = { phase: "none" },
+  onStopWaiting,
+  onChangeResume,
   onRecordManualSubmission,
-  nativeMaterialDownloads = false,
+  fetchImplementation,
 }: {
   application: Application;
   applyUrl?: string | undefined;
-  fetchImplementation?: typeof globalThis.fetch;
+  handoff?: ExtensionHandoffState;
+  onStopWaiting?: () => void;
+  /** Reopens the application so a different resume can be chosen; nothing is lost. */
+  onChangeResume?: () => void;
   onRecordManualSubmission(observation?: ManualFormObservation): Promise<void> | void;
-  nativeMaterialDownloads?: boolean;
+  fetchImplementation?: typeof globalThis.fetch;
 }) {
   const headingId = useId();
   const [message, setMessage] = useState<string>();
-  const [busyFormat, setBusyFormat] = useState<"pdf" | "docx">();
   const [recording, setRecording] = useState(false);
   const [observation, setObservation] = useState<ManualFormObservation>();
-  const pending = useRef<AbortController | undefined>(undefined);
   const packet = application.currentPacket;
-  const deadlines = packet?.temporaryMaterials?.map(materialDeadline) ?? [];
-  const expired = useMaterialExpiry(deadlines.length ? Math.min(...deadlines) : undefined);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: changed approval bindings invalidate any held file read.
-  useEffect(
-    () => () => pending.current?.abort(),
-    [application.id, application.revision, application.packetAvailability],
-  );
-  useEffect(() => {
-    if (expired) pending.current?.abort();
-  }, [expired]);
   const href = safeApplyUrl(applyUrl);
-  const fields = (application.currentPacket?.fields ?? []).filter(
+  const source = packetResumeSource(packet);
+  const expired = materialsExpired(packet?.temporaryMaterials);
+  const fields = (packet?.fields ?? []).filter(
     (field) =>
       field.value !== null &&
       field.value !== undefined &&
       String(field.value) !== "" &&
-      !field.fieldKey.startsWith("document."),
+      !/^documents?\./u.test(field.fieldKey),
   );
 
   async function copy(fieldKey: string, value: string) {
@@ -94,75 +83,6 @@ export function ApplyPanel({
       setMessage(`${labelFor(fieldKey)} copied.`);
     } catch {
       setMessage("Your browser did not allow copying. Select the text and copy it instead.");
-    }
-  }
-
-  async function download(format: "pdf" | "docx") {
-    if (pending.current || materialsExpired(packet?.temporaryMaterials)) return;
-    const controller = new AbortController();
-    let heldBytes: Uint8Array | undefined;
-    pending.current = controller;
-    setBusyFormat(format);
-    setMessage(undefined);
-    try {
-      const result = await fetchResumeFile(application.id, format, {
-        signal: controller.signal,
-        ...(fetchImplementation ? { fetch: fetchImplementation } : {}),
-      });
-      if (!result.ok) {
-        setMessage(result.message);
-        return;
-      }
-      const file: ApplicationResumeFile = result.file;
-      const expectedMaterial = packet?.temporaryMaterials?.find(
-        (material) => material.kind === "tailored_resume",
-      );
-      if (
-        controller.signal.aborted ||
-        file.format !== format ||
-        file.contentSha256 !== packet?.artifactHashes.resume ||
-        Boolean(expectedMaterial) !== Boolean(file.temporaryMaterial) ||
-        (expectedMaterial && !sameMaterial(file.temporaryMaterial, expectedMaterial)) ||
-        materialsExpired(file.temporaryMaterial ? [file.temporaryMaterial] : undefined)
-      ) {
-        setMessage("The resume changed or expired. Prepare and review it again.");
-        return;
-      }
-      const bytes = fileFrom(file.contentBase64);
-      heldBytes = bytes;
-      file.contentBase64 = "";
-      // The file must be exactly the bytes the platform said it verified.
-      if (
-        bytes.byteLength !== file.sizeBytes ||
-        (await sha256OfBytes(bytes)) !== file.sha256 ||
-        controller.signal.aborted ||
-        materialsExpired(packet?.temporaryMaterials) ||
-        materialsExpired(file.temporaryMaterial ? [file.temporaryMaterial] : undefined)
-      ) {
-        setMessage("The resume file did not pass its check, so it was not downloaded.");
-        return;
-      }
-      const url = URL.createObjectURL(
-        new Blob([bytes.buffer as ArrayBuffer], { type: file.mediaType }),
-      );
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = file.fileName;
-      anchor.rel = "noopener";
-      try {
-        document.body.append(anchor);
-        anchor.click();
-      } finally {
-        anchor.remove();
-        URL.revokeObjectURL(url);
-      }
-      setMessage(`${file.fileName} downloaded.`);
-    } catch {
-      if (!controller.signal.aborted) setMessage("The resume could not be downloaded. Try again.");
-    } finally {
-      heldBytes?.fill(0);
-      if (pending.current === controller) pending.current = undefined;
-      setBusyFormat(undefined);
     }
   }
 
@@ -187,51 +107,58 @@ export function ApplyPanel({
 
   return (
     <section aria-labelledby={headingId} className="apply-panel">
-      <h3 id={headingId}>Apply</h3>
-      <p>
-        Your application is approved and ready. Nothing is sent for you yet: automatic filling from
-        the browser extension is not available for this site. Open the application page, then use
-        your approved answers and resume below.
-      </p>
+      <h3 id={headingId}>Finish on the employer's page</h3>
       {expired ? (
         <p role="alert">
-          Generated materials expired. Prepare and review a new packet before applying. Files you
-          already downloaded or sent are outside platform cleanup.
+          Your generated resume expired. Generate it again, or apply with your uploaded resume.
+          Files you already downloaded or sent are outside platform cleanup.
         </p>
       ) : null}
-      {!expired ? <ExtensionApplicationHandoff application={application} /> : null}
+      {!expired && handoff.phase !== "none" && handoff.phase !== "unavailable" ? (
+        <p role="status">
+          {handoff.phase === "waiting_for_extension"
+            ? `The employer page is open. Open the ApplyDash extension on it: it already knows this application and will use your ${source === "generated" ? "generated resume (PDF)" : "uploaded resume"}. Waiting for you...`
+            : handoff.phase === "resume_sent"
+              ? "Your generated resume reached the extension. Open the extension on the employer page to fill the form."
+              : `The employer page is open. Open the ApplyDash extension on it: it already knows this application and will use your ${source === "generated" ? "generated resume (PDF)" : "uploaded resume"}.`}
+        </p>
+      ) : null}
+      {!expired && handoff.phase === "unavailable" ? (
+        <p role="status">
+          The extension did not answer, so nothing was filled for you. Apply on the employer page by
+          hand using the details below.
+        </p>
+      ) : null}
+      {handoff.phase === "waiting_for_extension" && onStopWaiting ? (
+        <button type="button" onClick={onStopWaiting}>
+          Stop waiting for the extension
+        </button>
+      ) : null}
       {href && !expired ? (
         <p>
           <a href={href} target="_blank" rel="noopener noreferrer">
-            Open the application page (opens in a new tab)
+            Open the employer's page again (opens in a new tab)
           </a>
         </p>
-      ) : (
+      ) : !href ? (
         <p>
           We do not have a safe link to this application page. Find the job on the employer's site.
         </p>
-      )}
-
-      {!nativeMaterialDownloads && !expired && application.currentPacket?.artifactHashes.resume ? (
-        <div>
-          <h4>Your tailored resume</h4>
-          <p>Exactly the version you reviewed. Upload it on the application page.</p>
-          {(["pdf", "docx"] as const).map((format) => (
-            <button
-              key={format}
-              type="button"
-              disabled={busyFormat !== undefined}
-              onClick={() => void download(format)}
-            >
-              {busyFormat === format ? "Preparing..." : `Download ${FORMAT_LABEL[format]}`}
-            </button>
-          ))}
-        </div>
+      ) : null}
+      <p>You confirm sensitive answers and the final submit on the employer's page.</p>
+      {onChangeResume ? (
+        <p>
+          <button type="button" className="link-button" onClick={onChangeResume}>
+            Choose a different resume
+          </button>
+        </p>
       ) : null}
 
+      {!expired ? <ExtensionApplicationHandoff application={application} /> : null}
+
       {!expired && fields.length > 0 ? (
-        <div>
-          <h4>Your approved answers</h4>
+        <details>
+          <summary>Your answers, to copy by hand</summary>
           <ul>
             {fields.map((field) => (
               <li key={field.fieldKey}>
@@ -246,7 +173,7 @@ export function ApplyPanel({
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       ) : null}
       <div>
         <h4>Record what happened</h4>
@@ -265,12 +192,7 @@ export function ApplyPanel({
         ) : null}
         <button
           type="button"
-          disabled={
-            recording ||
-            busyFormat !== undefined ||
-            expired ||
-            Boolean(packet?.form && !observation)
-          }
+          disabled={recording || expired || Boolean(packet?.form && !observation)}
           onClick={() => void recordManualSubmission()}
         >
           {recording ? "Opening confirmation..." : "Record submission status"}

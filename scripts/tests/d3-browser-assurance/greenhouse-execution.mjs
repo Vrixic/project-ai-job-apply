@@ -56,6 +56,8 @@ const modes = [
   "stalled-confirmation-hash",
   "generic-thank-you",
   "navigation",
+  "uploaded-docx",
+  "uploaded-docx-not-accepted",
 ];
 const unexpected = [];
 try {
@@ -86,7 +88,7 @@ try {
     const result = await page.evaluate((mode) => window.runGreenhouseExecutionFixture(mode), mode);
     assert.equal(
       result.result.kind === "confirmed",
-      mode === "success",
+      ["success", "uploaded-docx"].includes(mode),
       `${mode}: ${JSON.stringify(result)}`,
     );
     assert.equal(result.filesCleared, true, `${mode}: file controls must be cleared`);
@@ -94,6 +96,7 @@ try {
       result.submits,
       [
         "success",
+        "uploaded-docx",
         "confirmation-and-challenge",
         "challenge-during-final-proof",
         "stalled-confirmation-hash",
@@ -123,6 +126,16 @@ try {
       ].includes(mode)
     )
       assert.equal(result.effects, 0, mode);
+    if (mode === "uploaded-docx") {
+      // The candidate's own file keeps its format and is not given the generated-file name.
+      assert.deepEqual(
+        result.attached.map((entry) => entry.name),
+        ["resume.docx"],
+        mode,
+      );
+    }
+    if (mode === "uploaded-docx-not-accepted")
+      assert.deepEqual(result.attached, [], "a form that refuses Word never receives it");
     if (["confirmation-and-challenge", "challenge-during-final-proof"].includes(mode))
       assert.equal(result.result.kind, "challenge_required", mode);
     if (mode === "challenge-at-start") {
@@ -137,7 +150,8 @@ try {
     JSON.stringify({
       profile: "d3_greenhouse_execution_generated_synthetic_v1",
       cases: modes.length,
-      confirmationCases: 1,
+      uploadedResumeCases: 2,
+      confirmationCases: 2,
       falsePositiveConfirmations: 0,
       externalRequests: 0,
       providerUploads: 0,

@@ -55,3 +55,9 @@ only). A subpage is recorded without its query; fragments, credentials, other pa
 providers and origins still refuse. One shared `employerPageForSource` check in
 `@ai-job-apply/ats-sdk/observed-form` serves the extension and web. The Greenhouse execution
 path keeps its exact-URL binding.
+
+## Amendment: apply-time arming (2026-10-20)
+
+[ADR-050](050-generate-then-apply-flow.md) adds an identifiers-only `application-apply-intent.v1`
+message so the popup can offer the matching application without a pasted link. The packet is still
+read with the extension's own session; the review link remains the identity of the website page.
