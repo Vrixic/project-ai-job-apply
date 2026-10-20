@@ -254,7 +254,7 @@ try {
     })
     .check();
   await web.getByRole("button", { name: "I submitted it", exact: true }).click();
-  await web.getByText("Submitted and confirmed.", { exact: true }).waitFor();
+  await web.getByText("Submitted", { exact: true }).waitFor();
   await web.getByText("Submission confirmed by you.", { exact: true }).waitFor();
   const webCalls = await web.evaluate(() => window.readD3AssuranceCalls());
   const manualRequest = webCalls.find((call) => call.url.endsWith("/manual-submissions"));

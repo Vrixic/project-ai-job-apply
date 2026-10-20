@@ -233,6 +233,26 @@ class FakeBff {
       });
       return json(this.app);
     }
+    if (rest === "/manual-submissions" && method === "POST") {
+      this.app = this.base("takeover", {
+        currentPacket: this.app.currentPacket,
+        attempts: [
+          {
+            id: "00000000-0000-7000-8000-000000000012",
+            sequence: 1,
+            status: "taken_over",
+            adapterId: "manual",
+            adapterVersion: "none",
+            startedAt: new Date().toISOString(),
+          },
+        ],
+      });
+      return json({ outcome: "started", application: this.app }, 201);
+    }
+    if (rest.endsWith("/reconciliation") && method === "POST") {
+      this.app = this.base("applied", {});
+      return json(this.app);
+    }
     if (rest.startsWith("/resume/content") && method === "GET") {
       const query = new URL(url, "http://localhost").searchParams;
       const packet = this.app.currentPacket;
@@ -625,6 +645,17 @@ describe("ApplicationsWorkspace: Apply", () => {
     expect(container.querySelector('[role="dialog"]')?.textContent).toContain(
       "Did you submit the application",
     );
+  });
+
+  it("keeps just the word Submitted once the submission is logged, and reports it", async () => {
+    const bff = new FakeBff();
+    const onApplied = vi.fn();
+    await mount(bff, { onApplied });
+    await click("Apply");
+    await click("I submitted it");
+    expect(container.textContent).toBe("Submitted");
+    expect(onApplied).toHaveBeenLastCalledWith(true);
+    expect(container.textContent).not.toMatch(/Apply to this job|Before you apply|Record/u);
   });
 
   it("blocks Apply until empty answers are given and sensitive answers are checked", async () => {

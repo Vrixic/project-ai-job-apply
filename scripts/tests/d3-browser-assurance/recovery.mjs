@@ -48,7 +48,7 @@ try {
   await page.getByRole("button", { name: "It was not submitted", exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "Generate resume" }).count(), 0);
   await page.getByRole("button", { name: "I submitted it", exact: true }).click();
-  await page.getByText("Submitted and confirmed.", { exact: true }).waitFor();
+  await page.getByText("Submitted", { exact: true }).waitFor();
   assert.equal(await page.getByText("candidate@example.test", { exact: true }).count(), 0);
   await page.addScriptTag({ content: axe.source });
   const accessibility = await page.evaluate(() =>

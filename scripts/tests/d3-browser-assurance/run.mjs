@@ -190,7 +190,12 @@ try {
   // The outcome dialog opened by itself when Apply sent the candidate to the employer's page.
   await page.getByRole("dialog").waitFor();
   await page.getByRole("button", { name: "I submitted it", exact: true }).press("Enter");
-  await page.getByText("Submitted and confirmed.", { exact: true }).waitFor();
+  await page.getByText("Submitted", { exact: true }).waitFor();
+  // Nothing else is left of the apply step or the sources once the submission is logged.
+  assert.equal(await page.getByText("Apply to this job", { exact: true }).count(), 0);
+  assert.equal(await page.getByText("Sources and provenance", { exact: true }).count(), 0);
+  assert.equal(await page.getByText("Before you apply").count(), 0);
+  await shot(page, "10-submitted");
   await page.getByRole("tab", { name: "Applied", exact: true }).click();
   await page.getByText("Submission confirmed by you.", { exact: true }).waitFor();
   await employer.close();

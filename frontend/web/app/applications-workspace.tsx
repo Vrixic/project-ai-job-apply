@@ -81,6 +81,7 @@ export function ApplicationsWorkspace({
   fetchImplementation,
   coverLetterPreparationEnabled = coverLetterUiEnabled,
   savedAnswerSelectionEnabled = savedAnswersUiEnabled,
+  onApplied,
 }: {
   jobId: string;
   applicationId?: string;
@@ -89,6 +90,8 @@ export function ApplicationsWorkspace({
   fetchImplementation?: typeof globalThis.fetch;
   coverLetterPreparationEnabled?: boolean;
   savedAnswerSelectionEnabled?: boolean;
+  /** Reports whether the candidate's submission for this job has been logged. */
+  onApplied?: (applied: boolean) => void;
 }) {
   return (
     <JobApplicationWorkspace
@@ -98,6 +101,7 @@ export function ApplicationsWorkspace({
       applyUrl={applyUrl}
       coverLetterPreparationEnabled={coverLetterPreparationEnabled}
       savedAnswerSelectionEnabled={savedAnswerSelectionEnabled}
+      {...(onApplied ? { onApplied } : {})}
       {...(fetchImplementation ? { fetchImplementation } : {})}
     />
   );
@@ -110,6 +114,7 @@ function JobApplicationWorkspace({
   fetchImplementation,
   coverLetterPreparationEnabled,
   savedAnswerSelectionEnabled,
+  onApplied,
 }: Parameters<typeof ApplicationsWorkspace>[0]) {
   const headingId = useId();
   const [nativeMaterials] = useState(nativeMaterialsUiEnabled);
@@ -809,6 +814,10 @@ function JobApplicationWorkspace({
       }
     : undefined;
 
+  const applied = application?.status === "applied";
+  useEffect(() => {
+    onApplied?.(applied);
+  }, [applied, onApplied]);
   const terminal = application?.status === "applied" || application?.status === "cancelled";
   const approvedReady =
     application?.status === "approved" &&
@@ -823,6 +832,14 @@ function JobApplicationWorkspace({
     (application?.status === "takeover" || application?.status === "reconciliation_required") &&
     application.attempts.some(
       (attempt) => attempt.status === "ambiguous" || attempt.status === "taken_over",
+    );
+
+  // Once the submission is logged the page keeps one word and nothing else.
+  if (application?.status === "applied")
+    return (
+      <p role="status" className="apply-submitted">
+        Submitted
+      </p>
     );
 
   return (

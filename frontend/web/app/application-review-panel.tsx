@@ -15,7 +15,7 @@ export interface ApplicationReviewActions {
 }
 
 const STATUS_COPY: Partial<Record<Application["status"], string>> = {
-  applied: "Submitted and confirmed.",
+  applied: "Submitted",
   cancelled: "This application was cancelled.",
 };
 
