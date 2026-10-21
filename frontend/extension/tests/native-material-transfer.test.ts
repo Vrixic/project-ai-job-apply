@@ -7,7 +7,6 @@ import {
   transferApprovedNativeMaterials,
 } from "../../web/lib/native-extension-transfer";
 import { readNativeMaterial } from "../../web/lib/native-material-client";
-import type { NativeMaterialSession } from "../../web/lib/native-material-session";
 import {
   createNativeMaterialTransfer,
   type NativeTransferSelection,
@@ -120,7 +119,6 @@ afterEach(() => {
 
 function connected() {
   const f = setup();
-  const session = { ready: true, revision: 1 } as NativeMaterialSession;
   const controller = new AbortController();
   const messages: unknown[] = [];
   const nativeFile = structuredClone(f.file);
@@ -155,13 +153,11 @@ function connected() {
     transferApprovedNativeMaterials({
       extensionId: "a".repeat(32),
       messenger,
-      session,
       binding: f.selection,
-      format: "pdf",
       isCurrent,
       signal: controller.signal,
     });
-  return { ...f, session, controller, messages, nativeFile, messenger, isCurrent, run };
+  return { ...f, controller, messages, nativeFile, messenger, isCurrent, run };
 }
 
 describe("website-to-extension transport with simulated native and Chrome boundaries", () => {
@@ -181,13 +177,12 @@ describe("website-to-extension transport with simulated native and Chrome bounda
     owned.dispose();
   });
 
-  it.each(["approval", "session", "hash", "size", "magic"])(
+  it.each(["approval", "hash", "size", "magic"])(
     "refuses changed web %s before commit",
     async (mode) => {
       const f = connected();
       vi.mocked(readNativeMaterial).mockImplementation(async () => {
         if (mode === "approval") f.isCurrent.mockReturnValue(false);
-        if (mode === "session") Object.assign(f.session, { revision: 2 });
         if (mode === "hash") f.nativeFile.sha256 = "d".repeat(64);
         if (mode === "size") f.nativeFile.sizeBytes++;
         if (mode === "magic") f.nativeFile.contentBase64 = btoa("not-pdf");
@@ -527,5 +522,120 @@ describe("bounded memory-only native file transfer", () => {
     vi.spyOn(f.registry, "status").mockReturnValue({ mode: "off", reasons: ["kill_switch_off"] });
     await expect(f.transfer.begin(f.begin, f.sender)).rejects.toThrow();
     expect(f.revalidate).not.toHaveBeenCalled();
+  });
+});
+
+describe("the candidate's own uploaded resume selection", () => {
+  const document = { documentId: id(30), sha256: "e".repeat(64) };
+  const original = new TextEncoder().encode("%PDF-1.4 the candidate's own original");
+
+  function uploadedSetup() {
+    const f = setup();
+    f.transfer.clear();
+    const selection: NativeTransferSelection = {
+      ...f.selection,
+      materials: [],
+      uploadedResume: document,
+    };
+    f.transfer.select(selection);
+    const file = (overrides: Record<string, unknown> = {}) => ({
+      kind: "uploaded_resume" as const,
+      format: "pdf" as const,
+      mediaType: "application/pdf",
+      sha256: document.sha256,
+      bytes: new Uint8Array(original),
+      ...overrides,
+    });
+    return { ...f, selection, file };
+  }
+
+  it("is ready for the executor with the original bytes, only for a short lease inside the approval", () => {
+    const f = uploadedSetup();
+    const bytes = new Uint8Array(original);
+    f.transfer.attachUploaded(f.selection, f.file({ bytes }));
+    const owned = f.transfer.consumeSelected(f.selection.reviewLink);
+    expect(owned.files).toHaveLength(1);
+    expect(owned.files[0]).toMatchObject({ kind: "uploaded_resume", format: "pdf" });
+    expect(owned.files[0]?.generationId).toBeUndefined();
+    expect(owned.selection.uploadedResume).toEqual(document);
+    // Held until the earlier of ten minutes and the approval deadline.
+    expect(owned.deadline).toBeLessThanOrEqual(Date.now() + 10 * 60_000);
+    expect(owned.deadline).toBeLessThanOrEqual(f.selection.approvalExpiresAtMs);
+    owned.dispose();
+    expect(owned.files.length).toBe(0);
+    expect(bytes.every((byte) => byte === 0)).toBe(true);
+    expect(() => f.transfer.consumeSelected(f.selection.reviewLink)).toThrow();
+  });
+
+  it("is never offered a generated-file transfer", async () => {
+    const f = uploadedSetup();
+    await expect(f.transfer.begin(f.begin, f.sender)).rejects.toThrow();
+  });
+
+  it.each([
+    ["another digest", { sha256: "f".repeat(64) }],
+    ["a generated kind", { kind: "tailored_resume" as const }],
+    ["a generation id", { generationId: id(31) }],
+    ["no bytes", { bytes: new Uint8Array(0) }],
+    ["an oversized file", { bytes: new Uint8Array(2 * 1024 * 1024 + 1) }],
+  ])("refuses %s", (_name, change) => {
+    const f = uploadedSetup();
+    expect(() => f.transfer.attachUploaded(f.selection, f.file(change))).toThrow();
+    expect(() => f.transfer.consumeSelected(f.selection.reviewLink)).toThrow();
+  });
+
+  it("refuses a file for another selection, a second file, and a missing selection", () => {
+    const f = uploadedSetup();
+    expect(() =>
+      f.transfer.attachUploaded({ ...f.selection, packetHash: "d".repeat(64) }, f.file()),
+    ).toThrow();
+    f.transfer.attachUploaded(f.selection, f.file());
+    expect(() => f.transfer.attachUploaded(f.selection, f.file())).toThrow();
+    f.transfer.clear();
+    expect(() => f.transfer.attachUploaded(f.selection, f.file())).toThrow();
+  });
+
+  it.each([
+    [
+      "neither a generated file nor an uploaded one",
+      (s: NativeTransferSelection) => {
+        const { uploadedResume: _removed, ...without } = s;
+        return without;
+      },
+    ],
+    [
+      "both a generated file and an uploaded one",
+      (s: NativeTransferSelection) => ({ ...s, materials: setup().selection.materials }),
+    ],
+    [
+      "a malformed document id",
+      (s: NativeTransferSelection) => ({
+        ...s,
+        uploadedResume: { ...document, documentId: "nope" },
+      }),
+    ],
+    [
+      "a malformed digest",
+      (s: NativeTransferSelection) => ({ ...s, uploadedResume: { ...document, sha256: "short" } }),
+    ],
+  ])("refuses to select with %s", (_name, change) => {
+    const f = setup();
+    const base: NativeTransferSelection = {
+      ...f.selection,
+      materials: [],
+      uploadedResume: document,
+    };
+    const next = change(base);
+    f.transfer.clear();
+    expect(() => f.transfer.select(next)).toThrow();
+  });
+
+  it("clears the held original with the employer tab", () => {
+    const f = uploadedSetup();
+    const bytes = new Uint8Array(original);
+    f.transfer.attachUploaded(f.selection, f.file({ bytes }));
+    f.transfer.documentChanged(f.selection.tabId);
+    expect(bytes.every((byte) => byte === 0)).toBe(true);
+    expect(() => f.transfer.consumeSelected(f.selection.reviewLink)).toThrow();
   });
 });

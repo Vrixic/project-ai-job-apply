@@ -336,9 +336,14 @@ verification. It grants no employer host access and store packaging rejects exec
 handoff builds retain their read-only application scope and no external listener.
 
 The web native workspace separately requires `NEXT_PUBLIC_APPLICATION_EXTENSION_TRANSFER_ENABLED=true`
-and `NEXT_PUBLIC_APPLICATION_EXTENSION_ID` set to one exact installed Chrome extension ID. Select
-the current employer tab with the approved review link, then explicitly send approved PDF or Word
-files from the workspace. Native credentials remain in the web session. One private extension
+and `NEXT_PUBLIC_APPLICATION_EXTENSION_ID` set to one exact installed Chrome extension ID. Pressing
+**Apply** in the website opens the employer page and sends an identifiers-only apply intent
+(`application-apply-intent.v1`); the popup then offers that application and the candidate confirms
+on the employer tab (no manifest or permission change). The generated resume is PDF only and is
+pushed by the website; when none is valid the extension pulls the candidate's uploaded resume
+(original format, at most 2 MiB) with its own session. An expired or mismatched file is never
+attached. See [ADR-050](../../docs/adr/050-generate-then-apply-flow.md). Native credentials remain
+in the web session. One private extension
 selection/admission binds both documents, account, job, packet, approval and original generation.
 There is no file storage, discovery, upload or submission in this batch. Withdrawal, identity change,
 navigation, restart and original expiry discard the memory inventory; unknown acknowledgements

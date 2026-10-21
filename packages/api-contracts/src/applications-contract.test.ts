@@ -184,7 +184,7 @@ describe("Applications OpenAPI contract", () => {
     const applicationPaths = Object.entries(contract.paths).filter(([path]) =>
       path.startsWith("/applications"),
     );
-    expect(applicationPaths.length).toBe(22);
+    expect(applicationPaths.length).toBe(23);
     for (const [, item] of applicationPaths) {
       for (const operation of Object.values(item) as Array<{
         security: Array<{ oidc: string[] }>;
@@ -225,6 +225,7 @@ describe("Applications OpenAPI contract", () => {
       "GET /applications/{applicationId}/resume/authorization",
       "GET /applications/{applicationId}/resume/file",
       "GET /applications/{applicationId}/resume/location",
+      "GET /applications/{applicationId}/resume/uploaded",
       "POST /applications/search",
       "POST /applications/{applicationId}/attempts/{attemptId}/dispatch",
     ]);
@@ -249,6 +250,175 @@ describe("Applications OpenAPI contract", () => {
       .replaceAll("validation_rejected", "")
       .match(/interview|offer|reject|recruiter|hired|shortlist/gi);
     expect(found).toBeNull();
+  });
+});
+
+describe("generated resume delivery is PDF only", () => {
+  const material = {
+    schemaVersion: 1,
+    kind: "tailored_resume",
+    generationId: randomUUID(),
+    version: 1,
+    contentSha256: hash,
+    completedAtMs: 1_000,
+    expiresAtMs: 1_801_000,
+  };
+  const file = {
+    format: "pdf",
+    mediaType: "application/pdf",
+    fileName: "tailored-resume.pdf",
+    sha256: hash,
+    sizeBytes: 4,
+    contentSha256: hash,
+    contentBase64: "JVBERg==",
+    temporaryMaterial: material,
+  };
+
+  it("accepts a PDF resume file and refuses Word in every resume delivery shape", () => {
+    const resume = compileComponentValidator("ApplicationResumeFile");
+    expect(resume(file), JSON.stringify(resume.errors)).toBe(true);
+    const word = {
+      ...file,
+      format: "docx",
+      mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    };
+    expect(resume(word)).toBe(false);
+    expect(resume({ ...file, mediaType: word.mediaType })).toBe(false);
+    const transferFile = compileComponentValidator("ApplicationNativeTransferFile");
+    expect(transferFile(file)).toBe(true);
+    expect(transferFile(word)).toBe(false);
+    const begin = compileComponentValidator("ApplicationNativeTransferBegin");
+    const request = {
+      schema: "application-native-transfer-begin.v1",
+      applicationId: randomUUID(),
+      packetId: randomUUID(),
+      packetHash: hash,
+      format: "pdf",
+    };
+    expect(begin(request)).toBe(true);
+    expect(begin({ ...request, format: "docx" })).toBe(false);
+    const admission = compileComponentValidator("ApplicationNativeTransferAdmission");
+    const granted = {
+      schema: "application-native-transfer-admission.v1",
+      nonce: hash,
+      expiresAtMs: 5_000,
+      applicationId: randomUUID(),
+      packetId: randomUUID(),
+      packetHash: hash,
+      approvalId: randomUUID(),
+      revision: 3,
+      format: "pdf",
+      materials: [material],
+    };
+    expect(admission(granted)).toBe(true);
+    expect(admission({ ...granted, format: "docx" })).toBe(false);
+  });
+
+  it("accepts only the PDF query on the resume file route", () => {
+    const route = contract.paths["/applications/{applicationId}/resume/file"].get;
+    const format = route.parameters.find(
+      (parameter: { name: string }) => parameter.name === "format",
+    );
+    expect(format?.schema.enum).toEqual(["pdf"]);
+    expect(route.description).not.toMatch(/docx|word/iu);
+  });
+
+  it("keeps the candidate's own uploaded resume in its original format", () => {
+    const uploaded = compileComponentValidator("ApplicationUploadedResumeFile");
+    const original = {
+      documentId: randomUUID(),
+      fileName: "Candidate Resume.docx",
+      format: "docx",
+      mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      sha256: hash,
+      sizeBytes: 1_200_000,
+      contentBase64: "UEsDBA==",
+    };
+    expect(uploaded(original), JSON.stringify(uploaded.errors)).toBe(true);
+    expect(uploaded({ ...original, format: "pdf", mediaType: "application/pdf" })).toBe(true);
+    for (const bad of [
+      { ...original, sizeBytes: 2 * 1024 * 1024 + 1 },
+      { ...original, mediaType: "text/plain" },
+      { ...original, format: "txt" },
+      { ...original, fileName: "../resume.docx" },
+      { ...original, fileName: "a\u0000b.docx" },
+      { ...original, sha256: "short" },
+      { ...original, generationId: randomUUID() },
+      { ...original, contentBase64: "A".repeat(2_796_213) },
+    ])
+      expect(uploaded(bad), JSON.stringify(bad).slice(0, 80)).toBe(false);
+  });
+
+  it("allows an uploaded resume in an execution file only without a generation", () => {
+    const execution = compileComponentValidator("ApplicationExecutionFile");
+    const base = {
+      format: "docx",
+      mediaType: "application/octet-stream",
+      sha256: hash,
+      contentBase64: "UEsDBA==",
+    };
+    expect(execution({ ...base, kind: "uploaded_resume" })).toBe(true);
+    expect(execution({ ...base, kind: "uploaded_resume", generationId: randomUUID() })).toBe(false);
+    expect(execution({ ...base, kind: "tailored_resume" })).toBe(false);
+    expect(execution({ ...base, kind: "tailored_resume", generationId: randomUUID() })).toBe(true);
+    expect(execution({ ...base, kind: "cover_letter", generationId: randomUUID() })).toBe(true);
+  });
+});
+
+describe("resume generation status and the apply intent", () => {
+  it("accepts only coherent generation states", () => {
+    const status = compileComponentValidator("ApplicationResumeGeneration");
+    const at = "2026-10-20T12:00:00.000Z";
+    for (const good of [
+      { state: "not_requested" },
+      { state: "preparing", requestedAt: at },
+      { state: "ready", requestedAt: at },
+      { state: "expired", requestedAt: at },
+      { state: "failed", errorCode: "generation_failed", requestedAt: at },
+      { state: "failed", errorCode: "no_resume" },
+    ])
+      expect(status(good), JSON.stringify(good)).toBe(true);
+    for (const bad of [
+      { state: "failed" },
+      { state: "ready", errorCode: "generation_failed" },
+      { state: "not_requested", requestedAt: at },
+      { state: "running" },
+      { state: "failed", errorCode: "boom" },
+      { state: "preparing", taskArn: "arn:aws:ecs:x" },
+    ])
+      expect(status(bad), JSON.stringify(bad)).toBe(false);
+  });
+
+  it("lets a packet request an uploaded resume and nothing else", () => {
+    const request = compileComponentValidator("PrepareApplicationPacketRequest");
+    expect(request({ expectedRevision: 2 })).toBe(true);
+    expect(request({ expectedRevision: 2, resume: "uploaded" })).toBe(true);
+    expect(request({ expectedRevision: 2, resume: "generate" })).toBe(true);
+    for (const resume of ["docx", "tailored", 1, null])
+      expect(request({ expectedRevision: 2, resume }), String(resume)).toBe(false);
+  });
+
+  it("arms the extension with identifiers only", () => {
+    const intent = compileComponentValidator("ApplicationApplyIntent");
+    const value = {
+      schema: "application-apply-intent.v1",
+      applicationId: randomUUID(),
+      jobId: randomUUID(),
+      packetId: randomUUID(),
+      packetHash: hash,
+    };
+    expect(intent(value)).toBe(true);
+    for (const extra of [
+      { token: "x" },
+      { url: "https://example.test" },
+      { resume: "uploaded" },
+      { contentBase64: "AAAA" },
+    ])
+      expect(intent({ ...value, ...extra })).toBe(false);
+    expect(intent({ ...value, schema: "application-apply-intent.v2" })).toBe(false);
+    const receipt = compileComponentValidator("ApplicationApplyIntentReceipt");
+    expect(receipt({ schema: "application-apply-intent-receipt.v1", expiresAtMs: 10 })).toBe(true);
+    expect(receipt({ schema: "application-apply-intent-receipt.v1" })).toBe(false);
   });
 });
 

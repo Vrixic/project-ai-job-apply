@@ -88,6 +88,7 @@ import {
   nativeMaterialLocationsFromEnvironment,
   nativeResumeLocationsFromEnvironment,
 } from "./native-material-location-runtime.js";
+import { LambdaOriginalResumeClient } from "./original-resume-client.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
 import { KmsRestrictedAnswerCipher } from "./restricted-answer-kms-cipher.js";
 import { resumeLimitsFromEntitlements } from "./resume-limits.js";
@@ -262,6 +263,10 @@ const APPLICATION_RESUME_FILE_PATH_PATTERN = new RegExp(
   `^/v1/applications/${APPLICATION_ID}/resume/file$`,
   "u",
 );
+const APPLICATION_UPLOADED_RESUME_PATH_PATTERN = new RegExp(
+  `^/v1/applications/${APPLICATION_ID}/resume/uploaded$`,
+  "u",
+);
 const APPLICATION_COVER_LETTER_PATH_PATTERN = new RegExp(
   `^/v1/applications/${APPLICATION_ID}/cover-letter$`,
   "u",
@@ -363,6 +368,7 @@ function allowedRoute(
   if (
     method === "GET" &&
     (APPLICATION_RESUME_PATH_PATTERN.test(path) ||
+      APPLICATION_UPLOADED_RESUME_PATH_PATTERN.test(path) ||
       APPLICATION_COVER_LETTER_PATH_PATTERN.test(path) ||
       APPLICATION_PREPARATION_PATH_PATTERN.test(path))
   ) {
@@ -1249,6 +1255,14 @@ async function createConfiguredApplication(
     ...(process.env.DOCUMENT_TAILORING_FUNCTION_ARN
       ? {
           tailoring: new LambdaResumeTailoringClient(process.env.DOCUMENT_TAILORING_FUNCTION_ARN),
+          // Default off: attaching the candidate's own original file is a separate release gate.
+          ...(process.env.UPLOADED_RESUME_ATTACHMENT_ENABLED === "true"
+            ? {
+                uploadedResumes: new LambdaOriginalResumeClient(
+                  process.env.DOCUMENT_TAILORING_FUNCTION_ARN,
+                ),
+              }
+            : {}),
         }
       : {}),
     catalog,

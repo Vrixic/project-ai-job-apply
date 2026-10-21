@@ -15,15 +15,23 @@ import {
   type DocumentParserCorpusRequest,
   executeDocumentParserCorpus,
 } from "./document-parser-corpus.js";
-import type { DocumentParserInput, DocumentParserResult } from "./parser-lambda.js";
 import {
   type NormalizedDocumentReader,
   S3NormalizedDocumentReader,
 } from "./normalized-document-reader.js";
+import type { DocumentParserInput, DocumentParserResult } from "./parser-lambda.js";
+
 export {
   type NormalizedDocumentReader,
   S3NormalizedDocumentReader,
 } from "./normalized-document-reader.js";
+
+import {
+  createOriginalResumeService,
+  ORIGINAL_RESUME_REQUEST_KIND,
+  type OriginalResumeResult,
+  S3OriginalResumeReader,
+} from "./original-resume.js";
 import { type DocumentProcessingJob, PostgresDocumentProcessorStore } from "./processor.js";
 import {
   createResumeTailoringService,
@@ -286,6 +294,7 @@ let runtimeHandler: ReturnType<typeof createDocumentProcessorHandler> | undefine
 let runtimeStore: PostgresDocumentProcessorStore | undefined;
 let runtimeParser: AwsDocumentParserClient | undefined;
 let runtimeTailoring: ReturnType<typeof createResumeTailoringService> | undefined;
+let runtimeOriginalResume: ReturnType<typeof createOriginalResumeService> | undefined;
 
 function getRuntimeParser(): { parser: AwsDocumentParserClient; parserVersion: string } {
   const bucketName = process.env.CANDIDATE_DOCUMENT_BUCKET ?? "";
@@ -353,7 +362,13 @@ function isScheduledEvent(event: SQSEvent | ScheduledEvent): event is ScheduledE
 
 export async function handler(
   event: SQSEvent | ScheduledEvent | DocumentParserCorpusRequest | { kind: string },
-): Promise<SQSBatchResponse | DocumentParserCorpusAggregate | ResumeTailoringResult | undefined> {
+): Promise<
+  | SQSBatchResponse
+  | DocumentParserCorpusAggregate
+  | ResumeTailoringResult
+  | OriginalResumeResult
+  | undefined
+> {
   if ((event as { kind?: unknown }).kind === "development-document-parser-corpus-v1") {
     const { parser, parserVersion } = getRuntimeParser();
     return executeDocumentParserCorpus(event, parserVersion, parser);
@@ -387,6 +402,16 @@ export async function handler(
       source: new PostgresParsedResumeSource(database.client),
       reader: normalizedReader,
     });
+    const source = new PostgresParsedResumeSource(database.client);
+    runtimeOriginalResume = createOriginalResumeService({
+      source,
+      reader: new S3OriginalResumeReader(
+        bucketName,
+        kmsKeyArn,
+        process.env.DOCUMENT_OBJECT_ACCESS_ROLE_ARN ?? "",
+        region,
+      ),
+    });
     runtimeHandler = createDocumentProcessorHandler(
       { accountId, region, protectionPlanArn, bucketName },
       runtimeStore,
@@ -396,6 +421,9 @@ export async function handler(
   }
   if ((event as { kind?: unknown }).kind === RESUME_TAILORING_REQUEST_KIND) {
     return (runtimeTailoring as ReturnType<typeof createResumeTailoringService>)(event);
+  }
+  if ((event as { kind?: unknown }).kind === ORIGINAL_RESUME_REQUEST_KIND) {
+    return (runtimeOriginalResume as ReturnType<typeof createOriginalResumeService>)(event);
   }
   if (isScheduledEvent(event as SQSEvent | ScheduledEvent)) {
     await createDocumentProcessingReconciler(

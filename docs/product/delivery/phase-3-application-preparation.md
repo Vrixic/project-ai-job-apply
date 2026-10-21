@@ -1,5 +1,13 @@
 # D3 — High-Quality Application Preparation
 
+2026-10-20: D3-147 to D3-151 reshape the candidate flow to Generate-or-Apply
+([ADR-050](../../adr/050-generate-then-apply-flow.md); [evidence](evidence/d3-generate-then-apply-flow-2026-10-20.md)). Implemented and locally
+tested: BFF material reads with no popup sign-in, honest generation states with retry, Apply as the
+approval act (server hash binding unchanged), PDF-only generated resumes, an uploaded-resume
+fallback and extension arming. Not accepted: nothing is deployed, the native image still predates
+#701, and live token, installed-extension, security and privacy reviews remain open. D3 stays
+In progress.
+
 2026-10-17: installed-Chrome and hosted testing found and fixed eight defects (D3-139 to D3-146, below);
 see [evidence](evidence/d3-installed-extension-and-rights-2026-10-17.md). Capture, saved-answer selection, approved handoff, correction, withdrawal, reuse
 and a not-submitted outcome passed on a synthetic account. The canonical rights run is still FAILED/open
@@ -57,9 +65,20 @@ components and the connected journey. Historical proof records remain historical
 reconciled-copy operators and physical restore rehearsals are not D3 dependencies. Independent
 D1/admin acceptance stays deferred.
 
-Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 2026-10-17.
+Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 2026-10-20.
 
 ## Task register
+
+D3-147 to D3-151 started and implemented 2026-10-20 on one branch (local source and tests only; no
+deployment, no paid runtime): D3-147 replace the popup material sign-in with authenticated BFF reads
+(ADR-044 superseded); D3-148 server-derived `resumeGeneration` state with loading, failed-with-retry
+and expired states in place of the manual check button; D3-149 Apply as the candidate's approval act
+with explicit sensitive-answer checks kept (ADR-050 decision 2); D3-150 generated resumes PDF only
+across OpenAPI, Documents, native completion and extension transfer; D3-151 uploaded-resume
+fallback (`resume: uploaded`, owner-scoped original read, default off) and identifiers-only apply
+intent for the extension. Implemented and locally tested; not accepted. Open: the Greenhouse
+submit-click discrepancy (owner decision), Documents/Gateway/web release order, a governed native
+image release, native acceptance of the web session token, and security/privacy review.
 
 D3-139 to D3-146 started 2026-10-15 and merged 2026-10-15/17 with before/after regressions, targeted
 runs and independent review where consequential (hosted CI executed zero steps because of billing):
@@ -354,6 +373,7 @@ Application history ends at confirmed submission; sensitive answers and irrevers
 - [Saved-answer packet binding](evidence/d3-vault-packet-binding-2026-10-04.md)
 - [Restricted receipt migration](evidence/d3-legacy-receipt-transition-2026-10-08.md)
 - [Capability approval packet](../../security/d3-application-approval-packet.md)
+- [Generate-then-apply flow, 2026-10-20](evidence/d3-generate-then-apply-flow-2026-10-20.md)
 - [Provider fixture request](../foundation/d3-provider-fixture-request.md)
 
 Historical checkpoints are retained in Git history and the linked evidence; this document records current status only.

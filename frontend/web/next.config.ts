@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import { nativeMaterialConfiguration } from "./lib/native-material-session";
 
 export const securityHeaders = [
   {
@@ -42,14 +41,6 @@ const nextConfig: NextConfig = {
           ...resolveCrawlerHeaders(process.env.PUBLIC_JOB_INDEXING_ENABLED),
         ],
       },
-      ...(nativeMaterialConfiguration()
-        ? [
-            {
-              source: "/jobs",
-              headers: [{ key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" }],
-            },
-          ]
-        : []),
     ];
   },
 };

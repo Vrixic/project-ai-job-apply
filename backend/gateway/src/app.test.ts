@@ -12,6 +12,7 @@ import {
   PreparationNotFoundError,
   RestrictedPacketStoreUnavailableError,
   StalePacketError,
+  UploadedResumeTooLargeError,
 } from "@ai-job-apply/applications-service";
 import type { PrivilegedModerationAuditWriter } from "@ai-job-apply/profile-service/privileged-moderation-audit";
 import "reflect-metadata";
@@ -3836,6 +3837,24 @@ describe("Applications routes", () => {
       contentSha256: hash,
       contentBase64: "dGVzdA==",
     } as const),
+    uploadedResumeFile: record("uploadedResumeFile", {
+      documentId: jobId,
+      fileName: "Candidate Resume.pdf",
+      format: "pdf",
+      mediaType: "application/pdf",
+      sha256: hash,
+      sizeBytes: 4,
+      contentBase64: "dGVzdA==",
+    } as const),
+    resumeFile: record("resumeFile", {
+      format: "pdf",
+      mediaType: "application/pdf",
+      fileName: "tailored.pdf",
+      sha256: hash,
+      sizeBytes: 4,
+      contentSha256: hash,
+      contentBase64: "dGVzdA==",
+    } as const),
     approve: record("approve", application),
     reopen: record("reopen", application),
     cancel: record("cancel", application),
@@ -4196,6 +4215,148 @@ describe("Applications routes", () => {
       ).statusCode,
     ).toBe(400);
     expect(calls).toHaveLength(0);
+  });
+
+  it("serves the candidate's own uploaded resume to its owner only, with no query and no-store", async () => {
+    const read = { authorization: `Bearer ${await token("applications:read")}` };
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/applications/${applicationId}/resume/uploaded`,
+      headers: read,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.json()).toMatchObject({
+      documentId: jobId,
+      format: "pdf",
+      mediaType: "application/pdf",
+      sha256: hash,
+    });
+    // The owner is the authenticated candidate's resolved identity, never a request value.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.method).toBe("uploadedResumeFile");
+    expect(calls[0]?.args[1]).toBe(applicationId);
+    expect(calls[0]?.args[0]).not.toBe(applicationId);
+    calls.length = 0;
+    // The route takes no query, no body, and a malformed id never reaches the service.
+    for (const request of [
+      { method: "GET", url: `/v1/applications/${applicationId}/resume/uploaded?format=pdf` },
+      { method: "GET", url: `/v1/applications/${applicationId}/resume/uploaded?owner=other` },
+      { method: "GET", url: "/v1/applications/not-a-uuid/resume/uploaded" },
+    ] as const) {
+      expect(
+        (await app.inject({ ...request, headers: read } as never)).statusCode,
+        request.url,
+      ).toBe(400);
+    }
+    expect(calls).toHaveLength(0);
+    // A write-only token cannot read it, and an anonymous caller is refused.
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/v1/applications/${applicationId}/resume/uploaded`,
+          headers: { authorization: `Bearer ${await token("applications:write")}` },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/v1/applications/${applicationId}/resume/uploaded`,
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("maps uploaded-resume failures to stable value-free problems", async () => {
+    const read = { authorization: `Bearer ${await token("applications:read")}` };
+    for (const [error, status, code] of [
+      [new ApplicationNotFoundError(), 404, "application_not_found"],
+      [new StalePacketError(["resume_changed"]), 409, "application_packet_stale"],
+      [new ApplicationsUnavailableError(), 503, "applications_unavailable"],
+    ] as const) {
+      failure = error;
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/applications/${applicationId}/resume/uploaded`,
+        headers: read,
+      });
+      expect(response.statusCode).toBe(status);
+      expect(response.json()).toMatchObject({ code });
+      expect(response.body).not.toContain("Candidate Resume");
+    }
+  });
+
+  it("serves a generated resume only as PDF", async () => {
+    const read = { authorization: `Bearer ${await token("applications:read")}` };
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/v1/applications/${applicationId}/resume/file?format=pdf`,
+          headers: read,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(calls.at(-1)).toMatchObject({ method: "resumeFile" });
+    expect(calls.at(-1)?.args.slice(-2)).toEqual([applicationId, "pdf"]);
+    calls.length = 0;
+    for (const format of ["docx", "exe", ""]) {
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: `/v1/applications/${applicationId}/resume/file?format=${format}`,
+            headers: read,
+          })
+        ).statusCode,
+        format,
+      ).toBe(400);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it("accepts the uploaded-resume option and maps an oversized file to its own code", async () => {
+    const write = {
+      authorization: `Bearer ${await token("applications:write")}`,
+      "idempotency-key": key,
+    };
+    const url = `/v1/applications/${applicationId}/packets`;
+    const ok = await app.inject({
+      method: "POST",
+      url,
+      headers: write,
+      payload: { expectedRevision: 2, resume: "uploaded" },
+    });
+    expect(ok.statusCode).toBe(201);
+    expect(calls.at(-1)).toMatchObject({ method: "preparePacket" });
+    expect(JSON.stringify(calls.at(-1)?.args)).toContain('"resume":"uploaded"');
+    for (const resume of ["docx", "tailored", 1, null]) {
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url,
+            headers: write,
+            payload: { expectedRevision: 2, resume },
+          })
+        ).statusCode,
+        String(resume),
+      ).toBe(400);
+    }
+    failure = new UploadedResumeTooLargeError();
+    const tooLarge = await app.inject({
+      method: "POST",
+      url,
+      headers: write,
+      payload: { expectedRevision: 2, resume: "uploaded" },
+    });
+    expect(tooLarge.statusCode).toBe(409);
+    expect(tooLarge.json()).toMatchObject({ code: "application_resume_too_large" });
+    expect(JSON.stringify(tooLarge.json().detail)).not.toMatch(/bytes|\d{6,}/u);
   });
 
   it("maps a foreign or missing preparation to the same non-reflecting owner failure", async () => {
@@ -4615,11 +4776,8 @@ const applicationsDatabaseUrl = process.env.DATABASE_URL;
               ...((request as { mode?: string }).mode === "artifact"
                 ? {
                     artifact: {
-                      format: (request as { format: "docx" | "pdf" }).format,
-                      mediaType:
-                        (request as { format: string }).format === "pdf"
-                          ? "application/pdf"
-                          : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                      format: "pdf" as const,
+                      mediaType: "application/pdf" as const,
                       sha256: "f".repeat(64),
                       sizeBytes: 11,
                       contentBase64: Buffer.from("synthetic!!").toString("base64"),
@@ -4762,7 +4920,7 @@ const applicationsDatabaseUrl = process.env.DATABASE_URL;
         preview.body.sections[0].entries[0].bullets.map((b: { change: string }) => b.change),
       ).toEqual(["moved_up", "omitted"]);
 
-      // The candidate can download exactly the resume the packet carries, in either format.
+      // The candidate can download exactly the resume the packet carries, as a PDF.
       const pdf = await send(bearer, "GET", `/v1/applications/${id}/resume/file?format=pdf`, "u");
       expect(pdf.status).toBe(200);
       expect(pdf.body).toMatchObject({
@@ -4773,9 +4931,10 @@ const applicationsDatabaseUrl = process.env.DATABASE_URL;
         sizeBytes: 11,
       });
       expect(Buffer.from(pdf.body.contentBase64, "base64").toString()).toBe("synthetic!!");
+      // Generated resumes are delivered only as PDF.
       expect(
         (await send(bearer, "GET", `/v1/applications/${id}/resume/file?format=docx`, "u")).status,
-      ).toBe(200);
+      ).toBe(400);
       // Only the strict `format` query is accepted.
       for (const bad of ["", "?format=exe", "?format=pdf&extra=1", "?other=pdf"]) {
         const refused = await send(bearer, "GET", `/v1/applications/${id}/resume/file${bad}`, "u");

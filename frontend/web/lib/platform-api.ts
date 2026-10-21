@@ -126,6 +126,10 @@ const declaredProblems = new Map<string, Readonly<DeclaredProblem>>([
   ],
   ["409:application_packet_stale", { code: "application_packet_stale", title: "Packet is stale" }],
   [
+    "409:application_resume_too_large",
+    { code: "application_resume_too_large", title: "Uploaded resume is too large" },
+  ],
+  [
     "409:application_approval_refused",
     { code: "application_approval_refused", title: "Approval refused" },
   ],

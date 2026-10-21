@@ -1,4 +1,5 @@
 import {
+  type ApplicationResumeGeneration,
   COVER_LETTER_DISCLOSURE_VERSION,
   type StartManualApplicationSubmissionRequest,
 } from "@ai-job-apply/api-contracts";
@@ -87,6 +88,10 @@ import {
   type PreparedRestrictedPacketFields,
 } from "./restricted-packet-protection.js";
 import {
+  deriveResumeGeneration,
+  type ResumeGenerationRequestRow,
+} from "./resume-generation-state.js";
+import {
   type ApplicationEvent,
   type ApplicationStatus,
   assertHistoryKind,
@@ -142,6 +147,8 @@ export interface ApplicationView {
   approval: ApprovalRecord | null;
   attempts: AttemptRecord[];
   currentAction: CurrentAction;
+  /** Value-free generated-resume status for the current packet; omitted when none is relevant. */
+  resumeGeneration?: ApplicationResumeGeneration;
 }
 
 export interface CommandResult {
@@ -742,6 +749,8 @@ export class PostgresApplicationStore {
       PacketInputs,
       "jobRevision" | "form" | "fields" | "artifactHashes" | "temporaryMaterials"
     >;
+    /** `uploaded` binds the candidate's own resume and requests no one-off generation. */
+    resume?: "generate" | "uploaded";
   }): Promise<CommandResult> {
     command = structuredClone(command);
     return this.withOriginalReceiptAuthority(async () => {
@@ -751,6 +760,8 @@ export class PostgresApplicationStore {
         expectedRevision: command.expectedRevision,
         jobRevision: command.packet.jobRevision,
         form: command.packet.form,
+        // Absent for the default so existing idempotent receipts keep their request hash.
+        ...(command.resume === "uploaded" ? { resume: "uploaded" } : {}),
         artifactHashes: command.packet.artifactHashes,
         ...(command.packet.temporaryMaterials?.length
           ? { temporaryMaterials: command.packet.temporaryMaterials }
@@ -768,7 +779,7 @@ export class PostgresApplicationStore {
       return this.commandResult(command, "create_packet", requestHash, async (tx, app, now) => {
         if (prior) throw new RestrictedPacketStoreUnavailableError();
         const updated = await this.writePacket(tx, app, now, command.packet, prepared);
-        if (this.options.nativeResumePreparationEnabled?.()) {
+        if (command.resume !== "uploaded" && this.options.nativeResumePreparationEnabled?.()) {
           await tx`
             INSERT INTO applications.outbox
               (id, application_id, owner_user_id, application_revision, event_type, subject,
@@ -2742,12 +2753,40 @@ export class PostgresApplicationStore {
     const [withdrawal] = await tx<Array<{ at: Date | null }>>`
       SELECT max(requested_at) AS at FROM applications.native_material_withdrawals WHERE owner_user_id=${ownerUserId}`;
     const now = this.clock();
+    const [request] = await tx<
+      Array<{
+        status: ResumeGenerationRequestRow["outboxStatus"];
+        resume_dispatch_result: ResumeGenerationRequestRow["dispatchResult"];
+        resume_execution_terminal_status: ResumeGenerationRequestRow["terminalStatus"];
+        occurred_at: Date;
+      }>
+    >`
+      SELECT status, resume_dispatch_result, resume_execution_terminal_status, occurred_at
+      FROM applications.outbox
+      WHERE application_id = ${row.id} AND owner_user_id = ${ownerUserId}
+        AND event_type = 'application.resume-preparation.requested.v1'
+      ORDER BY occurred_at DESC, id DESC LIMIT 1`;
+    const resumeGeneration = deriveResumeGeneration({
+      materials: packet?.temporaryMaterials,
+      packetResumeHash: packet?.artifactHashes.resume,
+      request: request
+        ? {
+            outboxStatus: request.status,
+            dispatchResult: request.resume_dispatch_result,
+            terminalStatus: request.resume_execution_terminal_status,
+            requestedAtMs: request.occurred_at.getTime(),
+          }
+        : null,
+      nowMs: now.getTime(),
+      withdrawnAtMs: withdrawal?.at?.getTime(),
+    });
     return {
       ...(withdrawal?.at ? { nativeMaterialsWithdrawnAtMs: withdrawal.at.getTime() } : {}),
       application: toApplication(row),
       currentPacket: packet,
       approval,
       attempts,
+      ...(packet && resumeGeneration.state !== "not_requested" ? { resumeGeneration } : {}),
       currentAction: deriveCurrentAction({
         status: row.status,
         hasUnresolvedFields:

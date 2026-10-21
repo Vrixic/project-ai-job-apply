@@ -1,4 +1,5 @@
 import type {
+  ApplicationApplyIntent,
   ApplicationNativeTransferAdmission,
   ApplicationNativeTransferBegin,
   ApplicationNativeTransferCommit,
@@ -6,6 +7,7 @@ import type {
   ApplicationTemporaryMaterial,
 } from "@ai-job-apply/api-contracts";
 import {
+  validateApplicationApplyIntentReceipt,
   validateApplicationNativeTransferAdmission,
   validateApplicationNativeTransferCommit,
   validateApplicationNativeTransferReceipt,
@@ -13,7 +15,6 @@ import {
 import { materialDeadline, sameMaterial } from "./application-material-lifetime";
 import { sha256OfBytes } from "./applications-client";
 import { readNativeMaterial } from "./native-material-client";
-import type { NativeMaterialSession } from "./native-material-session";
 
 const unavailable = () => Error("NativeExtensionTransferUnavailable");
 const EXTENSION_ID = /^[a-p]{32}$/u;
@@ -71,11 +72,37 @@ function send(
   });
 }
 
+/**
+ * Arms the extension when the candidate presses Apply. Identifiers only: no credential, file,
+ * answer or URL. The extension reads the packet itself with its own session. Returns the deadline
+ * until which it holds the identifiers, or nothing when no extension answered.
+ */
+export async function sendApplyIntent(options: {
+  extensionId: string;
+  messenger: NativeExtensionMessenger;
+  intent: Omit<ApplicationApplyIntent, "schema">;
+  signal: AbortSignal;
+}): Promise<{ expiresAtMs: number } | undefined> {
+  if (!EXTENSION_ID.test(options.extensionId)) return undefined;
+  try {
+    const answer = await send(
+      options.messenger,
+      options.extensionId,
+      { schema: "application-apply-intent.v1", ...options.intent },
+      options.signal,
+    );
+    return validateApplicationApplyIntentReceipt(answer)
+      ? { expiresAtMs: answer.expiresAtMs }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Explicit candidate action only. Transfer acknowledgement is never ATS submission evidence. */
 export async function transferApprovedNativeMaterials(options: {
   extensionId: string;
   messenger: NativeExtensionMessenger;
-  session: NativeMaterialSession;
   binding: {
     applicationId: string;
     packetId: string;
@@ -85,7 +112,6 @@ export async function transferApprovedNativeMaterials(options: {
     approvalExpiresAtMs: number;
     materials: readonly ApplicationTemporaryMaterial[];
   };
-  format: "pdf" | "docx";
   /** The mounted workspace's current account/packet/approval must still match. */
   isCurrent(): boolean;
   signal: AbortSignal;
@@ -94,7 +120,6 @@ export async function transferApprovedNativeMaterials(options: {
   const binding = structuredClone(options.binding);
   const controller = new AbortController();
   const abort = () => controller.abort();
-  const revision = options.session.revision;
   const now = Date.now();
   const deadline = Math.min(
     now + 60_000,
@@ -113,12 +138,7 @@ export async function transferApprovedNativeMaterials(options: {
   const timer = setTimeout(abort, Math.max(0, deadline - now));
   options.signal.addEventListener("abort", abort, { once: true });
   if (options.signal.aborted) abort();
-  const current = () =>
-    !controller.signal.aborted &&
-    options.session.ready &&
-    options.session.revision === revision &&
-    options.isCurrent() &&
-    Date.now() < deadline;
+  const current = () => !controller.signal.aborted && options.isCurrent() && Date.now() < deadline;
   let receipt: ApplicationNativeTransferReceipt | undefined;
   let admission: ApplicationNativeTransferAdmission | undefined;
   try {
@@ -138,7 +158,7 @@ export async function transferApprovedNativeMaterials(options: {
       applicationId: binding.applicationId,
       packetId: binding.packetId,
       packetHash: binding.packetHash,
-      format: options.format,
+      format: "pdf",
     };
     const answer = await send(options.messenger, options.extensionId, begin, controller.signal);
     if (!current() || !validateApplicationNativeTransferAdmission(answer)) throw unavailable();
@@ -149,7 +169,7 @@ export async function transferApprovedNativeMaterials(options: {
       admission.packetHash !== binding.packetHash ||
       admission.approvalId !== binding.approvalId ||
       admission.revision !== binding.revision ||
-      admission.format !== options.format ||
+      admission.format !== "pdf" ||
       admission.expiresAtMs <= Date.now() ||
       admission.expiresAtMs > deadline ||
       admission.materials.length !== binding.materials.length ||
@@ -165,21 +185,26 @@ export async function transferApprovedNativeMaterials(options: {
       for (const material of admission.materials) {
         if (!current() || Date.now() >= admission.expiresAtMs) throw unavailable();
         const value = await readNativeMaterial(
-          options.session,
           {
             applicationId: binding.applicationId,
             packetId: binding.packetId,
             packetHash: binding.packetHash,
             material,
           },
-          options.format,
+          "pdf",
           {
             signal: controller.signal,
             ...(options.fetch ? { fetch: options.fetch } : {}),
           },
         );
-        if (!("contentBase64" in value) || !value.temporaryMaterial) throw unavailable();
-        const file = { ...value, temporaryMaterial: value.temporaryMaterial };
+        if (!("contentBase64" in value) || !value.temporaryMaterial || value.format !== "pdf")
+          throw unavailable();
+        const file: ApplicationNativeTransferCommit["files"][number] = {
+          ...value,
+          format: "pdf",
+          mediaType: "application/pdf",
+          temporaryMaterial: value.temporaryMaterial,
+        };
         value.contentBase64 = "";
         files.push(file);
         const bytes = Uint8Array.from(atob(file.contentBase64), (character) =>
@@ -190,9 +215,7 @@ export async function transferApprovedNativeMaterials(options: {
           !current() ||
           Date.now() >= admission.expiresAtMs ||
           bytes.byteLength !== file.sizeBytes ||
-          (file.format === "pdf"
-            ? new TextDecoder().decode(bytes.subarray(0, 5)) !== "%PDF-"
-            : bytes[0] !== 0x50 || bytes[1] !== 0x4b) ||
+          new TextDecoder().decode(bytes.subarray(0, 5)) !== "%PDF-" ||
           (await sha256OfBytes(bytes)) !== file.sha256 ||
           !current()
         )
@@ -274,5 +297,38 @@ export function discardTransferredNativeMaterials(
     );
   } catch {
     // No retry or provider effect. The receiving extension owns its independent disposal timer.
+  }
+}
+
+/**
+ * Retries the one-use admission until the candidate has opened the extension on the employer page
+ * and it has selected this application, or the window closes. Each attempt is a complete, fresh
+ * transfer; nothing is retained between attempts and no attempt widens any original deadline.
+ */
+export async function transferWhenSelected(
+  options: Parameters<typeof transferApprovedNativeMaterials>[0] & {
+    giveUpAtMs: number;
+    retryEveryMs?: number;
+  },
+): Promise<ApplicationNativeTransferReceipt> {
+  const { giveUpAtMs, retryEveryMs = 2_000, ...transfer } = options;
+  for (;;) {
+    try {
+      return await transferApprovedNativeMaterials(transfer);
+    } catch (error) {
+      if (transfer.signal.aborted || Date.now() + retryEveryMs >= giveUpAtMs) throw error;
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, retryEveryMs);
+        transfer.signal.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          { once: true },
+        );
+      });
+      if (transfer.signal.aborted) throw unavailable();
+    }
   }
 }

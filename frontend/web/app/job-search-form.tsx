@@ -2,7 +2,7 @@
 
 import type { CanonicalJobSummary, JobSearchPage } from "@ai-job-apply/api-contracts";
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { listAppliedApplications } from "../lib/applications-client";
+import { APPLICATIONS_CHANGED_EVENT, listAppliedApplications } from "../lib/applications-client";
 import { JobDetailPanel } from "./job-detail-panel";
 import { JobReportControl } from "./job-report-control";
 import {
@@ -97,6 +97,7 @@ export function JobSearchForm({
   const [submittedFields, setSubmittedFields] = useState<JobSearchFields>();
   const [items, setItems] = useState<CanonicalJobSummary[]>([]);
   const [appliedJobIds, setAppliedJobIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [appliedRefresh, setAppliedRefresh] = useState(0);
   const [cursor, setCursor] = useState<string>();
   const [searching, setSearching] = useState(false);
   const [savingJobId, setSavingJobId] = useState<string>();
@@ -167,7 +168,15 @@ export function JobSearchForm({
     }
   }, [searching]);
 
-  // Confirmed-submitted jobs are excluded from search results; see the filter in `results` below.
+  useEffect(() => {
+    const refresh = () => setAppliedRefresh((value) => value + 1);
+    window.addEventListener(APPLICATIONS_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(APPLICATIONS_CHANGED_EVENT, refresh);
+  }, []);
+
+  // Submitted jobs are excluded from search results; see the filter in `results` below. A new
+  // submission only adds to the set, so a job stays hidden even if this read fails.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a logged submission triggers a fresh read.
   useEffect(() => {
     if (!authenticated || !applicationsUiEnabled) {
       setAppliedJobIds(new Set());
@@ -177,11 +186,15 @@ export function JobSearchForm({
     void listAppliedApplications({ signal: controller.signal }).then((result) => {
       if (controller.signal.aborted || !result.ok) return;
       setAppliedJobIds(
-        new Set(result.applications.map((application) => application.canonicalJobId)),
+        (current) =>
+          new Set([
+            ...current,
+            ...result.applications.map((application) => application.canonicalJobId),
+          ]),
       );
     });
     return () => controller.abort();
-  }, [authenticated]);
+  }, [authenticated, appliedRefresh]);
 
   function update<Key extends keyof JobSearchFields>(key: Key, value: JobSearchFields[Key]) {
     setFields((current) => ({ ...current, [key]: value }));
@@ -530,7 +543,15 @@ export function JobSearchForm({
                 >
                   {savingJobId === job.id ? "Saving…" : "Save job"}
                 </button>
-                <JobDetailPanel jobId={job.id} authenticated={authenticated} />
+                <JobDetailPanel
+                  jobId={job.id}
+                  authenticated={authenticated}
+                  onSubmitted={() =>
+                    setAppliedJobIds((current) =>
+                      current.has(job.id) ? current : new Set(current).add(job.id),
+                    )
+                  }
+                />
                 <JobReportControl jobId={job.id} />
                 <MatchAssessmentPanel jobId={job.id} />
               </article>

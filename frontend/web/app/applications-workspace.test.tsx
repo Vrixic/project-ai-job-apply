@@ -1,72 +1,329 @@
 // @vitest-environment jsdom
 
-import type { Application } from "@ai-job-apply/api-contracts";
+import { createHash } from "node:crypto";
+import type { Application, ApplicationTemporaryMaterial } from "@ai-job-apply/api-contracts";
 import axe from "axe-core";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { APPLICATIONS_CHANGED_EVENT } from "../lib/applications-client";
 import { ApplicationsWorkspace } from "./applications-workspace";
 
 const APP = "00000000-0000-7000-8000-000000000001";
 const JOB = "00000000-0000-7000-8000-000000000002";
-const HASH = "a".repeat(64);
-const AT = "2026-09-18T12:00:00.000Z";
+const DOC = "00000000-0000-7000-8000-000000000030";
+const GEN = "00000000-0000-7000-8000-000000000020";
+const CONTENT_HASH = "c".repeat(64);
+const PDF_BYTES = Buffer.from("%PDF-1.4 synthetic resume");
+const PDF_BASE64 = PDF_BYTES.toString("base64");
+const PDF_SHA256 = createHash("sha256").update(PDF_BYTES).digest("hex");
+const UPLOADED_HASH = "d".repeat(64);
+const APPLY_URL = "https://boards.example.test/jobs/1";
+const EXTENSION_ID = "a".repeat(32);
 
-function application(overrides: Partial<Application> = {}): Application {
-  return {
-    id: APP,
-    canonicalJobId: JOB,
-    status: "preparing",
-    revision: 1,
-    currentAction: "prepare_packet",
-    attempts: [],
-    createdAt: AT,
-    updatedAt: AT,
-    ...overrides,
-  } as Application;
-}
+type Mode = "ready" | "failed" | "no_resume" | "timed_out" | "never";
 
-function reviewable(revision = 2): Application {
-  return application({
-    status: "review_required",
-    revision,
-    currentAction: "review_and_approve",
-    currentPacket: {
-      id: "00000000-0000-7000-8000-000000000003",
-      version: 1,
-      packetHash: HASH,
-      jobRevision: HASH,
-      artifactHashes: { resume: HASH },
-      fields: [
-        {
-          fieldKey: "contact.email",
-          value: "candidate@example.test",
-          origin: "confirmed_fact",
-          sourceFactIds: ["00000000-0000-7000-8000-000000000010"],
-          confidence: 0.99,
-          disposition: "review",
-          reasons: ["explicit_each_time"],
-          requiresReview: true,
+/** An in-memory stand-in for the Applications BFF. Nothing here reaches a network or a provider. */
+class FakeBff {
+  app: Application | undefined;
+  mode: Mode = "ready";
+  /** GET reads of the application that pass before a generation resolves. */
+  pollsUntilResolved = 2;
+  polls = 0;
+  revision = 1;
+  packetCounter = 0;
+  needsInput = false;
+  sensitive = false;
+  calls: Array<{ method: string; url: string; body?: Record<string, unknown> }> = [];
+  material: ApplicationTemporaryMaterial | undefined;
+  failPreview = false;
+
+  private packet(resume: "generate" | "uploaded") {
+    this.packetCounter += 1;
+    const hash = (this.packetCounter.toString(16).padStart(2, "0") + "e".repeat(62)).slice(0, 64);
+    const fields: Record<string, unknown>[] = [
+      {
+        fieldKey: "contact.email",
+        value: "candidate@example.test",
+        origin: "confirmed_fact",
+        sourceFactIds: [DOC],
+        confidence: 1,
+        disposition: "auto",
+        reasons: [],
+        requiresReview: false,
+      },
+    ];
+    if (this.sensitive)
+      fields.push({
+        fieldKey: "authorization.work_in_country",
+        value: true,
+        origin: "user_entered",
+        sourceFactIds: [],
+        confidence: 1,
+        disposition: "review",
+        reasons: ["restricted_answer", "never_infer"],
+        requiresReview: true,
+      });
+    if (this.needsInput)
+      fields.push({
+        fieldKey: "questions.why_company",
+        value: null,
+        origin: "confirmed_fact",
+        sourceFactIds: [],
+        confidence: 0.4,
+        disposition: "user_action",
+        reasons: ["unsupported_value"],
+        requiresReview: true,
+      });
+    if (resume === "uploaded")
+      fields.push({
+        fieldKey: "documents.resume",
+        value: UPLOADED_HASH,
+        origin: "confirmed_fact",
+        sourceFactIds: [DOC],
+        confidence: 1,
+        disposition: "review",
+        reasons: ["explicit_each_time"],
+        requiresReview: true,
+      });
+    return {
+      id: `00000000-0000-7000-8000-0000000001${String(this.packetCounter).padStart(2, "0")}`,
+      version: this.packetCounter,
+      packetHash: hash,
+      jobRevision: hash,
+      artifactHashes: resume === "uploaded" ? { resume: UPLOADED_HASH } : {},
+      fields,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  private base(status: Application["status"], extras: Record<string, unknown> = {}) {
+    this.revision += 1;
+    const now = new Date().toISOString();
+    return {
+      id: APP,
+      canonicalJobId: JOB,
+      status,
+      revision: this.revision,
+      currentAction:
+        status === "approved"
+          ? "ready_to_submit"
+          : status === "review_required"
+            ? "review_and_approve"
+            : "prepare_packet",
+      attempts: [],
+      createdAt: now,
+      updatedAt: now,
+      ...extras,
+    } as unknown as Application;
+  }
+
+  private resolveGeneration() {
+    const app = this.app;
+    const packet = app?.currentPacket;
+    if (!app || !packet || app.resumeGeneration?.state !== "preparing") return;
+    this.polls += 1;
+    if (this.polls < this.pollsUntilResolved || this.mode === "never") return;
+    const requestedAt = app.resumeGeneration.requestedAt;
+    if (this.mode === "ready") {
+      this.material = {
+        schemaVersion: 1,
+        kind: "tailored_resume",
+        generationId: GEN,
+        version: 1,
+        contentSha256: CONTENT_HASH,
+        completedAtMs: Date.now(),
+        expiresAtMs: Date.now() + 1_800_000,
+      };
+      const next = this.packet("generate");
+      next.artifactHashes = { resume: CONTENT_HASH };
+      next.fields.push({
+        fieldKey: "documents.resume",
+        value: CONTENT_HASH,
+        origin: "generated",
+        sourceFactIds: [],
+        confidence: 1,
+        disposition: "review",
+        reasons: ["explicit_each_time", "generated_content"],
+        requiresReview: true,
+      });
+      this.app = this.base("review_required", {
+        currentPacket: { ...next, temporaryMaterials: [this.material] },
+        resumeGeneration: { state: "ready", requestedAt },
+      });
+      return;
+    }
+    this.app = this.base("review_required", {
+      currentPacket: packet,
+      resumeGeneration: {
+        state: "failed",
+        errorCode:
+          this.mode === "no_resume"
+            ? "no_resume"
+            : this.mode === "timed_out"
+              ? "generation_timed_out"
+              : "generation_failed",
+        requestedAt,
+      },
+    });
+  }
+
+  fetch = vi.fn<typeof fetch>(async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    const body = init?.body
+      ? (JSON.parse(String(init.body)) as Record<string, unknown>)
+      : undefined;
+    this.calls.push({ method, url, ...(body ? { body } : {}) });
+    const json = (value: unknown, status = 200) =>
+      new Response(JSON.stringify(value), {
+        status,
+        headers: {
+          "content-type": status >= 400 ? "application/problem+json" : "application/json",
+          "cache-control": "no-store",
         },
-      ],
-      createdAt: AT,
-    },
-  } as unknown as Application);
-}
-
-const respond = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": status >= 400 ? "application/problem+json" : "application/json" },
+      });
+    if (url === "/api/platform/applications/search")
+      return json({ items: this.app ? [this.app] : [] });
+    if (url === "/api/platform/applications" && method === "POST") {
+      this.app = this.base("preparing");
+      return json(this.app, 201);
+    }
+    if (!this.app || !url.startsWith(`/api/platform/applications/${APP}`))
+      return json({ code: "application_not_found" }, 404);
+    const rest = url.slice(`/api/platform/applications/${APP}`.length);
+    if (rest === "" && method === "GET") {
+      this.resolveGeneration();
+      return json(this.app);
+    }
+    if (rest === "/packets" && method === "POST") {
+      if (this.app.status === "approved") return json({ code: "application_state_conflict" }, 409);
+      const resume = body?.resume === "uploaded" ? "uploaded" : "generate";
+      const packet = this.packet(resume);
+      this.polls = 0;
+      this.app = this.base("review_required", {
+        currentPacket: packet,
+        ...(resume === "generate"
+          ? { resumeGeneration: { state: "preparing", requestedAt: new Date().toISOString() } }
+          : {}),
+      });
+      return json(this.app, 201);
+    }
+    if (rest === "/reopen" && method === "POST") {
+      this.app = this.base("review_required", { currentPacket: this.app.currentPacket });
+      return json(this.app);
+    }
+    if (rest === "/approval" && method === "POST") {
+      const packet = this.app.currentPacket;
+      const acknowledged = (body?.acknowledgedFieldKeys ?? []) as string[];
+      const missing = (packet?.fields ?? []).filter(
+        (field) => field.requiresReview && !acknowledged.includes(field.fieldKey),
+      );
+      if (!packet || body?.packetHash !== packet.packetHash || missing.length)
+        return json({ code: "application_approval_refused" }, 409);
+      this.app = this.base("approved", {
+        currentPacket: packet,
+        ...(this.app.resumeGeneration ? { resumeGeneration: this.app.resumeGeneration } : {}),
+        approval: {
+          id: "00000000-0000-7000-8000-000000000011",
+          packetHash: packet.packetHash,
+          approvedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 1_800_000).toISOString(),
+          acknowledgedFieldKeys: acknowledged,
+        },
+      });
+      return json(this.app);
+    }
+    if (rest === "/manual-submissions" && method === "POST") {
+      this.app = this.base("takeover", {
+        currentPacket: this.app.currentPacket,
+        attempts: [
+          {
+            id: "00000000-0000-7000-8000-000000000012",
+            sequence: 1,
+            status: "taken_over",
+            adapterId: "manual",
+            adapterVersion: "none",
+            startedAt: new Date().toISOString(),
+          },
+        ],
+      });
+      return json({ outcome: "started", application: this.app }, 201);
+    }
+    if (rest.endsWith("/reconciliation") && method === "POST") {
+      this.app = this.base("applied", {});
+      return json(this.app);
+    }
+    if (rest.startsWith("/resume/content") && method === "GET") {
+      const query = new URL(url, "http://localhost").searchParams;
+      const packet = this.app.currentPacket;
+      if (this.failPreview) return json({ code: "applications_unavailable" }, 503);
+      if (!packet || !this.material || query.get("packetHash") !== packet.packetHash)
+        return json({ code: "application_packet_stale" }, 409);
+      if (query.get("format") === "pdf")
+        return json({
+          format: "pdf",
+          mediaType: "application/pdf",
+          fileName: "tailored-resume.pdf",
+          sha256: PDF_SHA256,
+          sizeBytes: PDF_BYTES.byteLength,
+          contentSha256: CONTENT_HASH,
+          contentBase64: PDF_BASE64,
+          temporaryMaterial: this.material,
+        });
+      return json({
+        status: "ready",
+        matchesPacket: true,
+        tailoringVersion: "1",
+        contentSha256: CONTENT_HASH,
+        temporaryMaterial: this.material,
+        sections: [
+          {
+            kind: "experience",
+            heading: "Experience",
+            entries: [
+              {
+                lines: ["Engineer, Example Co"],
+                bullets: [{ text: "Built the billing service", change: "moved_up" }],
+              },
+            ],
+          },
+        ],
+      });
+    }
+    return json({ code: "application_not_found" }, 404);
   });
+
+  /** The request bodies of every packet the candidate caused to be prepared. */
+  packetRequests() {
+    return this.calls.filter((call) => call.url.endsWith("/packets")).map((call) => call.body);
+  }
+  approvals() {
+    return this.calls.filter((call) => call.url.endsWith("/approval")).map((call) => call.body);
+  }
+}
 
 let container: HTMLDivElement;
 let root: Root;
+let openedTab: {
+  opener: unknown;
+  closed: boolean;
+  location: { replace: ReturnType<typeof vi.fn> };
+  close: ReturnType<typeof vi.fn>;
+};
 
 beforeEach(() => {
   vi.stubGlobal("React", React);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubEnv("NEXT_PUBLIC_NATIVE_MATERIAL_UI", "enabled");
+  openedTab = {
+    opener: window,
+    closed: false,
+    location: { replace: vi.fn() },
+    close: vi.fn(() => {
+      openedTab.closed = true;
+    }),
+  };
+  vi.spyOn(window, "open").mockImplementation(() => openedTab as unknown as Window);
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -75,1393 +332,564 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   vi.useRealTimers();
+  Reflect.deleteProperty(window, "chrome");
 });
 
-async function click(label: RegExp | string) {
-  const button = Array.from(container.querySelectorAll("button")).find((element) =>
-    typeof label === "string"
-      ? element.textContent === label
-      : label.test(element.textContent ?? ""),
-  );
-  if (!button) throw new Error(`No button ${String(label)}`);
-  await act(async () => {
-    button.click();
-  });
-}
-
-async function acknowledgeReplacement() {
-  const checkbox = Array.from(
-    container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
-  ).find((element) =>
-    element.closest("label")?.textContent?.includes("Replace the current preparation"),
-  );
-  if (checkbox && !checkbox.checked) await act(async () => checkbox.click());
-}
-
-async function replacePacket() {
-  await acknowledgeReplacement();
-  await click("Prepare a new packet");
-}
 async function mount(
-  fetchImplementation: typeof globalThis.fetch,
-  applyUrl?: string,
-  coverLetterPreparationEnabled = false,
-  applicationId?: string,
+  bff: FakeBff,
+  props: Partial<Parameters<typeof ApplicationsWorkspace>[0]> = {},
 ) {
   await act(async () => {
     root.render(
       <ApplicationsWorkspace
         jobId={JOB}
-        {...(applicationId ? { applicationId } : {})}
-        applyUrl={applyUrl}
-        fetchImplementation={fetchImplementation}
-        coverLetterPreparationEnabled={coverLetterPreparationEnabled}
+        applyUrl={APPLY_URL}
+        fetchImplementation={bff.fetch}
+        coverLetterPreparationEnabled={false}
+        {...props}
       />,
     );
   });
+  await settle();
 }
 
-describe("ApplicationsWorkspace", () => {
-  function nativeUi() {
-    vi.stubEnv("NEXT_PUBLIC_NATIVE_MATERIAL_UI", "enabled");
-    vi.stubEnv("NEXT_PUBLIC_NATIVE_AUTH0_DOMAIN", "synthetic.auth0.com");
-    vi.stubEnv("NEXT_PUBLIC_NATIVE_AUTH0_CLIENT_ID", "synthetic-client");
-    vi.stubEnv("NEXT_PUBLIC_NATIVE_MATERIAL_BASE_HOST", "materials.example.test");
-  }
-
-  it("discovers a background-generated resume with one read and no new preparation", async () => {
-    nativeUi();
-    const ready = reviewable(3);
-    if (!ready.currentPacket) throw Error("Missing synthetic packet");
-    ready.currentPacket.temporaryMaterials = [
-      {
-        schemaVersion: 1,
-        kind: "tailored_resume",
-        generationId: "00000000-0000-7000-8000-000000000020",
-        version: 1,
-        contentSha256: HASH,
-        completedAtMs: Date.now(),
-        expiresAtMs: Date.now() + 1_800_000,
-      },
-    ];
-    const send = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(respond(reviewable()))
-      .mockResolvedValueOnce(respond(ready));
-    await mount(send, undefined, false, APP);
-    expect(container.textContent).not.toContain("Resume tailoring");
-    await click("Check generated resume");
-    expect(send).toHaveBeenCalledTimes(2);
-    expect(send.mock.calls[1]?.[0]).toBe(`/api/platform/applications/${APP}`);
-    expect(send.mock.calls[1]?.[1]).toMatchObject({ method: "GET", cache: "no-store" });
-    expect(send.mock.calls[1]?.[1]).not.toHaveProperty("body");
-    expect(container.textContent).toContain("Sign in to view generated materials");
-    expect(container.textContent).not.toContain("Check generated resume");
-    expect(container.textContent).not.toContain("Open application page");
-  });
-
-  it.each(["wrong-job", "wrong-id", "older", "malformed", "unavailable"])(
-    "refuses %s generated-resume refresh without starting work",
-    async (kind) => {
-      nativeUi();
-      const next = reviewable(kind === "older" ? 1 : 3);
-      if (kind === "wrong-job") next.canonicalJobId = "00000000-0000-7000-8000-000000000099";
-      if (kind === "wrong-id") next.id = "00000000-0000-7000-8000-000000000099";
-      const send = vi
-        .fn<typeof fetch>()
-        .mockResolvedValueOnce(respond(reviewable()))
-        .mockResolvedValueOnce(
-          respond(kind === "malformed" ? { id: APP } : next, kind === "unavailable" ? 503 : 200),
-        );
-      await mount(send, undefined, false, APP);
-      await click("Check generated resume");
-      expect(container.textContent).toContain("We could not check the generated resume.");
-      expect(container.textContent).toContain("Check generated resume");
-      expect(send).toHaveBeenCalledTimes(2);
-      expect(send.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
-    },
-  );
-
-  it("keeps an unavailable generated resume retry read-only", async () => {
-    nativeUi();
-    const send = vi.fn<typeof fetch>().mockImplementation(async () => respond(reviewable()));
-    await mount(send, undefined, false, APP);
-    await click("Check generated resume");
-    expect(container.textContent).toContain(
-      "The generated resume is not available yet. It may still be preparing.",
-    );
-    await click("Check generated resume");
-    expect(send).toHaveBeenCalledTimes(3);
-    expect(send.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
-  });
-
-  it("requires fresh replacement consent when the current preparation state is unknown", async () => {
-    nativeUi();
-    const send = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(respond(reviewable()))
-      .mockResolvedValueOnce(respond(reviewable(3)))
-      .mockResolvedValueOnce(respond(reviewable(4), 201));
-    await mount(send, undefined, false, APP);
-    const replacement = () =>
-      Array.from(container.querySelectorAll("button")).find(
-        (element) => element.textContent === "Prepare a new packet",
-      );
-    expect(container.textContent).toContain("may still be preparing");
-    expect(replacement()?.disabled).toBe(true);
-    await click("Prepare a new packet");
-    expect(send).toHaveBeenCalledTimes(1);
-    await acknowledgeReplacement();
-    expect(replacement()?.disabled).toBe(false);
-    await click("Check generated resume");
-    expect(send).toHaveBeenCalledTimes(2);
-    expect(replacement()?.disabled).toBe(true);
-    await acknowledgeReplacement();
-    await click("Prepare a new packet");
-    const writes = send.mock.calls.filter(([, options]) => options?.method === "POST");
-    expect(writes).toHaveLength(1);
-    expect(JSON.parse(String(writes[0]?.[1]?.body))).toEqual({ expectedRevision: 3 });
-    expect(replacement()?.disabled).toBe(true);
-  });
-
-  it.each(["expired", "expires while open"])(
-    "offers explicit replacement when native material %s",
-    async (mode) => {
-      nativeUi();
-      vi.useFakeTimers();
-      try {
-        const current = reviewable();
-        if (!current.currentPacket) throw Error("Missing packet");
-        const expiresAtMs = Date.now() + (mode === "expired" ? -1 : 1000);
-        current.currentPacket.temporaryMaterials = [
-          {
-            schemaVersion: 1,
-            kind: "tailored_resume",
-            generationId: "00000000-0000-7000-8000-000000000020",
-            version: 1,
-            contentSha256: HASH,
-            completedAtMs: expiresAtMs - 1_800_000,
-            expiresAtMs,
-          },
-        ];
-        const send = vi
-          .fn<typeof fetch>()
-          .mockResolvedValueOnce(respond(current))
-          .mockResolvedValueOnce(respond(reviewable(3), 201));
-        await mount(send, undefined, false, APP);
-        if (mode !== "expired") {
-          expect(container.textContent).not.toContain("Prepare a new packet");
-          await act(async () => {
-            await vi.advanceTimersByTimeAsync(1001);
-          });
-        }
-        expect(container.textContent).toContain("requires fresh review and approval");
-        expect(container.textContent).not.toContain("Check generated resume");
-        expect(send).toHaveBeenCalledTimes(1);
-        await replacePacket();
-        const writes = send.mock.calls.filter(([, options]) => options?.method === "POST");
-        expect(writes).toHaveLength(1);
-        expect(JSON.parse(String(writes[0]?.[1]?.body))).toEqual({ expectedRevision: 2 });
-        expect(container.textContent).not.toContain("Your application is approved and ready");
-      } finally {
-        vi.useRealTimers();
-      }
-    },
-  );
-
-  it("admits one explicit replacement despite a double click", async () => {
-    nativeUi();
-    let finish!: (response: Response) => void;
-    const send = vi.fn<typeof fetch>(async (_url, options) =>
-      options?.method === "POST"
-        ? new Promise<Response>((resolve) => {
-            finish = resolve;
-          })
-        : respond(reviewable()),
-    );
-    await mount(send, undefined, false, APP);
-    expect(container.textContent).toContain("requires fresh review and approval");
-    const button = Array.from(container.querySelectorAll("button")).find(
-      (element) => element.textContent === "Prepare a new packet",
-    );
-    if (!button) throw Error("Missing explicit preparation action");
-    await acknowledgeReplacement();
+async function settle(rounds = 30) {
+  for (let round = 0; round < rounds; round += 1)
     await act(async () => {
-      button.click();
-      button.click();
+      await Promise.resolve();
     });
-    expect(send.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
-    expect(button.disabled).toBe(true);
-    await act(async () => {
-      finish(respond(reviewable(3), 201));
-    });
-    expect(container.textContent).toContain("Confirm before approving");
-    expect(container.textContent).not.toContain("Your application is approved and ready");
-  });
+}
 
-  it("retries an ambiguous explicit preparation with the same revision and key", async () => {
-    nativeUi();
-    const send = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(respond(reviewable()))
-      .mockRejectedValueOnce(Error("Lost response"))
-      .mockResolvedValueOnce(respond(reviewable(3), 201));
-    await mount(send, undefined, false, APP);
-    await replacePacket();
-    await replacePacket();
-    const writes = send.mock.calls.filter(([, options]) => options?.method === "POST");
-    expect(writes).toHaveLength(2);
-    expect(writes[0]?.[0]).toBe(`/api/platform/applications/${APP}/packets`);
-    expect(writes[0]?.[1]?.body).toBe(writes[1]?.[1]?.body);
-    expect(JSON.parse(String(writes[0]?.[1]?.body))).toEqual({ expectedRevision: 2 });
-    expect(writes[0]?.[1]?.headers).toEqual(writes[1]?.[1]?.headers);
-  });
-
-  it("refreshes a revision conflict before a new explicit preparation", async () => {
-    nativeUi();
-    const send = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(respond(reviewable()))
-      .mockResolvedValueOnce(respond({ code: "application_revision_conflict" }, 409))
-      .mockResolvedValueOnce(respond(reviewable(4)))
-      .mockResolvedValueOnce(respond(reviewable(5), 201));
-    await mount(send, undefined, false, APP);
-    await replacePacket();
-    await replacePacket();
-    const writes = send.mock.calls.filter(([, options]) => options?.method === "POST");
-    expect(writes.map(([, options]) => JSON.parse(String(options?.body)))).toEqual([
-      { expectedRevision: 2 },
-      { expectedRevision: 4 },
-    ]);
-    expect(writes[0]?.[1]?.headers).not.toEqual(writes[1]?.[1]?.headers);
-  });
-
-  it("refuses a late old-generation read after replacing the packet", async () => {
-    nativeUi();
-    const stale = reviewable(3);
-    if (!stale.currentPacket) throw Error("Missing synthetic packet");
-    stale.currentPacket.temporaryMaterials = [
-      {
-        schemaVersion: 1,
-        kind: "tailored_resume",
-        generationId: "00000000-0000-7000-8000-000000000020",
-        version: 1,
-        contentSha256: HASH,
-        completedAtMs: Date.now(),
-        expiresAtMs: Date.now() + 1_800_000,
-      },
-    ];
-    const send = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(respond(reviewable()))
-      .mockResolvedValueOnce(respond(reviewable(4), 201))
-      .mockResolvedValueOnce(respond(stale));
-    await mount(send, undefined, false, APP);
-    await replacePacket();
-    await click("Check generated resume");
-    expect(container.textContent).toContain("We could not check the generated resume.");
-    expect(container.textContent).not.toContain("Sign in to view generated materials");
-    expect(send.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1);
-  });
-
-  it("refreshes extension confirmation on return and notifies application history", async () => {
-    const current = application({
-      status: "submitting",
-      currentAction: "submission_in_progress",
-      revision: 3,
-    });
-    const applied = application({ status: "applied", currentAction: "none", revision: 4 });
-    const send = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(respond(current))
-      .mockResolvedValueOnce(respond(applied));
-    const historyChanged = vi.fn();
-    window.addEventListener(APPLICATIONS_CHANGED_EVENT, historyChanged);
-    try {
-      await mount(send, undefined, false, APP);
-      await act(async () => {
-        window.dispatchEvent(new Event("focus"));
-      });
-      expect(send).toHaveBeenCalledTimes(2);
-      expect(send.mock.calls[1]?.[0]).toBe(`/api/platform/applications/${APP}`);
-      expect(historyChanged).toHaveBeenCalledTimes(1);
-      expect(container.textContent).toContain("Submitted and confirmed.");
-    } finally {
-      window.removeEventListener(APPLICATIONS_CHANGED_EVENT, historyChanged);
-    }
-  });
-
-  it.each(["foreign", "stale"])(
-    "deduplicates return refresh and refuses %s application state",
-    async (mode) => {
-      const current = application({
-        status: "submitting",
-        currentAction: "submission_in_progress",
-        revision: 3,
-      });
-      let resolveRead: ((response: Response) => void) | undefined;
-      const send = vi
-        .fn<typeof fetch>()
-        .mockResolvedValueOnce(respond(current))
-        .mockImplementationOnce(
-          () =>
-            new Promise((resolve) => {
-              resolveRead = resolve;
-            }),
-        );
-      await mount(send, undefined, false, APP);
-      await act(async () => {
-        window.dispatchEvent(new Event("focus"));
-        window.dispatchEvent(new Event("focus"));
-        document.dispatchEvent(new Event("visibilitychange"));
-      });
-      expect(send).toHaveBeenCalledTimes(2);
-      await act(async () => {
-        resolveRead?.(
-          respond(
-            application({
-              id: mode === "foreign" ? JOB : APP,
-              revision: mode === "stale" ? 2 : 4,
-              status: "applied",
-              currentAction: "none",
-            }),
-          ),
-        );
-      });
-      expect(container.textContent).toContain("A submission is in progress.");
-    },
+function button(label: string | RegExp): HTMLButtonElement | undefined {
+  return Array.from(container.querySelectorAll("button")).find((element) =>
+    typeof label === "string"
+      ? element.textContent === label
+      : label.test(element.textContent ?? ""),
   );
+}
 
-  it.each(["another field", "selected field"])(
-    "preserves prior entries/form and replaces only an explicitly edited %s",
-    async (kind) => {
-      const current = reviewable();
-      if (!current.currentPacket) throw new Error();
-      const form = { adapterId: "generic-assisted-v1", variantId: "generic", formHash: HASH };
-      current.currentPacket.form = form;
-      current.currentPacket.fields = [
-        {
-          fieldKey: "contact.phone",
-          value: "original phone",
-          origin: "user_entered",
-          sourceFactIds: [],
-          confidence: 1,
-          disposition: "review",
-          reasons: ["explicit_each_time"],
-          requiresReview: true,
-        },
-        {
-          fieldKey: "contact.address.city",
-          value: "Synthetic City",
-          origin: "user_entered",
-          sourceFactIds: [],
-          confidence: 1,
-          disposition: "review",
-          reasons: ["explicit_each_time"],
-          requiresReview: true,
-        },
-        {
-          fieldKey: "authorization.us_authorized",
-          value: false,
-          origin: "answer_vault",
-          sourceFactIds: [JOB],
-          confidence: 1,
-          disposition: "review",
-          reasons: ["restricted_answer"],
-          requiresReview: true,
-          vaultReference: {
-            id: JOB,
-            version: 7,
-            context: "us.explicit",
-            questionHash: HASH,
-            meaningConfirmed: true,
-            validUntilEpochMs: null,
-          },
-        },
-      ];
-      const requests: Record<string, unknown>[] = [];
-      const send = vi.fn<typeof fetch>(async (url, options) => {
-        if (String(url).endsWith("/packets")) {
-          requests.push(JSON.parse(String(options?.body)));
-          return respond(reviewable(3), 201);
-        }
-        if (String(url).endsWith("/search")) return respond({ items: [current] });
-        if (String(url).endsWith("/resume"))
-          return respond({ status: "no_resume", matchesPacket: false });
-        return respond(current);
-      });
-      await mount(send);
-      const control =
-        kind === "selected field"
-          ? container.querySelector("select")
-          : container.querySelector('input[id$="-input"]');
-      if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement))
-        throw new Error("Missing edit control");
-      const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(control), "value")?.set;
-      await act(async () => {
-        setter?.call(control, kind === "selected field" ? "false" : "new phone");
-        control.dispatchEvent(
-          new Event(kind === "selected field" ? "change" : "input", { bubbles: true }),
-        );
-      });
-      await act(async () =>
-        control
-          .closest("form")
-          ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
-      );
-      expect(requests).toHaveLength(1);
-      expect(requests[0]?.form).toEqual(form);
-      expect(requests[0]?.userEntries).toContainEqual({
-        fieldKey: "contact.address.city",
-        value: "Synthetic City",
-      });
-      if (kind === "selected field") {
-        expect(requests[0]?.vaultSelections).toBeUndefined();
-        expect(requests[0]?.userEntries).toContainEqual({
-          fieldKey: "authorization.us_authorized",
-          value: false,
-        });
-        expect(requests[0]?.userEntries).toContainEqual({
-          fieldKey: "contact.phone",
-          value: "original phone",
-        });
-      } else {
-        expect(requests[0]?.vaultSelections).toEqual([
-          {
-            id: JOB,
-            version: 7,
-            fieldKey: "authorization.us_authorized",
-            context: "us.explicit",
-            questionHash: HASH,
-            meaningConfirmed: true,
-          },
-        ]);
-        expect(requests[0]?.userEntries).toContainEqual({
-          fieldKey: "contact.phone",
-          value: "new phone",
-        });
-      }
-    },
-  );
-  it("opens the exact handoff application without searching for another packet", async () => {
-    const send = vi.fn<typeof fetch>(async () => respond(application()));
-    await mount(send, undefined, false, APP);
-    expect(send).toHaveBeenCalledTimes(1);
-    expect(String(send.mock.calls[0]?.[0])).toBe(`/api/platform/applications/${APP}`);
-    expect(container.textContent).toContain("Preparing");
+async function click(label: string | RegExp) {
+  const target = button(label);
+  if (!target) throw new Error(`No button ${String(label)}`);
+  await act(async () => target.click());
+  await settle();
+}
+
+async function advance(ms: number) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
   });
-  it.each(["wrong-job", "wrong-id", "not-found"])(
-    "refuses %s handoff lookup without creating or searching",
-    async (kind) => {
-      const send = vi.fn(async () =>
-        respond(
-          application({
-            ...(kind === "wrong-job"
-              ? { canonicalJobId: "00000000-0000-7000-8000-000000000099" }
-              : {}),
-            ...(kind === "wrong-id" ? { id: "00000000-0000-7000-8000-000000000099" } : {}),
-          }),
-          kind === "not-found" ? 404 : 200,
-        ),
-      );
-      await mount(send, undefined, false, APP);
-      expect(container.textContent).toContain("Reload application review");
-      expect(container.textContent).not.toContain("Prepare application");
-      expect(send).toHaveBeenCalledTimes(1);
-      await click("Reload application review");
-      expect(send).toHaveBeenCalledTimes(2);
-    },
-  );
-  it("does not request or expose cover-letter generation by default", async () => {
-    const send = vi.fn(async (input: RequestInfo | URL) =>
-      String(input).endsWith("/search")
-        ? respond({ items: [] })
-        : String(input).endsWith("/packets")
-          ? respond(reviewable(), 201)
-          : respond(application(), 201),
-    );
-    await mount(send);
-    expect(container.textContent).not.toContain("Optional cover letter");
-    await click("Prepare application");
-    const packet = send.mock.calls.find(([url]) => String(url).endsWith("/packets"));
+  await settle();
+}
+
+function statusText() {
+  return Array.from(container.querySelectorAll("[role=status]"))
+    .map((element) => element.textContent)
+    .join(" ");
+}
+
+const REMOVED_COPY = [
+  "Sign in to view generated materials",
+  "Disconnect material access",
+  "Approve this packet",
+  "I reviewed this generated",
+  "Cancel application",
+  "Replace the current preparation",
+  "Check generated resume",
+  "may still be preparing",
+  "Edit again",
+  "Word (DOCX)",
+];
+
+function expectNoRemovedCopy() {
+  for (const text of REMOVED_COPY) expect(container.textContent).not.toContain(text);
+}
+
+describe("ApplicationsWorkspace: generate, then apply", () => {
+  it("starts with Generate resume and Apply, with no approval ceremony", async () => {
+    const bff = new FakeBff();
+    await mount(bff);
+    expect(button("Generate resume")).toBeDefined();
+    expect(button("Apply")?.disabled).toBe(false);
+    expect(container.textContent).toContain("Apply will use your own uploaded resume, unchanged.");
+    expectNoRemovedCopy();
+    expect(bff.calls.map((call) => call.url)).toEqual(["/api/platform/applications/search"]);
     expect(
-      JSON.parse(String((packet as unknown as [string, RequestInit])[1].body)),
-    ).not.toHaveProperty("coverLetter");
-  });
-  it("requires explicit disclosure, polls the accepted operation and blocks unavailable material approval", async () => {
-    const ready = reviewable(4);
-    const OP = "00000000-0000-7000-8000-000000000020";
-    if (!ready.currentPacket) throw new Error("Missing packet");
-    ready.currentPacket.artifactHashes.coverLetter = HASH;
-    ready.currentPacket.temporaryMaterials = [
-      {
-        schemaVersion: 1,
-        kind: "cover_letter",
-        generationId: OP,
-        version: 1,
-        contentSha256: HASH,
-        completedAtMs: Date.now(),
-        expiresAtMs: Date.now() + 1_800_000,
-      },
-    ];
-    const calls: Array<{ url: string; init: RequestInit }> = [];
-    const send = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
-      const url = String(input);
-      calls.push({ url, init });
-      if (url.endsWith("/search")) return respond({ items: [] });
-      if (url.endsWith("/packets"))
-        return respond(
-          { id: OP, applicationId: APP, state: "queued", createdAt: AT, updatedAt: AT },
-          202,
-        );
-      if (url.includes("/preparations/"))
-        return respond({
-          id: OP,
-          applicationId: APP,
-          state: "succeeded",
-          result: { packetId: ready.currentPacket?.id, revision: 4 },
-          createdAt: AT,
-          updatedAt: AT,
-        });
-      if (url === `/api/platform/applications/${APP}`) return respond(ready);
-      if (url.endsWith("/resume")) return respond({ status: "no_resume", matchesPacket: false });
-      return respond(application(), 201);
-    });
-    await mount(send, undefined, true);
-    expect(container.textContent).toContain(
-      "Provider abuse-monitoring logs may retain content for up to 30 days",
-    );
-    await act(async () => {
-      container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
-    });
-    await click("Prepare resume and cover letter");
-    const command = calls.find(({ url }) => url.endsWith("/packets"));
-    expect(JSON.parse(String(command?.init.body))).toEqual({
-      expectedRevision: 1,
-      coverLetter: { disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true } },
-    });
-    expect(calls.filter(({ url }) => url.endsWith("/packets"))).toHaveLength(1);
-    expect(container.textContent).toContain("Preparation finished");
-    expect(container.textContent).toContain("Its exact preview is unavailable");
-    expect(container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(
-      false,
-    );
-    expect(
-      Array.from(container.querySelectorAll("button")).find(
-        (button) => button.textContent === "Approve this packet",
-      )?.disabled,
-    ).toBe(true);
-  });
-  it("replays a lost admission response with the original disclosure/body/key and requires a new choice after failure", async () => {
-    const commands: RequestInit[] = [];
-    const OP = "00000000-0000-7000-8000-000000000020";
-    const send = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
-      const url = String(input);
-      if (url.endsWith("/search")) return respond({ items: [] });
-      if (url.endsWith("/packets")) {
-        commands.push(init);
-        return commands.length === 1
-          ? respond({ code: "applications_unavailable" }, 503)
-          : respond(
-              {
-                id: OP,
-                applicationId: APP,
-                state: "failed",
-                errorCode: "generation_unavailable",
-                createdAt: AT,
-                updatedAt: AT,
-              },
-              202,
-            );
-      }
-      if (url === `/api/platform/applications/${APP}`) return respond(reviewable());
-      return respond(application(), 201);
-    });
-    await mount(send, undefined, true);
-    await act(async () => {
-      container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
-    });
-    await click("Prepare resume and cover letter");
-    await click("Prepare resume and cover letter");
-    expect(commands).toHaveLength(2);
-    expect(commands[0]?.body).toBe(commands[1]?.body);
-    expect(commands[0]?.headers).toEqual(commands[1]?.headers);
-    expect(container.textContent).toContain("Cover-letter generation is unavailable");
-    expect(container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(
-      false,
-    );
-  });
-  it("bounds status reads and checks the same operation without redispatching generation", async () => {
-    vi.useFakeTimers();
-    const OP = "00000000-0000-7000-8000-000000000020";
-    const operation = { id: OP, applicationId: APP, state: "queued", createdAt: AT, updatedAt: AT };
-    const calls: string[] = [];
-    const send = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      calls.push(url);
-      if (url.endsWith("/search")) return respond({ items: [] });
-      if (url.endsWith("/packets")) return respond(operation, 202);
-      if (url.includes("/preparations/")) return respond(operation);
-      return respond(application(), 201);
-    });
-    await mount(send, undefined, true);
-    await act(async () => {
-      container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
-    });
-    await click("Prepare resume and cover letter");
-    expect(container.textContent).not.toContain("Approve this packet");
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(240_001);
-    });
-    expect(calls.filter((url) => url.includes("/preparations/"))).toHaveLength(120);
-    await click("Check preparation status");
-    expect(calls.filter((url) => url.includes("/preparations/"))).toHaveLength(121);
-    expect(calls.filter((url) => url.endsWith("/packets"))).toHaveLength(1);
-  });
-  it.each([false, true])(
-    "cancels pending preparation and stops polling (ambiguous=%s)",
-    async (ambiguous) => {
-      vi.useFakeTimers();
-      const OP = "00000000-0000-7000-8000-000000000020";
-      const operation = {
-        id: OP,
-        applicationId: APP,
-        state: "running",
-        createdAt: AT,
-        updatedAt: AT,
-      };
-      const calls: Array<{ url: string; init: RequestInit }> = [];
-      let cancellationSent = false;
-      const send = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
-        const url = String(input);
-        calls.push({ url, init });
-        if (url.endsWith("/search")) return respond({ items: [] });
-        if (url.endsWith("/packets")) return respond(operation, 202);
-        if (url.includes("/preparations/")) return respond(operation);
-        const cancelled = application({ status: "cancelled", revision: 3, currentAction: "none" });
-        if (url.endsWith("/cancel")) {
-          cancellationSent = true;
-          return ambiguous
-            ? respond({ code: "applications_unavailable" }, 503)
-            : respond(cancelled);
-        }
-        if (url === `/api/platform/applications/${APP}`)
-          return respond(cancellationSent ? cancelled : reviewable(2));
-        return respond(application(), 201);
-      });
-      await mount(send, undefined, true);
-      await act(async () => {
-        container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
-      });
-      await click("Prepare resume and cover letter");
-      await click("Cancel application");
-      expect(container.textContent).toContain("This application was cancelled");
-      const cancel = calls.find(({ url }) => url.endsWith("/cancel"));
-      expect(calls.filter(({ url }) => url.endsWith("/cancel"))).toHaveLength(1);
-      expect(JSON.parse(String(cancel?.init.body))).toEqual({ expectedRevision: 2 });
-      const count = calls.length;
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(10_000);
-      });
-      expect(calls).toHaveLength(count);
-    },
-  );
-  it("refuses a succeeded operation whose exact packet does not match the current application", async () => {
-    const OP = "00000000-0000-7000-8000-000000000020";
-    const send = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.endsWith("/search")) return respond({ items: [] });
-      if (url.endsWith("/packets"))
-        return respond(
-          {
-            id: OP,
-            applicationId: APP,
-            state: "succeeded",
-            result: { packetId: OP, revision: 2 },
-            createdAt: AT,
-            updatedAt: AT,
-          },
-          202,
-        );
-      if (url === `/api/platform/applications/${APP}`) return respond(reviewable(2));
-      return respond(application(), 201);
-    });
-    await mount(send, undefined, true);
-    await act(async () => {
-      container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
-    });
-    await click("Prepare resume and cover letter");
-    expect(container.textContent).toContain("prepared packet could not be verified");
-    expect(container.textContent).not.toContain("Approve this packet");
-  });
-  it("does not restore a completed packet from a late status read after cancellation", async () => {
-    const OP = "00000000-0000-7000-8000-000000000020";
-    const ready = reviewable(3);
-    let finish: ((response: Response) => void) | undefined;
-    let reads = 0;
-    let heldSignal: AbortSignal | undefined;
-    const send = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
-      const url = String(input);
-      if (url.endsWith("/search")) return respond({ items: [] });
-      if (url.endsWith("/packets"))
-        return respond(
-          {
-            id: OP,
-            applicationId: APP,
-            state: "succeeded",
-            result: { packetId: ready.currentPacket?.id, revision: 3 },
-            createdAt: AT,
-            updatedAt: AT,
-          },
-          202,
-        );
-      if (url.endsWith("/cancel"))
-        return respond(application({ status: "cancelled", revision: 4, currentAction: "none" }));
-      if (url === `/api/platform/applications/${APP}`) {
-        reads += 1;
-        if (reads === 1) {
-          heldSignal = init.signal ?? undefined;
-          return new Promise<Response>((resolve) => {
-            finish = resolve;
-          });
-        }
-        return respond(ready);
-      }
-      return respond(application(), 201);
-    });
-    await mount(send, undefined, true);
-    await act(async () => {
-      container.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
-    });
-    await click("Prepare resume and cover letter");
-    await click("Cancel application");
-    expect(heldSignal?.aborted).toBe(true);
-    await act(async () => {
-      finish?.(respond(ready));
-    });
-    expect(container.textContent).toContain("This application was cancelled");
-    expect(container.textContent).not.toContain("Approve this packet");
-  });
-  it("keeps retries stable and gives changed answers a different preparation key", async () => {
-    const value = reviewable();
-    if (!value.currentPacket) throw new Error("Missing fixture packet");
-    value.currentPacket.fields = [
-      { ...value.currentPacket.fields[0], origin: "user_entered" },
-    ] as typeof value.currentPacket.fields;
-    const calls: RequestInit[] = [];
-    const fetchImplementation = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
-      if (String(input).endsWith("/search")) return respond({ items: [value] });
-      if (String(input).endsWith("/packets")) {
-        calls.push(init);
-        return respond({ code: "applications_unavailable" }, 503);
-      }
-      return respond({}, 404);
-    }) as typeof fetch;
-    await mount(fetchImplementation);
-    for (const answer of ["first@example.test", "first@example.test", "second@example.test"]) {
-      await act(async () => {
-        const input = container.querySelector('input:not([type="checkbox"])');
-        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-        setter?.call(input, answer);
-        input?.dispatchEvent(new Event("input", { bubbles: true }));
-      });
-      await click("Save answer");
-    }
-    expect(calls).toHaveLength(3);
-    expect(calls[0]?.headers).toEqual(calls[1]?.headers);
-    expect(calls[1]?.headers).not.toEqual(calls[2]?.headers);
-    expect(JSON.stringify(calls.map((call) => call.headers))).not.toContain("example.test");
-  });
-  it("retries an uncertain candidate confirmation with its original payload and key", async () => {
-    const takeover = application({
-      status: "takeover",
-      revision: 4,
-      currentAction: "complete_manually",
-      attempts: [
-        {
-          id: APP,
-          sequence: 1,
-          status: "taken_over",
-          adapterId: "manual",
-          adapterVersion: "none",
-          startedAt: AT,
-        },
-      ],
-    });
-    const calls: RequestInit[] = [];
-    const fetchImplementation = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
-      if (String(input).endsWith("/search")) return respond({ items: [takeover] });
-      calls.push(init);
-      if (calls.length === 1) throw new Error("Lost response");
-      return respond({ ...takeover, revision: 5, status: "applied", currentAction: "none" });
-    }) as typeof fetch;
-    await mount(fetchImplementation);
-    await click("I submitted it");
-    await vi.waitFor(() => expect(container.textContent).toContain("That did not go through"));
-    await click("I submitted it");
-    await vi.waitFor(() => expect(container.textContent).toContain("Submitted and confirmed"));
-    expect(calls).toHaveLength(2);
-    expect(calls[1]?.body).toBe(calls[0]?.body);
-    expect(calls[1]?.headers).toEqual(calls[0]?.headers);
-  });
-
-  it("discards the previous job workspace when the selected job changes", async () => {
-    const fetchImplementation = vi.fn(async () =>
-      respond({ items: [reviewable()] }),
-    ) as typeof fetch;
-    await mount(fetchImplementation);
-    expect(container.textContent).toContain("Application review");
-    const otherJob = "00000000-0000-7000-8000-000000000099";
-    const emptyFetch = vi.fn(async () => respond({ items: [] })) as typeof fetch;
-    await act(async () =>
-      root.render(<ApplicationsWorkspace jobId={otherJob} fetchImplementation={emptyFetch} />),
-    );
-    expect(container.textContent).not.toContain("Application review");
-    expect(container.textContent).toContain("Prepare application");
-  });
-  it("creates then prepares an application and shows the review panel", async () => {
-    const calls: Array<[string, RequestInit]> = [];
-    const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {
-      calls.push([url, init]);
-      if (url.endsWith("/search")) return respond({ items: [] });
-      return url.endsWith("/packets") ? respond(reviewable(), 201) : respond(application(), 201);
-    }) as unknown as typeof globalThis.fetch;
-    await mount(fetchImplementation);
-    expect(container.textContent).toContain("nothing is submitted from this page");
-    await click("Prepare application");
-
-    // Opening looks for an existing application first, then the resume preview is a read-only
-    // GET that follows the packet; commands are unchanged.
-    expect(calls.map(([url]) => url).filter((url) => !url.endsWith("/resume"))).toEqual([
-      "/api/platform/applications/search",
-      "/api/platform/applications",
-      `/api/platform/applications/${APP}/packets`,
-    ]);
-    expect(JSON.parse(String(calls[0]?.[1].body))).toEqual({ jobId: JOB, limit: 1 });
-    expect(JSON.parse(String(calls[1]?.[1].body))).toEqual({ jobId: JOB });
-    expect(JSON.parse(String(calls[2]?.[1].body))).toEqual({ expectedRevision: 1 });
-    for (const [, init] of calls.filter(
-      ([url, request]) => request.method === "POST" && !url.endsWith("/search"),
-    )) {
-      expect((init.headers as Record<string, string>)["idempotency-key"]).toMatch(/^web-/);
-    }
-    expect(container.textContent).toContain("Application review");
-    expect(container.textContent).toContain("Review what will be sent");
-    // The candidate sees the resume prepared for this job next to the packet.
-    expect(container.textContent).toContain("Your resume for this job");
-    expect(calls.map(([url]) => url)).toContain(`/api/platform/applications/${APP}/resume`);
-  });
-
-  const buttons = () => Array.from(container.querySelectorAll("button")).map((b) => b.textContent);
-
-  it("opens the candidate's existing live application for the job instead of starting another", async () => {
-    const calls: Array<[string, RequestInit]> = [];
-    const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {
-      calls.push([url, init]);
-      return url.endsWith("/search") ? respond({ items: [reviewable()] }) : respond({}, 404);
-    }) as unknown as typeof globalThis.fetch;
-    await mount(fetchImplementation);
-
-    expect(container.textContent).toContain("Application review");
-    expect(container.textContent).toContain("Review what will be sent");
-    expect(container.textContent).toContain("Your resume for this job");
-    expect(container.textContent).not.toContain("Checking for an existing application");
-    expect(buttons()).not.toContain("Prepare application");
-    expect(JSON.parse(String(calls[0]?.[1].body))).toEqual({ jobId: JOB, limit: 1 });
-    // Nothing was created or prepared just by opening the page.
-    expect(
-      calls.filter(([url, init]) => init.method === "POST" && !url.endsWith("/search")),
+      (await axe.run(container, { rules: { "color-contrast": { enabled: false } } })).violations,
     ).toEqual([]);
   });
 
-  it("offers to prepare when the newest application was cancelled or none exists", async () => {
-    for (const items of [[application({ status: "cancelled", revision: 4 })], []]) {
-      const fetchImplementation = vi.fn(async (url: string) =>
-        url.endsWith("/search") ? respond({ items }) : respond({}, 404),
-      ) as unknown as typeof globalThis.fetch;
-      await mount(fetchImplementation);
-      expect(container.textContent).toContain("nothing is submitted from this page");
-      expect(buttons()).toContain("Prepare application");
-      await act(async () => root.render(<div />));
-    }
+  it("disables Apply when the job has no safe employer link", async () => {
+    await mount(new FakeBff(), { applyUrl: "javascript:alert(1)" });
+    expect(button("Apply")?.disabled).toBe(true);
+    expect(container.textContent).toContain("We do not have a safe link");
   });
 
-  it("shows the prepare step when the lookup fails or returns anything unexpected", async () => {
-    const otherJob = "00000000-0000-7000-8000-0000000000ff";
-    for (const reply of [
-      () => respond({}, 503),
-      () => respond({ items: [application({ canonicalJobId: otherJob })] }),
-      () => respond({ items: "nope" }),
-    ]) {
-      const fetchImplementation = vi.fn(async (url: string) =>
-        url.endsWith("/search") ? reply() : respond({}, 404),
-      ) as unknown as typeof globalThis.fetch;
-      await mount(fetchImplementation);
-      expect(container.textContent).not.toContain("Application review");
-      expect(buttons()).toContain("Prepare application");
-      await act(async () => root.render(<div />));
-    }
-  });
-
-  it("opens the live application when creating one reports that it already exists", async () => {
-    let searches = 0;
-    const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {
-      if (url.endsWith("/search")) {
-        searches += 1;
-        // Nothing at first (page load); the application exists by the time the candidate clicks.
-        return respond({ items: searches === 1 ? [] : [reviewable()] });
-      }
-      if (url === "/api/platform/applications" && init.method === "POST") {
-        return respond({ code: "application_already_exists" }, 409);
-      }
-      return respond({}, 404);
-    }) as unknown as typeof globalThis.fetch;
-    await mount(fetchImplementation);
-    await click("Prepare application");
-    expect(container.textContent).toContain("Application review");
-    expect(container.textContent).toContain(
-      "You already have an application for this job. It is open below.",
-    );
-    expect(container.textContent).not.toContain("live application for this job");
-  });
-
-  it("keeps the fixed already-exists copy when that application cannot be found", async () => {
-    const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {
-      if (url.endsWith("/search")) return respond({ items: [] });
-      if (url === "/api/platform/applications" && init.method === "POST") {
-        return respond({ code: "application_already_exists" }, 409);
-      }
-      return respond({}, 404);
-    }) as unknown as typeof globalThis.fetch;
-    await mount(fetchImplementation);
-    await click("Prepare application");
-    expect(container.textContent).toContain("You already have a live application for this job.");
-  });
-
-  it("continues preparing an existing application that has no packet yet, without creating another", async () => {
-    const calls: Array<[string, RequestInit]> = [];
-    const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {
-      calls.push([url, init]);
-      if (url.endsWith("/search")) return respond({ items: [application()] });
-      return url.endsWith("/packets") ? respond(reviewable(), 201) : respond({}, 404);
-    }) as unknown as typeof globalThis.fetch;
-    await mount(fetchImplementation);
-    await click("Prepare application");
-    const posts = calls.filter(([url, init]) => init.method === "POST" && !url.endsWith("/search"));
-    expect(posts.map(([url]) => url)).toEqual([`/api/platform/applications/${APP}/packets`]);
-    expect(JSON.parse(String(posts[0]?.[1].body))).toEqual({ expectedRevision: 1 });
-    expect(container.textContent).toContain("Review what will be sent");
-  });
-
-  it("approves exactly the reviewed packet hash and acknowledged keys at the current revision", async () => {
-    const calls: Array<[string, RequestInit]> = [];
-    const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {
-      calls.push([url, init]);
-      if (url.endsWith("/approval")) {
-        return respond(application({ status: "approved", revision: 3 }));
-      }
-      return url.endsWith("/packets") ? respond(reviewable(), 201) : respond(application(), 201);
-    }) as unknown as typeof globalThis.fetch;
-    await mount(fetchImplementation);
-    await click("Prepare application");
-    const acknowledge = Array.from(container.querySelectorAll("input[type=checkbox]"))[0];
-    await act(async () => {
-      (acknowledge as HTMLInputElement).click();
-    });
-    await click(/approve/i);
-
-    const approval = calls.find(([url]) => url.endsWith("/approval"));
-    expect(approval).toBeDefined();
-    expect(JSON.parse(String(approval?.[1].body))).toEqual({
-      expectedRevision: 2,
-      packetHash: HASH,
-      acknowledgedFieldKeys: ["contact.email"],
-    });
-    const approvalHeaders = (approval?.[1].headers ?? {}) as Record<string, string>;
-    expect(approvalHeaders["idempotency-key"]).toBe(`web-approve-2-${APP}`);
-    expect(container.textContent).toContain("Approved");
-  });
-
-  it("offers the Apply step only after approval, without submitting anything", async () => {
-    const calls: Array<[string, RequestInit]> = [];
-    const readyToApply = {
-      ...reviewable(3),
-      status: "approved",
-      currentAction: "ready_to_submit",
-    } as unknown as Application;
-    const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {
-      calls.push([url, init]);
-      if (url.endsWith("/approval")) return respond(readyToApply);
-      return url.endsWith("/packets") ? respond(reviewable(), 201) : respond(application(), 201);
-    }) as unknown as typeof globalThis.fetch;
-    await mount(fetchImplementation, "https://boards.example.test/jobs/1");
-    await click("Prepare application");
-    // Not yet approved: no Apply step.
-    expect(container.textContent).not.toContain("Open the application page");
-    const acknowledge = Array.from(container.querySelectorAll("input[type=checkbox]"))[0];
-    await act(async () => {
-      (acknowledge as HTMLInputElement).click();
-    });
-    await click(/approve/i);
-    expect(container.textContent).toContain("Open the application page");
-    expect(container.querySelector("a")?.getAttribute("href")).toBe(
-      "https://boards.example.test/jobs/1",
-    );
-    // Opening the manual handoff does not itself create an attempt.
-    expect(calls.map(([url]) => url).filter((url) => /submissions|attempts/.test(url))).toEqual([]);
-  });
-
-  it("records a manual attempt, then uses the existing candidate attestation path", async () => {
-    const attemptId = "00000000-0000-7000-8000-000000000020";
-    const ready = {
-      ...reviewable(3),
-      status: "approved",
-      currentAction: "ready_to_submit",
-      approval: {
-        packetHash: HASH,
-        approvedAt: AT,
-        expiresAt: "2026-09-19T12:00:00.000Z",
-        acknowledgedFieldKeys: ["contact.email"],
-      },
-    } as unknown as Application;
-    const takenOver = {
-      ...ready,
-      status: "takeover",
-      revision: 4,
-      currentAction: "complete_manually",
-      attempts: [
-        {
-          id: attemptId,
-          sequence: 1,
-          status: "taken_over",
-          adapterId: "manual",
-          adapterVersion: "none",
-          startedAt: AT,
-          resolvedAt: AT,
-        },
-      ],
-    } as unknown as Application;
-    const applied = {
-      ...takenOver,
-      status: "applied",
-      revision: 5,
-      currentAction: "none",
-      attempts: [{ ...takenOver.attempts[0], status: "confirmed" }],
-    } as unknown as Application;
-    const calls: Array<[string, RequestInit]> = [];
-    const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {
-      calls.push([url, init]);
-      if (url.endsWith("/search")) return respond({ items: [ready] });
-      if (url.endsWith("/manual-submissions")) {
-        return respond({ outcome: "started", attemptId, application: takenOver });
-      }
-      if (url.endsWith("/reconciliation")) return respond(applied);
-      return respond({}, 404);
-    }) as unknown as typeof globalThis.fetch;
-
-    await mount(fetchImplementation, "https://boards.example.test/jobs/1");
-    await click("Record submission status");
-
-    const start = calls.find(([url]) => url.endsWith("/manual-submissions"));
-    expect(start).toBeDefined();
-    if (!start) throw new Error("Manual submission start was not called");
-    expect(JSON.parse(String(start[1].body))).toEqual({ expectedRevision: 3 });
-    expect((start[1].headers as Record<string, string>)["idempotency-key"]).toBe(
-      `web-manual-submission-3-${APP}`,
-    );
-    expect(container.querySelector('[aria-label="Confirm the submission status"]')).not.toBeNull();
-    expect(container.textContent).toContain("I submitted it");
-
-    await click("I submitted it");
-    await vi.waitFor(() => {
-      expect(calls.some(([url]) => url.endsWith("/reconciliation"))).toBe(true);
-    });
-    const reconciliation = calls.find(([url]) => url.endsWith("/reconciliation"));
-    expect(reconciliation?.[0]).toBe(
-      `/api/platform/applications/${APP}/attempts/${attemptId}/reconciliation`,
-    );
-    expect(JSON.parse(String(reconciliation?.[1].body))).toMatchObject({
-      kind: "user_attested_submitted",
-    });
-    expect(container.textContent).toContain("Submitted and confirmed.");
-    expect(container.textContent).not.toContain("Record submission status");
-  });
-
-  it("shows fixed copy for a refusal and never upstream text", async () => {
-    const fetchImplementation = vi.fn(async () =>
-      respond(
-        {
-          type: "urn:ai-job-apply:problem:forbidden",
-          title: "SECRET upstream title",
-          status: 403,
-          code: "forbidden",
-          detail: "candidate@example.test leaked",
-        },
-        403,
-      ),
-    ) as unknown as typeof globalThis.fetch;
-    await mount(fetchImplementation);
-    await click("Prepare application");
-    expect(container.textContent).toContain("Applications are not enabled for your account yet.");
-    expect(container.textContent).not.toContain("SECRET");
-    expect(container.textContent).not.toContain("candidate@example.test");
-    // The candidate can try again; nothing was created.
-    expect(container.textContent).toContain("Prepare application");
-  });
-
-  it("reloads the latest application after a revision conflict", async () => {
-    const calls: string[] = [];
-    const fetchImplementation = vi.fn(async (url: string, init: RequestInit) => {
-      calls.push(`${init.method} ${url}`);
-      if (url.endsWith("/cancel")) {
-        return respond(
-          {
-            type: "urn:ai-job-apply:problem:application_revision_conflict",
-            title: "Application changed",
-            status: 409,
-            code: "application_revision_conflict",
-          },
-          409,
-        );
-      }
-      if (init.method === "GET") return respond(reviewable(5));
-      return url.endsWith("/packets") ? respond(reviewable(2), 201) : respond(application(), 201);
-    }) as unknown as typeof globalThis.fetch;
-    await mount(fetchImplementation);
-    await click("Prepare application");
-    await click(/cancel/i);
-    expect(calls).toContain(`GET /api/platform/applications/${APP}`);
-    expect(container.textContent).toContain("This application changed");
-  });
-
-  it.each(["503", "transport"])(
-    "observes a committed cancellation after %s without replaying its command",
-    async (failure) => {
-      let reads = 0;
-      const send = vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
-        if (url === `/api/platform/applications/${APP}/cancel`) {
-          if (failure === "transport") throw new Error("Synthetic connection loss");
-          return respond({ code: "applications_unavailable" }, 503);
-        }
-        if (url === `/api/platform/applications/${APP}` && init?.method === "GET")
-          return respond(
-            ++reads === 1
-              ? reviewable()
-              : application({ status: "cancelled", revision: 3, currentAction: "none" }),
-          );
-        return respond({}, 404);
-      });
-      await mount(send, undefined, false, APP);
-      await click(/cancel/i);
-      expect(container.textContent).toContain("This application was cancelled");
-      expect(container.textContent).not.toContain("Cancellation could not be confirmed");
-      const calls = send.mock.calls.filter(
-        ([url]) => url === `/api/platform/applications/${APP}` || String(url).endsWith("/cancel"),
-      );
-      expect(calls.map(([, init]) => init?.method)).toEqual(["GET", "POST", "GET"]);
-      expect(calls[2]?.[1]).not.toHaveProperty("body");
-    },
-  );
-
-  it.each(["wrong-id", "wrong-job", "same", "older", "active", "malformed", "unavailable"])(
-    "does not claim cancellation from a %s observation",
-    async (observation) => {
-      const latest = application({ status: "cancelled", revision: 3, currentAction: "none" });
-      if (observation === "wrong-id") latest.id = "00000000-0000-7000-8000-000000000099";
-      if (observation === "wrong-job")
-        latest.canonicalJobId = "00000000-0000-7000-8000-000000000099";
-      if (observation === "same") latest.revision = 2;
-      if (observation === "older") latest.revision = 1;
-      let reads = 0;
-      const send = vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
-        if (String(url).endsWith("/cancel"))
-          return respond({ code: "applications_unavailable" }, 503);
-        if (url === `/api/platform/applications/${APP}` && init?.method === "GET") {
-          if (++reads === 1) return respond(reviewable());
-          return respond(
-            observation === "malformed"
-              ? { id: APP, status: "cancelled" }
-              : observation === "active"
-                ? reviewable(3)
-                : latest,
-            observation === "unavailable" ? 503 : 200,
-          );
-        }
-        return respond({}, 404);
-      });
-      await mount(send, undefined, false, APP);
-      await click(/cancel/i);
-      expect(container.textContent).not.toContain("This application was cancelled");
-      expect(container.textContent).toContain("Cancellation could not be confirmed");
-      expect(
-        send.mock.calls
-          .filter(
-            ([url]) =>
-              url === `/api/platform/applications/${APP}` || String(url).endsWith("/cancel"),
-          )
-          .map(([, init]) => init?.method),
-      ).toEqual(["GET", "POST", "GET"]);
-    },
-  );
-
-  it("bounds cancellation observation without replaying the command", async () => {
-    vi.useFakeTimers();
-    let observationSignal: AbortSignal | undefined;
-    let reads = 0;
-    const send = vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
-      if (String(url).endsWith("/cancel"))
-        return respond({ code: "applications_unavailable" }, 503);
-      if (url === `/api/platform/applications/${APP}` && init?.method === "GET") {
-        if (++reads === 1) return respond(reviewable());
-        return new Promise<Response>((_resolve, reject) => {
-          observationSignal = init?.signal ?? undefined;
-          observationSignal?.addEventListener("abort", () => reject(new Error("Aborted")));
-        });
-      }
-      return respond({}, 404);
-    });
-    await mount(send, undefined, false, APP);
-    await click(/cancel/i);
-    await act(async () => vi.advanceTimersByTimeAsync(10_000));
-    expect(observationSignal?.aborted).toBe(true);
-    expect(container.textContent).toContain("Cancellation could not be confirmed");
+  it("Generate shows a loading state that resolves to the resume by itself", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const bff = new FakeBff();
+    await mount(bff);
+    await click("Generate resume");
+    expect(bff.packetRequests()).toEqual([{ expectedRevision: 2 }]);
+    const status = container.querySelector('[role="status"]');
+    expect(status?.textContent).toContain("Generating your resume");
+    expect(status?.textContent).toContain("1 to 2 minutes");
+    // Apply stays available while generating: it then uses the uploaded resume, and says so.
+    expect(button("Apply")?.disabled).toBe(false);
+    expect(container.textContent).toContain("Apply now uses your own uploaded resume");
+    expectNoRemovedCopy();
+    await advance(3_100);
+    expect(container.textContent).toContain("Generating your resume");
+    await advance(3_100);
+    expect(container.textContent).toContain("Built the billing service");
+    expect(container.textContent).toContain("(Moved up)");
+    expect(container.textContent).toContain("deleted 30 minutes after it was made");
+    expect(container.textContent).not.toContain("Generating your resume");
+    expect(button("Apply")?.disabled).toBe(false);
+    expect(container.textContent).toContain("Apply will use your generated resume (PDF)");
+    expectNoRemovedCopy();
+    // The only reads are the application itself and the BFF-proxied preview: no sign-in step.
     expect(
-      send.mock.calls
-        .filter(
-          ([url]) => url === `/api/platform/applications/${APP}` || String(url).endsWith("/cancel"),
-        )
-        .map(([, init]) => init?.method),
-    ).toEqual(["GET", "POST", "GET"]);
+      bff.calls.filter((call) => call.url.includes("/content")).map((call) => call.url),
+    ).toHaveLength(1);
+    expect(bff.calls.some((call) => /location|authorization/u.test(call.url))).toBe(false);
   });
 
-  it("has no detectable accessibility violations before and after preparing", async () => {
-    const fetchImplementation = vi.fn(async (url: string) =>
-      url.endsWith("/packets") ? respond(reviewable(), 201) : respond(application(), 201),
-    ) as unknown as typeof globalThis.fetch;
-    await mount(fetchImplementation);
-    expect((await axe.run(container)).violations).toEqual([]);
-    await click("Prepare application");
-    expect((await axe.run(container)).violations).toEqual([]);
+  it.each([
+    ["failed", "failed", "could not generate your resume this time", true],
+    ["timed_out", "timed_out", "took longer than expected", true],
+    ["no_resume", "no_resume", "could not find an uploaded resume", false],
+  ] as const)(
+    "shows a clear %s failure instead of 'still preparing'",
+    async (_name, mode, copy, retry) => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const bff = new FakeBff();
+      bff.mode = mode;
+      await mount(bff);
+      await click("Generate resume");
+      await advance(6_500);
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(copy);
+      expectNoRemovedCopy();
+      expect(Boolean(button("Try again"))).toBe(retry);
+      // Polling stopped once the state resolved.
+      const reads = bff.calls.length;
+      await advance(10_000);
+      expect(bff.calls.length).toBe(reads);
+      expect(button("Apply with my uploaded resume")).toBeDefined();
+    },
+  );
+
+  it("retries a failed generation with a fresh preparation request", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const bff = new FakeBff();
+    bff.mode = "failed";
+    await mount(bff);
+    await click("Generate resume");
+    await advance(6_500);
+    bff.mode = "ready";
+    await click("Try again");
+    expect(bff.packetRequests()).toHaveLength(2);
+    await advance(6_500);
+    expect(container.textContent).toContain("Built the billing service");
+  });
+
+  it("shows expiry and regenerates in one click", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const bff = new FakeBff();
+    await mount(bff);
+    await click("Generate resume");
+    await advance(6_500);
+    expect(container.textContent).toContain("Built the billing service");
+    await advance(1_800_000);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "expired and was deleted",
+    );
+    expect(container.textContent).not.toContain("Built the billing service");
+    expect(container.textContent).toContain("Apply will use your own uploaded resume");
+    expect(button("Apply")?.disabled).toBe(false);
+    await click("Generate again");
+    expect(bff.packetRequests()).toHaveLength(2);
+  });
+
+  it("stops waiting after the polling limit and reports a timeout", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const bff = new FakeBff();
+    bff.mode = "never";
+    await mount(bff);
+    await click("Generate resume");
+    await advance(13 * 60_000);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "took longer than expected",
+    );
+  });
+
+  it("says generation is unavailable when the server never started one", async () => {
+    const bff = new FakeBff();
+    const base = bff.fetch.getMockImplementation();
+    bff.fetch.mockImplementation(async (input, init) => {
+      const response = await base?.(input, init);
+      if (!response || !String(input).endsWith("/packets")) return response as Response;
+      const value = await response.json();
+      delete value.resumeGeneration;
+      return new Response(JSON.stringify(value), response);
+    });
+    await mount(bff);
+    await click("Generate resume");
+    expect(container.textContent).toContain("Resume generation is not available right now");
   });
 });
 
-describe("withdrawn packet recovery", () => {
-  it("drops a remembered edit when conflict refresh reveals a withheld packet", async () => {
-    const current = reviewable();
-    if (!current.currentPacket?.fields[0]) throw new Error("Missing synthetic field");
-    current.currentPacket.fields[0].origin = "user_entered";
-    const bodies: unknown[] = [];
-    const send = vi.fn<typeof fetch>(async (url, options) => {
-      if (String(url).endsWith("/search")) return respond({ items: [current] });
-      if (String(url).endsWith("/resume"))
-        return respond({ status: "no_resume", matchesPacket: false });
-      if (String(url).endsWith("/packets")) {
-        bodies.push(JSON.parse(String(options?.body)));
-        return bodies.length === 1
-          ? respond({ code: "application_revision_conflict" }, 409)
-          : respond(reviewable(5), 201);
-      }
-      return respond(
-        application({
-          status: "review_required",
-          revision: 4,
-          currentAction: "re_review",
-          packetAvailability: "withheld",
-        }),
-      );
+describe("ApplicationsWorkspace: cover letter", () => {
+  it("has its own Generate step with no consent checkbox, and sends the disclosure on that click", async () => {
+    const bff = new FakeBff();
+    await mount(bff, { coverLetterPreparationEnabled: true });
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+    expect(container.textContent).toContain("Cover letter (optional)");
+    expect(container.textContent).not.toMatch(/using these terms|requires a new choice/u);
+    await click("Generate cover letter");
+    expect(bff.packetRequests().at(-1)).toMatchObject({
+      coverLetter: { disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true } },
     });
-    await mount(send);
-    const control = container.querySelector('input[id$="-input"]');
-    if (!(control instanceof HTMLInputElement)) throw new Error("Missing editable field");
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
-        control,
-        "fresh@example.test",
-      );
-      control.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await act(async () =>
-      control
-        .closest("form")
-        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  });
+
+  it("does not request a cover letter when only the resume is generated", async () => {
+    const bff = new FakeBff();
+    await mount(bff, { coverLetterPreparationEnabled: true });
+    await click("Generate resume");
+    expect(bff.packetRequests().at(-1)).not.toHaveProperty("coverLetter");
+  });
+});
+
+describe("ApplicationsWorkspace: Apply", () => {
+  it("applies directly with the uploaded resume: packet, approval, then the employer page", async () => {
+    const bff = new FakeBff();
+    await mount(bff);
+    await click("Apply");
+    expect(bff.packetRequests()).toEqual([{ expectedRevision: 2, resume: "uploaded" }]);
+    expect(bff.approvals()).toEqual([
+      expect.objectContaining({ acknowledgedFieldKeys: ["documents.resume"] }),
+    ]);
+    // The tab was opened on the click, severed from this page, and only then pointed at the job.
+    expect(window.open).toHaveBeenCalledWith("", "_blank");
+    expect(openedTab.opener).toBeNull();
+    expect(openedTab.location.replace).toHaveBeenCalledWith(APPLY_URL);
+    expect(container.textContent).toContain("Finish on the employer's page");
+    expect(container.textContent).toContain("Record submission");
+    expectNoRemovedCopy();
+  });
+
+  it("applies with the generated PDF once it is ready and shown, without a new packet", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const bff = new FakeBff();
+    await mount(bff);
+    await click("Generate resume");
+    await advance(6_500);
+    expect(button("Apply")?.disabled).toBe(false);
+    await click("Apply");
+    expect(bff.packetRequests()).toHaveLength(1);
+    expect(bff.approvals()).toEqual([
+      expect.objectContaining({ acknowledgedFieldKeys: ["documents.resume"] }),
+    ]);
+    expect(openedTab.location.replace).toHaveBeenCalledWith(APPLY_URL);
+  });
+
+  it("will not apply with a generated resume whose exact preview was not shown", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const bff = new FakeBff();
+    bff.failPreview = true;
+    await mount(bff);
+    await click("Generate resume");
+    await advance(6_500);
+    expect(container.textContent).toContain("could not be loaded right now");
+    expect(button("Apply")?.disabled).toBe(true);
+  });
+
+  it("falls back to the uploaded resume when the generated one expired", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const bff = new FakeBff();
+    await mount(bff);
+    await click("Generate resume");
+    await advance(6_500);
+    await advance(1_800_000);
+    await click("Apply");
+    // The expired packet is replaced by one bound to the uploaded file, never the expired file.
+    expect(bff.packetRequests().at(-1)).toMatchObject({ resume: "uploaded" });
+    const approval = bff.approvals().at(-1);
+    expect(approval).toBeDefined();
+    expect(bff.app?.currentPacket?.temporaryMaterials).toBeUndefined();
+    expect(bff.app?.status).toBe("approved");
+  });
+
+  it("lets the candidate skip a slow generation and apply with the uploaded resume", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const bff = new FakeBff();
+    bff.mode = "never";
+    await mount(bff);
+    await click("Generate resume");
+    await advance(3_100);
+    await click("Skip and apply with my uploaded resume");
+    expect(bff.packetRequests().at(-1)).toMatchObject({ resume: "uploaded" });
+    expect(bff.app?.status).toBe("approved");
+    expect(openedTab.location.replace).toHaveBeenCalledWith(APPLY_URL);
+  });
+
+  it("opens the outcome dialog by itself after Apply, with no button to find", async () => {
+    const bff = new FakeBff();
+    await mount(bff);
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    await click("Apply");
+    expect(container.querySelector('[role="dialog"]')?.textContent).toContain(
+      "Did you submit the application",
     );
-    expect(container.textContent).toContain("previous packet is withheld");
-    await replacePacket();
-    expect(bodies).toEqual([
-      {
-        expectedRevision: 2,
-        userEntries: [{ fieldKey: "contact.email", value: "fresh@example.test" }],
-      },
-      { expectedRevision: 4 },
+  });
+
+  it("keeps just the word Submitted once the submission is logged", async () => {
+    const bff = new FakeBff();
+    await mount(bff);
+    await click("Apply");
+    await click("I submitted it");
+    expect(container.textContent).toBe("Submitted");
+  });
+
+  it("hands the submitted state to its caller instead of drawing it", async () => {
+    const bff = new FakeBff();
+    const onApplied = vi.fn();
+    await mount(bff, { onApplied });
+    await click("Apply");
+    await click("I submitted it");
+    expect(onApplied).toHaveBeenCalled();
+    expect(container.textContent).toBe("");
+  });
+
+  it("blocks Apply until empty answers are given and sensitive answers are checked", async () => {
+    const bff = new FakeBff();
+    bff.needsInput = true;
+    bff.sensitive = true;
+    await mount(bff);
+    // Preparing the packet is part of Apply; with answers needed it stops before approval.
+    await click("Apply");
+    expect(bff.approvals()).toEqual([]);
+    expect(container.textContent).toContain("We need your answer");
+    expect(container.textContent).toContain("Check these answers");
+    expect(button("Apply")?.disabled).toBe(true);
+    expect(container.textContent).toContain("1 answer(s) still need your input.");
+    expect(container.textContent).toContain("1 answer(s) still need your check.");
+    expect(openedTab.location.replace).not.toHaveBeenCalled();
+    expect(openedTab.close).toHaveBeenCalled();
+  });
+
+  it("requires the sensitive answer check and sends exactly what was checked", async () => {
+    const bff = new FakeBff();
+    bff.sensitive = true;
+    await mount(bff);
+    await click("Generate resume");
+    // Make the generated state irrelevant: apply with the uploaded resume once the packet exists.
+    bff.mode = "never";
+    await click("Skip and apply with my uploaded resume");
+    expect(bff.approvals()).toEqual([]);
+    expect(button("Apply")?.disabled).toBe(true);
+    const box = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    await act(async () => box?.click());
+    expect(button("Apply")?.disabled).toBe(false);
+    await click("Apply");
+    expect(bff.approvals()).toEqual([
+      expect.objectContaining({
+        acknowledgedFieldKeys: ["authorization.work_in_country", "documents.resume"],
+      }),
     ]);
   });
 
-  it("reopens a withheld approval, prepares without old answers, then requires fresh review", async () => {
-    let current = application({
-      status: "approved",
-      revision: 3,
-      currentAction: "re_review",
-      packetAvailability: "withheld",
-    });
-    const bodies: unknown[] = [];
-    const send = vi.fn<typeof fetch>(async (url, options) => {
-      if (String(url).endsWith("/search")) return respond({ items: [current] });
-      if (String(url).endsWith("/reopen"))
-        current = { ...current, status: "review_required", revision: 4 };
-      if (String(url).endsWith("/packets")) {
-        bodies.push(JSON.parse(String(options?.body)));
-        current = reviewable(5);
-        return respond(current, 201);
-      }
-      if (String(url).endsWith("/resume"))
-        return respond({ status: "no_resume", matchesPacket: false });
-      return respond(current);
-    });
-    await mount(send, "https://employer.example/jobs/1");
-    expect(container.textContent).toContain("previous packet is withheld");
-    expect(container.textContent).not.toContain("Your application is approved and ready");
-    expect(container.querySelector('a[href="https://employer.example/jobs/1"]')).toBeNull();
-    await click("Reopen for preparation");
-    await replacePacket();
-    expect(bodies).toEqual([{ expectedRevision: 4 }]);
-    expect(container.textContent).toContain("candidate@example.test");
-    const approve = Array.from(container.querySelectorAll("button")).find((button) =>
-      /Approve/.test(button.textContent ?? ""),
+  it("closes the pre-opened tab and shows fixed copy when Apply fails", async () => {
+    const bff = new FakeBff();
+    const base = bff.fetch.getMockImplementation();
+    bff.fetch.mockImplementation(async (input, init) =>
+      String(input).endsWith("/approval")
+        ? new Response(JSON.stringify({ code: "application_approval_refused", detail: "SECRET" }), {
+            status: 409,
+            headers: { "content-type": "application/problem+json" },
+          })
+        : (base?.(input, init) as Promise<Response>),
     );
-    expect(approve?.disabled).toBe(true);
-    expect(container.textContent).not.toContain("previous packet is withheld");
+    await mount(bff);
+    await click("Apply");
+    expect(container.textContent).toContain("That approval was not accepted");
+    expect(container.textContent).not.toContain("SECRET");
+    expect(openedTab.location.replace).not.toHaveBeenCalled();
+    expect(openedTab.close).toHaveBeenCalled();
   });
-  it.each(["takeover", "reconciliation_required"] as const)(
-    "retains explicit duplicate-risk reconciliation for %s without packet content",
-    async (status) => {
-      const current = application({
-        status,
-        revision: 5,
-        currentAction: "confirm_submission_status",
-        packetAvailability: "withheld",
-        attempts: [
-          {
-            id: JOB,
-            sequence: 1,
-            status: "taken_over",
-            adapterId: "manual",
-            adapterVersion: "manual.v1",
-            startedAt: AT,
+
+  it("ignores a second click while Apply is working", async () => {
+    const bff = new FakeBff();
+    await mount(bff);
+    await act(async () => {
+      button("Apply")?.click();
+      button("Apply")?.click();
+    });
+    await settle(8);
+    expect(bff.packetRequests()).toHaveLength(1);
+    expect(bff.approvals()).toHaveLength(1);
+    // The second click must not leave a second, blank employer tab behind.
+    expect(window.open).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not carry checks over to a packet rebuilt during Apply", async () => {
+    const bff = new FakeBff();
+    bff.sensitive = true;
+    bff.mode = "never";
+    await mount(bff);
+    await click("Generate resume");
+    const box = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    await act(async () => box?.click());
+    // The generated packet is still preparing, so Apply rebuilds it for the uploaded resume. The
+    // candidate checked the old packet's answers, not the new one's.
+    await click("Apply");
+    expect(bff.approvals()).toEqual([]);
+    expect(container.textContent).toContain("Your answers were updated");
+    expect(openedTab.location.replace).not.toHaveBeenCalled();
+    expect(openedTab.close).toHaveBeenCalled();
+  });
+
+  it("opens an already approved application at the employer step", async () => {
+    const bff = new FakeBff();
+    await mount(bff);
+    await click("Apply");
+    act(() => root.unmount());
+    root = createRoot(container);
+    await mount(bff);
+    expect(container.textContent).toContain("Finish on the employer's page");
+    expect(button("Apply")).toBeUndefined();
+  });
+});
+
+describe("ApplicationsWorkspace: extension hand-off", () => {
+  function extension(answers: Array<"unselected" | "ok">) {
+    const messages: Array<Record<string, unknown>> = [];
+    const queue = [...answers];
+    Object.defineProperty(window, "chrome", {
+      configurable: true,
+      value: {
+        runtime: {
+          sendMessage(
+            target: string,
+            message: Record<string, unknown>,
+            callback: (value: unknown) => void,
+          ) {
+            expect(target).toBe(EXTENSION_ID);
+            messages.push(message);
+            if (message.schema === "application-apply-intent.v1")
+              callback({
+                schema: "application-apply-intent-receipt.v1",
+                expiresAtMs: Date.now() + 600_000,
+              });
+            else if (message.schema === "application-native-transfer-begin.v1") {
+              if (queue.shift() === "unselected") callback({ error: "unavailable" });
+              else
+                callback({
+                  ...message,
+                  schema: "application-native-transfer-admission.v1",
+                  nonce: "f".repeat(64),
+                  expiresAtMs: Date.now() + 30_000,
+                  approvalId: "00000000-0000-7000-8000-000000000011",
+                  revision: extensionRevision(),
+                  materials: extensionMaterials(),
+                });
+            } else if (message.schema === "application-native-transfer-commit.v1") {
+              const admission = message.admission as Record<string, unknown>;
+              callback({
+                schema: "application-native-transfer-receipt.v1",
+                nonce: admission.nonce,
+                applicationId: admission.applicationId,
+                packetId: admission.packetId,
+                packetHash: admission.packetHash,
+                expiresAtMs: Math.min(
+                  Date.now() + 1_800_000,
+                  ...(admission.materials as ApplicationTemporaryMaterial[]).map(
+                    (item) => item.expiresAtMs,
+                  ),
+                ),
+              });
+            } else callback({ ok: true });
           },
-        ],
-      });
-      const send = vi.fn<typeof fetch>(async () => respond({ items: [current] }));
-      await mount(send);
-      expect(container.textContent).toContain("I submitted it");
-      const notSubmitted = Array.from(container.querySelectorAll("button")).find(
-        (button) => button.textContent === "It was not submitted",
-      );
-      expect(notSubmitted?.disabled).toBe(true);
-      expect(container.textContent).not.toContain("Prepare a new packet");
-      expect(container.textContent).not.toContain("candidate@example.test");
-    },
-  );
+        },
+      },
+    });
+    return messages;
+  }
+
+  let currentBff: FakeBff;
+  const extensionRevision = () => currentBff.app?.revision ?? 0;
+  const extensionMaterials = () => (currentBff.material ? [currentBff.material] : []);
+
+  beforeEach(() => {
+    vi.stubEnv("NEXT_PUBLIC_APPLICATION_EXTENSION_TRANSFER_ENABLED", "true");
+    vi.stubEnv("NEXT_PUBLIC_APPLICATION_EXTENSION_ID", EXTENSION_ID);
+  });
+
+  it("arms the extension with identifiers only when applying with the uploaded resume", async () => {
+    currentBff = new FakeBff();
+    const messages = extension([]);
+    await mount(currentBff);
+    await click("Apply");
+    const intent = messages.find((message) => message.schema === "application-apply-intent.v1");
+    expect(intent).toEqual({
+      schema: "application-apply-intent.v1",
+      applicationId: APP,
+      jobId: JOB,
+      packetId: currentBff.app?.currentPacket?.id,
+      packetHash: currentBff.app?.currentPacket?.packetHash,
+    });
+    // The page identifies itself by its review link, and nothing else is sent for an uploaded file.
+    expect(window.location.pathname + window.location.search).toBe(
+      `/jobs?application=${APP}&job=${JOB}`,
+    );
+    expect(messages.some((message) => String(message.schema).includes("transfer"))).toBe(false);
+    expect(statusText()).toContain("uploaded resume");
+    expect(JSON.stringify(messages)).not.toMatch(/token|authorization|candidate@example/iu);
+  });
+
+  it("sends the generated PDF once the extension asks, and only as PDF", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    currentBff = new FakeBff();
+    const messages = extension(["unselected", "unselected", "ok"]);
+    await mount(currentBff);
+    await click("Generate resume");
+    await advance(6_500);
+    await click("Apply");
+    expect(container.textContent).toContain("Open the ApplyDash extension");
+    await advance(2_100);
+    await advance(2_100);
+    await advance(2_100);
+    const schemas = messages.map((message) => message.schema);
+    expect(
+      schemas.filter((schema) => schema === "application-native-transfer-begin.v1").length,
+    ).toBeGreaterThanOrEqual(3);
+    const commit = messages.find(
+      (message) => message.schema === "application-native-transfer-commit.v1",
+    );
+    expect(commit).toBeDefined();
+    const files = (commit?.files ?? []) as Array<Record<string, unknown>>;
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatchObject({ format: "pdf", mediaType: "application/pdf" });
+    expect(JSON.stringify(messages)).not.toMatch(/docx|wordprocessingml/iu);
+    expect(container.textContent).toContain("It will use your generated resume (PDF)");
+  });
+
+  it("tells the candidate to finish by hand when no extension answers", async () => {
+    currentBff = new FakeBff();
+    Object.defineProperty(window, "chrome", {
+      configurable: true,
+      value: {
+        runtime: {
+          sendMessage: (_t: string, _m: unknown, cb: (v: unknown) => void) => cb(undefined),
+        },
+      },
+    });
+    await mount(currentBff);
+    await click("Apply");
+    expect(container.textContent).toContain("The extension did not answer");
+  });
 });

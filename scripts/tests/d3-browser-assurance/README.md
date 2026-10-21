@@ -30,3 +30,13 @@ files, cancellation, stalled hashing, structure/value changes and missing confir
 are intercepted and form submission is prevented: zero actual uploads or external submissions.
 The background and content-entry regressions separately cover write-ahead dispatch, lost
 acknowledgements, exact proof ownership and complete payload disposal during stalled hashing.
+
+## Try the generate-then-apply flow by hand
+
+`pnpm playground:d3-apply` (opens your browser) serves the production candidate
+workspace at `http://127.0.0.1:4177/` with the same synthetic BFF, native and extension responses the
+runner uses. Pick a scenario in the bar (generation succeeds quickly or slowly, fails with retry,
+no uploaded resume, never finishes); it searches and opens the job for you. Use "Show recorded
+requests" to see the BFF calls Apply makes, and the extension buttons to simulate an installed or
+missing extension. Apply opens a blank synthetic employer tab. No AWS, Docker, Auth0 or employer
+request is made; stop with Ctrl+C.

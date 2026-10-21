@@ -13,6 +13,7 @@ import type {
   ApplicationSubmissionStart,
   ApplicationTemporaryMaterialAuthorization,
   ApplicationTemporaryMaterialLocation,
+  ApplicationUploadedResumeFile,
   ReconcileApplicationAttemptRequest,
   StartManualApplicationSubmissionRequest,
 } from "@ai-job-apply/api-contracts";
@@ -60,6 +61,11 @@ import {
   readBoundTemporaryCoverLetter,
 } from "./temporary-cover-letter-read.js";
 import { temporaryMaterialReasons } from "./temporary-material.js";
+import {
+  packetUsesUploadedResume,
+  UPLOADED_RESUME_MAXIMUM_BYTES,
+  type UploadedResumeSource,
+} from "./uploaded-resume.js";
 
 const validateMaterialLocation = compileComponentValidator("ApplicationTemporaryMaterialLocation");
 
@@ -109,6 +115,8 @@ export interface PacketPreparationSource {
     vaultSelections?: readonly VaultSelection[];
     /** The form structure the extension observed and mapped against, when known. */
     form: FormBinding | null;
+    /** `uploaded` binds the candidate's own resume instead of generating one. */
+    resume?: "generate" | "uploaded";
   }): Promise<PacketPreparation>;
 }
 
@@ -234,6 +242,11 @@ export interface ApplicationsApi {
     applicationId: string,
     format: ApplicationResumeFile["format"],
   ): Promise<ApplicationResumeFile>;
+  /** The candidate's own original resume the current packet binds; refused if it changed. */
+  uploadedResumeFile?(
+    ownerUserId: string,
+    applicationId: string,
+  ): Promise<ApplicationUploadedResumeFile>;
   history(
     ownerUserId: string,
     applicationId: string,
@@ -247,6 +260,7 @@ export interface ApplicationsApi {
       userEntries?: readonly UserEntry[];
       vaultSelections?: readonly VaultSelection[];
       form?: FormBinding;
+      resume?: "generate" | "uploaded";
     },
     idempotencyKey: string,
   ): Promise<Application>;
@@ -320,6 +334,8 @@ export interface ApplicationsServiceDependencies {
   jobs: ApplicationJobGate;
   /** Tailored-resume preview; when absent the preview reports the service as unavailable. */
   resumes?: ResumePreviewSource;
+  /** The candidate's own uploaded resume file, from its Documents owner. */
+  uploadedResumes?: UploadedResumeSource;
   /** Absent until preparation persistence and owned Documents context/read boundaries are wired. */
   preparations?: ApplicationPreparations;
   coverLetters?: ApplicationCoverLetters;
@@ -723,6 +739,47 @@ export class ApplicationsService implements ApplicationsApi {
     return { ...rest, fileName: tailoredFileName(baseFileName, format) };
   }
 
+  async uploadedResumeFile(
+    ownerUserId: string,
+    applicationId: string,
+  ): Promise<ApplicationUploadedResumeFile> {
+    const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    const packet = view.currentPacket;
+    const uploaded = this.dependencies.uploadedResumes;
+    if (!uploaded) throw new ApplicationsUnavailableError();
+    // Only a packet bound to the candidate's own resume may read it, and never a terminal one.
+    if (!packet || !packetUsesUploadedResume(packet) || !packet.artifactHashes.resume)
+      throw new StalePacketError(["resume_changed"]);
+    if (view.application.status === "applied" || view.application.status === "cancelled")
+      throw new StalePacketError(["resume_changed"]);
+    const expected = packet.artifactHashes.resume;
+    const sourceFact = packet.fields.find((field) => field.fieldKey === "documents.resume");
+    const documentId = sourceFact?.sourceFactIds[0];
+    if (!documentId) throw new StalePacketError(["resume_changed"]);
+    let file: Awaited<ReturnType<UploadedResumeSource["file"]>>;
+    try {
+      file = await uploaded.file(ownerUserId, documentId);
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
+    if (
+      !file ||
+      file.documentId !== documentId ||
+      file.sha256 !== expected ||
+      file.sizeBytes > UPLOADED_RESUME_MAXIMUM_BYTES
+    )
+      throw new StalePacketError(["resume_changed"]);
+    return {
+      documentId: file.documentId,
+      fileName: file.fileName,
+      format: file.format,
+      mediaType: file.mediaType,
+      sha256: file.sha256,
+      sizeBytes: file.sizeBytes,
+      contentBase64: file.contentBase64,
+    };
+  }
+
   async history(
     ownerUserId: string,
     applicationId: string,
@@ -752,6 +809,7 @@ export class ApplicationsService implements ApplicationsApi {
       userEntries?: readonly UserEntry[];
       vaultSelections?: readonly VaultSelection[];
       form?: FormBinding;
+      resume?: "generate" | "uploaded";
     },
     idempotencyKey: string,
   ): Promise<Application> {
@@ -763,12 +821,14 @@ export class ApplicationsService implements ApplicationsApi {
       userEntries: snapshot.userEntries ?? [],
       form: snapshot.form ?? null,
       ...(snapshot.vaultSelections ? { vaultSelections: snapshot.vaultSelections } : {}),
+      ...(snapshot.resume ? { resume: snapshot.resume } : {}),
     });
     const result = await this.dependencies.store.createPacket({
       ownerUserId,
       applicationId,
       expectedRevision: snapshot.expectedRevision,
       idempotencyKey,
+      ...(snapshot.resume === "uploaded" ? { resume: "uploaded" as const } : {}),
       packet: {
         jobRevision: preparation.jobRevision,
         form: preparation.form,
@@ -1277,6 +1337,7 @@ export function toApiApplication(
           },
         }
       : {}),
+    ...(view.resumeGeneration ? { resumeGeneration: { ...view.resumeGeneration } } : {}),
     attempts: view.attempts.map(toApiAttempt),
     createdAt: view.application.createdAt.toISOString(),
     updatedAt: view.application.updatedAt.toISOString(),

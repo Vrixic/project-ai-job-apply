@@ -17,7 +17,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
  * - `artifact` adds one verified rendering of the requested format.
  */
 export type ResumeTailoringMode = "hash" | "preview" | "artifact";
-export type ResumeArtifactFormat = "docx" | "pdf";
+/** Generated resumes are delivered only as PDF. */
+export type ResumeArtifactFormat = "pdf";
 
 export interface ResumeTailoringRequest {
   kind: typeof RESUME_TAILORING_REQUEST_KIND;
@@ -55,9 +56,7 @@ export interface ResumeTailoringReady {
   sections?: TailoredSectionView[];
   artifact?: {
     format: ResumeArtifactFormat;
-    mediaType:
-      | "application/pdf"
-      | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    mediaType: "application/pdf";
     sha256: string;
     sizeBytes: number;
     contentBase64: string;
@@ -106,7 +105,7 @@ export function parseResumeTailoringRequest(value: unknown): ResumeTailoringRequ
     return null;
   }
   if (input.mode === "artifact") {
-    if (input.format !== "docx" && input.format !== "pdf") return null;
+    if (input.format !== "pdf") return null;
   } else if (input.format !== undefined) {
     return null;
   }

@@ -836,8 +836,25 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description One verified DOCX or PDF rendering of the tailored resume the current packet carries. It is refused with a stale-packet conflict unless the rendering's content hash equals the packet's resume hash, so the file a candidate downloads is exactly the one they reviewed. */
+        /** @description One verified PDF rendering of the tailored resume the current packet carries. Generated resumes are delivered only as PDF. It is refused with a stale-packet conflict unless the rendering's content hash equals the packet's resume hash, so the file a candidate downloads is exactly the one they reviewed. */
         get: operations["getApplicationResumeFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/applications/{applicationId}/resume/uploaded": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The candidate's own original uploaded resume in its original format, for the employer attachment. Owner-scoped and bound to the current packet: it is refused with a stale-packet conflict unless the file's SHA-256 equals the packet's resume hash, and with a conflict when the packet carries a generated resume instead. Files above 2 MiB are refused. The response is not cacheable and must not be persisted, logged or placed in a URL. */
+        get: operations["getApplicationUploadedResume"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2341,6 +2358,7 @@ export interface components {
             packetAvailability?: "withheld";
             currentPacket?: components["schemas"]["ApplicationPacket"];
             approval?: components["schemas"]["ApplicationApproval"];
+            resumeGeneration?: components["schemas"]["ApplicationResumeGeneration"];
             attempts: components["schemas"]["ApplicationAttempt"][];
             /** Format: date-time */
             createdAt: string;
@@ -2405,9 +2423,9 @@ export interface components {
         };
         ApplicationResumeFile: {
             /** @enum {string} */
-            format: "docx" | "pdf";
+            format: "pdf";
             /** @enum {string} */
-            mediaType: "application/pdf" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            mediaType: "application/pdf";
             fileName: string;
             /** @description SHA-256 of the file bytes. */
             sha256: string;
@@ -2418,6 +2436,55 @@ export interface components {
             /** @description Exact original memory generation and fixed expiry on the native resume path. Do not persist or cache this response; discard platform copies at expiry, logout, cancellation or confirmed submission. */
             temporaryMaterial?: components["schemas"]["ApplicationTemporaryMaterial"];
         };
+        /** @description Honest, value-free status of the generated resume for the current application packet. Derived from owner metadata only; it never carries content, task identifiers or provider detail. */
+        ApplicationResumeGeneration: {
+            /**
+             * @description not_requested: no generation was asked for the current packet. preparing: queued or running; a cold start typically takes one to two minutes. ready: a generated PDF is available until its fixed expiry. failed: generation ended without a resume or exceeded its bound; request it again. expired: the generated resume passed its fixed 30-minute expiry.
+             * @enum {string}
+             */
+            state: "not_requested" | "preparing" | "ready" | "failed" | "expired";
+            /**
+             * @description Present only when state is failed. no_resume: the candidate has no uploaded resume to tailor.
+             * @enum {string}
+             */
+            errorCode?: "no_resume" | "generation_failed" | "generation_timed_out";
+            /**
+             * Format: date-time
+             * @description When generation was requested for the current packet lineage. Absent when state is not_requested.
+             */
+            requestedAt?: string;
+        } & (unknown & unknown);
+        /** @description The candidate's own original uploaded resume, byte for byte, in its original format. Files above 2 MiB are refused rather than attached. */
+        ApplicationUploadedResumeFile: {
+            /** Format: uuid */
+            documentId: string;
+            fileName: string;
+            /** @enum {string} */
+            format: "pdf" | "docx";
+            mediaType: components["schemas"]["ResumeMediaType"];
+            /** @description SHA-256 of the original file bytes. Equals the current packet's resume hash. */
+            sha256: string;
+            sizeBytes: number;
+            contentBase64: string;
+        };
+        /** @description First-party website-to-extension arming message sent when the candidate presses Apply. It carries identifiers only: no credential, file, answer or URL. The extension reads the packet itself with its own session and derives which resume to use from the packet. */
+        ApplicationApplyIntent: {
+            /** @constant */
+            schema: "application-apply-intent.v1";
+            /** Format: uuid */
+            applicationId: string;
+            /** Format: uuid */
+            jobId: string;
+            /** Format: uuid */
+            packetId: string;
+            packetHash: string;
+        };
+        /** @description Acknowledges that the extension holds the identifiers in memory until this deadline. Not submission evidence. */
+        ApplicationApplyIntentReceipt: {
+            /** @constant */
+            schema: "application-apply-intent-receipt.v1";
+            expiresAtMs: number;
+        };
         /** @description Default-off first-party website-to-extension transport only; no REST route, credentials or submission authority. */
         ApplicationNativeTransferBegin: {
             /** @constant */
@@ -2427,8 +2494,8 @@ export interface components {
             /** Format: uuid */
             packetId: string;
             packetHash: string;
-            /** @enum {string} */
-            format: "pdf" | "docx";
+            /** @constant */
+            format: "pdf";
         };
         /** @description One-use transfer admission, at most 60 seconds and bounded by original material/approval deadlines. Runtime must bind Chrome sender and destination documents plus the current extension account. No token is carried. */
         ApplicationNativeTransferAdmission: {
@@ -2444,8 +2511,8 @@ export interface components {
             /** Format: uuid */
             approvalId: string;
             revision: number;
-            /** @enum {string} */
-            format: "pdf" | "docx";
+            /** @constant */
+            format: "pdf";
             materials: components["schemas"]["ApplicationTemporaryMaterial"][];
         };
         /** @description Transient native file with mandatory original generation metadata. Validate the exact resume/cover-letter producer shape by material kind, decoded bytes/hash/format and matching approved packet before use. Never send through Gateway, persist, log or renew expiry. */
@@ -2581,6 +2648,11 @@ export interface components {
                 value: string | number | boolean | (string | number | boolean)[] | null;
             }[];
             coverLetter?: components["schemas"]["RequestedApplicationCoverLetter"];
+            /**
+             * @description generate (default) also requests the one-off generated resume. uploaded builds the packet with the candidate's own uploaded resume and requests no generation.
+             * @enum {string}
+             */
+            resume?: "generate" | "uploaded";
             vaultSelections?: {
                 /** Format: uuid */
                 id: string;
@@ -2697,16 +2769,19 @@ export interface components {
             needsUserAction: boolean;
         };
         ApplicationExecutionFile: {
-            /** @enum {string} */
-            kind: "tailored_resume" | "cover_letter";
+            /**
+             * @description uploaded_resume is the candidate's own original file in its original format; generated kinds are temporary and carry their generation ID.
+             * @enum {string}
+             */
+            kind: "tailored_resume" | "cover_letter" | "uploaded_resume";
             /** Format: uuid */
-            generationId: string;
+            generationId?: string;
             /** @enum {string} */
             format: "pdf" | "docx";
             mediaType: string;
             sha256: string;
             contentBase64: string;
-        };
+        } & unknown;
         ApplicationExecutionInspect: {
             /** @constant */
             schema: "application-execution-inspect.v1";
@@ -4782,7 +4857,7 @@ export interface operations {
     getApplicationResumeFile: {
         parameters: {
             query: {
-                format: "docx" | "pdf";
+                format: "pdf";
             };
             header?: never;
             path: {
@@ -4803,6 +4878,34 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getApplicationUploadedResume: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped uploaded resume file */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationUploadedResumeFile"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

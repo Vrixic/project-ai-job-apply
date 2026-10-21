@@ -152,27 +152,27 @@ describe("resume tailoring service", () => {
     expect(result.matchedTerms).not.toContain("kubernetes-cluster-wishlist");
   });
 
-  it("renders and verifies the requested format, and never returns an unverified artifact", async () => {
+  it("renders and verifies a PDF, and never returns an unverified artifact", async () => {
     const { service } = serviceFor();
-    for (const format of ["docx", "pdf"] as const) {
-      const result = await service(request({ mode: "artifact", format }));
-      if (result.status !== "ready") throw new Error(`expected ready for ${format}`);
-      expect(result.artifact?.format).toBe(format);
-      expect(result.artifact?.sha256).toMatch(/^[a-f0-9]{64}$/u);
-      const artifactBytes = Buffer.from(result.artifact?.contentBase64 ?? "", "base64");
-      expect(artifactBytes.byteLength).toBeGreaterThan(0);
-      expect(createHash("sha256").update(artifactBytes).digest("hex")).toBe(
-        result.artifact?.sha256,
-      );
-      expect(Buffer.from(result.artifact?.contentBase64 ?? "", "base64").byteLength).toBe(
-        result.artifact?.sizeBytes,
-      );
-    }
-    const docx = await service(request({ mode: "artifact", format: "docx" }));
-    const pdf = await service(request({ mode: "artifact", format: "pdf" }));
-    if (docx.status !== "ready" || pdf.status !== "ready") throw new Error("expected ready");
-    // One approval binding for both renderings.
-    expect(docx.contentSha256).toBe(pdf.contentSha256);
+    const result = await service(request({ mode: "artifact", format: "pdf" }));
+    if (result.status !== "ready") throw new Error("expected ready");
+    expect(result.artifact?.format).toBe("pdf");
+    expect(result.artifact?.mediaType).toBe("application/pdf");
+    expect(result.artifact?.sha256).toMatch(/^[a-f0-9]{64}$/u);
+    const artifactBytes = Buffer.from(result.artifact?.contentBase64 ?? "", "base64");
+    expect(artifactBytes.byteLength).toBeGreaterThan(0);
+    expect(new TextDecoder().decode(artifactBytes.subarray(0, 5))).toBe("%PDF-");
+    expect(createHash("sha256").update(artifactBytes).digest("hex")).toBe(result.artifact?.sha256);
+    expect(artifactBytes.byteLength).toBe(result.artifact?.sizeBytes);
+  });
+
+  it("delivers generated resumes only as PDF: a Word request is invalid", async () => {
+    const { service } = serviceFor();
+    expect(await service(request({ mode: "artifact", format: "docx" as never }))).toEqual({
+      schema: RESUME_TAILORING_RESULT_SCHEMA,
+      status: "unavailable",
+      reason: "invalid_request",
+    });
   });
 
   it("reports no resume for an owner without a parsed resume and never reads another owner's", async () => {

@@ -24,6 +24,13 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 
 ## D3 — High-quality application preparation
 
+2026-10-20: D3-147 to D3-151 ([ADR-050](../../adr/050-generate-then-apply-flow.md)) implement and
+locally test the Generate-or-Apply flow: BFF material reads without a popup sign-in, server-derived
+generation states with retry, Apply as the approval act, PDF-only generated resumes, and an
+uploaded-resume fallback with extension arming. Nothing is deployed or accepted; release order,
+a governed native image, live acceptance and security/privacy review remain. D3 stays In progress.
+[Evidence](evidence/d3-generate-then-apply-flow-2026-10-20.md).
+
 2026-10-17: D3-139 to D3-146 (PRs #687-#694)
 fix eight defects found in installed Chrome and hosted testing (boundary size, empty KMS context,
 Ashby/Lever form pages, challenge pages, job no-store, radio labels, native digest handoff, clock skew).

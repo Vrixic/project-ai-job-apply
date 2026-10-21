@@ -30,6 +30,8 @@ export function createNativeResumeTransport(options: NativeResumeTransportOption
     async read(format, signal) {
       if (!read || typeof version !== "string" || version.length < 1 || version.length > 32)
         throw Error("NativeMemoryTransportUnavailable");
+      // Generated resumes are delivered only as PDF.
+      if (format !== "preview" && format !== "pdf") throw Error("NativeMemoryTransportUnavailable");
       const held = await read(reference, format, signal);
       let value: ApplicationResumePreview | ApplicationResumeFile | undefined;
       const release = () => {

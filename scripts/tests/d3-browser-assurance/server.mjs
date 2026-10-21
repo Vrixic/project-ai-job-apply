@@ -14,7 +14,9 @@ function assertOutputBoundary() {
   }
 }
 
-export async function startD3BrowserAssuranceServer() {
+export async function startD3BrowserAssuranceServer(options = {}) {
+  const indexFile = options.indexFile ?? "index.html";
+  const port = options.port ?? Number(process.env.D3_BROWSER_ASSURANCE_PORT ?? 4177);
   assertOutputBoundary();
   await rm(output, { recursive: true, force: true });
   await mkdir(output, { recursive: true });
@@ -31,11 +33,11 @@ export async function startD3BrowserAssuranceServer() {
     legalComments: "none",
     define: {
       "process.env":
-        '{"NODE_ENV":"test","NEXT_PUBLIC_APPLICATION_EXTENSION_HANDOFF":"enabled","NEXT_PUBLIC_APPLICATIONS_UI":"enabled","NEXT_PUBLIC_COVER_LETTER_PREPARATION_UI":"enabled","NEXT_PUBLIC_NATIVE_MATERIAL_UI":"enabled","NEXT_PUBLIC_NATIVE_AUTH0_DOMAIN":"identity.example.test","NEXT_PUBLIC_NATIVE_AUTH0_CLIENT_ID":"synthetic-client","NEXT_PUBLIC_NATIVE_MATERIAL_BASE_HOST":"materials.example.test","NEXT_PUBLIC_APPLICATION_EXTENSION_TRANSFER_ENABLED":"true","NEXT_PUBLIC_APPLICATION_EXTENSION_ID":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}',
+        '{"NODE_ENV":"test","NEXT_PUBLIC_APPLICATION_EXTENSION_HANDOFF":"enabled","NEXT_PUBLIC_APPLICATIONS_UI":"enabled","NEXT_PUBLIC_COVER_LETTER_PREPARATION_UI":"enabled","NEXT_PUBLIC_NATIVE_MATERIAL_UI":"enabled","NEXT_PUBLIC_APPLICATION_EXTENSION_TRANSFER_ENABLED":"true","NEXT_PUBLIC_APPLICATION_EXTENSION_ID":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}',
     },
   });
   const assets = new Map([
-    ["/", [await readFile(resolve(gallery, "index.html")), "text/html; charset=utf-8"]],
+    ["/", [await readFile(resolve(gallery, indexFile)), "text/html; charset=utf-8"]],
     [
       "/bundle.js",
       [await readFile(resolve(output, "bundle.js")), "text/javascript; charset=utf-8"],
@@ -60,7 +62,7 @@ export async function startD3BrowserAssuranceServer() {
   });
   await new Promise((resolveListen, rejectListen) => {
     server.once("error", rejectListen);
-    server.listen(4177, "127.0.0.1", resolveListen);
+    server.listen(port, "127.0.0.1", resolveListen);
   });
   const popupServer = createServer((_request, response) => {
     response.writeHead(200, {
@@ -79,7 +81,7 @@ export async function startD3BrowserAssuranceServer() {
   if (!popupAddress || typeof popupAddress === "string")
     throw Error("Synthetic popup port unavailable");
   return {
-    origin: "http://127.0.0.1:4177",
+    origin: `http://127.0.0.1:${port}`,
     popupOrigin: `http://127.0.0.1:${popupAddress.port}`,
     async close() {
       await new Promise((resolveClose) => popupServer.close(resolveClose));

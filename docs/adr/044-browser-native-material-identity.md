@@ -1,6 +1,6 @@
 # ADR-044: Separate browser identity for native material reads
 
-Status: Owner-selected design; locally verified implementation; live activation pending
+Status: Superseded by [ADR-050](050-generate-then-apply-flow.md) (2026-10-20): generated material is read through the authenticated BFF with no browser-held credential. Retained as the record of the earlier popup design.
 Date: 2026-10-09
 
 ## Decision

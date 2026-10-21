@@ -259,6 +259,33 @@ describe("Applications browser boundary", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("forwards an uploaded-resume preparation and refuses any other resume option", async () => {
+    const forwarded = harness(() => json(application({ status: "review_required" }), 201));
+    const accepted = await applicationsRoute(
+      "preparePacket",
+      post(`/api/platform/applications/${APP}/packets`, {
+        expectedRevision: 1,
+        resume: "uploaded",
+      }),
+      { applicationId: APP },
+      forwarded.deps,
+    );
+    expect(accepted.status).toBe(201);
+    const init = (forwarded.fetch.mock.calls[0] as unknown[])[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({ expectedRevision: 1, resume: "uploaded" });
+    for (const resume of ["docx", "tailored", 1, null]) {
+      const refused = harness(() => json(application(), 201));
+      const response = await applicationsRoute(
+        "preparePacket",
+        post(`/api/platform/applications/${APP}/packets`, { expectedRevision: 1, resume }),
+        { applicationId: APP },
+        refused.deps,
+      );
+      expect(response.status).toBe(400);
+      expect(refused.fetch).not.toHaveBeenCalled();
+    }
+  });
+
   it("rejects malformed identifiers and any query outside the history allowlist", async () => {
     const { fetch, deps } = harness(() => json(application()));
     const get = (url: string) => new Request(url, { method: "GET" });
@@ -500,6 +527,7 @@ describe("Applications browser boundary", () => {
     for (const search of [
       "",
       "?format=exe",
+      "?format=docx",
       "?format=pdf&format=docx",
       "?format=pdf&x=1",
       "?x=pdf",

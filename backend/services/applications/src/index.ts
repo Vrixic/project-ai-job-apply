@@ -29,10 +29,12 @@ export type {
   RestrictedPacketExportReference,
   RestrictedPacketExportScope,
 } from "./restricted-packet-export.js";
+export * from "./resume-generation-state.js";
 export * from "./resume-preview.js";
 export * from "./service.js";
 export * from "./state-machine.js";
 export * from "./store.js";
 export * from "./temporary-cover-letter-read.js";
 export * from "./temporary-response.js";
+export * from "./uploaded-resume.js";
 export * from "./vault.js";

@@ -70,7 +70,12 @@ export function plainHttpsUrl(value: string): string | undefined {
 }
 
 /** Entire response, including streaming, has one deadline and a byte cap. Never follows redirects. */
-export async function readJson(url: URL, token: string, signal?: AbortSignal): Promise<unknown> {
+export async function readJson(
+  url: URL,
+  token: string,
+  signal?: AbortSignal,
+  maximumBytes = 512 * 1024,
+): Promise<unknown> {
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
@@ -106,7 +111,7 @@ export async function readJson(url: URL, token: string, signal?: AbortSignal): P
       if (controller.signal.aborted) throw new Error(HANDOFF_FAILURE);
       if (chunk.done) break;
       bytes += chunk.value.byteLength;
-      if (bytes > 512 * 1024) {
+      if (bytes > maximumBytes) {
         chunk.value.fill(0);
         throw new Error(HANDOFF_FAILURE);
       }

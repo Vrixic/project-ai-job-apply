@@ -62,9 +62,12 @@ function failureMessage(status: number): string {
 export function JobDetailPanel({
   jobId,
   authenticated,
+  onSubmitted,
 }: {
   jobId: string;
   authenticated: boolean;
+  /** Called once the candidate's submission for this job is logged. */
+  onSubmitted?: () => void;
 }) {
   const panelId = useId();
   const headingId = `${panelId}-heading`;
@@ -309,6 +312,7 @@ export function JobDetailPanel({
                   <ApplicationsWorkspace
                     jobId={result.detail.id}
                     applyUrl={result.detail.sources[0]?.canonicalUrl}
+                    {...(onSubmitted ? { onApplied: onSubmitted } : {})}
                   />
                 ) : null}
               </>

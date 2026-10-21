@@ -289,11 +289,18 @@ use and a separately reviewed deployment enables the panel.
 
 ## Native material sign-out cleanup
 
-Application BFF preparation reads and resume/cover-letter location reads return validated scalar
-metadata only. A 202 packet response is accepted only for an explicit cover-letter request and
-is validated as a preparation operation. Browser-native identity transport and cover-letter
-preview/download UI remain unfinished. Generated-material review requires an exact available
-preview; expiry blocks approval and material use without renewing the original deadline.
+Application BFF preparation reads return validated scalar metadata only. A 202 packet response
+is accepted only for an explicit cover-letter request and is validated as a preparation operation.
+
+Generate-then-apply ([ADR-050](../../docs/adr/050-generate-then-apply-flow.md)): the job page offers
+**Generate resume** (a loading step that follows the server `resumeGeneration` state to ready, failed
+with retry, or expired with one-click regenerate) or **Apply** directly with the uploaded resume.
+Apply opens the employer page and arms the extension; the candidate never picks a file. Generated
+resume and cover-letter content is read through the same-origin BFF routes
+`/api/platform/applications/{id}/{resume|cover-letter}/content`, which use the server-held session
+token, so there is no popup sign-in or browser-held material credential. Set the server-only
+`NATIVE_MATERIAL_BASE_HOST` (reviewed native DNS/TLS base host) to enable them. Generated resumes
+are PDF only. Expiry blocks material use without renewing the original deadline.
 
 NATIVE_MATERIAL_LOGOUT_ENABLED defaults off. Enable it only after the managed owner-withdrawal
 route and durable cleanup worker are accepted, with AUTH0_APPLICATIONS_SCOPES=enabled and the
@@ -319,8 +326,9 @@ activation or phase-completion claim follows from the source flag or local mock-
 
 ## Manual extension handoff (default off)
 
-`NEXT_PUBLIC_APPLICATION_EXTENSION_HANDOFF=enabled` offers an opaque application/job review link
-only for a current approved, unexpired packet. The separately configured unpacked extension reads
+`NEXT_PUBLIC_APPLICATION_EXTENSION_HANDOFF=enabled` allows the jobs page to reopen an opaque
+application/job review link. The workspace no longer shows a copy-link panel after Apply (the
+extension is armed by the apply intent instead, ADR-050). The separately configured unpacked extension reads
 that packet with its own account and copies candidate-approved answers on the matching employer
 page. Generated documents remain in this native browser workspace. The extension never submits.
 An exact `/jobs?application=UUID&job=UUID` link reopens that owner-scoped application; a failed or

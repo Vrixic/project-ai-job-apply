@@ -311,6 +311,30 @@ export async function executeApprovedApplication(options: {
     )
       throw unavailable();
     originalPacket = structuredClone(application.currentPacket);
+    // The candidate's own original must be exactly the file the approved packet binds, and is
+    // checked before any attempt exists: a mismatch refuses here with no employer or server effect.
+    const uploadedFiles = options.owned.files.filter((file) => file.kind === "uploaded_resume");
+    if (
+      uploadedFiles.length > 1 ||
+      (selection.materials.length === 0 && uploadedFiles.length !== 1) ||
+      uploadedFiles.some(
+        (file) =>
+          selection.materials.length > 0 ||
+          !originalPacket?.artifactHashes.resume ||
+          file.generationId !== undefined ||
+          file.sha256 !== originalPacket.artifactHashes.resume ||
+          file.sha256 !== selection.uploadedResume?.sha256,
+      )
+    )
+      throw unavailable();
+    for (const file of uploadedFiles) {
+      const digest = new Uint8Array(
+        await bounded(crypto.subtle.digest("SHA-256", file.bytes.slice())),
+      );
+      const hash = [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+      digest.fill(0);
+      if (hash !== file.sha256) throw unavailable();
+    }
     // Saved answers can expire sooner than approval/materials. Only shorten the original lease.
     for (const field of originalPacket.fields) {
       const validUntil = field.vaultReference?.validUntilEpochMs;
@@ -437,16 +461,18 @@ export async function executeApprovedApplication(options: {
         })),
       files: options.owned.files.map((file) => ({
         kind: file.kind,
-        generationId: file.generationId,
+        ...(file.generationId ? { generationId: file.generationId } : {}),
         format: file.format,
         mediaType: file.mediaType,
         sha256: file.sha256,
         contentBase64: btoa(Array.from(file.bytes, (byte) => String.fromCharCode(byte)).join("")),
       })),
     };
+    // The candidate's own original (up to 2 MiB) may exceed the generated-file wire limit.
     if (
       !validateApplicationExecutionCommand(command) ||
-      new TextEncoder().encode(JSON.stringify(command)).byteLength > 850_000
+      new TextEncoder().encode(JSON.stringify(command)).byteLength >
+        (uploadedFiles.length ? 3_700_000 : 850_000)
     )
       throw unavailable();
     chrome.runtime.onMessage.addListener(proofListener);

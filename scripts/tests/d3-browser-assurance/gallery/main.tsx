@@ -1,12 +1,10 @@
-import type { Application } from "@ai-job-apply/api-contracts";
+import type { Application, ApplicationTemporaryMaterial } from "@ai-job-apply/api-contracts";
 import { validateApplicationNativeTransferCommit } from "@ai-job-apply/api-contracts/browser-validators";
 import { createRoot } from "react-dom/client";
-import { NativeMaterialSession } from "../../../../frontend/web/lib/native-material-session";
 import "../../../../frontend/web/app/styles.css";
 import { ApplicationsWorkspace } from "../../../../frontend/web/app/applications-workspace";
 import { AppliedJobsPanel } from "../../../../frontend/web/app/applied-jobs-panel";
 import { JobSearchForm } from "../../../../frontend/web/app/job-search-form";
-import { ResumePreviewSection } from "../../../../frontend/web/app/resume-preview-section";
 import { MaterialSignOutSignal } from "../../../../frontend/web/app/signed-out/material-sign-out-signal";
 
 const APP = "00000000-0000-7000-8000-000000000001";
@@ -93,65 +91,6 @@ const review = {
 } as unknown as Application;
 let current: Application | undefined;
 let coverLetterScenario = false;
-let nativeScenario = false;
-// Synthetic Chrome receiver for actual UI checks. No installed-extension acceptance or ATS effect.
-const transferCalls: string[] = [];
-let admittedTransfer: unknown;
-Object.defineProperty(window, "chrome", {
-  configurable: true,
-  value: {
-    runtime: {
-      sendMessage(target: string, message: { schema: string }, callback: (value: unknown) => void) {
-        if (target !== "a".repeat(32) || !current?.currentPacket || !current.approval) {
-          callback({ error: "unavailable" });
-          return;
-        }
-        transferCalls.push(message.schema);
-        if (message.schema === "application-native-transfer-begin.v1") {
-          const packet = current.currentPacket;
-          admittedTransfer = {
-            ...message,
-            schema: "application-native-transfer-admission.v1",
-            nonce: "c".repeat(64),
-            expiresAtMs: Math.min(
-              Date.now() + 30_000,
-              ...(packet.temporaryMaterials ?? []).map((material) => material.expiresAtMs),
-            ),
-            approvalId: current.approval.id,
-            revision: current.revision,
-            materials: packet.temporaryMaterials,
-          };
-          callback(admittedTransfer);
-        } else if (message.schema === "application-native-transfer-commit.v1") {
-          if (
-            !validateApplicationNativeTransferCommit(message) ||
-            JSON.stringify(message.admission) !== JSON.stringify(admittedTransfer)
-          ) {
-            callback({ error: "unavailable" });
-            return;
-          }
-          const admission = message.admission;
-          admittedTransfer = undefined;
-          callback({
-            schema: "application-native-transfer-receipt.v1",
-            nonce: admission.nonce,
-            applicationId: admission.applicationId,
-            packetId: admission.packetId,
-            packetHash: admission.packetHash,
-            expiresAtMs: Math.min(
-              Date.parse(current.approval.expiresAt),
-              ...admission.materials.map((material) => material.expiresAtMs),
-            ),
-          });
-        } else {
-          admittedTransfer = undefined;
-          callback({ ok: true });
-        }
-      },
-    },
-  },
-});
-Object.assign(window, { readD3TransferCalls: () => [...transferCalls] });
 let savedAnswerScenario = false;
 let preparationReads = 0;
 const PREPARATION = "00000000-0000-7000-8000-000000000020";
@@ -200,87 +139,109 @@ const respond = (body: unknown, status = 200) =>
     },
   });
 
-const syntheticFetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
-  const url = String(input);
+const record = (url: string, init: RequestInit) => {
   calls.push({
     url,
     method: init.method ?? "GET",
     ...(init.body ? { body: JSON.parse(String(init.body)) } : {}),
     ...((init.headers as Record<string, string> | undefined)?.["idempotency-key"]
-      ? {
-          idempotencyKey: (init.headers as Record<string, string>)["idempotency-key"],
-        }
+      ? { idempotencyKey: (init.headers as Record<string, string>)["idempotency-key"] }
       : {}),
   });
-  if (nativeScenario && (url.includes("/location?") || url.startsWith("https://"))) {
+};
+
+// Synthetic Chrome receiver for actual UI checks. No installed-extension acceptance or ATS effect.
+// The candidate "opens the extension on the employer page" by setting `selected` from the test.
+const extensionMessages: Array<{ schema: string; keys: string[] }> = [];
+const extension = { selected: false, answerIntents: true, admission: undefined as unknown };
+let extensionApplication: () => Application | undefined = () => current;
+Object.defineProperty(window, "chrome", {
+  configurable: true,
+  value: {
+    runtime: {
+      sendMessage(target: string, message: { schema: string }, callback: (value: unknown) => void) {
+        const app = extensionApplication();
+        extensionMessages.push({ schema: message.schema, keys: Object.keys(message).sort() });
+        if (target !== "a".repeat(32)) return callback({ error: "unavailable" });
+        if (message.schema === "application-apply-intent.v1") {
+          if (!extension.answerIntents) return callback(undefined);
+          return callback({
+            schema: "application-apply-intent-receipt.v1",
+            expiresAtMs: Date.now() + 600_000,
+          });
+        }
+        const packet = app?.currentPacket;
+        if (!packet || !app?.approval) return callback({ error: "unavailable" });
+        if (message.schema === "application-native-transfer-begin.v1") {
+          if (!extension.selected) return callback({ error: "unavailable" });
+          extension.admission = {
+            ...message,
+            schema: "application-native-transfer-admission.v1",
+            nonce: "c".repeat(64),
+            expiresAtMs: Math.min(
+              Date.now() + 30_000,
+              ...(packet.temporaryMaterials ?? []).map((material) => material.expiresAtMs),
+            ),
+            approvalId: app.approval.id,
+            revision: app.revision,
+            materials: packet.temporaryMaterials,
+          };
+          return callback(extension.admission);
+        }
+        if (message.schema === "application-native-transfer-commit.v1") {
+          const commit = message as unknown;
+          if (
+            !validateApplicationNativeTransferCommit(commit) ||
+            JSON.stringify(commit.admission) !== JSON.stringify(extension.admission)
+          )
+            return callback({ error: "unavailable" });
+          const admission = commit.admission;
+          extension.admission = undefined;
+          return callback({
+            schema: "application-native-transfer-receipt.v1",
+            nonce: admission.nonce,
+            applicationId: admission.applicationId,
+            packetId: admission.packetId,
+            packetHash: admission.packetHash,
+            expiresAtMs: Math.min(
+              Date.parse(app.approval.expiresAt),
+              ...admission.materials.map((material) => material.expiresAtMs),
+            ),
+          });
+        }
+        extension.admission = undefined;
+        return callback({ ok: true });
+      },
+    },
+  },
+});
+Object.assign(window, {
+  readD3ExtensionMessages: () => structuredClone(extensionMessages),
+  setD3ExtensionSelected: (value: boolean) => {
+    extension.selected = value;
+  },
+});
+
+const syntheticFetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+  const url = String(input);
+  record(url, init);
+  if (url.includes("/cover-letter/content")) {
     const material = current?.currentPacket?.temporaryMaterials?.find(
-      (value) =>
-        value.kind === (url.includes("/cover-letter") ? "cover_letter" : "tailored_resume"),
+      (value) => value.kind === "cover_letter",
     );
-    if (!material || !current?.currentPacket) return respond({}, 404);
-    if (url.includes("/location?"))
-      return respond({
-        schemaVersion: 1,
-        packetId: PACKET,
-        packetHash: HASH,
-        temporaryMaterial: material,
-        origin: `https://${ATTEMPT}.materials.example.test:8443`,
-      });
-    if (
-      init.credentials !== "omit" ||
-      (init.headers as Record<string, string>).authorization !==
-        "Bearer synthetic-native-browser-token"
-    )
-      return respond({}, 403);
-    if (url.includes("/file?")) {
-      const format = new URL(url).searchParams.get("format");
-      const bytes = new TextEncoder().encode(
-        format === "pdf" ? "%PDF-Synthetic approved file" : "PKSynthetic approved file",
-      );
-      const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))]
-        .map((value) => value.toString(16).padStart(2, "0"))
-        .join("");
-      return respond({
-        format,
-        mediaType:
-          format === "pdf"
-            ? "application/pdf"
-            : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        fileName: `synthetic.${format}`,
-        sha256: hash,
-        sizeBytes: bytes.length,
-        contentSha256: HASH,
-        contentBase64: btoa(new TextDecoder().decode(bytes)),
-        temporaryMaterial: material,
-      });
-    }
-    return respond(
-      material.kind === "tailored_resume"
-        ? {
-            status: "ready",
-            matchesPacket: true,
-            contentSha256: HASH,
-            temporaryMaterial: material,
-            sections: [
-              {
-                kind: "experience",
-                entries: [{ lines: ["Native synthetic resume preview"], bullets: [] }],
-              },
-            ],
-          }
-        : {
-            status: "ready",
-            matchesPacket: true,
-            documentId: PREPARATION,
-            version: 1,
-            contentSha256: HASH,
-            temporaryMaterial: material,
-            reviewRequired: true,
-            paragraphs: [{ text: "Native synthetic grounded cover letter", factIds: [JOB] }],
-            model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
-            promptVersion: "synthetic.v1",
-          },
-    );
+    if (!material) return respond({}, 404);
+    return respond({
+      status: "ready",
+      matchesPacket: true,
+      documentId: PREPARATION,
+      version: 1,
+      contentSha256: HASH,
+      temporaryMaterial: material,
+      reviewRequired: true,
+      paragraphs: [{ text: "Native synthetic grounded cover letter", factIds: [JOB] }],
+      model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+      promptVersion: "synthetic.v1",
+    });
   }
   if (url.endsWith("/jobs/search")) return respond({ items: [job] });
   if (url === "/api/platform/restricted-answers")
@@ -337,27 +298,14 @@ const syntheticFetch = (async (input: RequestInfo | URL, init: RequestInit = {})
       } as Application;
       return respond(current, 201);
     }
-    if (coverLetterScenario || nativeScenario) {
+    if (coverLetterScenario) {
       const completedAtMs = Date.now();
       current = {
         ...review,
         currentPacket: {
           ...review.currentPacket,
-          artifactHashes: { coverLetter: HASH, ...(nativeScenario ? { resume: HASH } : {}) },
+          artifactHashes: { coverLetter: HASH },
           temporaryMaterials: [
-            ...(nativeScenario
-              ? [
-                  {
-                    schemaVersion: 1 as const,
-                    kind: "tailored_resume" as const,
-                    generationId: ATTEMPT,
-                    version: 1,
-                    contentSha256: HASH,
-                    completedAtMs,
-                    expiresAtMs: completedAtMs + 1_800_000,
-                  },
-                ]
-              : []),
             {
               schemaVersion: 1,
               kind: "cover_letter",
@@ -391,24 +339,23 @@ const syntheticFetch = (async (input: RequestInfo | URL, init: RequestInit = {})
   }
   if (url === `/api/platform/applications/${APP}`) return respond(current);
   if (url.endsWith("/approval")) {
-    if (savedAnswerScenario && current?.currentPacket && approved.approval) {
+    if (current?.currentPacket && approved.approval) {
       const request = JSON.parse(String(init.body));
       current = {
-        ...current,
+        ...(savedAnswerScenario ? current : approved),
         status: "approved",
-        revision: current.revision + 1,
+        revision: (current.revision ?? 2) + 1,
         currentAction: "ready_to_submit",
+        currentPacket: current.currentPacket,
         approval: {
           ...approved.approval,
           packetHash: current.currentPacket.packetHash,
           acknowledgedFieldKeys: request.acknowledgedFieldKeys,
         },
-      };
+      } as Application;
       return respond(current);
     }
-    current = nativeScenario
-      ? ({ ...approved, currentPacket: current?.currentPacket } as Application)
-      : approved;
+    current = approved;
     return respond(current);
   }
   if (url.endsWith("/manual-submissions")) {
@@ -457,12 +404,261 @@ const syntheticFetch = (async (input: RequestInfo | URL, init: RequestInit = {})
   return respond({ code: "application_not_found" }, 404);
 }) as typeof globalThis.fetch;
 
+type GenerationMode = "ready" | "failed" | "no_resume" | "never";
+
+/**
+ * A stateful stand-in for the authenticated BFF for the generate-then-apply journey. The real
+ * workspace, preview, polling, hand-off and extension-transfer code runs against it; only the
+ * network, identity and native process are simulated.
+ */
+function createApplyBff(options: { mode: GenerationMode; pollsUntilResolved: number }) {
+  let app: Application | undefined;
+  let revision = 1;
+  let packetCounter = 0;
+  let polls = 0;
+  let material: ApplicationTemporaryMaterial | undefined;
+  const pdf = new TextEncoder().encode(
+    "%PDF-1.4 synthetic tailored resume for the browser journey",
+  );
+  let pdfSha256 = "";
+  void crypto.subtle.digest("SHA-256", pdf).then((digest) => {
+    pdfSha256 = [...new Uint8Array(digest)]
+      .map((value) => value.toString(16).padStart(2, "0"))
+      .join("");
+  });
+  const base64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
+  const packet = (resume: "generate" | "uploaded") => {
+    packetCounter += 1;
+    const hash = `${packetCounter.toString(16).padStart(2, "0")}${"e".repeat(62)}`;
+    return {
+      id: `00000000-0000-7000-8000-0000000001${String(packetCounter).padStart(2, "0")}`,
+      version: packetCounter,
+      packetHash: hash,
+      jobRevision: hash,
+      artifactHashes: resume === "uploaded" ? { resume: "d".repeat(64) } : {},
+      fields: [
+        {
+          fieldKey: "contact.email",
+          value: "candidate@example.test",
+          origin: "confirmed_fact",
+          sourceFactIds: [PACKET],
+          confidence: 1,
+          disposition: "auto",
+          reasons: [],
+          requiresReview: false,
+        },
+        ...(resume === "uploaded"
+          ? [
+              {
+                fieldKey: "documents.resume",
+                value: "d".repeat(64),
+                origin: "confirmed_fact",
+                sourceFactIds: [PACKET],
+                confidence: 1,
+                disposition: "review",
+                reasons: ["explicit_each_time"],
+                requiresReview: true,
+              },
+            ]
+          : []),
+      ],
+      createdAt: new Date().toISOString(),
+    };
+  };
+  const next = (status: Application["status"], extras: Record<string, unknown> = {}) => {
+    revision += 1;
+    const now = new Date().toISOString();
+    return {
+      id: APP,
+      canonicalJobId: JOB,
+      status,
+      revision,
+      currentAction:
+        status === "approved"
+          ? "ready_to_submit"
+          : status === "review_required"
+            ? "review_and_approve"
+            : status === "takeover"
+              ? "complete_manually"
+              : status === "applied"
+                ? "none"
+                : "prepare_packet",
+      attempts: [],
+      createdAt: now,
+      updatedAt: now,
+      ...extras,
+    } as unknown as Application;
+  };
+  const resolve = () => {
+    const generation = app?.resumeGeneration;
+    if (!app?.currentPacket || generation?.state !== "preparing") return;
+    polls += 1;
+    if (polls < options.pollsUntilResolved || options.mode === "never") return;
+    const requestedAt = generation.requestedAt;
+    if (options.mode === "ready") {
+      material = {
+        schemaVersion: 1,
+        kind: "tailored_resume",
+        generationId: ATTEMPT,
+        version: 1,
+        contentSha256: HASH,
+        completedAtMs: Date.now(),
+        expiresAtMs: Date.now() + 1_800_000,
+      };
+      const generated = packet("generate");
+      generated.artifactHashes = { resume: HASH };
+      generated.fields.push({
+        fieldKey: "documents.resume",
+        value: HASH,
+        origin: "generated",
+        sourceFactIds: [],
+        confidence: 1,
+        disposition: "review",
+        reasons: ["explicit_each_time", "generated_content"],
+        requiresReview: true,
+      });
+      app = next("review_required", {
+        currentPacket: { ...generated, temporaryMaterials: [material] },
+        resumeGeneration: { state: "ready", requestedAt },
+      });
+      return;
+    }
+    app = next("review_required", {
+      currentPacket: app.currentPacket,
+      resumeGeneration: {
+        state: "failed",
+        errorCode: options.mode === "no_resume" ? "no_resume" : "generation_failed",
+        requestedAt,
+      },
+    });
+  };
+  extensionApplication = () => app;
+  const fetchApply = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const url = String(input);
+    if (!url.startsWith("/api/platform/applications")) return syntheticFetch(input, init);
+    record(url, init);
+    const method = init.method ?? "GET";
+    const body = init.body ? JSON.parse(String(init.body)) : undefined;
+    if (url === "/api/platform/applications/search") return respond({ items: app ? [app] : [] });
+    if (url === "/api/platform/applications" && method === "POST") {
+      app = next("preparing");
+      return respond(app, 201);
+    }
+    if (!app || !url.startsWith(`/api/platform/applications/${APP}`))
+      return respond({ code: "application_not_found" }, 404);
+    const rest = url.slice(`/api/platform/applications/${APP}`.length);
+    if (rest === "" && method === "GET") {
+      resolve();
+      return respond(app);
+    }
+    if (rest === "/packets" && method === "POST") {
+      const resume = body.resume === "uploaded" ? "uploaded" : "generate";
+      polls = 0;
+      app = next("review_required", {
+        currentPacket: packet(resume),
+        ...(resume === "generate"
+          ? { resumeGeneration: { state: "preparing", requestedAt: new Date().toISOString() } }
+          : {}),
+      });
+      return respond(app, 201);
+    }
+    if (rest === "/reopen" && method === "POST") {
+      app = next("review_required", { currentPacket: app.currentPacket });
+      return respond(app);
+    }
+    if (rest === "/approval" && method === "POST") {
+      const current = app.currentPacket;
+      if (!current || body.packetHash !== current.packetHash)
+        return respond({ code: "application_approval_refused" }, 409);
+      const missing = current.fields.filter(
+        (field) => field.requiresReview && !body.acknowledgedFieldKeys.includes(field.fieldKey),
+      );
+      if (missing.length) return respond({ code: "application_approval_refused" }, 409);
+      app = next("approved", {
+        currentPacket: current,
+        ...(app.resumeGeneration ? { resumeGeneration: app.resumeGeneration } : {}),
+        approval: {
+          id: "00000000-0000-7000-8000-000000000011",
+          packetHash: current.packetHash,
+          approvedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 1_800_000).toISOString(),
+          acknowledgedFieldKeys: body.acknowledgedFieldKeys,
+        },
+      });
+      return respond(app);
+    }
+    if (rest === "/manual-submissions" && method === "POST") {
+      app = next("takeover", {
+        currentPacket: app.currentPacket,
+        attempts: takenOver.attempts,
+      });
+      return respond({ outcome: "started", attemptId: ATTEMPT, application: app });
+    }
+    if (rest.endsWith("/reconciliation") && method === "POST") {
+      app = next("applied", { currentPacket: app.currentPacket, attempts: applied.attempts });
+      return respond(app);
+    }
+    if (rest.startsWith("/resume/content") && method === "GET") {
+      const query = new URL(url, location.origin).searchParams;
+      if (
+        !app.currentPacket ||
+        !material ||
+        query.get("packetHash") !== app.currentPacket.packetHash
+      )
+        return respond({ code: "application_packet_stale" }, 409);
+      if (query.get("format") === "pdf")
+        return respond({
+          format: "pdf",
+          mediaType: "application/pdf",
+          fileName: "tailored-resume.pdf",
+          sha256: pdfSha256,
+          sizeBytes: pdf.byteLength,
+          contentSha256: HASH,
+          contentBase64: base64(pdf),
+          temporaryMaterial: material,
+        });
+      return respond({
+        status: "ready",
+        matchesPacket: true,
+        tailoringVersion: "synthetic.v1",
+        contentSha256: HASH,
+        temporaryMaterial: material,
+        matchedTerms: ["typescript"],
+        sections: [
+          {
+            kind: "experience",
+            heading: "Experience",
+            entries: [
+              {
+                lines: ["Senior Engineer, Example Co"],
+                bullets: [
+                  {
+                    text: "Built the billing service",
+                    change: "moved_up",
+                    matchedTerms: ["billing"],
+                  },
+                  { text: "Mentored two engineers", change: "kept" },
+                  { text: "Organised the office party", change: "omitted" },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+    }
+    return respond({ code: "application_not_found" }, 404);
+  }) as typeof globalThis.fetch;
+  return fetchApply;
+}
+
 declare global {
   interface Window {
     readD3AssuranceCalls(): RecordedCall[];
-    showD3ExpiryPreview(): void;
+    readD3ExtensionMessages(): Array<{ schema: string; keys: string[] }>;
+    setD3ExtensionSelected(value: boolean): void;
+    setD3ExtensionAnswers(value: boolean): void;
     showD3CoverLetterPreparation(): void;
-    showD3NativeJourney(): void;
+    showD3ApplyJourney(mode?: GenerationMode, pollsUntilResolved?: number): void;
     showD3SignedOut(): void;
     showD3SavedAnswerJourney(): void;
     showD3WithdrawalRecovery(status: "approved" | "takeover"): void;
@@ -470,6 +666,9 @@ declare global {
 }
 
 window.readD3AssuranceCalls = () => structuredClone(calls);
+window.setD3ExtensionAnswers = (value) => {
+  extension.answerIntents = value;
+};
 window.fetch = syntheticFetch;
 
 const container = document.querySelector<HTMLDivElement>("#root");
@@ -479,7 +678,6 @@ window.showD3SavedAnswerJourney = () => {
   current = review;
   savedAnswerScenario = true;
   coverLetterScenario = false;
-  nativeScenario = false;
   const source = job.sources[0];
   if (!source) throw new Error("Missing synthetic source");
   source.canonicalUrl = "https://employer.example/jobs/synthetic";
@@ -490,6 +688,7 @@ window.showD3SavedAnswerJourney = () => {
       <ApplicationsWorkspace
         key="saved-answer-journey"
         jobId={JOB}
+        applyUrl="https://employer.example/jobs/synthetic"
         savedAnswerSelectionEnabled
         fetchImplementation={syntheticFetch}
       />
@@ -513,11 +712,7 @@ window.showD3WithdrawalRecovery = (status) => {
   calls.length = 0;
   const recoveryFetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = String(input);
-    calls.push({
-      url,
-      method: init.method ?? "GET",
-      ...(init.body ? { body: JSON.parse(String(init.body)) } : {}),
-    });
+    record(url, init);
     if (url.endsWith("/search")) return respond({ items: [recovery] });
     if (url.endsWith("/reopen"))
       recovery = { ...recovery, status: "review_required", revision: recovery.revision + 1 };
@@ -550,6 +745,7 @@ window.showD3SignedOut = () => root.render(<MaterialSignOutSignal />);
 window.showD3CoverLetterPreparation = () => {
   current = undefined;
   coverLetterScenario = true;
+  savedAnswerScenario = false;
   preparationReads = 0;
   calls.length = 0;
   root.render(
@@ -557,62 +753,32 @@ window.showD3CoverLetterPreparation = () => {
       <h1>Synthetic cover-letter preparation</h1>
       <ApplicationsWorkspace
         jobId={JOB}
+        applyUrl="https://boards.example.test/jobs/1"
         coverLetterPreparationEnabled
         fetchImplementation={syntheticFetch}
       />
     </div>,
   );
 };
-window.showD3NativeJourney = () => {
-  // Authentication is deliberately simulated; the production session.read and native reader remain real.
-  NativeMaterialSession.prototype.signIn = async function () {
-    this.clear();
-    Reflect.set(this, "token", "synthetic-native-browser-token");
-    Reflect.set(this, "deadline", Date.now() + 600_000);
-  };
+let journeys = 0;
+window.showD3ApplyJourney = (mode = "ready", pollsUntilResolved = 2) => {
   current = undefined;
-  nativeScenario = true;
   coverLetterScenario = false;
-  preparationReads = 0;
+  savedAnswerScenario = false;
   calls.length = 0;
+  extensionMessages.length = 0;
+  extension.selected = false;
+  extension.answerIntents = true;
+  const source = job.sources[0];
+  if (source) source.canonicalUrl = "https://boards.example.test/jobs/1";
+  window.fetch = createApplyBff({ mode, pollsUntilResolved });
+  journeys += 1;
   root.render(
     <JobSearchForm
+      key={`journey-${journeys}`}
       authenticated
       savedPanel={<p>No saved jobs.</p>}
       appliedPanel={<AppliedJobsPanel authenticated />}
-    />,
-  );
-};
-window.showD3ExpiryPreview = () => {
-  const expiresAtMs = Date.now() + 1500;
-  root.render(
-    <ResumePreviewSection
-      applicationId={APP}
-      revision={2}
-      expectedHash={HASH}
-      fetchImplementation={async () =>
-        respond({
-          status: "ready",
-          matchesPacket: true,
-          contentSha256: HASH,
-          tailoringVersion: "synthetic.v1",
-          temporaryMaterial: {
-            schemaVersion: 1,
-            kind: "tailored_resume",
-            generationId: PACKET,
-            version: 1,
-            contentSha256: HASH,
-            completedAtMs: expiresAtMs - 1_800_000,
-            expiresAtMs,
-          },
-          sections: [
-            {
-              kind: "experience",
-              entries: [{ lines: ["Generated synthetic one-off preview"], bullets: [] }],
-            },
-          ],
-        })
-      }
     />,
   );
 };

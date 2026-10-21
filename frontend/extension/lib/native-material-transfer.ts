@@ -20,6 +20,11 @@ import { sameNativeTransferBinding as same } from "./native-transfer-binding";
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
 const unavailable = () => Error("NativeMaterialTransferUnavailable");
 
+/** Largest original file attached automatically; mirrors the contract's uploaded-resume limit. */
+export const UPLOADED_RESUME_MAXIMUM_BYTES = 2 * 1024 * 1024;
+/** How long an uploaded original may stay in this worker's memory after it is pulled. */
+const UPLOADED_RESUME_LEASE_MS = 10 * 60_000;
+
 export interface NativeTransferSelection {
   applicationId: string;
   packetId: string;
@@ -28,6 +33,8 @@ export interface NativeTransferSelection {
   revision: number;
   approvalExpiresAtMs: number;
   materials: ApplicationTemporaryMaterial[];
+  /** Bound when the packet carries the candidate's own uploaded resume instead of a generated one. */
+  uploadedResume?: { documentId: string; sha256: string };
   reviewLink: string;
   jobId: string;
   ownerFence: string;
@@ -38,8 +45,10 @@ export interface NativeTransferSelection {
 }
 
 export interface TransferredNativeFile {
-  kind: "tailored_resume" | "cover_letter";
-  generationId: string;
+  kind: "tailored_resume" | "cover_letter" | "uploaded_resume";
+  /** Generated kinds only; the candidate's own original has no generation. */
+  generationId?: string;
+  /** Generated files are PDF only; an uploaded original keeps its format. */
   format: "pdf" | "docx";
   mediaType: string;
   sha256: string;
@@ -155,6 +164,15 @@ export function createNativeMaterialTransfer(options: {
         selection.approvalExpiresAtMs,
         ...selection.materials.map((material) => material.expiresAtMs),
       );
+      const uploadedOnly = selection.materials.length === 0;
+      if (
+        uploadedOnly
+          ? !selection.uploadedResume ||
+            !UUID.test(selection.uploadedResume.documentId) ||
+            !/^[a-f0-9]{64}$/u.test(selection.uploadedResume.sha256)
+          : selection.uploadedResume !== undefined
+      )
+        throw unavailable();
       const probe = {
         schema: "application-native-transfer-admission.v1",
         nonce: "a".repeat(64),
@@ -168,7 +186,7 @@ export function createNativeMaterialTransfer(options: {
         materials: selection.materials,
       };
       if (
-        !validateApplicationNativeTransferAdmission(probe) ||
+        (!uploadedOnly && !validateApplicationNativeTransferAdmission(probe)) ||
         !Number.isFinite(deadline) ||
         now >= deadline ||
         !UUID.test(selection.documentId) ||
@@ -212,6 +230,7 @@ export function createNativeMaterialTransfer(options: {
       const state = current;
       if (
         state?.phase !== "selected" ||
+        state.selection.materials.length === 0 ||
         !active(state) ||
         !senderMatches(state, sender) ||
         !validateApplicationNativeTransferBegin(value) ||
@@ -340,6 +359,33 @@ export function createNativeMaterialTransfer(options: {
       } finally {
         for (const file of value.files) file.contentBase64 = "";
       }
+    },
+    /**
+     * Private composition only. The candidate's own original, pulled with the extension's own
+     * session, becomes the ready file for an uploaded-resume selection. It is held in memory for a
+     * short lease, never beyond the approval, and is cleared with the selection.
+     */
+    attachUploaded(selection: Readonly<NativeTransferSelection>, file: TransferredNativeFile) {
+      const state = current;
+      const uploaded = state?.selection.uploadedResume;
+      if (
+        state?.phase !== "selected" ||
+        !active(state) ||
+        !uploaded ||
+        !same(state.selection, selection) ||
+        file.kind !== "uploaded_resume" ||
+        file.generationId !== undefined ||
+        file.sha256 !== uploaded.sha256 ||
+        file.bytes.byteLength < 1 ||
+        file.bytes.byteLength > UPLOADED_RESUME_MAXIMUM_BYTES
+      )
+        throw unavailable();
+      state.files = [file];
+      state.phase = "ready";
+      reschedule(
+        state,
+        Math.min(state.selection.approvalExpiresAtMs, Date.now() + UPLOADED_RESUME_LEASE_MS),
+      );
     },
     cancel(input: unknown, sender: chrome.runtime.MessageSender) {
       const value = boundedMessage(input, 4096);

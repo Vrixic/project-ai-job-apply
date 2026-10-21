@@ -528,5 +528,8 @@ It uses synthetic AWS responses and private temporary files; it cannot attest cu
 UI/background and generated validators in Chromium under MV3 script CSP, including real clipboard
 copy, sensitive-answer confirmation reset, per-copy owner reads and changed-tab refusal. Auth,
 Chrome APIs and HTTP responses are synthetic. It starts no AWS/Docker runtime and makes no employer
-request. The connected web journey remains `node scripts/tests/d3-browser-assurance/run.mjs`;
-both runners are local evidence, not installed-extension or provider acceptance.
+request. The connected web journey remains `node scripts/tests/d3-browser-assurance/run.mjs`; it
+now covers Generate (loading, ready, failed with retry, expired), Apply with a generated or
+uploaded resume, PDF-only preview and download, and the BFF material read without a popup. Set
+`D3_SCREENSHOT_DIR` to also save screenshots. Both runners are local evidence, not
+installed-extension or provider acceptance.

@@ -49,6 +49,13 @@ window.runGreenhouseExecutionFixture = async (mode) => {
   const email = document.querySelector("#email");
   const resume = document.querySelector("#resume");
   const cover = document.querySelector("#cover");
+  // The candidate's own original resume: its format is kept, and there is no generated cover letter.
+  const uploaded = mode.startsWith("uploaded-docx");
+  if (uploaded) {
+    document.querySelector('label[for="cover"]').remove();
+    cover.remove();
+    resume.setAttribute("accept", mode === "uploaded-docx" ? ".pdf,.doc,.docx" : ".pdf");
+  }
   const attestation = document.querySelector("#attestation");
   attestation.checked = mode !== "candidate-incomplete";
   let effects = 0;
@@ -127,14 +134,24 @@ window.runGreenhouseExecutionFixture = async (mode) => {
     return result;
   };
   const bytes = new TextEncoder().encode("%PDF-SYNTHETIC ONLY");
-  const files = ["tailored_resume", "cover_letter"].map((kind, index) => ({
-    kind,
-    generationId: `00000000-0000-7000-8000-00000000000${index + 4}`,
-    format: "pdf",
-    mediaType: "application/pdf",
-    sha256: "e".repeat(64),
-    bytes: new Uint8Array(bytes),
-  }));
+  const files = uploaded
+    ? [
+        {
+          kind: "uploaded_resume",
+          format: "docx",
+          mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          sha256: "e".repeat(64),
+          bytes: new Uint8Array(new TextEncoder().encode("PK synthetic docx original")),
+        },
+      ]
+    : ["tailored_resume", "cover_letter"].map((kind, index) => ({
+        kind,
+        generationId: `00000000-0000-7000-8000-00000000000${index + 4}`,
+        format: "pdf",
+        mediaType: "application/pdf",
+        sha256: "e".repeat(64),
+        bytes: new Uint8Array(bytes),
+      }));
   try {
     const result = await executeGreenhouseApplication({
       document,

@@ -1,5 +1,5 @@
 // Generated; do not edit.
-import type { Application, StartApplicationSubmissionRequest, ApplicationSubmissionStart, ApplicationAttempt, ApplicationSubmissionResultRequest, ApplicationExecutionInspect, ApplicationExecutionInspection, ApplicationExecutionCommand, ApplicationExecutionProof, ApplicationExecutionProofResult, ApplicationExecutionResult, ApplicationExecutionCancel, CanonicalJobDetail, ApplicationTemporaryMaterialAuthorization, ApplicationResumeFile, ApplicationCoverLetterFile, ApplicationNativeTransferBegin, ApplicationNativeTransferAdmission, ApplicationNativeTransferCommit, ApplicationNativeTransferReceipt, ApplicationNativeTransferDiscard, ApplicationNativeTransferCancel } from "../src/index.js";
+import type { Application, StartApplicationSubmissionRequest, ApplicationSubmissionStart, ApplicationAttempt, ApplicationSubmissionResultRequest, ApplicationExecutionInspect, ApplicationExecutionInspection, ApplicationExecutionCommand, ApplicationExecutionProof, ApplicationExecutionProofResult, ApplicationExecutionResult, ApplicationExecutionCancel, CanonicalJobDetail, ApplicationTemporaryMaterialAuthorization, ApplicationResumeFile, ApplicationUploadedResumeFile, ApplicationApplyIntent, ApplicationApplyIntentReceipt, ApplicationCoverLetterFile, ApplicationNativeTransferBegin, ApplicationNativeTransferAdmission, ApplicationNativeTransferCommit, ApplicationNativeTransferReceipt, ApplicationNativeTransferDiscard, ApplicationNativeTransferCancel } from "../src/index.js";
 export function validateApplication(value: unknown): value is Application;
 export function validateStartApplicationSubmissionRequest(value: unknown): value is StartApplicationSubmissionRequest;
 export function validateApplicationSubmissionStart(value: unknown): value is ApplicationSubmissionStart;
@@ -15,6 +15,9 @@ export function validateApplicationExecutionCancel(value: unknown): value is App
 export function validateCanonicalJobDetail(value: unknown): value is CanonicalJobDetail;
 export function validateApplicationTemporaryMaterialAuthorization(value: unknown): value is ApplicationTemporaryMaterialAuthorization;
 export function validateApplicationResumeFile(value: unknown): value is ApplicationResumeFile;
+export function validateApplicationUploadedResumeFile(value: unknown): value is ApplicationUploadedResumeFile;
+export function validateApplicationApplyIntent(value: unknown): value is ApplicationApplyIntent;
+export function validateApplicationApplyIntentReceipt(value: unknown): value is ApplicationApplyIntentReceipt;
 export function validateApplicationCoverLetterFile(value: unknown): value is ApplicationCoverLetterFile;
 export function validateApplicationNativeTransferBegin(value: unknown): value is ApplicationNativeTransferBegin;
 export function validateApplicationNativeTransferAdmission(value: unknown): value is ApplicationNativeTransferAdmission;

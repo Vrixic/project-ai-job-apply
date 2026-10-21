@@ -5,6 +5,7 @@ export type ExtensionMessage =
   | { action: "application_native_select"; reviewLink: string }
   | { action: "application_native_apply"; reviewLink: string }
   | { action: "application_native_clear" }
+  | { action: "application_pending_intent" }
   | { action: "application_form_capture"; reviewLink: string }
   | { action: "application_handoff_read"; reviewLink: string }
   | { action: "application_handoff_copy"; snapshotId: string; fieldKey: string; confirmed: true }
@@ -71,6 +72,7 @@ export function parseExtensionMessage(value: unknown): ExtensionMessage | undefi
       "capture",
       "application_handoff_clear",
       "application_native_clear",
+      "application_pending_intent",
       "clear_queue",
       "clear_stopped",
       "login",

@@ -1,13 +1,12 @@
-import type {
-  ApplicationCoverLetterFile,
-  ApplicationCoverLetterPreview,
-  ApplicationResumeFile,
-  ApplicationResumePreview,
-  ApplicationTemporaryMaterial,
-  ApplicationTemporaryMaterialLocation,
+import {
+  type ApplicationCoverLetterFile,
+  type ApplicationCoverLetterPreview,
+  type ApplicationResumeFile,
+  type ApplicationResumePreview,
+  type ApplicationTemporaryMaterial,
+  compileComponentValidator,
 } from "@ai-job-apply/api-contracts";
 import { materialDeadline, sameMaterial } from "./application-material-lifetime";
-import type { NativeMaterialSession } from "./native-material-session";
 
 export interface NativeMaterialBinding {
   applicationId: string;
@@ -21,7 +20,7 @@ export type NativeMaterialValue =
   | ApplicationResumeFile
   | ApplicationCoverLetterFile;
 
-type ReadPhase = "packet" | "location" | "transport" | "access" | "service" | "content";
+type ReadPhase = "request" | "access" | "service" | "content";
 class MaterialReadUnavailable extends Error {
   constructor(readonly phase: ReadPhase) {
     super("MaterialReadUnavailable");
@@ -29,22 +28,19 @@ class MaterialReadUnavailable extends Error {
 }
 const unavailable = (phase: ReadPhase = "content") => new MaterialReadUnavailable(phase);
 
+/** Fixed, value-free copy for a failed read. Never shows upstream text. */
 export function nativeMaterialReadFailureCopy(error: unknown): string {
   if (error instanceof MaterialReadUnavailable) {
-    if (error.phase === "packet")
-      return "This packet could not be verified. Refresh the application before trying again.";
-    if (error.phase === "location")
-      return "Material availability could not be verified. Refresh the application before trying again.";
     if (error.phase === "access")
-      return "Material access was refused. Sign in with the same account and try again.";
+      return "We could not confirm this resume belongs to your account. Sign in again and try again.";
     if (error.phase === "service")
-      return "The material service could not verify this read. Try again before the material expires.";
-    if (error.phase === "transport")
-      return "The material connection could not be verified. Sign in with the same account and try again.";
+      return "Your resume could not be loaded right now. Try again before it expires.";
   }
-  return "Materials could not be verified. Prepare a new packet and review it again.";
+  return "We could not verify your resume. Generate it again.";
 }
+
 const MAX_BYTES = 512 * 1024;
+const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
 
 async function json(response: Response, signal: AbortSignal): Promise<unknown> {
   if (signal.aborted) {
@@ -52,15 +48,16 @@ async function json(response: Response, signal: AbortSignal): Promise<unknown> {
     throw unavailable();
   }
   if (
-    !response.ok ||
     response.status !== 200 ||
     response.headers.get("cache-control") !== "no-store" ||
     !/^application\/json(?:;\s*charset=utf-8)?$/iu.test(
       response.headers.get("content-type") ?? "",
     ) ||
     !response.body
-  )
-    throw unavailable();
+  ) {
+    void response.body?.cancel().catch(() => undefined);
+    throw unavailable(response.status === 401 || response.status === 403 ? "access" : "service");
+  }
   const reader = response.body.getReader();
   const cancel = () => {
     void reader.cancel().catch(() => undefined);
@@ -96,74 +93,47 @@ async function json(response: Response, signal: AbortSignal): Promise<unknown> {
   }
 }
 
-/** Scalar BFF proof -> fixed native HTTPS read -> fresh scalar proof. No content crosses the BFF. */
+/**
+ * Same-origin read of one generated material through the authenticated BFF. The browser holds no
+ * credential; the BFF performs the owner-authorized native read. Every response is validated
+ * against its closed schema and the exact packet, material identity and content hash again here.
+ */
 export async function readNativeMaterial(
-  session: NativeMaterialSession,
   binding: NativeMaterialBinding,
-  format: "preview" | "pdf" | "docx",
+  format: "preview" | "pdf",
   options: { fetch?: typeof fetch; signal?: AbortSignal } = {},
 ): Promise<NativeMaterialValue> {
   const controller = new AbortController();
   const abort = () => controller.abort();
   const original = structuredClone(binding);
   const send = options.fetch ?? fetch;
-  const revision = session.revision;
-  const deadline = Math.min(Date.now() + 15_000, materialDeadline(original.material));
-  const current = () =>
-    !controller.signal.aborted &&
-    session.ready &&
-    session.revision === revision &&
-    Date.now() < deadline;
+  const deadline = Math.min(Date.now() + 20_000, materialDeadline(original.material));
   const timer = setTimeout(abort, Math.max(0, deadline - Date.now()));
   if (options.signal?.aborted) controller.abort();
   options.signal?.addEventListener("abort", abort, { once: true });
   const route = original.material.kind === "tailored_resume" ? "resume" : "cover-letter";
-  let phase: ReadPhase = "packet";
+  let phase: ReadPhase = "request";
   try {
     const work = async () => {
-      if (!current()) throw unavailable();
-      const { compileComponentValidator } = await import("@ai-job-apply/api-contracts");
-      const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
       if (
-        !uuid.test(original.applicationId) ||
-        !uuid.test(original.packetId) ||
+        controller.signal.aborted ||
+        Date.now() >= deadline ||
+        !UUID.test(original.applicationId) ||
+        !UUID.test(original.packetId) ||
         !/^[a-f0-9]{64}$/u.test(original.packetHash) ||
         !compileComponentValidator("ApplicationTemporaryMaterial")(original.material)
       )
         throw unavailable();
-      const locationValid = compileComponentValidator("ApplicationTemporaryMaterialLocation");
-      const location = async () => {
-        if (!current()) throw unavailable();
-        const response = await send(
-          `/api/platform/applications/${original.applicationId}/${route}/location?generationId=${original.material.generationId}`,
-          {
-            method: "GET",
-            cache: "no-store",
-            credentials: "same-origin",
-            redirect: "error",
-            signal: controller.signal,
-          },
-        );
-        const value = await json(response, controller.signal);
-        if (!current() || !locationValid(value)) throw unavailable();
-        const result = value as ApplicationTemporaryMaterialLocation;
-        if (
-          result.packetId !== original.packetId ||
-          result.packetHash !== original.packetHash ||
-          !sameMaterial(result.temporaryMaterial, original.material) ||
-          new URL(result.origin).origin !== result.origin
-        )
-          throw unavailable();
-        return result;
-      };
-      phase = "location";
-      const before = await location();
-      const url = new URL(
-        `/v1/applications/${original.applicationId}/${route}${format === "preview" ? "" : `/file?format=${format}`}`,
-        before.origin,
+      const response = await send(
+        `/api/platform/applications/${original.applicationId}/${route}/content?generationId=${original.material.generationId}&packetHash=${original.packetHash}&format=${format}`,
+        {
+          method: "GET",
+          cache: "no-store",
+          credentials: "same-origin",
+          redirect: "error",
+          signal: controller.signal,
+        },
       );
-      phase = "transport";
-      const response = await session.read(url, controller.signal, send);
       phase = response.status === 401 || response.status === 403 ? "access" : "service";
       const value = await json(response, controller.signal);
       phase = "content";
@@ -175,7 +145,12 @@ export async function readNativeMaterial(
           : format === "preview"
             ? "ApplicationCoverLetterPreview"
             : "ApplicationCoverLetterFile";
-      if (!compileComponentValidator(schema)(value) || !current()) throw unavailable();
+      if (
+        !compileComponentValidator(schema)(value) ||
+        controller.signal.aborted ||
+        Date.now() >= deadline
+      )
+        throw unavailable();
       const result = value as NativeMaterialValue;
       if (
         !("temporaryMaterial" in result) ||
@@ -183,17 +158,9 @@ export async function readNativeMaterial(
         !("contentSha256" in result) ||
         result.contentSha256 !== original.material.contentSha256 ||
         ("status" in result && (result.status !== "ready" || !result.matchesPacket)) ||
-        ("format" in result &&
-          (result.format !== format ||
-            result.mediaType !==
-              (format === "pdf"
-                ? "application/pdf"
-                : "application/vnd.openxmlformats-officedocument.wordprocessingml.document")))
+        ("format" in result && (result.format !== "pdf" || result.mediaType !== "application/pdf"))
       )
         throw unavailable();
-      phase = "location";
-      if ((await location()).origin !== before.origin) throw unavailable();
-      if (!current()) throw unavailable();
       return result;
     };
     const aborted = new Promise<never>((_, reject) => {
