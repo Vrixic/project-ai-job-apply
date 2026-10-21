@@ -95,4 +95,53 @@ describe("JobSearchForm with Applications enabled", () => {
     expect(container.textContent).toContain("Fullstack Engineer");
     expect(container.textContent).not.toContain("Backend Engineer");
   });
+
+  it("removes a job from the results as soon as its submission is logged", async () => {
+    let applied: unknown[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/platform/jobs/search")) {
+        return respond({ items: [activeJob, appliedJob] });
+      }
+      if (url.endsWith("/api/platform/applications/search")) return respond({ items: applied });
+      throw new Error(`Unexpected request: ${url} ${String(init?.method)}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.resetModules();
+    const { JobSearchForm } = await import("./job-search-form");
+    const { APPLICATIONS_CHANGED_EVENT } = await import("../lib/applications-client");
+
+    await act(async () => {
+      root.render(<JobSearchForm authenticated savedPanel={<div />} appliedPanel={<div />} />);
+    });
+    await flush();
+    const submit = container.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (!submit) throw new Error("Missing Search submit button");
+    await act(async () => {
+      submit.click();
+    });
+    await flush();
+    expect(container.textContent).toContain("Backend Engineer");
+
+    applied = [
+      {
+        id: "00000000-0000-7000-8000-000000000201",
+        canonicalJobId: appliedJob.id,
+        status: "applied",
+        revision: 1,
+        currentAction: "none",
+        attempts: [],
+        createdAt: "2026-09-18T12:00:00.000Z",
+        updatedAt: "2026-09-18T12:00:00.000Z",
+      },
+    ];
+    await act(async () => {
+      window.dispatchEvent(new Event(APPLICATIONS_CHANGED_EVENT));
+    });
+    await flush();
+
+    expect(container.textContent).toContain("Fullstack Engineer");
+    expect(container.textContent).not.toContain("Backend Engineer");
+  });
 });

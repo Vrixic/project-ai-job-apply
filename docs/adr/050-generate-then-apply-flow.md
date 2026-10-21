@@ -59,8 +59,8 @@ use.
    - The cancel action and the replace-while-running checkbox leave the UI; the routes remain for
      reconciliation and API clients. The panel after Apply is minimal: the employer link, one line
      naming the resume the extension will use, and a Record submission button that opens a dialog.
-     Once a submission is logged the job card shows the single word "Submitted" in place of Save job,
-     and the Apply step, the review panel and the sources and provenance section are removed.
+     Search holds only jobs that were not applied to: once a submission is logged the job leaves the
+     search results at once (and stays out of later searches), and it is listed under Applied.
      The dialog opens by itself when Apply sends the candidate to the employer's page, so it is
      waiting when they return; Cancel dismisses it and the button reopens it.
      The dialog records the outcome in one step (I submitted it / It was not submitted); the earlier

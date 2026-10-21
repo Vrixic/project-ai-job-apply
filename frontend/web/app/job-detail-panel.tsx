@@ -62,13 +62,11 @@ function failureMessage(status: number): string {
 export function JobDetailPanel({
   jobId,
   authenticated,
-  submitted = false,
   onSubmitted,
 }: {
   jobId: string;
   authenticated: boolean;
-  /** The candidate's submission for this job is logged: the Apply step and sources are removed. */
-  submitted?: boolean;
+  /** Called once the candidate's submission for this job is logged. */
   onSubmitted?: () => void;
 }) {
   const panelId = useId();
@@ -275,49 +273,42 @@ export function JobDetailPanel({
                 </p>
                 <h5>Description</h5>
                 <p className="job-detail-description">{result.detail.description}</p>
-                {submitted ? null : (
-                  <>
-                    <h5>Sources and provenance</h5>
-                    <p>Source links open external sites in a new tab.</p>
-                    <ul className="job-detail-sources">
-                      {result.detail.sources.map((source) => (
-                        <li key={`${source.provider}-${source.canonicalUrl}`}>
-                          <a
-                            href={source.canonicalUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            referrerPolicy="no-referrer"
-                          >
-                            {providerLabels[source.provider]} source (opens in a new tab)
-                          </a>
-                          <p>{provenanceLabels[source.provenance]}</p>
-                          <p>
-                            First observed{" "}
-                            <time dateTime={source.firstObservedAt}>
-                              {new Date(source.firstObservedAt).toLocaleDateString()}
-                            </time>
-                            {" · "}Last verified{" "}
-                            <time dateTime={source.lastVerifiedAt}>
-                              {new Date(source.lastVerifiedAt).toLocaleDateString()}
-                            </time>
-                          </p>
-                          {source.validThrough && (
-                            <p>
-                              Source valid through{" "}
-                              <time dateTime={source.validThrough}>
-                                {new Date(source.validThrough).toLocaleDateString()}
-                              </time>
-                            </p>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-                {authenticated &&
-                applicationsUiEnabled &&
-                !submitted &&
-                result.detail.status === "active" ? (
+                <h5>Sources and provenance</h5>
+                <p>Source links open external sites in a new tab.</p>
+                <ul className="job-detail-sources">
+                  {result.detail.sources.map((source) => (
+                    <li key={`${source.provider}-${source.canonicalUrl}`}>
+                      <a
+                        href={source.canonicalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        referrerPolicy="no-referrer"
+                      >
+                        {providerLabels[source.provider]} source (opens in a new tab)
+                      </a>
+                      <p>{provenanceLabels[source.provenance]}</p>
+                      <p>
+                        First observed{" "}
+                        <time dateTime={source.firstObservedAt}>
+                          {new Date(source.firstObservedAt).toLocaleDateString()}
+                        </time>
+                        {" · "}Last verified{" "}
+                        <time dateTime={source.lastVerifiedAt}>
+                          {new Date(source.lastVerifiedAt).toLocaleDateString()}
+                        </time>
+                      </p>
+                      {source.validThrough && (
+                        <p>
+                          Source valid through{" "}
+                          <time dateTime={source.validThrough}>
+                            {new Date(source.validThrough).toLocaleDateString()}
+                          </time>
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {authenticated && applicationsUiEnabled && result.detail.status === "active" ? (
                   <ApplicationsWorkspace
                     jobId={result.detail.id}
                     applyUrl={result.detail.sources[0]?.canonicalUrl}
