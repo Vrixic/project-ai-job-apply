@@ -1,10 +1,10 @@
+import { loadApplicationTransitionTargetManifest } from "./application-transition-target-manifest.js";
 import {
   collectRestoreDataInventory,
   compareRestoreDataInventories,
   type RestoreDataInventory,
 } from "./restore-data-inventory.js";
 import {
-  loadCurrentRestoreManifest,
   parseRestoreManifest,
   type RestoreManifestSource,
   type RestoreSqlClient,
@@ -372,7 +372,7 @@ export async function reconcileApplicationRestore(
   const admitted = () => {
     if (!options.enabled() || process.hrtime.bigint() - start >= 120_000_000_000n) throw denied();
   };
-  const current = loadCurrentRestoreManifest();
+  const current = loadApplicationTransitionTargetManifest();
   async function snapshot(client: RestoreSqlClient, archived: boolean) {
     admitted();
     return client.begin("read only isolation level repeatable read", async (raw) => {

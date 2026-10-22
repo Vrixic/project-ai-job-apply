@@ -2,21 +2,18 @@ import { createHash } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import { restoreCatalogFixture } from "./application-restore-catalog.fixture.js";
 import { reconcileApplicationRestore } from "./application-restore-reconciliation.js";
+import { loadApplicationTransitionTargetManifest } from "./application-transition-target-manifest.js";
 import {
   collectRestoreDataInventory,
   type RestoreDataInventory,
 } from "./restore-data-inventory.js";
-import {
-  loadCurrentRestoreManifest,
-  type RestoreManifestSource,
-  type RestoreSqlClient,
-} from "./restore-verifier.js";
+import type { RestoreManifestSource, RestoreSqlClient } from "./restore-verifier.js";
 
 vi.mock("./restore-data-inventory.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./restore-data-inventory.js")>()),
   collectRestoreDataInventory: vi.fn(),
 }));
-const current = loadCurrentRestoreManifest();
+const current = loadApplicationTransitionTargetManifest();
 const columns = Object.fromEntries(
   Object.entries(restoreCatalogFixture).map(([version, tables]) => [
     version,
