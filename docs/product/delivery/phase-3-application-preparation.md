@@ -11,7 +11,7 @@ native image releases, re-upload of existing resumes and live acceptance remain.
 tested: BFF material reads with no popup sign-in, honest generation states with retry, Apply as the
 approval act (server hash binding unchanged), PDF-only generated resumes, an uploaded-resume
 fallback and extension arming. Not accepted: nothing is deployed, the native image still predates
-#701, and live token, installed-extension, security and privacy reviews remain open. D3 stays
+#701, and live token, installed-extension and security reviews remain open. D3 stays
 In progress.
 
 2026-10-17: installed-Chrome and hosted testing found and fixed eight defects (D3-139 to D3-146, below);
@@ -84,7 +84,7 @@ across OpenAPI, Documents, native completion and extension transfer; D3-151 uplo
 fallback (`resume: uploaded`, owner-scoped original read, default off) and identifiers-only apply
 intent for the extension. Implemented and locally tested; not accepted. Open: the Greenhouse
 submit-click discrepancy (owner decision), Documents/Gateway/web release order, a governed native
-image release, native acceptance of the web session token, and security/privacy review.
+image release, native acceptance of the web session token, and security review.
 
 D3-139 to D3-146 started 2026-10-15 and merged 2026-10-15/17 with before/after regressions, targeted
 runs and independent review where consequential (hosted CI executed zero steps because of billing):
@@ -269,7 +269,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Assisted/manual Apply (D3-009, D3-018) | Canonical job opening, approved-answer copying and safe manual fallback are implemented; the deployed manual flow passed human review. | Managed direct native PDF/DOCX downloads pass; installed-extension handoff acceptance remains. |
 | Metrics (D3-010, D3-036) | Versioned correction/outcome metrics and strict detached telemetry envelopes are locally verified. | Production sinks/dashboards/alarms are deferred from the candidate-journey critical path. |
 | Verification (D3-011, D3-019) | Local adversarial, owner-isolation, duplicate-start and crash/replay checks pass; basic manual Apply is accepted. | Full generated-material journey, installed-extension checks and final security/privacy/accessibility/product acceptance. |
-| Capability approval (D3-012) | Engineering approval packet refreshed on October 9 against current source/evidence; existing limited development owner dispositions are linked without amendment. | Provider retention under ADR-038, exact release/source review and accountable legal/security/privacy gates remain; development direction alone does not close them. |
+| Capability approval (D3-012) | Engineering approval packet refreshed on October 9 against current source/evidence; existing limited development owner dispositions are linked without amendment. | Provider retention under ADR-038, exact release/source review and accountable legal/security gates remain; development direction alone does not close them. |
 | Candidate rights (D3-014, D3-028, D3-029, D3-030, D3-031, D3-073) | Applications export/delete support, restricted-answer export and document-prefix cleanup have local and partial managed evidence. Basic completed-deletion replay and D3 document-runtime status pass. | Current document-inclusive deletion/export lifecycle, backup aging and accountable review. Formal recovery proofs remain removed. |
 | Migration/release tooling (D3-015, D3-020, D3-032, D3-033, D3-034, D3-040, D3-041) | Release convergence, provenance guards, dependency corrections and checksum-bound migration/restore tooling are implemented and verified. | Fresh compatible publication and exact managed release/restore checks for the next activation. |
 | Resume limits/deletion (D3-025, D3-026, D3-027) | Plan-driven limits, in-progress upload exclusion, deletion and version/prefix byte purge are implemented and accepted in development. | Document-inclusive account-deletion acceptance remains under candidate rights. |
@@ -278,7 +278,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 | Private runtime (D3-051, D3-052, D3-053, D3-054, D3-058, D3-062, D3-066, D3-078) | Isolated control/maintenance/provider bootstraps, artifact publishers and restrictive IAM composition are implemented. | Complete managed release, effective permissions, scheduling/drain and live acceptance for cover-letter work. |
 | Preparation workflow (D3-068, D3-069, D3-070, D3-071) | Native preparation activity, durable entrypoint, starter and recovery artifacts are implemented and qualified locally. | Complete connected activation and original-work recovery/drain acceptance. |
 | One-off material policy (D3-064, D3-072) | Memory-only storage, bounded expiry, hash-only packet guards and legacy export readers are implemented locally. | Complete no-persistence/30-minute enforcement across provider, browser, ATS and all copies; legacy saved-content paths must remain inactive or be replaced. |
-| Restricted packets (D3-077) | Separate-key packet protection and legacy receipt migration are implemented; managed archival of seven receipts passed. | Managed original-request replay, saved-answer reuse and broader candidate/privacy acceptance. |
+| Restricted packets (D3-077) | Separate-key packet protection and legacy receipt migration are implemented; managed archival of seven receipts passed. | Managed original-request replay, saved-answer reuse and broader candidate acceptance. |
 | Native material session (D3-079) | Native HTTPS/image, route/disposal bindings, preparation/cleanup resources and a bounded backend test driver are implemented; managed resources are deployed disabled. | Controlled sign-in, source/owner activation, live preview/PDF/DOCX, expiry/retirement, browser/CORS and client/ATS acceptance. |
 | Connected browser safety (D3-080) | Exact material/hash/deadline guards, explicit generated-material review, boolean sensitive answers, packet-change resets, retry-stable commands, async preparation/scalar-location BFF routes and immediate confirmed-history refresh are locally verified. D3-088 supplies locally verified withdrawn-answer recovery. | Native identity/CORS activation and live acceptance remain; D3-083 supplies locally tested native browser source. |
 | Cover-letter request/status UI (D3-081) | Default-off versioned disclosure opt-in, explicit asynchronous requests, retry-stable admission, bounded status polling, current-packet checks and latest-revision cancellation are locally verified, including the full repository verifier and synthetic Chromium checks. Preview availability binds every material-reference scalar, including later versions of the same generation. | Live native preview/download, generation and cleanup acceptance remain open; browser source is tracked in D3-083. |
@@ -359,7 +359,8 @@ by the negative-path inspection; see [recovery evidence](evidence/d3-withdrawn-a
 installed Edge and expiry-drill testing, candidate output-quality acceptance, accessibility
 acceptance, product acceptance, AI evaluation, ATS-fixture QA representativeness and restore
 rehearsals. Rights/deletion, expiry enforcement, restricted-answer review, submission safety and
-the legal/security/privacy review stay. D3.1 no longer waits for D3 to complete.
+the legal and security review stay. D3.1 no longer waits for D3 to complete. Privacy reviews were
+removed from all phases on 2026-10-22.
 
 Generated cover letters and tailored resumes must never persist and must expire within 30 minutes (ADR-038).
 Manual Apply is the first acceptance path; Greenhouse is the first automated adapter.
@@ -368,14 +369,14 @@ Application history ends at confirmed submission; sensitive answers and irrevers
 ## Exit criteria
 
 Owner decision 2026-10-21: rendered-document verification, ATS accuracy acceptance, restore
-rehearsals, AI evaluation, accessibility and product acceptance are removed. Security and privacy
-criteria remain.
+rehearsals, AI evaluation, accessibility and product acceptance are removed. Security criteria
+remain; privacy reviews were removed 2026-10-22.
 
 - [ ] Truthful preparation, review, approval, Apply and confirmed-submission history work for the candidate.
 - [ ] Immutable approval bindings and duplicate-submission safety hold.
 - [ ] No generated-content persistence and all-copy expiry within 30 minutes (ADR-038).
 - [ ] The Greenhouse adapter works with a safe manual fallback.
-- [ ] Candidate export and deletion complete (the canonical rights run is still FAILED) and accountable legal/security/privacy review is done.
+- [ ] Candidate export and deletion complete (the canonical rights run is still FAILED) and accountable legal and security review is done.
 
 ## Evidence
 

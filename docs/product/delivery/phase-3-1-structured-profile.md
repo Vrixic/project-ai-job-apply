@@ -66,9 +66,9 @@ The exact field set per section is decided in D3.1-001.
 | ID | Task | State | Owner | Dependencies | Evidence or notes |
 |---|---|---|---|---|---|
 | D3.1-001 | Design and accept an ADR for the structured Profile: section model, single-source-of-truth rule, draft-then-save resume import, per-entry provenance (entered or imported), versioning and idempotency, data classification, and the disposition of existing development facts. Include a map of every consumer of profile facts (Profile service, Documents proposals, Matching, Applications runtime `toGraphFact`, AI SDK grounding, extension, candidate export/deletion/restore, OpenAPI, domain schemas, web BFF) and the effect on [D3-001](phase-3-application-preparation.md), [D4-003](phase-4-workday-and-remote.md), and architecture section 5.1. | Ready | Product owner (approval) | None | Open. Recommended: discard existing development facts and re-import the resume, because only development is deployed. [ADR-036](../../adr/036-structured-education-and-work-experience-entries.md) is prior analysis of the Education/Work Experience gap specifically (narrower than this task's scope, no consumer map or security/privacy review) - read and fold in, supersede, or reject. |
-| D3.1-002 | Privacy and security delta review of the new data classes (contact and address, employment history, free-text answers), their export, deletion, restore, logging exclusions, and the confirmation that no Restricted answer enters the general profile. | Ready | Independent security/privacy reviewer | D3.1-001 | Release gate under [delivery rule 8](README.md#tracking-rules). Technical implementation is not approval. |
+| D3.1-002 | Privacy and security delta review of the new data classes (contact and address, employment history, free-text answers), their export, deletion, restore, logging exclusions, and the confirmation that no Restricted answer enters the general profile. | Removed | n/a | D3.1-001 | Removed 2026-10-22 by owner decision: privacy reviews are out of scope. The design still keeps restricted answers out of the general profile. |
 | D3.1-003 | Evolve contracts: OpenAPI section and answer operations, domain schemas, generated clients, and event contracts if any. | Ready | Unassigned | D3.1-001 | Open. Run `pnpm contracts:generate`; never hand-edit `generated/`. |
-| D3.1-004 | Implement Profile service persistence and API for the sections: owner-scoped tables, forward-only migrations, optimistic versioning, idempotent writes, ownership tests on real PostgreSQL, Gateway routes and `allowedRoute`, and candidate export, deletion, and restore-manifest coverage. | Ready | Unassigned | D3.1-003, D3.1-002 | Open. |
+| D3.1-004 | Implement Profile service persistence and API for the sections: owner-scoped tables, forward-only migrations, optimistic versioning, idempotent writes, ownership tests on real PostgreSQL, Gateway routes and `allowedRoute`, and candidate export, deletion, and restore-manifest coverage. | Ready | Unassigned | D3.1-003 | Open. |
 | D3.1-005 | Implement Application answers: reusable question and answer pairs with exact-key matching, edit and delete, and refusal of restricted categories. | Ready | Unassigned | D3.1-004 | Open. Restricted answers remain in the ADR-010 vault owned by [D3-001](phase-3-application-preparation.md) and D3-015. |
 | D3.1-006 | Change resume import so parsed content becomes draft Education, Work experience, and Skills entries that join the profile only on save. Parser and processor are released together. | Ready | Unassigned | D3.1-004 | Open. Replaces the proposal path in Documents and Profile. |
 | D3.1-007 | Build the web Profile area with tabs and per-section edit forms, remove the "Your profile facts" panel, rewrite the onboarding tests, and meet accessibility and responsive checks. | Ready | Unassigned | D3.1-004, D3.1-005, D3.1-006 | Open. Uses generated clients only. |
@@ -86,7 +86,6 @@ The exact field set per section is decided in D3.1-001.
 - [ ] Prepare, matching, and extension fill read only the structured records, generated claims remain grounded and checked, and the packet approval binding is intact.
 - [ ] Restricted answers are not collected in the general profile and stay behind the ADR-010 review flow.
 - [ ] Export, deletion, and restore cover the new records, with evidence from the guarded tooling.
-- [ ] The privacy and security delta review has a recorded disposition.
 - [ ] D3-001, D4-003, architecture section 5.1, this document, and the master tracker agree.
 
 ## Work log
@@ -100,6 +99,7 @@ The exact field set per section is decided in D3.1-001.
 
 | Date | Decision or change | Reason | Evidence |
 |---|---|---|---|
+| 2026-10-22 | Owner removed privacy reviews from all phases: D3.1-002 is Removed and no longer gates D3.1-004. | Owner direction 2026-10-22 |
 | 2026-10-21 | Owner removed non-security testing and acceptance work: D3.1-012 is Removed and D3.1 no longer waits for D3 to complete. Security and privacy review (D3.1-002) is unchanged. | Owner direction 2026-10-21 |
 | 2026-09-21 | The owner decided that "profile facts" is not a section of its own and is removed. Its content moves into a structured Profile of skills, resume details, and generic application answers, delivered as D3.1 after D3. | Ambiguous facts are hard to track; plain saved records give one meaning and one place to correct. | Owner direction 2026-09-21 |
 

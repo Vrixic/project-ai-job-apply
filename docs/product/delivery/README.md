@@ -27,7 +27,7 @@ This folder turns the architecture roadmap into an auditable delivery system.
 5. Never erase important changes in direction. Record them in the decisions/change log.
 6. Evidence should link to code, tests, ADRs, product documents, dashboards, releases, or review records.
 7. The master tracker and phase document must be updated together when status, start, or completion changes.
-8. Foundational legal/privacy and security approval belongs in D0. A source, provider, permission,
+8. Foundational legal and security approval belongs in D0. A source, provider, permission,
    external action, jurisdiction, or other concrete capability also requires a blocking delta
    approval in the delivery that implements it.
 9. Every delivery follows [ADR-016](../../adr/016-scale-to-zero-application-runtime.md): default
@@ -43,8 +43,9 @@ This folder turns the architecture roadmap into an auditable delivery system.
     not replace this final release gate.
 
 11. Owner decision 2026-10-21: hosted admin acceptance and every other non-security test,
-    acceptance or evidence gate are removed from all incomplete phases. Security, privacy and
-    legal gates (rules 8 and 10) remain. Keep records to one short line per change.
+    acceptance or evidence gate are removed from all incomplete phases. Security and
+    legal gates (rules 8 and 10) remain. Owner decision 2026-10-22: privacy reviews and
+    approvals are removed from all phases. Keep records to one short line per change.
 
 ## Status vocabulary
 

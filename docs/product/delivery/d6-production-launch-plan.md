@@ -39,7 +39,7 @@ Owners: **E** engineering (me), **O** product owner, **C** counsel, **A** indepe
 | W3 | Product completeness | Finish the D1 open items, D3, D3.1, D4, D5, then D6-001 to D6-010 (mobile, Stripe and store billing) | E; O (decisions) | scope and sequencing; each delivery's own gates |
 | W4 | Extension release | Exact release candidate and configuration (retention duration, UGC policy version, signing keys), live Chrome/Edge sign-in matrix (D6-018), disable-and-re-enable drill operator and run, load and abuse acceptance (D6-019), store listing materials (D6-017) | E; O; S (review) | W1, W2, W6 |
 | W5 | Security assurance | Current exposure inventory for every route, staging load and recovery run (D6-013), assessor scope and rules of engagement, exact-candidate freeze, remediation and retest (D6-015) | E prepares; A tests | W1, W2, W3 |
-| W6 | Legal, privacy, identity | Naming and domain screening (D6-012), counsel review (D6-016), storefront, billing and account-deletion approvals (D6-011), UGC policy and retention approvals | O; C | W0 name, counsel selection |
+| W6 | Legal, identity | Naming and domain screening (D6-012), counsel review (D6-016), storefront, billing and account-deletion approvals (D6-011), UGC policy and retention approvals | O; C | W0 name, counsel selection |
 | W7 | Operations | Support channel, alarm routing, incident and rollback runbooks, restore drill in production-equivalent staging, kill-switch drills, vulnerability intake, go/no-go checklist | E writes; O staffs | W1 |
 
 ## Owner inputs needed (in the order they unblock work)
@@ -61,6 +61,6 @@ Owners: **E** engineering (me), **O** product owner, **C** counsel, **A** indepe
 
 ## What this plan does not claim
 
-- It is not an approval of any legal, privacy, security, store, billing, or naming decision, and it schedules nothing by date.
+- It is not an approval of any legal, security, store, billing, or naming decision, and it schedules nothing by date.
 - No production resource exists and none is authorized by this document. Every apply needs a saved plan the owner reviews.
 - The extension's store review, screen-reader testing, live sign-in matrix and load/abuse acceptance stay unpassed until their own evidence exists.
