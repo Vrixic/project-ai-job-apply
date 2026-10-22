@@ -220,7 +220,7 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 2026-10-22: D3.1 started. D3.1-001 is complete: [ADR-052](../../adr/052-structured-candidate-profile.md)
 is accepted (structured Profile sections, draft-then-save resume import, entry references for
 grounding, existing development facts discarded, restricted answers kept out) with a consumer map.
-D3.1-003 is complete: the Profile section, answer and import-draft contracts are added (additive, version 1) with generated clients and tests. D3.1-004 slice 1 is implemented: migration 0012 and the Profile section store are tested on real PostgreSQL. D3.1-004 is complete: persistence, Gateway routes and export and deletion coverage are tested locally. D3.1-005 (exact-key answer matching) and D3.1-006 (resume import as drafts) are done in source. Next: D3.1-007 (web Profile area), then D3.1-008 and D3.1-009 (grounding and consumers). Nothing is deployed.
+D3.1-003 is complete: the Profile section, answer and import-draft contracts are added (additive, version 1) with generated clients and tests. D3.1-004 slice 1 is implemented: migration 0012 and the Profile section store are tested on real PostgreSQL. D3.1-004 is complete: persistence, Gateway routes and export and deletion coverage are tested locally. D3.1-005 (exact-key answer matching) and D3.1-006 (resume import as drafts) are done in source. D3.1-007 (web Profile area) is done in source. Next: D3.1-008 and D3.1-009 (grounding and consumers), then D3.1-010 retirement. Nothing is deployed.
 [Phase 3.1 tasks](phase-3-1-structured-profile.md).
 
 ## D4 — Workday and remote preparation

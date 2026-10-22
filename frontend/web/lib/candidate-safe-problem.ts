@@ -2,6 +2,7 @@ export type CandidateProblemSurface =
   | "operation"
   | "preferences"
   | "profile_facts"
+  | "profile_sections"
   | "restricted_answers"
   | "resume";
 
@@ -30,6 +31,12 @@ const copyBySurface: Readonly<Record<CandidateProblemSurface, SurfaceCopy>> = {
     invalid: "Check the profile fact and try again.",
     missing: "This profile fact is no longer available. Refresh and try again.",
     unavailable: "Profile facts are temporarily unavailable.",
+  },
+  profile_sections: {
+    conflict: "This profile entry changed. Refresh and review it again.",
+    invalid: "Check the entry and try again.",
+    missing: "This profile entry is no longer available. Refresh and try again.",
+    unavailable: "Your profile is temporarily unavailable.",
   },
   restricted_answers: {
     conflict: "This saved answer changed. Refresh and review it again.",
@@ -62,6 +69,17 @@ const resumeCodeCopy: ReadonlyMap<string, string> = new Map([
   ],
 ]);
 
+// Fixed copy for refusals the candidate can act on while editing their profile.
+const profileSectionCodeCopy: ReadonlyMap<string, string> = new Map([
+  [
+    "restricted_question",
+    "This question is about work authorization, demographics or a legal disclosure. Answer it in Restricted answers instead.",
+  ],
+  ["profile_section_limit", "This section is full. Remove an entry before adding another."],
+  ["profile_record_duplicate", "You already saved this. Edit the existing entry instead."],
+  ["profile_order_conflict", "Your entries changed. Refresh and try the new order again."],
+]);
+
 const authenticationCodes = new Set(["authentication_required", "session_expired"]);
 const conflictCodes = new Set([
   "idempotency_conflict",
@@ -91,6 +109,10 @@ export async function candidateSafeProblemMessage(
   }
   if (surface === "resume" && code !== undefined) {
     const specific = resumeCodeCopy.get(code);
+    if (specific) return specific;
+  }
+  if (surface === "profile_sections" && code !== undefined) {
+    const specific = profileSectionCodeCopy.get(code);
     if (specific) return specific;
   }
   if (response.status === 403 || code === "forbidden") {

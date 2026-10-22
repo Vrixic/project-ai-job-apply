@@ -197,6 +197,31 @@ const restrictedAnswer = {
   confirmedAt: "2026-09-29T12:00:00.000Z",
 };
 
+function profileEntry(fields: Record<string, unknown>) {
+  return {
+    id: "019b4e12-7ea3-7c36-9357-aea35ab542cc",
+    ...fields,
+    version: 1,
+    origin: "entered",
+    displayOrder: 0,
+    createdAt: "2026-10-22T12:00:00.000Z",
+    updatedAt: "2026-10-22T12:00:00.000Z",
+  };
+}
+
+function profileAnswer() {
+  return {
+    id: "019b4e12-7ea3-7c36-9357-aea35ab542cc",
+    question: "Why us?",
+    answer: "Synthetic reason.",
+    questionKey: "why us",
+    version: 1,
+    origin: "entered",
+    createdAt: "2026-10-22T12:00:00.000Z",
+    updatedAt: "2026-10-22T12:00:00.000Z",
+  };
+}
+
 const validValues: Record<FoundationResponseSchemaName, unknown> = {
   CanonicalJobDetail: {
     id: "00000000-0000-7000-8000-000000000002",
@@ -228,6 +253,35 @@ const validValues: Record<FoundationResponseSchemaName, unknown> = {
   CreateResumeUploadResponse: resumeUploadResponse,
   ProfileFactCollection: factCollection,
   ProfileFact: profileFact,
+  ProfilePersonal: {
+    fullName: "Synthetic Person",
+    version: 1,
+    origin: "entered",
+    createdAt: "2026-10-22T12:00:00.000Z",
+    updatedAt: "2026-10-22T12:00:00.000Z",
+  },
+  ProfileEntryReference: {
+    section: "skill",
+    entryId: "019b4e12-7ea3-7c36-9357-aea35ab542cc",
+    version: 1,
+  },
+  ProfileImportDraftCollection: { drafts: [] },
+  ProfileEducationEntry: profileEntry({ school: "Synthetic University" }),
+  ProfileEducationEntryCollection: { entries: [profileEntry({ school: "Synthetic University" })] },
+  ProfileWorkExperienceEntry: profileEntry({
+    company: "Synthetic Systems",
+    title: "Engineer",
+    startDate: "2020-01-01",
+  }),
+  ProfileWorkExperienceEntryCollection: {
+    entries: [
+      profileEntry({ company: "Synthetic Systems", title: "Engineer", startDate: "2020-01-01" }),
+    ],
+  },
+  ProfileSkillEntry: profileEntry({ name: "TypeScript" }),
+  ProfileSkillEntryCollection: { entries: [profileEntry({ name: "TypeScript" })] },
+  ProfileApplicationAnswer: profileAnswer(),
+  ProfileApplicationAnswerCollection: { answers: [profileAnswer()] },
   RestrictedAnswerCollection: { answers: [restrictedAnswer] },
   RestrictedAnswer: restrictedAnswer,
   CandidateDataExport: candidateDataExport,

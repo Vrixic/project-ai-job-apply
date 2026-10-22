@@ -11,6 +11,17 @@ export type FoundationWriteSchemaName =
   | "CreateResumeUploadRequest"
   | "CreateProfileFactRequest"
   | "UpdateProfileFactRequest"
+  | "PutProfilePersonalRequest"
+  | "ReorderProfileEntriesRequest"
+  | "SaveProfileImportDraftRequest"
+  | "CreateProfileEducationEntryRequest"
+  | "UpdateProfileEducationEntryRequest"
+  | "CreateProfileWorkExperienceEntryRequest"
+  | "UpdateProfileWorkExperienceEntryRequest"
+  | "CreateProfileSkillEntryRequest"
+  | "UpdateProfileSkillEntryRequest"
+  | "CreateProfileApplicationAnswerRequest"
+  | "UpdateProfileApplicationAnswerRequest"
   | "SaveRestrictedAnswerRequest"
   | "CreateCandidateDataExportRequest"
   | "CreateAccountDeletionRequest"
@@ -22,6 +33,35 @@ const validators = new Map<FoundationWriteSchemaName, ReturnType<typeof compileC
     ["CreateResumeUploadRequest", compileComponentValidator("CreateResumeUploadRequest")],
     ["CreateProfileFactRequest", compileComponentValidator("CreateProfileFactRequest")],
     ["UpdateProfileFactRequest", compileComponentValidator("UpdateProfileFactRequest")],
+    ["PutProfilePersonalRequest", compileComponentValidator("PutProfilePersonalRequest")],
+    ["ReorderProfileEntriesRequest", compileComponentValidator("ReorderProfileEntriesRequest")],
+    ["SaveProfileImportDraftRequest", compileComponentValidator("SaveProfileImportDraftRequest")],
+    [
+      "CreateProfileEducationEntryRequest",
+      compileComponentValidator("CreateProfileEducationEntryRequest"),
+    ],
+    [
+      "UpdateProfileEducationEntryRequest",
+      compileComponentValidator("UpdateProfileEducationEntryRequest"),
+    ],
+    [
+      "CreateProfileWorkExperienceEntryRequest",
+      compileComponentValidator("CreateProfileWorkExperienceEntryRequest"),
+    ],
+    [
+      "UpdateProfileWorkExperienceEntryRequest",
+      compileComponentValidator("UpdateProfileWorkExperienceEntryRequest"),
+    ],
+    ["CreateProfileSkillEntryRequest", compileComponentValidator("CreateProfileSkillEntryRequest")],
+    ["UpdateProfileSkillEntryRequest", compileComponentValidator("UpdateProfileSkillEntryRequest")],
+    [
+      "CreateProfileApplicationAnswerRequest",
+      compileComponentValidator("CreateProfileApplicationAnswerRequest"),
+    ],
+    [
+      "UpdateProfileApplicationAnswerRequest",
+      compileComponentValidator("UpdateProfileApplicationAnswerRequest"),
+    ],
     ["SaveRestrictedAnswerRequest", compileComponentValidator("SaveRestrictedAnswerRequest")],
     [
       "CreateCandidateDataExportRequest",

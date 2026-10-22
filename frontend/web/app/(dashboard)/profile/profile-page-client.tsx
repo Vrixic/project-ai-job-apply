@@ -20,9 +20,7 @@ import {
   toggleOrderedChoice,
   type WorkMode,
 } from "../../preference-form-state";
-import { ProfileFactsForm } from "../../profile-facts-form";
-import { ProfilePersonalCard } from "../../profile-personal-card";
-import { ProfileSkillsCard } from "../../profile-skills-card";
+import { ProfileArea } from "../../profile-sections/profile-area";
 import { RestrictedAnswersForm } from "../../restricted-answers-form";
 
 const workModeOptions: ReadonlyArray<{ value: WorkMode; label: string }> = [
@@ -579,10 +577,8 @@ export function ProfilePageClient({
     }
   }
 
-  return (
-    <section aria-label="Profile">
-      <ProfilePersonalCard authenticated={authenticated} name={name} email={email} />
-      <ProfileSkillsCard authenticated={authenticated} />
+  const preferencesPanel = (
+    <>
       {message && <output aria-live="polite">{message}</output>}
       {operation && (
         <section className="result" aria-live="polite">
@@ -597,7 +593,7 @@ export function ProfilePageClient({
               </p>
               <small>
                 This check only reports whether optional location and minimum compensation
-                preferences are saved. It does not assess resume processing, profile facts,
+                preferences are saved. It does not assess resume processing, saved profile entries,
                 matching, or application readiness.
               </small>
             </>
@@ -773,9 +769,20 @@ export function ProfilePageClient({
           </button>
         )}
       </form>
+    </>
+  );
 
-      <ProfileFactsForm authenticated={authenticated} />
-      {restrictedAnswerVaultUiEnabled && <RestrictedAnswersForm authenticated={authenticated} />}
-    </section>
+  return (
+    <ProfileArea
+      authenticated={authenticated}
+      name={name}
+      email={email}
+      preferences={preferencesPanel}
+      restricted={
+        restrictedAnswerVaultUiEnabled ? (
+          <RestrictedAnswersForm authenticated={authenticated} />
+        ) : undefined
+      }
+    />
   );
 }
