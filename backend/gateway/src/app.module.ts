@@ -95,6 +95,11 @@ import {
 import {
   type EntitlementReadService,
   EntitlementUnavailableError,
+  StripeAlreadySubscribedError,
+  StripeApiError,
+  StripeNoBillingAccountError,
+  StripeSignatureError,
+  StripeWebhookPayloadError,
 } from "@ai-job-apply/billing-service";
 import {
   DocumentIdempotencyConflictError,
@@ -222,6 +227,7 @@ import {
   projectApplicationsFailure,
 } from "./applications-http.js";
 import { withNativeMaterialCredential } from "./native-material-availability.js";
+import type { RawBodyRequest, StripeBillingGateway } from "./stripe-billing.js";
 import type { NativeMaterialWithdrawalApi } from "./native-owner-material-cleanup.js";
 import { temporaryMaterialRequestSignal } from "./temporary-material-http.js";
 import {
@@ -246,6 +252,7 @@ const NATIVE_MATERIAL_WITHDRAWALS = Symbol("NATIVE_MATERIAL_WITHDRAWALS");
 const PRIVATE_SAVED_PAGE_CAPTURES = Symbol("PRIVATE_SAVED_PAGE_CAPTURES");
 const MATCH_ASSESSMENTS = Symbol("MATCH_ASSESSMENTS");
 const ENTITLEMENTS = Symbol("ENTITLEMENTS");
+const STRIPE_BILLING = Symbol("STRIPE_BILLING");
 const DOCUMENT_STORE = Symbol("DOCUMENT_STORE");
 const CANDIDATE_DATA_EXPORT_DOWNLOADS = Symbol("CANDIDATE_DATA_EXPORT_DOWNLOADS");
 const TOKEN_VERIFIER = Symbol("TOKEN_VERIFIER");
@@ -910,6 +917,21 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "match_assessment_unavailable";
       title = "Match assessment unavailable";
       detail = "The match assessment is temporarily unavailable";
+    } else if (exception instanceof StripeAlreadySubscribedError) {
+      status = HttpStatus.CONFLICT;
+      code = "billing_already_subscribed";
+      title = "Already subscribed";
+      detail = "The account already has a Pro subscription";
+    } else if (exception instanceof StripeNoBillingAccountError) {
+      status = HttpStatus.CONFLICT;
+      code = "billing_no_account";
+      title = "No billing account";
+      detail = "The account has no subscription to manage";
+    } else if (exception instanceof StripeApiError) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
+      code = "billing_unavailable";
+      title = "Billing unavailable";
+      detail = "Billing is temporarily unavailable";
     } else if (exception instanceof EntitlementUnavailableError) {
       status = HttpStatus.SERVICE_UNAVAILABLE;
       code = "entitlement_unavailable";
@@ -3600,6 +3622,67 @@ class ApplicationsController {
   }
 }
 
+function assertNoRequestInput(request: AuthenticatedRequest): void {
+  if (
+    (request.query && Object.keys(request.query as Record<string, unknown>).length > 0) ||
+    (request.headers["content-length"] !== undefined &&
+      request.headers["content-length"] !== "0") ||
+    request.headers["transfer-encoding"] !== undefined
+  ) {
+    throw new HttpException("Request input is invalid", HttpStatus.BAD_REQUEST);
+  }
+}
+
+/** Stripe subscription checkout and portal for the signed-in candidate, plus the signed webhook. */
+@Controller("/v1/billing")
+@UseFilters(ProblemDetailsFilter)
+class StripeBillingController {
+  constructor(
+    @Inject(RequestIdentity) private readonly identity: RequestIdentity,
+    @Inject(STRIPE_BILLING) private readonly billing: StripeBillingGateway,
+  ) {}
+
+  @Post("/checkout-sessions")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async createCheckoutSession(@Req() request: AuthenticatedRequest): Promise<{ url: string }> {
+    assertNoRequestInput(request);
+    const user = await this.identity.resolve(request, "profile:write");
+    return this.billing.startCheckout(user.id);
+  }
+
+  @Post("/portal-sessions")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async createPortalSession(@Req() request: AuthenticatedRequest): Promise<{ url: string }> {
+    assertNoRequestInput(request);
+    const user = await this.identity.resolve(request, "profile:write");
+    return this.billing.openPortal(user.id);
+  }
+
+  /** Public: authenticated only by the Stripe signature over the raw body. */
+  @Post("/webhooks/stripe")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async receiveStripeWebhook(@Req() request: AuthenticatedRequest): Promise<{ received: true }> {
+    const raw = (request as unknown as RawBodyRequest).rawBody;
+    const signature = request.headers["stripe-signature"];
+    if (!raw || typeof signature !== "string") {
+      throw new HttpException("Invalid webhook request", HttpStatus.BAD_REQUEST);
+    }
+    try {
+      await this.billing.handleWebhook(raw, signature);
+    } catch (error) {
+      if (error instanceof StripeSignatureError || error instanceof StripeWebhookPayloadError) {
+        throw new HttpException("Invalid webhook request", HttpStatus.BAD_REQUEST);
+      }
+      // Anything else is ours or Stripe's to retry, so the delivery is not acknowledged.
+      throw new HttpException("Webhook processing unavailable", HttpStatus.SERVICE_UNAVAILABLE);
+    }
+    return { received: true };
+  }
+}
+
 @Controller("/v1/material-withdrawals")
 @UseFilters(ProblemDetailsFilter)
 class NativeMaterialWithdrawalsController {
@@ -3659,6 +3742,7 @@ export interface AppModuleOptions {
   privateSavedPageCaptures: PrivateSavedPageCaptures;
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
+  stripeBilling?: StripeBillingGateway;
   documents: DocumentStore;
   trust: TrustApplicationService;
   trustReviewerAuthority: OidcTrustReviewerAuthority;
@@ -3686,6 +3770,7 @@ export class AppModule {
         ...(options.contributionCapabilityPolicy
           ? [ExtensionContributionCapabilityPolicyController]
           : []),
+        ...(options.stripeBilling ? [StripeBillingController] : []),
       ],
       providers: [
         RequestIdentity,
@@ -3716,6 +3801,7 @@ export class AppModule {
         { provide: PRIVATE_SAVED_PAGE_CAPTURES, useValue: options.privateSavedPageCaptures },
         { provide: MATCH_ASSESSMENTS, useValue: options.matchAssessments },
         { provide: ENTITLEMENTS, useValue: options.entitlements },
+        { provide: STRIPE_BILLING, useValue: options.stripeBilling ?? null },
         { provide: DOCUMENT_STORE, useValue: options.documents },
         { provide: TRUST_APPLICATION, useValue: options.trust },
         { provide: TRUST_REVIEWER_AUTHORITY, useValue: options.trustReviewerAuthority },

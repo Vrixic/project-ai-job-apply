@@ -126,6 +126,7 @@ import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { privacySafeRequestFailure } from "./app.module.js";
 import { createGatewayApplication } from "./application.js";
+import { type StripeBillingGateway, createStripeBillingGateway } from "./stripe-billing.js";
 import { createApplicationsRuntime, loadFieldDefinitions } from "./applications-runtime.js";
 import {
   type AuthorizedHttpApiEvent,
@@ -894,6 +895,7 @@ async function createApp(
     documents?: DocumentStore;
     restrictedAnswerVault?: RestrictedAnswerVaultStore;
     profileSections?: ProfileSectionStore;
+    stripeBilling?: StripeBillingGateway;
     privilegedModerationAudit?: PrivilegedModerationAuditWriter;
   } = {},
 ) {
@@ -956,6 +958,7 @@ async function createApp(
       : {}),
     matchAssessments,
     entitlements,
+    ...(options.stripeBilling ? { stripeBilling: options.stripeBilling } : {}),
     documents,
     ...(options.applications ? { applications: options.applications } : {}),
     ...(options.trust ? { trust: options.trust } : {}),
@@ -6250,5 +6253,198 @@ describe("structured Profile section routes (ADR-052)", () => {
       "discardDraft",
       "putPersonal",
     ]);
+  });
+});
+
+describe("Stripe billing routes (D6-005)", () => {
+  const signingSecret = "whsec_gatewaytest";
+
+  it("registers no billing route unless Stripe billing is configured", async () => {
+    const { app, issuer } = await createApp();
+    const token = await issuer.issue("billing-off", { scope: "profile:read profile:write" });
+    for (const url of ["/v1/billing/checkout-sessions", "/v1/billing/portal-sessions"]) {
+      const response = await app.inject({
+        method: "POST",
+        url,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(response.statusCode).toBe(404);
+    }
+    const webhook = await app.inject({
+      method: "POST",
+      url: "/v1/billing/webhooks/stripe",
+      headers: { "content-type": "application/json" },
+      payload: "{}",
+    });
+    expect(webhook.statusCode).toBe(404);
+    await app.close();
+  });
+
+  async function configured(overrides: Partial<StripeBillingGateway> = {}) {
+    const calls: string[] = [];
+    const billing: StripeBillingGateway = {
+      async startCheckout(userId) {
+        calls.push(`checkout:${userId}`);
+        return { url: "https://checkout.stripe.com/c/test" };
+      },
+      async openPortal(userId) {
+        calls.push(`portal:${userId}`);
+        return { url: "https://billing.stripe.com/p/test" };
+      },
+      async handleWebhook(rawBody, signature) {
+        calls.push(`webhook:${rawBody.toString("utf8")}:${signature}`);
+      },
+      ...overrides,
+    };
+    const setup = await createApp({ stripeBilling: billing });
+    return { ...setup, calls };
+  }
+
+  it("requires authentication and refuses request input on checkout and portal", async () => {
+    const { app, issuer, calls } = await configured();
+    const anonymous = await app.inject({ method: "POST", url: "/v1/billing/checkout-sessions" });
+    expect(anonymous.statusCode).toBe(401);
+    const readOnly = await issuer.issue("billing-readonly", { scope: "profile:read" });
+    const denied = await app.inject({
+      method: "POST",
+      url: "/v1/billing/portal-sessions",
+      headers: { authorization: `Bearer ${readOnly}` },
+    });
+    expect(denied.statusCode).toBe(403);
+    const token = await issuer.issue("billing-owner", { scope: "profile:read profile:write" });
+    const withQuery = await app.inject({
+      method: "POST",
+      url: "/v1/billing/checkout-sessions?price=price_evil",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(withQuery.statusCode).toBe(400);
+    const ok = await app.inject({
+      method: "POST",
+      url: "/v1/billing/checkout-sessions",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(ok.statusCode).toBe(201);
+    expect(ok.json()).toEqual({ url: "https://checkout.stripe.com/c/test" });
+    expect(ok.headers["cache-control"]).toBe("no-store");
+    const portal = await app.inject({
+      method: "POST",
+      url: "/v1/billing/portal-sessions",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(portal.statusCode).toBe(201);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatch(/^checkout:/u);
+    expect(calls[1]).toMatch(/^portal:/u);
+    await app.close();
+  });
+
+  it("maps billing outcomes to stable problem codes", async () => {
+    const { StripeAlreadySubscribedError, StripeNoBillingAccountError, StripeApiError } =
+      await import("@ai-job-apply/billing-service");
+    for (const [error, status, code] of [
+      [new StripeAlreadySubscribedError(), 409, "billing_already_subscribed"],
+      [new StripeNoBillingAccountError(), 409, "billing_no_account"],
+      [new StripeApiError(500, "api_error"), 503, "billing_unavailable"],
+    ] as const) {
+      const { app, issuer } = await configured({
+        async startCheckout() {
+          throw error;
+        },
+      });
+      const token = await issuer.issue("billing-owner", { scope: "profile:read profile:write" });
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/billing/checkout-sessions",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(response.statusCode).toBe(status);
+      expect(response.json().code).toBe(code);
+      await app.close();
+    }
+  });
+
+  it("passes the exact raw webhook bytes and signature to the handler without a bearer token", async () => {
+    const { app, calls } = await configured();
+    const payload = '{"id":"evt_00000001",  "type":"customer.created","data":{"object":{}}}';
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/billing/webhooks/stripe",
+      headers: { "content-type": "application/json", "stripe-signature": "t=1,v1=abc" },
+      payload,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ received: true });
+    expect(calls).toEqual([`webhook:${payload}:t=1,v1=abc`]);
+    await app.close();
+  });
+
+  it("rejects a webhook with no signature header, a bad signature or an oversized body", async () => {
+    const { StripeSignatureError } = await import("@ai-job-apply/billing-service");
+    const { app, calls } = await configured({
+      async handleWebhook() {
+        throw new StripeSignatureError();
+      },
+    });
+    const missing = await app.inject({
+      method: "POST",
+      url: "/v1/billing/webhooks/stripe",
+      headers: { "content-type": "application/json" },
+      payload: "{}",
+    });
+    expect(missing.statusCode).toBe(400);
+    const bad = await app.inject({
+      method: "POST",
+      url: "/v1/billing/webhooks/stripe",
+      headers: { "content-type": "application/json", "stripe-signature": "t=1,v1=00" },
+      payload: "{}",
+    });
+    expect(bad.statusCode).toBe(400);
+    const large = await app.inject({
+      method: "POST",
+      url: "/v1/billing/webhooks/stripe",
+      headers: { "content-type": "application/json", "stripe-signature": "t=1,v1=00" },
+      payload: JSON.stringify({ pad: "x".repeat(300 * 1024) }),
+    });
+    expect(large.statusCode).toBe(413);
+    expect(calls).toEqual([]);
+    await app.close();
+  });
+
+  it("does not acknowledge a delivery that failed to process, so Stripe retries", async () => {
+    const { app } = await configured({
+      async handleWebhook() {
+        throw new Error("database unavailable");
+      },
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/billing/webhooks/stripe",
+      headers: { "content-type": "application/json", "stripe-signature": "t=1,v1=00" },
+      payload: "{}",
+    });
+    expect(response.statusCode).toBe(503);
+    await app.close();
+  });
+
+  it("composes from the environment only when it is complete", () => {
+    const base = {
+      reader: { readEntitlement: async () => ({ userId: "u", version: 0, plan: "free" as const }) },
+      writer: { applyEntitlementChange: async () => ({}) as never },
+    };
+    expect(createStripeBillingGateway({ env: {}, ...base })).toBeUndefined();
+    expect(
+      createStripeBillingGateway({
+        env: {
+          STRIPE_SECRET_KEY: "sk_test_abc123",
+          STRIPE_WEBHOOK_SECRETS: signingSecret,
+          STRIPE_PRO_PRICE_ID: "price_123",
+          BILLING_APP_BASE_URL: "https://app.example.test",
+        },
+        ...base,
+      }),
+    ).toBeDefined();
+    expect(() =>
+      createStripeBillingGateway({ env: { STRIPE_SECRET_KEY: "sk_test_abc123" }, ...base }),
+    ).toThrow(/partially/u);
   });
 });

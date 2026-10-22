@@ -514,6 +514,66 @@ describe("API Gateway Lambda boundary", () => {
     );
   });
 
+  it("allows bodyless authenticated billing sessions and one public signed Stripe webhook", async () => {
+    const principalBridge = createInvocationPrincipalBridge();
+    const inject = vi.fn().mockResolvedValue({
+      statusCode: 200,
+      body: "{}",
+      headers: { "content-type": "application/json" },
+    });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge,
+    });
+
+    for (const path of ["/v1/billing/checkout-sessions", "/v1/billing/portal-sessions"]) {
+      const accepted = await invoke(handler, routedEvent("POST", path));
+      const withBody = await invoke(
+        handler,
+        routedEvent("POST", path, {
+          body: "{}",
+          headers: {
+            authorization: "Bearer opaque-api-gateway-token",
+            "content-type": "application/json",
+          },
+        }),
+      );
+      const unauthenticated = routedEvent("POST", path);
+      delete unauthenticated.requestContext.authorizer;
+      const anonymous = await invoke(handler, unauthenticated);
+      const get = await invoke(handler, routedEvent("GET", path));
+      expect(accepted.statusCode).toBe(200);
+      expect(withBody.statusCode).toBe(400);
+      expect(anonymous.statusCode).toBe(401);
+      expect(get.statusCode).toBe(404);
+    }
+    expect(inject).toHaveBeenCalledTimes(2);
+
+    inject.mockClear();
+    const webhookPath = "/v1/billing/webhooks/stripe";
+    const signed = routedEvent("POST", webhookPath, {
+      body: '{"id":"evt_00000001"}',
+      headers: { "content-type": "application/json", "stripe-signature": "t=1,v1=ab" },
+    });
+    delete signed.requestContext.authorizer;
+    const webhook = await invoke(handler, signed);
+    expect(webhook.statusCode).toBe(200);
+    expect(inject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "POST",
+        url: webhookPath,
+        payload: '{"id":"evt_00000001"}',
+        headers: expect.objectContaining({ "stripe-signature": "t=1,v1=ab" }),
+      }),
+    );
+    const getWebhook = await invoke(handler, routedEvent("GET", webhookPath));
+    const trailing = await invoke(handler, routedEvent("POST", `${webhookPath}/`));
+    expect(getWebhook.statusCode).toBe(404);
+    expect(trailing.statusCode).toBe(404);
+  });
+
   it("allows only an exact lowercase UUIDv7 bodyless match-assessment route", async () => {
     const inject = vi.fn().mockResolvedValue({
       statusCode: 200,

@@ -35,6 +35,7 @@ import {
   type CandidateDataExportDownloadSigner,
 } from "./app.module.js";
 import type { NativeMaterialWithdrawalApi } from "./native-owner-material-cleanup.js";
+import { type StripeBillingGateway, installStripeWebhookRawBody } from "./stripe-billing.js";
 import { installTemporaryMaterialResponseGuards } from "./temporary-material-http.js";
 import {
   OidcTrustReviewerAuthority,
@@ -59,6 +60,7 @@ export interface GatewayApplicationOptions {
   privateSavedPageCaptures?: PrivateSavedPageCaptures;
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
+  stripeBilling?: StripeBillingGateway;
   documents: DocumentStore;
   trust?: TrustApplicationService;
   trustReviewerAssignments?: readonly TrustReviewerAssignment[];
@@ -161,6 +163,7 @@ export async function createGatewayApplication(
         } satisfies PrivateSavedPageCaptures),
       matchAssessments: options.matchAssessments,
       entitlements: options.entitlements,
+      ...(options.stripeBilling ? { stripeBilling: options.stripeBilling } : {}),
       documents: options.documents,
       trust: options.trust ?? new TrustApplicationService(),
       trustReviewerAuthority: new OidcTrustReviewerAuthority(
@@ -183,6 +186,7 @@ export async function createGatewayApplication(
   });
   app.getHttpAdapter().getInstance().addHook("onRequest", applyRequestContext);
   installTemporaryMaterialResponseGuards(app.getHttpAdapter().getInstance());
+  installStripeWebhookRawBody(app.getHttpAdapter().getInstance());
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
   return app;
