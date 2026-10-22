@@ -31,6 +31,11 @@ gate any phase; D3.1-012 and D6-019 are Removed and D3.1 no longer waits for D3.
 privacy, legal and the ADR-015 independent assessment remain, as do AWS shutdown before handoff
 and the product-scope rules. See each phase document's exit criteria and decision log.
 
+2026-10-22 owner decision: privacy reviews and approvals are removed from all phases (D3.1-002 is
+Removed; privacy dropped from the D1, D3, D4, D5, D6 and D7 review gates). Security review, legal
+review, counsel and the ADR-015 independent assessment remain; privacy controls already built in
+code (deletion, export, expiry) stay as engineering. D0 and D2 records are unchanged.
+
 2026-10-21: D3-152 and D3-153 ([ADR-051](../../adr/051-style-preserving-generated-resume.md)): the web preview is the
 rendered PDF with a User_Job_Name_ID file name (merged, #705), and generated PDFs are redrawn in the
 style of the candidate's own resume with whole wrapped bullets reordered or trimmed (local source and
@@ -41,7 +46,7 @@ progress. [Evidence](evidence/d3-style-preserving-resume-2026-10-21.md).
 locally test the Generate-or-Apply flow: BFF material reads without a popup sign-in, server-derived
 generation states with retry, Apply as the approval act, PDF-only generated resumes, and an
 uploaded-resume fallback with extension arming. Nothing is deployed or accepted; release order,
-a governed native image, live acceptance and security/privacy review remain. D3 stays In progress.
+a governed native image, live acceptance and security review remain. D3 stays In progress.
 [Evidence](evidence/d3-generate-then-apply-flow-2026-10-20.md).
 
 2026-10-17: D3-139 to D3-146 (PRs #687-#694)

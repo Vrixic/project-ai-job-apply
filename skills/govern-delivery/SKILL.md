@@ -50,15 +50,15 @@ changes keep their per-change verification evidence as usual.
 ## Complete a delivery
 
 Hosted admin acceptance and other non-security acceptance gates were removed by the owner on
-2026-10-21 and are not completion gates. Security, privacy, legal and launch-assessment gates
+2026-10-21 and are not completion gates. Security, legal and launch-assessment gates
 (ADR-015, ADR-019, ADR-020) remain.
 
 A delivery is complete only when:
 
-- Every remaining exit criterion is met; security and privacy criteria have linked evidence.
+- Every remaining exit criterion is met; security criteria have linked evidence.
 - Every required task is complete or formally removed with a recorded reason.
 - Blockers are closed or explicitly accepted by an accountable owner.
-- Required security, privacy and legal evidence exists. Restore, accessibility, load and product
+- Required security and legal evidence exists. Privacy reviews were removed on 2026-10-22. Restore, accessibility, load and product
   acceptance evidence is not required.
 - The completion date and completion record are written in the phase document.
 - The same date/status appears in the master tracker.

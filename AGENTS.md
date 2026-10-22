@@ -49,7 +49,7 @@ implemented, locally verified, deployed, planned, and externally blocked behavio
 ## Feature-first testing (owner decision 2026-10-21)
 
 Feature development is the priority. Testing, acceptance and evidence work that does not protect
-security or privacy is out of scope: no browser-automation passes, accessibility or load
+security is out of scope: no browser-automation passes, accessibility or load
 acceptance, restore rehearsals, hosted admin acceptance, product acceptance, or per-change
 evidence files. Do not add them to task registers or exit criteria.
 
@@ -59,6 +59,10 @@ safeguards, generated-content expiry (ADR-038), dependency audit, static analysi
 independent pre-launch assessment (ADR-015). For ordinary feature changes, build and typecheck
 the touched package and run its existing tests only when they are quick; do not write new
 non-security tests unless the user asks.
+
+Privacy reviews (privacy approvals, privacy delta reviews, and privacy counsel or reviewer gates)
+were removed from all phases on 2026-10-22. Privacy controls already built into the code
+(deletion, export, expiry, restricted-answer handling) stay as engineering, not as review gates.
 
 Say plainly what works and what does not. Do not describe untested behavior as verified, and
 label simulated responses as simulated. Record status in the phase document and tracker with one

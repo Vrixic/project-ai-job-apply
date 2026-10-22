@@ -30,9 +30,9 @@ rate limits, or measured volume; retain the in-app fallback regardless of capaci
 | D5-005 | Implement send-only Gmail/Outlook OAuth with scope enforcement, revocation, and copyable-draft fallback. | Ready | Unassigned | D0 legal/security | Open |
 | D5-006 | Implement explicit send approval, connected-account delivery, limits, suppression, and one restrained follow-up. | Ready | Unassigned | D5-004, D5-005 | Open |
 | D5-007 | Implement delivery reconciliation, bounce/complaint handling, duplicate prevention, and disconnect/deletion. | Ready | Unassigned | D5-001–D5-006 | Open |
-| D5-008 | Enforce and test the absence of inbox-reading, calendar, and post-submission status permissions/data flows. | Ready | Unassigned | D0 privacy/threat model | Open |
-| D5-009 | Complete OAuth, privacy, anti-spam and grounding security testing. | Ready | Unassigned | D5-001–D5-008 | Open. Provider-failure, accessibility and product testing removed 2026-10-21 (owner decision). |
-| D5-010 | Obtain contact-source, anti-spam, OAuth-provider, legal, security, and privacy approval before any outreach send. | Ready | Legal/privacy counsel; security/privacy reviewers | Concrete sources, providers, scopes, consent UX and suppression controls | Release gate LR-D5-01; drafts may be tested synthetically but sending remains disabled. |
+| D5-008 | Enforce and test the absence of inbox-reading, calendar, and post-submission status permissions/data flows. | Ready | Unassigned | D0 threat model | Open |
+| D5-009 | Complete OAuth, anti-spam and grounding security testing. | Ready | Unassigned | D5-001–D5-008 | Open. Provider-failure, accessibility and product testing removed 2026-10-21 (owner decision). |
+| D5-010 | Obtain contact-source, anti-spam, OAuth-provider, legal and security approval before any outreach send. | Ready | Legal counsel; security reviewers | Concrete sources, providers, scopes, consent UX and suppression controls | Release gate LR-D5-01; drafts may be tested synthetically but sending remains disabled. |
 
 ## Exit criteria
 
@@ -48,7 +48,7 @@ rate limits, or measured volume; retain the in-app fallback regardless of capaci
 - [ ] Outreach contains no fabricated relationship, claim, application state, or candidate fact.
 - [ ] Every outreach send is recipient/content/account/time approved and protected by limits/suppression.
 - [ ] Duplicate-send prevention, revocation and deletion behave correctly. Provider-failure, bounce and complaint test passes were removed 2026-10-21.
-- [ ] Legal, security and privacy evidence is complete. Accessibility and product acceptance were removed 2026-10-21.
+- [ ] Legal and security evidence is complete. Accessibility and product acceptance were removed 2026-10-21.
 
 ## Work log
 

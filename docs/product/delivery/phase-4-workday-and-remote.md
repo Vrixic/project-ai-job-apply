@@ -31,7 +31,7 @@ isolation, failure, or demand evidence. Do not keep idle browser fleets running.
 | D4-008 | Implement ambiguous-submit reconciliation and confirmation evidence. | Ready | Unassigned | D3 application state | Open |
 | D4-009 | Implement per-variant canaries, telemetry, kill switches, and active-tab/manual fallback. | Ready | Unassigned | D3 adapter release system | Open |
 | D4-010 | Complete isolation, session, redirect, cleanup and security testing of the remote browser runtime. | Ready | Unassigned | D4-001–D4-009 | Open. Replay, load and takeover-usability testing removed 2026-10-21 (owner decision). |
-| D4-011 | Obtain Workday/tenant-specific legal and independent security/privacy approval for remote-browser and session processing. | Ready | Legal/privacy counsel; independent security reviewer | Concrete variants, runtime, data flow, isolation and test evidence | Release gate LR-D4-01; live tenant/remote execution remains disabled until approved. |
+| D4-011 | Obtain Workday/tenant-specific legal and independent security approval for remote-browser and session processing. | Ready | Legal counsel; independent security reviewer | Concrete variants, runtime, data flow, isolation and test evidence | Release gate LR-D4-01; live tenant/remote execution remains disabled until approved. |
 | D4-012 | Acquire authorized, sanitized Workday tenant/widget/application fixtures for the declared supported matrix (no separate QA representativeness acceptance; removed 2026-10-21). | Ready | QA/automation; capability reviewers | D0-007 process; exact Workday scope and source authorization | Blocking provider-evidence gate under [ADR-021](../../adr/021-own-provider-fixtures-with-adapter-deliveries.md); synthetic fixtures do not satisfy it. |
 
 ## Exit criteria
@@ -44,7 +44,7 @@ isolation, failure, or demand evidence. Do not keep idle browser fleets running.
 - [ ] Resume-import overwrites and material form changes are detected and re-reviewed.
 - [ ] Timeout/ambiguous submission handling prevents duplicate attempts.
 - [ ] Active-tab and manual fallback preserve the application packet when remote work fails.
-- [ ] Security, privacy and isolation evidence is complete. Reliability, load, adapter and product acceptance were removed 2026-10-21.
+- [ ] Security and isolation evidence is complete. Reliability, load, adapter and product acceptance were removed 2026-10-21.
 
 ## Work log
 
