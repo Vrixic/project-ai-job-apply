@@ -15,11 +15,11 @@ const mocks = vi.hoisted(() => ({
     confirmationReferenceAttribute: "data-reference",
   },
 }));
-vi.mock("../lib/greenhouse/profiles", () => ({
-  greenhouseExecutionProfile: () => mocks.profile,
-  greenhouseExecutionRegistry: {},
+vi.mock("../lib/providers", () => ({
+  providerForUrl: () => ({ profile: () => mocks.profile, inspect: vi.fn() }),
+  applicationExecutionRegistry: {},
 }));
-vi.mock("../lib/greenhouse/execute", () => ({ executeGreenhouseApplication: mocks.execute }));
+vi.mock("../lib/application-run", () => ({ executeApplication: mocks.execute }));
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
@@ -69,7 +69,7 @@ it("clears the entire two-file command during stalled hashing on expiry, cancel 
     return new Promise<ArrayBuffer>(() => {});
   });
   vi.stubGlobal("crypto", { subtle: { digest } });
-  await import("../entrypoints/greenhouse-execution");
+  await import("../entrypoints/application-execution");
   expect(addListener).toHaveBeenCalledTimes(1);
   if (!listener) throw Error("Missing command listener");
   for (const reason of ["expiry", "cancel", "pagehide"]) {

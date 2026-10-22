@@ -5,16 +5,12 @@ import {
   validateApplicationExecutionInspect,
   validateApplicationExecutionProofResult,
 } from "@ai-job-apply/api-contracts/browser-validators";
-import { executeGreenhouseApplication } from "../lib/greenhouse/execute";
-import { inspectGreenhouseApplication } from "../lib/greenhouse/inspect";
-import {
-  greenhouseExecutionProfile,
-  greenhouseExecutionRegistry,
-} from "../lib/greenhouse/profiles";
+import { executeApplication } from "../lib/application-run";
 import type { TransferredNativeFile } from "../lib/native-material-transfer";
+import { applicationExecutionRegistry, providerForUrl } from "../lib/providers";
 
 // Isolated-world lifetime only. Reinjection/restart cannot create a second effect listener.
-const installed = "__applyDashGreenhouseExecutionV1";
+const installed = "__applyDashApplicationExecutionV1";
 if (!Object.hasOwn(globalThis, installed)) {
   Object.defineProperty(globalThis, installed, { value: true });
   let spent = false;
@@ -53,7 +49,9 @@ if (!Object.hasOwn(globalThis, installed)) {
           message.deadline > Date.now() + 60_000
         )
           throw Error("ApplicationExecutionUnavailable");
-        const inspection = inspectGreenhouseApplication(document, message.employerUrl);
+        const provider = providerForUrl(message.employerUrl);
+        if (!provider) throw Error("ApplicationExecutionUnavailable");
+        const inspection = provider.inspect(document, message.employerUrl);
         try {
           const encoded = new TextEncoder().encode(inspection.structure);
           const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", encoded));
@@ -89,8 +87,10 @@ if (!Object.hasOwn(globalThis, installed)) {
         if (new TextEncoder().encode(wire).byteLength > (hasUploaded ? 3_700_000 : 850_000))
           throw Error("ApplicationExecutionUnavailable");
         wire = "";
-        const profile = greenhouseExecutionProfile(message.variantId, message.adapterVersion);
+        const provider = providerForUrl(message.employerUrl);
+        const profile = provider?.profile(message.variantId, message.adapterVersion);
         if (
+          !provider ||
           !profile ||
           spent ||
           active ||
@@ -169,7 +169,8 @@ if (!Object.hasOwn(globalThis, installed)) {
           current();
           if (hash !== file.sha256) throw Error("ApplicationExecutionUnavailable");
         }
-        const result = await executeGreenhouseApplication({
+        const result = await executeApplication({
+          provider,
           document,
           employerUrl: message.employerUrl,
           documentId: message.documentId,
@@ -179,7 +180,7 @@ if (!Object.hasOwn(globalThis, installed)) {
           packet: message.fields,
           files: state.files,
           profile,
-          registry: greenhouseExecutionRegistry,
+          registry: applicationExecutionRegistry,
           deadline: message.deadline,
           signal: controller.signal,
           claim() {

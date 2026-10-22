@@ -1,4 +1,5 @@
-import { executeGreenhouseApplication } from "../../../frontend/extension/lib/greenhouse/execute.ts";
+import { executeApplication } from "../../../frontend/extension/lib/application-run.ts";
+import { greenhouseProvider } from "../../../frontend/extension/lib/greenhouse/provider.ts";
 import { inspectGreenhouseApplication } from "../../../frontend/extension/lib/greenhouse/inspect.ts";
 import { AdapterRegistry } from "../../../packages/ats-sdk/src/registry.ts";
 
@@ -153,7 +154,8 @@ window.runGreenhouseExecutionFixture = async (mode) => {
         bytes: new Uint8Array(bytes),
       }));
   try {
-    const result = await executeGreenhouseApplication({
+    const result = await executeApplication({
+      provider: greenhouseProvider,
       document,
       employerUrl: "https://boards.greenhouse.io/synthetic/jobs/123",
       documentId: "00000000-0000-7000-8000-000000000007",
