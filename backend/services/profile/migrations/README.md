@@ -17,6 +17,12 @@ removes it and all its versions. Releasing it needs the migration image inventor
 release guards (`publish-development-migration-image.ps1`, `development-d2-runtime-release.ps1`)
 updated to include it; they still list the earlier set and fail closed.
 
+`0013_profile_sections_candidate_rights` replaces the export and deletion functions so the portable
+export carries the new sections (`personal`, `education`, `workExperience`, `skills`,
+`applicationAnswers`, `importDrafts`) and account deletion erases them together with their
+idempotency replay records. It adds the helper `profile.export_candidate_entries`. The release guards
+mentioned above also need 0013.
+
 Provider retirement migrations must fail before mutation when undispatched work remains.
 Historical published routing values may be normalized only to a provider-neutral retired label;
 operation, audit, idempotency, and user-owned data remain unchanged.

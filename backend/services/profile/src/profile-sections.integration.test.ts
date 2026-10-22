@@ -1,3 +1,7 @@
+import {
+  candidateDataExportValidationIssue,
+  validateCandidateDataExportV1,
+} from "@ai-job-apply/domain";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, describe, expect, it } from "vitest";
 import { createDatabase } from "./index.js";
@@ -389,5 +393,142 @@ describeWithDatabase("PostgresProfileSectionStore (ADR-052)", () => {
       )::int AS n
     `;
     expect(counts?.n).toBe(0);
+  });
+
+  async function authorizeCandidateDeletion(userId: string): Promise<string> {
+    const operationId = uuidv7();
+    const requestId = uuidv7();
+    await database.client`
+      INSERT INTO platform.operations (id, user_id, kind, state)
+      VALUES (${operationId}::uuid, ${userId}::uuid, 'account_deletion', 'queued')
+    `;
+    await database.client`
+      INSERT INTO profile.account_deletion_requests (
+        id, user_id, operation_id, policy_version, state, version,
+        confirmed_at, backup_expires_at
+      ) VALUES (
+        ${requestId}::uuid, ${userId}::uuid, ${operationId}::uuid,
+        'profile-sections-test.v1', 'quarantined', 1,
+        '2026-09-01T15:00:00.000Z'::timestamptz,
+        '2026-09-08T15:00:00.000Z'::timestamptz
+      )
+    `;
+    await database.client`
+      INSERT INTO privacy.account_deletion_ledger (
+        request_id, subject_digest, policy_version, policy_sha256, state,
+        owner_inventory, subprocessor_inventory, confirmed_at, backup_expires_at
+      ) VALUES (
+        ${requestId}::uuid, ${"a".repeat(64)}, 'profile-sections-test.v1', ${"b".repeat(64)},
+        'quarantined', '{}'::jsonb, '{}'::jsonb,
+        '2026-09-01T15:00:00.000Z'::timestamptz, '2026-09-08T15:00:00.000Z'::timestamptz
+      )
+    `;
+    return requestId;
+  }
+
+  it("exports every saved section in the portable format and erases all of it on deletion", async () => {
+    const owner = await user();
+    await store.putPersonal(
+      owner,
+      {
+        expectedVersion: 0,
+        fullName: "Synthetic Person",
+        links: [{ kind: "github", url: "https://example.test/x" }],
+      },
+      key(),
+      trace,
+    );
+    const school = await store.createEntry(
+      owner,
+      "education",
+      { school: "Export University" },
+      key(),
+      trace,
+    );
+    await store.createEntry(owner, "workExperience", work, key(), trace);
+    await store.createEntry(owner, "skill", { name: "Export Skill" }, key(), trace);
+    await store.createEntry(
+      owner,
+      "applicationAnswer",
+      { question: "Why do you want to work here?", answer: "Export answer text." },
+      key(),
+      trace,
+    );
+    await store.createDraft(owner, uuidv7(), "skill", { name: "Draft Skill" });
+
+    const [exported] = await database.client<Array<{ data: { profile: Record<string, unknown> } }>>`
+      SELECT profile.export_candidate_data(${owner}::uuid) AS data
+    `;
+    const profile = exported?.data.profile as Record<string, unknown[] & Record<string, unknown>>;
+    expect(profile.personal).toMatchObject({
+      fullName: "Synthetic Person",
+      version: 1,
+      origin: "entered",
+    });
+    expect(profile.education).toMatchObject([
+      { id: school.id, school: "Export University", displayOrder: 0 },
+    ]);
+    expect(profile.workExperience).toMatchObject([
+      { company: "Synthetic Systems", bullets: work.bullets },
+    ]);
+    expect(profile.skills).toMatchObject([{ name: "Export Skill" }]);
+    expect(profile.applicationAnswers).toMatchObject([
+      { question: "Why do you want to work here?", questionKey: "why do you want to work here" },
+    ]);
+    expect(profile.importDrafts).toMatchObject([
+      { section: "skill", values: { name: "Draft Skill" } },
+    ]);
+    const at = "2026-10-22T12:00:00.000Z";
+    const portable = {
+      schemaVersion: 1,
+      format: "candidate-data-export-v1",
+      exportId: uuidv7(),
+      policyVersion: "synthetic-v1",
+      generatedAt: at,
+      candidate: { createdAt: at, connectedAccounts: [] },
+      profile: exported?.data.profile,
+      documents: { resumes: [] },
+      jobs: { reports: [] },
+      matching: { savedJobs: [] },
+      billing: { entitlement: { plan: "free", version: 0, effectiveAt: at } },
+      audit: { events: [] },
+    };
+    expect(candidateDataExportValidationIssue(portable)).toBeUndefined();
+    expect(validateCandidateDataExportV1(portable)).toBe(true);
+
+    const other = await user();
+    const [otherExport] = await database.client<
+      Array<{ data: { profile: Record<string, unknown> } }>
+    >`
+      SELECT profile.export_candidate_data(${other}::uuid) AS data
+    `;
+    expect(otherExport?.data.profile).toMatchObject({
+      personal: null,
+      education: [],
+      workExperience: [],
+      skills: [],
+      applicationAnswers: [],
+      importDrafts: [],
+    });
+
+    await store.createEntry(other, "skill", { name: "Other Skill" }, key(), trace);
+    const requestId = await authorizeCandidateDeletion(owner);
+    await database.client`
+      SELECT profile.delete_candidate_data(${owner}::uuid, ${requestId}::uuid)
+    `;
+    const [left] = await database.client<{ n: number }[]>`
+      SELECT (
+        (SELECT count(*) FROM profile.entries WHERE user_id = ${owner}) +
+        (SELECT count(*) FROM profile.entry_versions WHERE entry_id = ${school.id}) +
+        (SELECT count(*) FROM profile.personal_versions WHERE user_id = ${owner}) +
+        (SELECT count(*) FROM profile.import_drafts WHERE user_id = ${owner}) +
+        (SELECT count(*) FROM platform.idempotency_keys
+          WHERE user_id = ${owner}
+            AND (scope LIKE 'profile.entry.%' OR scope LIKE 'profile.personal.%' OR scope LIKE 'profile.draft.%'))
+      )::int AS n
+    `;
+    expect(left?.n).toBe(0);
+    // Another candidate's records are untouched by this deletion.
+    expect((await store.listEntries(other, "skill")).length).toBe(1);
   });
 });

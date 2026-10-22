@@ -431,6 +431,10 @@
         {
           "version": "0012_profile_sections",
           "checksum": "859f9f3c0683c964ff39904431c4b39c2ceaa3004d3b0278955050031166186b"
+        },
+        {
+          "version": "0013_profile_sections_candidate_rights",
+          "checksum": "bb5ed49230e1272151a6414682047962662a20a187e3091804812e3165e16919"
         }
       ],
       "relations": [

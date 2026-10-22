@@ -105,6 +105,51 @@
           "items": {
             "$ref": "#/$defs/contributionConsent"
           }
+        },
+        "personal": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/personalSection"
+            }
+          ]
+        },
+        "education": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/educationEntry"
+          }
+        },
+        "workExperience": {
+          "type": "array",
+          "maxItems": 30,
+          "items": {
+            "$ref": "#/$defs/workExperienceEntry"
+          }
+        },
+        "skills": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/skillEntry"
+          }
+        },
+        "applicationAnswers": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "#/$defs/applicationAnswerEntry"
+          }
+        },
+        "importDrafts": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "#/$defs/profileImportDraft"
+          }
         }
       },
       "additionalProperties": false
@@ -2519,6 +2564,357 @@
         "expiresAtMs": ["contentSha256", "completedAtMs"],
         "readyAt": ["contentSha256", "completedAtMs", "expiresAtMs"]
       }
+    },
+    "personalSection": {
+      "type": "object",
+      "required": ["version", "origin", "createdAt", "updatedAt"],
+      "properties": {
+        "fullName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254
+        },
+        "phone": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 40,
+          "pattern": "^[0-9+().\\-\\s]+$"
+        },
+        "address": {
+          "type": "object",
+          "properties": {
+            "street": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "\\S"
+            },
+            "city": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "\\S"
+            },
+            "region": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "\\S"
+            },
+            "postalCode": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "pattern": "\\S"
+            },
+            "country": {
+              "type": "string",
+              "pattern": "^[A-Z]{2}$"
+            }
+          },
+          "additionalProperties": false
+        },
+        "links": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "required": ["kind", "url"],
+            "properties": {
+              "kind": {
+                "enum": ["linkedin", "github", "portfolio", "other"]
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "maxLength": 500,
+                "pattern": "^https://"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "origin": {
+          "enum": ["entered", "imported"]
+        },
+        "importId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/dateTime"
+        }
+      },
+      "additionalProperties": false
+    },
+    "educationEntry": {
+      "type": "object",
+      "required": ["id", "version", "origin", "createdAt", "updatedAt", "school", "displayOrder"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "origin": {
+          "enum": ["entered", "imported"]
+        },
+        "importId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "school": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S"
+        },
+        "degree": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S"
+        },
+        "fieldOfStudy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S"
+        },
+        "startDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "endDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "displayOrder": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        }
+      },
+      "additionalProperties": false
+    },
+    "workExperienceEntry": {
+      "type": "object",
+      "required": [
+        "id",
+        "version",
+        "origin",
+        "createdAt",
+        "updatedAt",
+        "company",
+        "title",
+        "startDate",
+        "displayOrder"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "origin": {
+          "enum": ["entered", "imported"]
+        },
+        "importId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "company": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S"
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S"
+        },
+        "startDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "endDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "bullets": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S"
+          }
+        },
+        "displayOrder": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        }
+      },
+      "additionalProperties": false
+    },
+    "skillEntry": {
+      "type": "object",
+      "required": ["id", "version", "origin", "createdAt", "updatedAt", "name", "displayOrder"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "origin": {
+          "enum": ["entered", "imported"]
+        },
+        "importId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "\\S"
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "pattern": "\\S"
+        },
+        "displayOrder": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999
+        }
+      },
+      "additionalProperties": false
+    },
+    "applicationAnswerEntry": {
+      "type": "object",
+      "required": [
+        "id",
+        "version",
+        "origin",
+        "createdAt",
+        "updatedAt",
+        "question",
+        "answer",
+        "questionKey"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "origin": {
+          "enum": ["entered", "imported"]
+        },
+        "importId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "pattern": "\\S"
+        },
+        "answer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "pattern": "\\S"
+        },
+        "questionKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "pattern": "\\S"
+        }
+      },
+      "additionalProperties": false
+    },
+    "profileImportDraft": {
+      "type": "object",
+      "required": ["id", "importId", "section", "values", "createdAt"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "importId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "section": {
+          "enum": ["personal", "education", "workExperience", "skill"]
+        },
+        "values": {
+          "type": "object"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        }
+      },
+      "additionalProperties": false
     }
   }
 }
