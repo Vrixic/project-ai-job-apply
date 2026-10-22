@@ -854,7 +854,7 @@ describe("ApplicationsWorkspace: extension hand-off", () => {
     await click("Generate resume");
     await advance(6_500);
     await click("Apply");
-    expect(container.textContent).toContain("Open the ApplyDash extension");
+    expect(container.textContent).toContain("open the ApplyDash extension");
     await advance(2_100);
     await advance(2_100);
     await advance(2_100);

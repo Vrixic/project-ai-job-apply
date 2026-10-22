@@ -37,8 +37,8 @@ const APPLICATION_SUBPAGES: Readonly<Record<string, string>> = {
 
 /**
  * Returns the employer page bound to a canonical job source, or undefined. The page must be the
- * exact source URL, or that same posting's provider application subpage on the same origin. A
- * subpage is returned without its query string (provider tracking), so no query is recorded.
+ * exact source URL (a tracking query is allowed and dropped), or that same posting's provider
+ * application subpage on the same origin. The result never carries a query string, so none is recorded.
  */
 export function employerPageForSource(sourceUrl: string, pageUrl: string): string | undefined {
   let source: URL;
@@ -52,6 +52,12 @@ export function employerPageForSource(sourceUrl: string, pageUrl: string): strin
   for (const url of [source, page])
     if (url.protocol !== "https:" || url.username || url.password || url.hash) return undefined;
   if (page.href === source.href) return source.href;
+  // Browsers and job-search extensions append tracking parameters (jr_id, utm_*, gh_src). The same
+  // posting with a query is still that posting; the query is dropped so none is recorded.
+  if (!source.search && page.origin === source.origin) {
+    const posting = source.pathname.replace(/\/$/u, "");
+    if (page.pathname.replace(/\/$/u, "") === posting) return `${page.origin}${source.pathname}`;
+  }
   const suffix = APPLICATION_SUBPAGES[source.hostname];
   if (!suffix || source.search || page.origin !== source.origin) return undefined;
   const posting = source.pathname.replace(/\/$/u, "");

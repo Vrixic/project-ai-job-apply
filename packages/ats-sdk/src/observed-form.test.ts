@@ -159,6 +159,28 @@ describe("employerPageForSource", () => {
       ),
     ).toBe("https://jobs.lever.co/acme/123/apply");
   });
+  it("binds the same posting when a tracking query was appended, and records no query", () => {
+    expect(employerPageForSource(ashby, `${ashby}?jr_id=tracking&utm_source=x`)).toBe(ashby);
+    expect(
+      employerPageForSource(
+        "https://job-boards.greenhouse.io/acme/jobs/42",
+        "https://job-boards.greenhouse.io/acme/jobs/42/?gh_src=abc",
+      ),
+    ).toBe("https://job-boards.greenhouse.io/acme/jobs/42");
+    // A different path, origin or a source that itself has a query stays refused.
+    expect(
+      employerPageForSource(
+        "https://job-boards.greenhouse.io/acme/jobs/42",
+        "https://job-boards.greenhouse.io/acme/jobs/43?gh_src=abc",
+      ),
+    ).toBeUndefined();
+    expect(
+      employerPageForSource(
+        "https://job-boards.greenhouse.io/acme/jobs/42?gh_jid=1",
+        "https://job-boards.greenhouse.io/acme/jobs/42?gh_jid=2",
+      ),
+    ).toBeUndefined();
+  });
   it("refuses other postings, providers, origins, schemes, fragments and credentials", () => {
     for (const page of [
       "https://jobs.ashbyhq.com/Mintlify/00000000-0000-0000-0000-000000000000/application",

@@ -14,10 +14,11 @@ import {
   validateCanonicalJobDetail,
 } from "@ai-job-apply/api-contracts/browser-validators";
 import { activeJobRevisionDigestInput } from "@ai-job-apply/api-contracts/job-revision-canonical";
+import { employerPageForSource } from "@ai-job-apply/ats-sdk/observed-form";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 import { applicationExecutionApi } from "./application-execution-api";
 import { commandFieldsFromPacket } from "./command-fields";
-import { plainHttpsUrl, readJson } from "./application-handoff";
+import { readJson } from "./application-handoff";
 import type { NativeTransferSelection, TransferredNativeFile } from "./native-material-transfer";
 import { sameNativeTransferBinding } from "./native-transfer-binding";
 import { providerForUrl } from "./providers";
@@ -176,7 +177,7 @@ export async function executeApprovedApplication(options: {
       Date.parse(job.expiresAt) <= Date.now() ||
       (job.validThrough && Date.parse(job.validThrough) <= Date.now()) ||
       !job.sources.some(
-        (source) => plainHttpsUrl(source.canonicalUrl) === plainHttpsUrl(selection.employerUrl),
+        (source) => employerPageForSource(source.canonicalUrl, selection.employerUrl) !== undefined,
       )
     )
       throw unavailable();
