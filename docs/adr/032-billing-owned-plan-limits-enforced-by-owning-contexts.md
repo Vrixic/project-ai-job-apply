@@ -30,8 +30,9 @@ start a second while the first is unfinished.
    candidate for the 30 minutes the processing reconciler would otherwise take.
 5. **One upload in progress, on every plan.** While any of the candidate's documents is uploading, scanning, or
    parsing, a new upload is refused with `resume_upload_in_progress`. This is a pipeline rule, not a billing gate.
-6. **Values.** Free allows one stored resume. Pro allows five (decided 2026-10-22 under D6-008, so the one paid product
-   has a visible benefit); changing either is a one-line table change with a test.
+6. **Values.** Free allows one stored resume. Pro allows two (decided 2026-10-22 under D6-008, so the one paid product
+   has a visible benefit; the owner chose two over the earlier proposal of five); changing either is a one-line
+   table change with a test.
 7. **Contract.** `GET /v1/entitlements` gains an optional `limits` object (additive, same version). Refusals reuse
    the existing `409` problem type with the codes `resume_document_limit` (limit reached) and
    `resume_upload_in_progress`. The web app gates the upload control from the documents list and the limits, and

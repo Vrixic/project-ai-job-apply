@@ -23,7 +23,7 @@ const pro = {
   evaluatedAt: "2026-10-22T12:00:00.000Z",
   accessThrough: "2026-11-20T00:00:00.000Z",
   graceThrough: "2026-11-23T00:00:00.000Z",
-  limits: { maxStoredResumes: 5 },
+  limits: { maxStoredResumes: 2 },
 };
 
 describe("PlanBilling", () => {
@@ -99,7 +99,7 @@ describe("PlanBilling", () => {
     );
     const navigate = await render();
     expect(container.textContent).toContain("through 2026-11-20");
-    expect(container.textContent).toContain("Stored resumes: up to 5 on Pro.");
+    expect(container.textContent).toContain("Stored resumes: up to 2 on Pro.");
     expect(button(/upgrade/i)).toBeUndefined();
     await act(async () => button(/manage subscription/i)?.click());
     await act(async () => {});
