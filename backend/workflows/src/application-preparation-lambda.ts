@@ -16,7 +16,7 @@ import {
 import { createJobCatalogDatabase, PostgresJobCatalog } from "@ai-job-apply/jobs-service";
 import {
   createDatabase,
-  PostgresProfileStore,
+  createProfileSectionStore,
   PostgresRestrictedAnswerVaultStore,
   resolveLambdaDatabaseUrl,
 } from "@ai-job-apply/profile-service";
@@ -112,7 +112,7 @@ export function createApplicationPreparationRuntime(
     definitions: defaultFieldDefinitions(),
     lockVaultReferences: vaultMetadata.lockCurrentReferences.bind(vaultMetadata),
   });
-  const profile = new PostgresProfileStore(profilePool);
+  const profile = createProfileSectionStore(profilePool.client);
   // This capability never searches or emits cursors; a fresh key keeps unused search authority private.
   const catalog = new PostgresJobCatalog(jobsPool, {
     searchCursorKeys: { active: { id: "preparation-unused", key: randomBytes(32) } },

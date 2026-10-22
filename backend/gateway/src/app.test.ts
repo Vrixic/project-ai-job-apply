@@ -4744,23 +4744,22 @@ const applicationsDatabaseUrl = process.env.DATABASE_URL;
         client,
         definitions: loadFieldDefinitions(taxonomy),
         profile: {
-          async listProfileFacts() {
-            return {
-              facts: [
-                {
-                  id: "019d04cf-1f80-7000-8000-0000000000f1",
-                  kind: "identity",
-                  key: "email",
-                  value: "synthetic.candidate@example.test",
-                  verification: "confirmed",
-                  sensitivity: "confidential",
-                  source: { type: "user", reference: "direct-entry" },
-                  version: 1,
-                  createdAt: "2026-09-18T00:00:00.000Z",
-                  updatedAt: "2026-09-18T00:00:00.000Z",
+          async listGroundingFacts() {
+            return [
+              {
+                id: "019d04cf-1f80-7000-8000-0000000000f1",
+                kind: "identity",
+                key: "email",
+                value: "synthetic.candidate@example.test",
+                verification: "confirmed" as const,
+                sensitivity: "confidential" as const,
+                source: {
+                  type: "user" as const,
+                  reference: "profile-entry:personal:019d04cf-1f80-7000-8000-0000000000f2:v1",
                 },
-              ],
-            } as never;
+                version: 1,
+              },
+            ];
           },
         },
         tailoring: {

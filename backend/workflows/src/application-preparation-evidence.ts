@@ -4,7 +4,7 @@ import type {
   PostgresCoverLetterStore,
 } from "@ai-job-apply/documents-service/cover-letter-runtime";
 import type { JobCatalogReader } from "@ai-job-apply/jobs-service";
-import { type ProfileStore, profileFactToGraphFact } from "@ai-job-apply/profile-service";
+import type { ProfileSectionStore } from "@ai-job-apply/profile-service";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
@@ -15,7 +15,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
  */
 export function createOwnedCoverLetterEvidenceSource(options: {
   applications: Pick<PostgresApplicationStore, "getApplication">;
-  profile: Pick<ProfileStore, "listProfileFacts">;
+  profile: Pick<ProfileSectionStore, "listGroundingFacts">;
   catalog: Pick<JobCatalogReader, "getActiveJob">;
   candidateLease: Pick<PostgresCoverLetterStore, "withGenerationLease">;
   enabled?: () => boolean;
@@ -59,11 +59,13 @@ export function createOwnedCoverLetterEvidenceSource(options: {
           };
           const expiresAt = job.expiresAt.getTime();
           if (!enabled()) throw new Error();
-          const { facts } = await options.profile.listProfileFacts(ownerUserId);
+          // Only the candidate's saved Profile records ground generated content (ADR-052).
+          const facts = await options.profile.listGroundingFacts(ownerUserId);
           const result = {
+            // Detached copies: later changes to the store's objects never alter the evidence.
             facts: facts
               .filter((fact) => fact.sensitivity !== "restricted")
-              .map(profileFactToGraphFact),
+              .map((fact) => structuredClone(fact)),
             // Keep the complete posting for context hashing; prompt bounding belongs to AI SDK.
             job: jobFacts,
           };

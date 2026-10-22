@@ -81,7 +81,7 @@ export function createIsolatedCoverLetterPreparationPort(options: {
       getApplication: options.owners.applications.getApplication.bind(options.owners.applications),
     }),
     profile: Object.freeze({
-      listProfileFacts: options.owners.profile.listProfileFacts.bind(options.owners.profile),
+      listGroundingFacts: options.owners.profile.listGroundingFacts.bind(options.owners.profile),
     }),
     catalog: Object.freeze({
       getActiveJob: options.owners.catalog.getActiveJob.bind(options.owners.catalog),

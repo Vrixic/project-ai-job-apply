@@ -19,7 +19,16 @@ import {
   type UpdateProfileSkillEntryRequest,
   type UpdateProfileWorkExperienceEntryRequest,
 } from "@ai-job-apply/api-contracts";
-import { normalizeQuestionKey, restrictedQuestionCategory } from "@ai-job-apply/domain";
+import {
+  type EducationRecordLike,
+  type GraphFact,
+  normalizeQuestionKey,
+  type PersonalRecordLike,
+  profileEntriesToGraphFacts,
+  restrictedQuestionCategory,
+  type SkillRecordLike,
+  type WorkRecordLike,
+} from "@ai-job-apply/domain";
 import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 
@@ -173,6 +182,11 @@ export interface ProfileSectionStore {
     userId: string,
     question: string,
   ): Promise<ProfileApplicationAnswer | null>;
+  /**
+   * The saved Profile as grounding evidence for generation and application packets, read from one
+   * consistent snapshot. Drafts are never included.
+   */
+  listGroundingFacts(userId: string): Promise<GraphFact[]>;
   listDrafts(userId: string): Promise<ProfileImportDraft[]>;
   createDraft(
     userId: string,
@@ -593,6 +607,39 @@ export class PostgresProfileSectionStore implements ProfileSectionStore {
       [userId, key],
     );
     return rows[0] ? (mapEntry(rows[0]) as ProfileApplicationAnswer) : null;
+  }
+
+  async listGroundingFacts(userId: string): Promise<GraphFact[]> {
+    return this.client.begin("isolation level repeatable read read only", async (tx) => {
+      const personal = await tx<PersonalRow[]>`
+        SELECT v.version, v.content, v.origin, v.import_id AS "importId",
+          v.created_at AS "updatedAt", v.created_at AS "createdAt"
+        FROM profile.personal_versions AS v
+        WHERE v.user_id = ${userId}
+        ORDER BY v.version DESC
+        LIMIT 1
+      `;
+      const entries = async (section: ProfileEntrySection) =>
+        (
+          await tx.unsafe<EntryRow[]>(
+            `SELECT ${ENTRY_SELECT}
+             FROM profile.entries AS e
+             JOIN LATERAL (
+               SELECT * FROM profile.entry_versions WHERE entry_id = e.id ORDER BY version DESC LIMIT 1
+             ) AS v ON true
+             WHERE e.user_id = $1 AND e.section = $2
+             ORDER BY e.display_order, e.id`,
+            [userId, section],
+          )
+        ).map(mapEntry) as unknown[];
+      return profileEntriesToGraphFacts({
+        userId,
+        personal: personal[0] ? (mapPersonal(personal[0]) as unknown as PersonalRecordLike) : null,
+        education: (await entries("education")) as EducationRecordLike[],
+        workExperience: (await entries("workExperience")) as WorkRecordLike[],
+        skills: (await entries("skill")) as SkillRecordLike[],
+      });
+    }) as Promise<GraphFact[]>;
   }
 
   async listDrafts(userId: string): Promise<ProfileImportDraft[]> {

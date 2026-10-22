@@ -23,7 +23,7 @@ import {
 import { createJobCatalogDatabase, PostgresJobCatalog } from "@ai-job-apply/jobs-service";
 import {
   createDatabase,
-  PostgresProfileStore,
+  createProfileSectionStore,
   resolveLambdaDatabaseUrl,
 } from "@ai-job-apply/profile-service";
 import { readNativePrincipal } from "@ai-job-apply/profile-service/native-principal";
@@ -115,7 +115,7 @@ export function createNativeOwnerRpcRuntime(
   const jobsPool = createJobCatalogDatabase(url, { maxConnections: 1 });
   const controls = createNativeOwnerControlStore(url, config.target, enabled);
   const applications = new PostgresApplicationStore(applicationPool);
-  const profile = new PostgresProfileStore(profilePool);
+  const profile = createProfileSectionStore(profilePool.client);
   const catalog = new PostgresJobCatalog(jobsPool, {
     searchCursorKeys: {
       active: { id: "native-evidence-unused", key: randomBytes(32) },

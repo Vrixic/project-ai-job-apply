@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createOwnedCoverLetterEvidenceSource } from "./application-preparation-evidence.js";
 
 type Options = Parameters<typeof createOwnedCoverLetterEvidenceSource>[0];
-type ProfileFact = Awaited<ReturnType<Options["profile"]["listProfileFacts"]>>["facts"][number];
+type ProfileFact = Awaited<ReturnType<Options["profile"]["listGroundingFacts"]>>[number];
 const owner = "019a4000-0000-7000-8000-000000000001";
 const app = "019a4000-0000-7000-8000-000000000002";
 const jobId = "019a4000-0000-7000-8000-000000000003";
@@ -19,8 +19,6 @@ const fact: ProfileFact = {
   sensitivity: "standard",
   source: { type: "user", reference: "synthetic" },
   version: 1,
-  createdAt: at.toISOString(),
-  updatedAt: at.toISOString(),
 };
 
 function fixture(defaultOff = false) {
@@ -48,9 +46,9 @@ function fixture(defaultOff = false) {
     expect(leased).toBe(true);
     return job as ActiveJobRecord | null;
   });
-  const listProfileFacts = vi.fn(async () => {
+  const listGroundingFacts = vi.fn(async () => {
     expect(leased).toBe(true);
-    return { facts, confirmedCount: facts.length, proposedCount: 0 };
+    return facts;
   });
   const withGenerationLease = vi.fn(async (_user: string, run: () => Promise<unknown>) => {
     if (!active) throw Error("Synthetic quarantined candidate");
@@ -64,7 +62,7 @@ function fixture(defaultOff = false) {
   const source = createOwnedCoverLetterEvidenceSource({
     applications: { getApplication },
     catalog: { getActiveJob },
-    profile: { listProfileFacts },
+    profile: { listGroundingFacts },
     candidateLease: { withGenerationLease },
     clock: () => now,
     ...(defaultOff ? {} : { enabled: () => enabled }),
@@ -73,7 +71,7 @@ function fixture(defaultOff = false) {
     source,
     getApplication,
     getActiveJob,
-    listProfileFacts,
+    listGroundingFacts,
     view,
     job,
     facts,
@@ -94,9 +92,9 @@ describe("private owned cover-letter evidence composition", () => {
     "refuses evidence when the posting/clock becomes unusable during Profile reads (%s)",
     async (kind) => {
       const f = fixture();
-      f.listProfileFacts.mockImplementation(async () => {
+      f.listGroundingFacts.mockImplementation(async () => {
         f.setClock(kind === "expired" ? f.job.expiresAt : new Date(Number.NaN));
-        return { facts: f.facts, confirmedCount: 1, proposedCount: 0 };
+        return f.facts;
       });
       await expect(f.source.load(owner, app)).rejects.toThrow("CoverLetterEvidenceUnavailable");
     },
@@ -111,14 +109,12 @@ describe("private owned cover-letter evidence composition", () => {
     const result = await f.source.load(owner, app);
     expect(f.getApplication).toHaveBeenCalledWith(owner, app);
     expect(f.getActiveJob).toHaveBeenCalledWith(jobId, at);
-    expect(f.listProfileFacts).toHaveBeenCalledWith(owner);
+    expect(f.listGroundingFacts).toHaveBeenCalledWith(owner);
     expect(result.job).toEqual({
       title: "Engineer",
       company: "Synthetic",
       description: f.job.description,
     });
-    expect(result.facts[0]).not.toHaveProperty("createdAt");
-    expect(result.facts[0]).not.toHaveProperty("updatedAt");
   });
   it.each(["not-an-id", owner.toUpperCase()])(
     "rejects malformed owner identity before reads %s",
@@ -141,7 +137,7 @@ describe("private owned cover-letter evidence composition", () => {
       f.view.application[field] = field === "canonicalJobId" ? "not-an-id" : other;
       await expect(f.source.load(owner, app)).rejects.toThrow("CoverLetterEvidenceUnavailable");
       expect(f.getActiveJob).not.toHaveBeenCalled();
-      expect(f.listProfileFacts).not.toHaveBeenCalled();
+      expect(f.listGroundingFacts).not.toHaveBeenCalled();
     },
   );
   it.each([null, "expired", "bad-time"])("refuses missing or stale job %s", async (value) => {
@@ -149,7 +145,7 @@ describe("private owned cover-letter evidence composition", () => {
     if (value === null) f.getActiveJob.mockResolvedValue(null);
     else f.job.expiresAt = value === "expired" ? at : new Date(Number.NaN);
     await expect(f.source.load(owner, app)).rejects.toThrow("CoverLetterEvidenceUnavailable");
-    expect(f.listProfileFacts).not.toHaveBeenCalled();
+    expect(f.listGroundingFacts).not.toHaveBeenCalled();
   });
   it("removes restricted facts and returns detached graph projections", async () => {
     const f = fixture();
@@ -173,13 +169,13 @@ describe("private owned cover-letter evidence composition", () => {
     const f = fixture();
     const description = "Synthetic ".repeat(1_000);
     f.job.description = description;
-    f.listProfileFacts.mockImplementation(async () => {
+    f.listGroundingFacts.mockImplementation(async () => {
       f.job.description = "changed";
-      return { facts: f.facts, confirmedCount: 1, proposedCount: 0 };
+      return f.facts;
     });
     expect((await f.source.load(owner, app)).job.description).toBe(description);
   });
-  it.each(["getApplication", "getActiveJob", "listProfileFacts"] as const)(
+  it.each(["getApplication", "getActiveJob", "listGroundingFacts"] as const)(
     "rechecks kill switch after %s",
     async (port) => {
       const f = fixture();
@@ -190,10 +186,10 @@ describe("private owned cover-letter evidence composition", () => {
         return value;
       }) as never);
       await expect(f.source.load(owner, app)).rejects.toThrow("CoverLetterEvidenceUnavailable");
-      if (port !== "listProfileFacts") expect(f.listProfileFacts).not.toHaveBeenCalled();
+      if (port !== "listGroundingFacts") expect(f.listGroundingFacts).not.toHaveBeenCalled();
     },
   );
-  it.each(["getApplication", "getActiveJob", "listProfileFacts"] as const)(
+  it.each(["getApplication", "getActiveJob", "listGroundingFacts"] as const)(
     "never reflects private diagnostics from %s",
     async (port) => {
       const f = fixture();

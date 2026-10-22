@@ -18,9 +18,7 @@ const now = new Date("2026-10-04T12:00:00Z");
 function fixture(defaultOff = false) {
   let enabled = true;
   let current = now;
-  const fact: Awaited<
-    ReturnType<Options["owners"]["profile"]["listProfileFacts"]>
-  >["facts"][number] = {
+  const fact: Awaited<ReturnType<Options["owners"]["profile"]["listGroundingFacts"]>>[number] = {
     id: factId,
     kind: "skill",
     key: "skill",
@@ -29,8 +27,6 @@ function fixture(defaultOff = false) {
     sensitivity: "standard",
     source: { type: "user", reference: "synthetic" },
     version: 1,
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString(),
   };
   const facts = [fact];
   const job = {
@@ -47,7 +43,7 @@ function fixture(defaultOff = false) {
       >,
   );
   const getActiveJob = vi.fn(async () => job);
-  const listProfileFacts = vi.fn(async () => ({ facts, confirmedCount: 1, proposedCount: 0 }));
+  const listGroundingFacts = vi.fn(async () => facts);
   const withGenerationLease = vi.fn<Options["candidateLease"]["withGenerationLease"]>(
     async (_owner, run) => run(),
   ) as unknown as Options["candidateLease"]["withGenerationLease"];
@@ -82,7 +78,7 @@ function fixture(defaultOff = false) {
   const port = createIsolatedCoverLetterPreparationPort({
     owners: {
       applications: { getApplication },
-      profile: { listProfileFacts },
+      profile: { listGroundingFacts },
       catalog: { getActiveJob },
     },
     documents: { generationMetadata, reserveGeneration, complete, recover },
@@ -124,7 +120,7 @@ function fixture(defaultOff = false) {
     job,
     getApplication,
     getActiveJob,
-    listProfileFacts,
+    listGroundingFacts,
     withGenerationLease,
     generationMetadata,
     reserveGeneration,
@@ -247,7 +243,7 @@ describe("private Applications to isolated Documents preparation composition", (
     expect(Object.keys(result).sort()).toEqual(["confirmedFactsHash", "jobContextHash"]);
     expect(JSON.stringify(result)).not.toContain("TypeScript");
     expect(f.getApplication).toHaveBeenCalledExactlyOnceWith(owner, applicationId);
-    expect(f.listProfileFacts).toHaveBeenCalledExactlyOnceWith(owner);
+    expect(f.listGroundingFacts).toHaveBeenCalledExactlyOnceWith(owner);
     expect(f.withGenerationLease).toHaveBeenCalledTimes(1);
     expect(f.invoke).not.toHaveBeenCalled();
   });

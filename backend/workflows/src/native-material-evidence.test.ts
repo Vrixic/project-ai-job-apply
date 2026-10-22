@@ -2,12 +2,11 @@ import { coverLetterContext } from "@ai-job-apply/ai-sdk";
 import type { ApplicationView } from "@ai-job-apply/applications-service";
 import type { NativeEvidenceBinding } from "@ai-job-apply/documents-service/native-evidence-binding";
 import type { ActiveJobRecord } from "@ai-job-apply/jobs-service";
-import { profileFactToGraphFact } from "@ai-job-apply/profile-service";
 import { describe, expect, it, vi } from "vitest";
 import { createNativeOwnedCoverLetterEvidenceSource } from "./native-material-evidence.js";
 
 type Options = Parameters<typeof createNativeOwnedCoverLetterEvidenceSource>[0];
-type Fact = Awaited<ReturnType<Options["profile"]["listProfileFacts"]>>["facts"][number];
+type Fact = Awaited<ReturnType<Options["profile"]["listGroundingFacts"]>>[number];
 const id = (n: number) => `019a4000-0000-7000-8000-${String(n).padStart(12, "0")}`;
 function fixture(defaultOff = false) {
   const at = new Date();
@@ -21,8 +20,6 @@ function fixture(defaultOff = false) {
     sensitivity: "standard",
     source: { type: "user", reference: "synthetic" },
     version: 1,
-    createdAt: at.toISOString(),
-    updatedAt: at.toISOString(),
   };
   const binding: NativeEvidenceBinding = {
     scope: {
@@ -50,7 +47,7 @@ function fixture(defaultOff = false) {
     },
   };
   const job = { title: "Engineer", company: "Synthetic", description: "Build reliable systems." };
-  const context = coverLetterContext({ facts: [profileFactToGraphFact(fact)], job, now: at });
+  const context = coverLetterContext({ facts: [fact], job, now: at });
   const getApplication = vi.fn(
     async () =>
       ({
@@ -68,11 +65,7 @@ function fixture(defaultOff = false) {
         expiresAt: new Date(at.getTime() + 60_000),
       }) as ActiveJobRecord,
   );
-  const listProfileFacts = vi.fn(async () => ({
-    facts: [fact],
-    confirmedCount: 1,
-    proposedCount: 0,
-  }));
+  const listGroundingFacts = vi.fn(async () => [fact]);
   const withGenerationLease = vi.fn(async (_owner: string, run: () => Promise<unknown>) => {
     leased = true;
     try {
@@ -90,7 +83,7 @@ function fixture(defaultOff = false) {
     checkAdmission,
     applications: { getApplication },
     catalog: { getActiveJob },
-    profile: { listProfileFacts },
+    profile: { listGroundingFacts },
     candidateLease: { withGenerationLease },
     ...(defaultOff ? {} : { enabled: () => true }),
   };
@@ -103,7 +96,7 @@ function fixture(defaultOff = false) {
     job,
     getApplication,
     getActiveJob,
-    listProfileFacts,
+    listGroundingFacts,
     checkAdmission,
   };
 }
@@ -140,7 +133,7 @@ describe("allocation-bound owning native evidence", () => {
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(Error("synthetic-database-private-details"));
     await expect(f.source.load(id(2), id(3))).rejects.toThrow(/^NativeEvidenceUnavailable$/u);
-    expect(f.listProfileFacts).toHaveBeenCalledOnce();
+    expect(f.listGroundingFacts).toHaveBeenCalledOnce();
     expect(f.fact.value).toEqual(["TypeScript"]);
   });
   it("refuses first admission without disclosing owner values", async () => {

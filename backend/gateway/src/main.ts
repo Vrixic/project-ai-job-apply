@@ -214,7 +214,7 @@ const applications =
   process.env.APPLICATIONS_ENABLED === "true"
     ? createApplicationsRuntime({
         client: createApplicationsDatabase(config.DATABASE_URL, { maxConnections: 2 }),
-        profile: store,
+        profile: profileSections,
         ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
         ...(legacyReceipts ? { legacyReceipts } : {}),
         ...(nativeMaterialLocations ? { nativeMaterialLocations } : {}),

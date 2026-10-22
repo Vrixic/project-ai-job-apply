@@ -106,7 +106,7 @@ function fixture(defaultOff = false, launchEnabled = true) {
             ReturnType<Options["owners"]["applications"]["getApplication"]>
           >,
       },
-      profile: { listProfileFacts: async () => ({ facts, confirmedCount: 1, proposedCount: 0 }) },
+      profile: { listGroundingFacts: async () => facts },
       catalog: {
         getActiveJob: async () =>
           ({

@@ -57,7 +57,7 @@ function setup(hasLetter = true) {
   const options: ApplicationsRuntimeOptions = {
     client: {} as ApplicationsRuntimeOptions["client"],
     definitions: new Map(),
-    profile: { listProfileFacts: vi.fn(async () => ({ facts: [] })) },
+    profile: { listGroundingFacts: vi.fn(async () => []) },
     catalog: {
       getActiveJob: vi.fn(async () => null),
       resolveActiveJobSummaries: vi.fn(async () => ({ items: [], catalogRevision: "synthetic" })),

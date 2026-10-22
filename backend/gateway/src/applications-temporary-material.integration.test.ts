@@ -25,7 +25,11 @@ import {
 } from "@ai-job-apply/documents-service/cover-letter-runtime";
 import { createNativeReadAuthorizationClient } from "@ai-job-apply/documents-service/native-read-authorization-client";
 import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
-import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-service";
+import {
+  createDatabase,
+  createProfileSectionStore,
+  PostgresProfileStore,
+} from "@ai-job-apply/profile-service";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -57,6 +61,7 @@ const key = () => `temporary-packet-${uuidv7()}`;
     maxConnections: 2,
   });
   const profile = new PostgresProfileStore(profileDatabase);
+  const profileSections = createProfileSectionStore(profileDatabase.client);
   let at = new Date();
   const definitions = defaultFieldDefinitions();
   const store = new PostgresApplicationStore(database, () => at, {
@@ -96,7 +101,7 @@ const key = () => `temporary-packet-${uuidv7()}`;
   ) {
     return createApplicationsRuntime({
       client: database,
-      profile,
+      profile: profileSections,
       catalog,
       definitions,
       restrictedPackets: packetProtection.options,
@@ -142,7 +147,7 @@ const key = () => `temporary-packet-${uuidv7()}`;
     await database`INSERT INTO identity.users (id) VALUES (${owner}::uuid) ON CONFLICT DO NOTHING`;
     const noProvider = createApplicationsRuntime({
       client: database,
-      profile,
+      profile: profileSections,
       catalog,
       definitions,
       restrictedPackets: packetProtection.options,
