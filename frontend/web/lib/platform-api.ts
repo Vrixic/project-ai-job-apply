@@ -117,6 +117,12 @@ const declaredProblems = new Map<string, Readonly<DeclaredProblem>>([
   ],
   ["409:saved_jobs_changed", { code: "saved_jobs_changed", title: "Saved jobs changed" }],
   [
+    "409:billing_already_subscribed",
+    { code: "billing_already_subscribed", title: "Already subscribed" },
+  ],
+  ["409:billing_no_account", { code: "billing_no_account", title: "No billing account" }],
+  ["503:billing_unavailable", { code: "billing_unavailable", title: "Billing unavailable" }],
+  [
     "400:invalid_application_cursor",
     { code: "invalid_application_cursor", title: "Invalid application cursor" },
   ],
