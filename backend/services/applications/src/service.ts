@@ -946,10 +946,16 @@ export class ApplicationsService implements ApplicationsApi {
     idempotencyKey: string,
   ): Promise<ApplicationSubmissionStart> {
     const current = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    const packet = current.currentPacket;
+    const lateBound =
+      lateBoundFormAdapters.has(request.adapterId) &&
+      packet !== null &&
+      packet.form === null &&
+      !packet.fields.some((field) => field.vaultReference);
     const live = await this.dependencies.bindings.resolve({
       ownerUserId,
       application: current.application,
-      formHash: request.observedFormHash,
+      formHash: lateBound ? null : request.observedFormHash,
     });
     const result: StartAttemptResult = await this.dependencies.store.startAttempt({
       ownerUserId,
@@ -1374,6 +1380,16 @@ interface CursorPayload {
   u: string;
   i: string;
 }
+
+/**
+ * ADR-053: adapters whose packets may be bound to the employer form late. The candidate approves
+ * answer values (ADR-050), so a packet with no form binding and no saved-answer references is
+ * executed against whatever form the adapter observes; the extension binds its own inspection.
+ */
+const lateBoundFormAdapters: ReadonlySet<string> = new Set([
+  "greenhouse-application-v1",
+  "ashby-application-v1",
+]);
 
 const CURSOR_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

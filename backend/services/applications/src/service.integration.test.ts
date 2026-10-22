@@ -196,6 +196,79 @@ describeWithDatabase("ApplicationsService over PostgreSQL", () => {
     expect(JSON.stringify(history)).not.toMatch(/interview|offer|recruiter|hired/i);
   });
 
+  it("starts an adapter attempt for a packet with no form binding and refuses other adapters (ADR-053)", async () => {
+    const unboundService = createIntegrationApplicationsService({
+      store,
+      jobs,
+      bindings,
+      packets: {
+        async prepare() {
+          return {
+            jobRevision: liveJobRevision,
+            form: null,
+            fields: [proposal()],
+            artifactHashes: { resume: HASH_C },
+          };
+        },
+      },
+    });
+    const prepareApproved = async () => {
+      const owner = uuidv7();
+      const created = await createFixtureServiceApplication(
+        unboundService,
+        client,
+        owner,
+        newJob(),
+        key("create"),
+      );
+      const prepared = await unboundService.preparePacket(
+        owner,
+        created.id,
+        { expectedRevision: created.revision },
+        key("packet"),
+      );
+      const approved = await unboundService.approve(
+        owner,
+        created.id,
+        {
+          expectedRevision: prepared.revision,
+          packetHash: prepared.currentPacket?.packetHash ?? "",
+          acknowledgedFieldKeys: [],
+        },
+        key("approve"),
+      );
+      return { owner, id: created.id, revision: approved.revision };
+    };
+    const lateBound = await prepareApproved();
+    const started = await unboundService.startSubmission(
+      lateBound.owner,
+      lateBound.id,
+      {
+        expectedRevision: lateBound.revision,
+        adapterId: "ashby-application-v1",
+        adapterVersion: "1.0.0",
+        observedFormHash: HASH_B,
+      },
+      key("start"),
+    );
+    expect(started.outcome).toBe("started");
+
+    const other = await prepareApproved();
+    const refused = await unboundService.startSubmission(
+      other.owner,
+      other.id,
+      {
+        expectedRevision: other.revision,
+        adapterId: "generic-assisted-v1",
+        adapterVersion: "1.0.0",
+        observedFormHash: HASH_B,
+      },
+      key("start"),
+    );
+    expect(refused.outcome).toBe("approval_invalidated");
+    expect(refused.invalidationReasons).toContain("form_changed");
+  });
+
   it("records a hand-completed submission through takeover and candidate attestation", async () => {
     const manualService = createIntegrationApplicationsService({
       store,
