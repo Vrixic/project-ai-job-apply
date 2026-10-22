@@ -165,6 +165,14 @@ export interface ProfileSectionStore {
     idempotencyKey: string,
     traceId: string,
   ): Promise<ProfileEntryRecord[]>;
+  /**
+   * Exact-key reuse (ADR-052): the saved answer whose normalized question key equals the asked
+   * question's, or null. Restricted questions never match, and nothing is inferred or fuzzy.
+   */
+  matchApplicationAnswer(
+    userId: string,
+    question: string,
+  ): Promise<ProfileApplicationAnswer | null>;
   listDrafts(userId: string): Promise<ProfileImportDraft[]>;
   createDraft(
     userId: string,
@@ -552,6 +560,25 @@ export class PostgresProfileSectionStore implements ProfileSectionStore {
         };
       },
     );
+  }
+
+  async matchApplicationAnswer(
+    userId: string,
+    question: string,
+  ): Promise<ProfileApplicationAnswer | null> {
+    if (restrictedQuestionCategory(question) !== undefined) return null;
+    const key = normalizeQuestionKey(question);
+    if (key.length === 0) return null;
+    const rows = await this.client.unsafe<EntryRow[]>(
+      `SELECT ${ENTRY_SELECT}
+       FROM profile.entries AS e
+       JOIN LATERAL (
+         SELECT * FROM profile.entry_versions WHERE entry_id = e.id ORDER BY version DESC LIMIT 1
+       ) AS v ON true
+       WHERE e.user_id = $1 AND e.section = 'applicationAnswer' AND e.natural_key = $2`,
+      [userId, key],
+    );
+    return rows[0] ? (mapEntry(rows[0]) as ProfileApplicationAnswer) : null;
   }
 
   async listDrafts(userId: string): Promise<ProfileImportDraft[]> {
