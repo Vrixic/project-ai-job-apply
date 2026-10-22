@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { fileURLToPath } from "node:url";
 import {
   applicationExecutionForBuild,
+  applicationExecutionProvidersForBuild,
   applicationHandoffOriginForBuild,
+  applicationImplementationHash,
   assertStoreContributionMode,
   capabilityPolicyPublicKeysForBuild,
   developmentContributionProvidersForBuild,
@@ -244,5 +247,51 @@ describe("development contribution build and store boundary", () => {
     expect(() =>
       assertStoreContributionMode({ EXTENSION_DEVELOPMENT_CONTRIBUTIONS: "yes" }, {}),
     ).toThrow();
+  });
+});
+
+describe("execution provider selection (ADR-053)", () => {
+  it("defaults to no provider and needs the execution build to name one", () => {
+    expect(applicationExecutionProvidersForBuild({}, {}, false)).toEqual([]);
+    expect(applicationExecutionProvidersForBuild({}, {}, true)).toEqual([]);
+    expect(() =>
+      applicationExecutionProvidersForBuild(
+        { EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON: '["ashby"]' },
+        {},
+        false,
+      ),
+    ).toThrow();
+    expect(
+      applicationExecutionProvidersForBuild(
+        { EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON: '["greenhouse","ashby"]' },
+        {},
+        true,
+      ),
+    ).toEqual(["greenhouse", "ashby"]);
+    expect(
+      applicationExecutionProvidersForBuild(
+        {},
+        { EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON: '["ashby"]' },
+        true,
+      ),
+    ).toEqual(["ashby"]);
+  });
+  it.each(['["lever"]', '["ashby","ashby"]', '"ashby"', "ashby", "[1]", "{}", ""])(
+    "rejects the selection %j",
+    (value) => {
+      expect(() =>
+        applicationExecutionProvidersForBuild(
+          { EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON: value },
+          {},
+          true,
+        ),
+      ).toThrow();
+    },
+  );
+  it("derives a stable implementation hash from the provider source", async () => {
+    const root = fileURLToPath(new URL("../", import.meta.url));
+    const first = await applicationImplementationHash(root);
+    expect(first).toMatch(/^[a-f0-9]{64}$/u);
+    expect(await applicationImplementationHash(root)).toBe(first);
   });
 });

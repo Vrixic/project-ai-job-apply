@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 import { build, context } from "esbuild";
 import {
   applicationExecutionForBuild,
+  applicationExecutionProvidersForBuild,
   applicationHandoffOriginForBuild,
+  applicationImplementationHash,
   capabilityPolicyPublicKeysForBuild,
   developmentContributionProvidersForBuild,
   localExtensionEnvironment,
@@ -28,6 +30,12 @@ const applicationExecution = applicationExecutionForBuild(
   fileEnvironment,
   handoffWebOrigin,
 );
+const applicationExecutionProviders = applicationExecutionProvidersForBuild(
+  process.env,
+  fileEnvironment,
+  applicationExecution,
+);
+const implementationSha256 = await applicationImplementationHash(extensionRoot);
 const developmentContributions = parseDevelopmentContributions(
   process.env.EXTENSION_DEVELOPMENT_CONTRIBUTIONS ??
     fileEnvironment.EXTENSION_DEVELOPMENT_CONTRIBUTIONS,
@@ -161,6 +169,9 @@ const buildOptions = {
     : {}),
   define: {
     __APPLICATION_EXECUTION_ENABLED__: JSON.stringify(applicationExecution),
+    __APPLICATION_EXECUTION_PROVIDERS__: JSON.stringify(applicationExecutionProviders),
+    __APPLICATION_EXECUTION_BUILT_AT_MS__: JSON.stringify(Date.now()),
+    __APPLICATION_IMPLEMENTATION_SHA256__: JSON.stringify(implementationSha256),
     __APPLICATION_HANDOFF_WEB_ORIGIN__: JSON.stringify(handoffWebOrigin),
     __AUTH0_AUDIENCE__: JSON.stringify(configured ? audience : ""),
     __AUTH0_CLIENT_ID__: JSON.stringify(configured ? clientId : ""),

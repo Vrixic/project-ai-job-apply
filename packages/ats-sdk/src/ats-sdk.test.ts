@@ -435,13 +435,14 @@ describe("adapter registry gate", () => {
         fixtureEvidence: { [id]: { ...evidence, kind: "synthetic" } },
       }).reasons,
     ).toContain("fixture_evidence_not_provider_derived");
+    // QA representativeness acceptance was removed by the owner (2026-10-21): not required.
     expect(
       status({
         enabled,
         liveEffectsApproved: true,
         fixtureEvidence: { [id]: { ...evidence, qaRepresentativenessAcceptedAt: "" } },
       }).reasons,
-    ).toContain("fixture_qa_acceptance_missing");
+    ).not.toContain("fixture_qa_acceptance_missing");
     expect(
       status({
         enabled,
