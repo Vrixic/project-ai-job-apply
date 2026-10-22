@@ -355,17 +355,27 @@ See [hosting build recovery](evidence/d3-candidate-hosting-build-recovery-2026-1
 D3-087 is locally verified; live acceptance remains separate. D3-088 implements locally verified recovery found
 by the negative-path inspection; see [recovery evidence](evidence/d3-withdrawn-answer-recovery-2026-10-09.md). See [current evidence](evidence/d3-observed-form-saved-answer-selection-2026-10-09.md).
 
+2026-10-21: Owner decision. Non-security testing, acceptance and evidence work is removed from D3:
+installed Edge and expiry-drill testing, candidate output-quality acceptance, accessibility
+acceptance, product acceptance, AI evaluation, ATS-fixture QA representativeness and restore
+rehearsals. Rights/deletion, expiry enforcement, restricted-answer review, submission safety and
+the legal/security/privacy review stay. D3.1 no longer waits for D3 to complete.
+
 Generated cover letters and tailored resumes must never persist and must expire within 30 minutes (ADR-038).
 Manual Apply is the first acceptance path; Greenhouse is the first automated adapter.
 Application history ends at confirmed submission; sensitive answers and irreversible actions require candidate review.
 
 ## Exit criteria
 
-- [ ] Complete truthful preparation, review, approval, Apply and confirmed-submission history.
-- [ ] Verify rendered documents, immutable approval bindings and duplicate-submission safety.
-- [ ] Prove no generated-content persistence and all-copy expiry within 30 minutes.
-- [ ] Accept supported ATS fixtures/accuracy and safe manual fallback.
-- [ ] Complete rights/restore, AI evaluation, accessibility and accountable legal/security/privacy/product reviews.
+Owner decision 2026-10-21: rendered-document verification, ATS accuracy acceptance, restore
+rehearsals, AI evaluation, accessibility and product acceptance are removed. Security and privacy
+criteria remain.
+
+- [ ] Truthful preparation, review, approval, Apply and confirmed-submission history work for the candidate.
+- [ ] Immutable approval bindings and duplicate-submission safety hold.
+- [ ] No generated-content persistence and all-copy expiry within 30 minutes (ADR-038).
+- [ ] The Greenhouse adapter works with a safe manual fallback.
+- [ ] Candidate export and deletion complete (the canonical rights run is still FAILED) and accountable legal/security/privacy review is done.
 
 ## Evidence
 

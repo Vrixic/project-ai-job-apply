@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-10-17. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
+Last updated: 2026-10-21. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
 
 ## Summary
 
@@ -23,6 +23,13 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 [Implemented and remaining capabilities](phase-1-web-and-job-catalog.md).
 
 ## D3 — High-quality application preparation
+
+2026-10-21 owner decision: all non-security testing, acceptance, evidence and friction work is
+removed from every incomplete phase (D1, D3, D3.1, D4, D5, D6, D7). Hosted admin, accessibility,
+load, restore-rehearsal, AI-evaluation, QA-representativeness and product acceptance no longer
+gate any phase; D3.1-012 and D6-019 are Removed and D3.1 no longer waits for D3. Security,
+privacy, legal and the ADR-015 independent assessment remain, as do AWS shutdown before handoff
+and the product-scope rules. See each phase document's exit criteria and decision log.
 
 2026-10-21: D3-152 and D3-153 ([ADR-051](../../adr/051-style-preserving-generated-resume.md)): the web preview is the
 rendered PDF with a User_Job_Name_ID file name (merged, #705), and generated PDFs are redrawn in the
@@ -339,6 +346,10 @@ inputs pass focused checks, independent review and all 43 repository stages. Man
 [Recovery input evidence](evidence/d3-bootstrap-recovery-inputs-2026-10-10.md).
 
 ## Cross-delivery decisions and changes
+
+2026-10-21: Non-security testing and acceptance work removed from all incomplete phases; D3.1 may
+start before D3 completes. The `AGENTS.md` testing section and the `govern-delivery` skill now
+reflect this.
 
 Applications history belongs to D3, the generic inbox to D5, and structured Profile replacement to D3.1.
 CI/CD work is deferred until production launch; independent launch security review remains required by ADR-015.

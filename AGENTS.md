@@ -46,21 +46,23 @@ API change normally uses `evolve-platform-contracts`, `build-vertical-slice`, an
 Read the relevant source before answering repository-specific questions. Clearly distinguish
 implemented, locally verified, deployed, planned, and externally blocked behavior.
 
-## Agent testing before human review
+## Feature-first testing (owner decision 2026-10-21)
 
-Test changed features before asking the user to test them. Run relevant automated checks and,
-for user-facing changes, exercise the actual UI with available browser automation. Fix failures
-and repeat the affected checks before handoff. Human review is the final acceptance step, not
-the first debugging pass.
+Feature development is the priority. Testing, acceptance and evidence work that does not protect
+security or privacy is out of scope: no browser-automation passes, accessibility or load
+acceptance, restore rehearsals, hosted admin acceptance, product acceptance, or per-change
+evidence files. Do not add them to task registers or exit criteria.
 
-State which build and environment were tested, and distinguish simulated authentication/API
-responses from live end-to-end behavior. If browser control or another prerequisite is
-unavailable, explain the specific gap without claiming verification. Ask for earlier human
-input only when needed for sign-in/MFA, an independent decision, required authorization, or
-another genuinely unavailable capability; complete all safe independent checks first.
+Keep and run security work: authentication and authorization, owner isolation, restricted-answer
+review, submission safety and duplicate-submission protection, deletion/export privacy
+safeguards, generated-content expiry (ADR-038), dependency audit, static analysis, and the
+independent pre-launch assessment (ADR-015). For ordinary feature changes, build and typecheck
+the touched package and run its existing tests only when they are quick; do not write new
+non-security tests unless the user asks.
 
-Do not reopen owner-removed manual testing of development-only Delivery queue or Your shared
-jobs panels. Keep the phase document updated with results and remaining human-only steps.
+Say plainly what works and what does not. Do not describe untested behavior as verified, and
+label simulated responses as simulated. Record status in the phase document and tracker with one
+short line per change.
 
 ## Local runtime hygiene
 
