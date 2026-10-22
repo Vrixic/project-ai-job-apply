@@ -24,6 +24,12 @@ Final hosted/public acceptance, maintenance deployment and real-candidate/privac
 
 ## D3 — High-quality application preparation
 
+2026-10-21: D3-152 and D3-153 ([ADR-051](../../adr/051-style-preserving-generated-resume.md)): the web preview is the
+rendered PDF with a User_Job_Name_ID file name (merged, #705), and generated PDFs are redrawn in the
+style of the candidate's own resume with whole wrapped bullets reordered or trimmed (local source and
+tests only; needs a parser and a governed native image release, then live acceptance). D3 stays In
+progress. [Evidence](evidence/d3-style-preserving-resume-2026-10-21.md).
+
 2026-10-20: D3-147 to D3-151 ([ADR-050](../../adr/050-generate-then-apply-flow.md)) implement and
 locally test the Generate-or-Apply flow: BFF material reads without a popup sign-in, server-derived
 generation states with retry, Apply as the approval act, PDF-only generated resumes, and an

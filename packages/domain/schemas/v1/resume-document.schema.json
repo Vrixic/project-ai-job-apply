@@ -35,12 +35,69 @@
           "page": { "type": "integer", "minimum": 1, "maximum": 50 },
           "text": { "type": "string", "minLength": 1, "maxLength": 20000, "pattern": "\\S" },
           "startOffset": { "type": "integer", "minimum": 0, "maximum": 200000 },
-          "endOffset": { "type": "integer", "minimum": 1, "maximum": 200000 }
+          "endOffset": { "type": "integer", "minimum": 1, "maximum": 200000 },
+          "layout": { "$ref": "#/$defs/blockLayout" }
         },
         "additionalProperties": false
       }
     },
+    "page": { "$ref": "#/$defs/pageGeometry" },
     "createdAt": { "type": "string", "format": "date-time" }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "pageGeometry": {
+      "description": "Page size in points. Present exactly when every block carries a layout.",
+      "type": "object",
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "number", "minimum": 50, "maximum": 3000 },
+        "height": { "type": "number", "minimum": 50, "maximum": 3000 }
+      },
+      "additionalProperties": false
+    },
+    "blockLayout": {
+      "description": "How one source line looked, so a tailored copy can be drawn the way the candidate's own resume was set. Positions and font traits only; run text repeats the block's own words.",
+      "type": "object",
+      "required": ["y", "runs"],
+      "properties": {
+        "y": { "type": "number", "minimum": -50, "maximum": 5000 },
+        "runs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 120,
+          "items": { "$ref": "#/$defs/layoutRun" }
+        },
+        "rules": { "type": "array", "maxItems": 24, "items": { "$ref": "#/$defs/layoutRule" } }
+      },
+      "additionalProperties": false
+    },
+    "layoutRun": {
+      "type": "object",
+      "required": ["x", "w", "size", "text"],
+      "properties": {
+        "x": { "type": "number", "minimum": -50, "maximum": 5000 },
+        "w": { "type": "number", "minimum": 0, "maximum": 5000 },
+        "size": { "type": "number", "minimum": 2, "maximum": 200 },
+        "text": { "type": "string", "minLength": 1, "maxLength": 20008 },
+        "bold": { "const": true },
+        "italic": { "const": true },
+        "family": { "enum": ["serif", "mono"] },
+        "color": { "type": "string", "pattern": "^#[0-9a-f]{6}$" }
+      },
+      "additionalProperties": false
+    },
+    "layoutRule": {
+      "type": "object",
+      "required": ["x0", "x1", "dy", "h"],
+      "properties": {
+        "x0": { "type": "number", "minimum": -50, "maximum": 5000 },
+        "x1": { "type": "number", "minimum": -50, "maximum": 5000 },
+        "dy": { "type": "number", "minimum": -50, "maximum": 100 },
+        "h": { "type": "number", "minimum": 0.1, "maximum": 6 },
+        "color": { "type": "string", "pattern": "^#[0-9a-f]{6}$" }
+      },
+      "additionalProperties": false
+    }
+  }
 }

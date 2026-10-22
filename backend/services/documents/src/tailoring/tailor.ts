@@ -1,5 +1,5 @@
 import { canonicalizeLeadingBullet } from "../leading-bullet.js";
-import type { AstEntry, AstNode, AstSection, ResumeAst } from "../resume-ast/types.js";
+import type { AstEntry, AstLine, AstNode, AstSection, ResumeAst } from "../resume-ast/types.js";
 
 export const TAILORING_VERSION = "tailoring.v1" as const;
 export const DEFAULT_MAX_BULLETS_PER_ENTRY = 6;
@@ -237,6 +237,8 @@ export interface RenderBlock {
   kind: "heading" | "line" | "bullet";
   text: string;
   nodeId: string;
+  /** How the source lines of this block looked, when the document carries layout. */
+  lines?: AstLine[];
 }
 
 /** Text as drawn in generated documents: only a leading visual bullet marker is canonicalized. */
@@ -255,7 +257,12 @@ export function materializeTailoredResume(ast: ResumeAst, tailored: TailoredResu
   const resolve = (nodeId: string, kind: RenderBlock["kind"]): RenderBlock => {
     const node = nodes.get(nodeId);
     if (!node) throw new Error("Tailored resume references a node outside its base tree");
-    return { kind, text: canonicalRenderText(node.text), nodeId };
+    return {
+      kind,
+      text: canonicalRenderText(node.text),
+      nodeId,
+      ...(node.lines ? { lines: structuredClone(node.lines) } : {}),
+    };
   };
   return tailored.sections.flatMap((section) => [
     ...(section.headingNodeId ? [resolve(section.headingNodeId, "heading")] : []),

@@ -73,3 +73,4 @@ ADRs are immutable historical records after acceptance. A new ADR supersedes an 
 
 - [ADR-049: Greenhouse approved application execution](049-greenhouse-approved-application-execution.md) (proposed; default-off adapter and connected execution work)
 - [ADR-050: Generate-then-apply flow, server-side material reads and PDF-only delivery](050-generate-then-apply-flow.md) (proposed; owner-directed, locally verified, live acceptance pending)
+- [ADR-051: Style-preserving generated resume](051-style-preserving-generated-resume.md) (proposed; owner-directed, locally verified, release and live acceptance pending)

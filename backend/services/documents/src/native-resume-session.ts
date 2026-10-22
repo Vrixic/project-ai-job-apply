@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { claimNativeMaterialProcess } from "./native-material-process.js";
 import type { KernelMemoryDeadline } from "./native-memory-session.js";
+import type { PageGeometry } from "./parsing/layout.js";
 import {
   type NormalizedResumeDocument,
   parseNormalizedResumeDocument,
@@ -43,6 +44,8 @@ export function nativeResumeJobHash(job: { title: string; description: string })
 }
 interface HeldResume {
   blocks: RenderBlock[];
+  /** Page size of the source resume, when its layout is known. */
+  page?: PageGeometry;
   sections: TailoredSectionView[];
   matchedTerms: string[];
 }
@@ -102,7 +105,12 @@ function captureIdentity(input: NativeResumeIdentity): Readonly<NativeResumeIden
   return fixed;
 }
 function clear(value: HeldResume): void {
-  for (const block of value.blocks) block.text = "";
+  for (const block of value.blocks) {
+    block.text = "";
+    // The source lines carry the same words, run by run.
+    for (const line of block.lines ?? []) for (const run of line.runs) run.text = "";
+    delete block.lines;
+  }
   value.blocks.length = 0;
   for (const section of value.sections) {
     delete section.heading;
@@ -194,6 +202,7 @@ export function createNativeResumeSession(options: NativeResumeSessionOptions) {
         if (verifyTailoredFactuality(ast, tailored).length) throw unavailable();
         held = {
           blocks: materializeTailoredResume(ast, tailored),
+          ...(ast.page ? { page: ast.page } : {}),
           sections: buildTailoredView(ast, tailored),
           matchedTerms: [...tailored.matchedTerms],
         };
@@ -228,7 +237,7 @@ export function createNativeResumeSession(options: NativeResumeSessionOptions) {
             const value = JSON.parse(new TextDecoder().decode(borrowed)) as HeldResume;
             try {
               // Generated resumes are delivered only as PDF, so only the PDF is verified.
-              const artifact = renderPdf(value.blocks);
+              const artifact = renderPdf(value.blocks, value.page);
               try {
                 if (
                   artifact.bytes.byteLength > 300_000 ||
@@ -285,7 +294,7 @@ export function createNativeResumeSession(options: NativeResumeSessionOptions) {
           format === "preview"
             ? { sections: held.sections, matchedTerms: held.matchedTerms }
             : await (async () => {
-                const artifact = renderPdf(captured.blocks);
+                const artifact = renderPdf(captured.blocks, captured.page);
                 artifactBytes = artifact.bytes;
                 if (
                   artifactBytes.byteLength > 300_000 ||
