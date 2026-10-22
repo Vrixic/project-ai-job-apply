@@ -43,7 +43,7 @@ Records important technical decisions, their context, alternatives, consequences
 - [ADR-032: Billing-owned plan limits, enforced atomically by the owning context](032-billing-owned-plan-limits-enforced-by-owning-contexts.md)
 - [ADR-033: Resume deletion is a tombstone, with a separate byte purge](033-resume-deletion-is-a-tombstone-with-a-separate-byte-purge.md)
 - [ADR-034: Resume byte purge runs in the candidate-rights maintenance runtime](034-resume-byte-purge-runs-in-the-candidate-rights-maintenance-runtime.md) (accepted 2026-09-21)
-- [ADR-036: Structured Education and Work Experience entries](036-structured-education-and-work-experience-entries.md) (input to [D3.1-001](../product/delivery/phase-3-1-structured-profile.md); not independently accepted)
+- [ADR-036: Structured Education and Work Experience entries](036-structured-education-and-work-experience-entries.md) (superseded by [ADR-052](052-structured-candidate-profile.md))
 
 - [ADR-037: Precreated cover-letter provider slots](037-precreated-cover-letter-provider-slots.md) (proposed; conditional transport only, privacy/runtime prerequisites unfinished)
 
@@ -74,3 +74,4 @@ ADRs are immutable historical records after acceptance. A new ADR supersedes an 
 - [ADR-049: Greenhouse approved application execution](049-greenhouse-approved-application-execution.md) (proposed; default-off adapter and connected execution work)
 - [ADR-050: Generate-then-apply flow, server-side material reads and PDF-only delivery](050-generate-then-apply-flow.md) (proposed; owner-directed, locally verified, live acceptance pending)
 - [ADR-051: Style-preserving generated resume](051-style-preserving-generated-resume.md) (proposed; owner-directed, locally verified, release and live acceptance pending)
+- [ADR-052: Structured candidate Profile replaces profile facts](052-structured-candidate-profile.md) (accepted 2026-10-22; implementation not started)
