@@ -1,7 +1,7 @@
 # D5 — Personalized Outreach and Application Notifications
 
-- Status: Not started
-- Start: Not started
+- Status: In progress
+- Start: 2026-10-22
 - Completion: Not completed
 - Owners: Unassigned
 - Last updated: 2026-08-17
@@ -23,8 +23,8 @@ rate limits, or measured volume; retain the in-app fallback regardless of capaci
 
 | ID | Task | State | Owner | Dependencies | Evidence or notes |
 |---|---|---|---|---|---|
-| D5-001 | Implement the Notifications-owned generic action inbox, preferences, quiet hours, urgency, channel routing, and deduplication by consuming minimal versioned source-owner events. | Ready | Unassigned | D0 contracts; D3 Applications events and other owner events as their capabilities land; [ADR-024](../../adr/024-application-history-and-inbox-phase-ownership.md) | Inbox state is a derived projection and cannot authorize, cause, or prove a source transition. D5 has no D1 action-inbox dependency. |
-| D5-002 | Implement transactional email and push delivery with provider fallback/reconciliation. | Ready | Unassigned | D0 infrastructure | Open |
+| D5-001 | Implement the Notifications-owned generic action inbox, preferences, quiet hours, urgency, channel routing, and deduplication by consuming minimal versioned source-owner events. | In progress | Claude | D0 contracts; D3 Applications events and other owner events as their capabilities land; [ADR-024](../../adr/024-application-history-and-inbox-phase-ownership.md) | Inbox state is a derived projection and cannot authorize, cause, or prove a source transition. D5 has no D1 action-inbox dependency. 2026-10-22 owner approved the new schema ([ADR-055](../../adr/055-notifications-inbox-and-preferences.md)). Slice 1 built and tested against local PostgreSQL, not deployed: `backend/services/notifications` with migration 0001, strict consumption of `application.status_changed.v1` and `application.applied.v1`, idempotent receipts, per-application cursors (stale events refused), unique items, acknowledge/dismiss/expire that never touch the source, preferences with quiet hours and routing. Open: candidate export and deletion, restore manifest, Gateway routes and contracts, the web inbox, and the in-process feed from Applications. |
+| D5-002 | Implement transactional email and push delivery with provider fallback/reconciliation. | In progress | Claude | D0 infrastructure | 2026-10-22 the routing decision (channel off, send now, defer past quiet hours) exists; providers, delivery attempts, fallback and reconciliation need the owner's email and push provider choice and credentials. |
 | D5-003 | Implement permitted contact source/provider abstraction and provenance. | Ready | Unassigned | Legal/source review | Open |
 | D5-004 | Implement grounded referral/recruiter drafts with recipient, evidence, and truthfulness checks. | Ready | Unassigned | D3 fact graph; D5-003 | Open |
 | D5-005 | Implement send-only Gmail/Outlook OAuth with scope enforcement, revocation, and copyable-draft fallback. | Ready | Unassigned | D0 legal/security | Open |

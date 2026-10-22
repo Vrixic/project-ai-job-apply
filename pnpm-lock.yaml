@@ -313,6 +313,15 @@ importers:
         specifier: 14.0.2
         version: 14.0.2
 
+  backend/services/notifications:
+    dependencies:
+      postgres:
+        specifier: 3.4.9
+        version: 3.4.9
+      uuid:
+        specifier: 14.0.2
+        version: 14.0.2
+
   backend/services/profile:
     dependencies:
       '@ai-job-apply/api-contracts':

@@ -1,0 +1,294 @@
+import type postgres from "postgres";
+import { v7 as uuidv7 } from "uuid";
+import type { SourceProjection } from "./source-events.js";
+import {
+  type InboxItem,
+  type InboxState,
+  type NotificationKind,
+  type NotificationPreferences,
+  type NotificationUrgency,
+  type QuietHours,
+  defaultQuietHours,
+} from "./types.js";
+
+interface ItemRow {
+  id: string;
+  kind: NotificationKind;
+  urgency: NotificationUrgency;
+  state: InboxState;
+  aggregate_id: string;
+  source_revision: string | number | bigint;
+  created_at: Date;
+  updated_at: Date;
+  expires_at: Date;
+}
+
+interface PreferencesRow {
+  version: number;
+  email_enabled: boolean;
+  push_enabled: boolean;
+  quiet_hours_enabled: boolean;
+  quiet_start_minute: number;
+  quiet_end_minute: number;
+  time_zone: string;
+  updated_at: Date;
+}
+
+export type RecordOutcome = "recorded" | "duplicate" | "stale" | "ignored";
+
+export interface InboxPage {
+  items: InboxItem[];
+  next?: { createdAt: Date; id: string };
+}
+
+function toItem(row: ItemRow): InboxItem {
+  return {
+    id: row.id,
+    kind: row.kind,
+    urgency: row.urgency,
+    state: row.state,
+    applicationId: row.aggregate_id,
+    sourceRevision: Number(row.source_revision),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    expiresAt: row.expires_at,
+  };
+}
+
+function toPreferences(row: PreferencesRow): NotificationPreferences {
+  return {
+    version: row.version,
+    inAppEnabled: true,
+    emailEnabled: row.email_enabled,
+    pushEnabled: row.push_enabled,
+    quietHours: {
+      enabled: row.quiet_hours_enabled,
+      startMinute: row.quiet_start_minute,
+      endMinute: row.quiet_end_minute,
+      timeZone: row.time_zone,
+    },
+    updatedAt: row.updated_at,
+  };
+}
+
+const ITEM_COLUMNS = `id, kind, urgency, state, aggregate_id, source_revision, created_at, updated_at, expires_at`;
+
+export class PostgresNotificationsStore {
+  constructor(private readonly client: postgres.Sql) {}
+
+  /**
+   * Applies one source event atomically: a replay changes nothing, an older revision is stale, and
+   * a newer one opens or resolves items. Per-application serialization keeps order deterministic.
+   */
+  async recordSourceEvent(
+    projection: SourceProjection,
+    now: Date,
+  ): Promise<{
+    outcome: RecordOutcome;
+    itemId?: string;
+  }> {
+    return this.client.begin(async (transaction) => {
+      await transaction`
+        SELECT pg_advisory_xact_lock(hashtext(${`notifications:${projection.ownerUserId}:${projection.applicationId}`}))
+      `;
+      const inserted = await transaction`
+        INSERT INTO notifications.source_receipts
+          (source_service, source_event_id, owner_user_id, event_type, received_at, outcome)
+        VALUES ('applications', ${projection.eventId}, ${projection.ownerUserId}::uuid,
+          'application.status', ${now}, 'recorded')
+        ON CONFLICT (source_service, source_event_id) DO NOTHING
+        RETURNING source_event_id
+      `;
+      if (inserted.length === 0) return { outcome: "duplicate" as const };
+      const setOutcome = async (outcome: RecordOutcome) => {
+        if (outcome === "recorded") return;
+        await transaction`
+          UPDATE notifications.source_receipts SET outcome = ${outcome}
+          WHERE source_service = 'applications' AND source_event_id = ${projection.eventId}
+        `;
+      };
+      const [cursor] = await transaction<{ last_revision: string }[]>`
+        SELECT last_revision FROM notifications.source_cursors
+        WHERE owner_user_id = ${projection.ownerUserId}::uuid
+          AND source_service = 'applications' AND aggregate_id = ${projection.applicationId}::uuid
+        FOR UPDATE
+      `;
+      if (cursor && Number(cursor.last_revision) > projection.revision) {
+        await setOutcome("stale");
+        return { outcome: "stale" as const };
+      }
+      await transaction`
+        INSERT INTO notifications.source_cursors
+          (owner_user_id, source_service, aggregate_id, last_revision, updated_at)
+        VALUES (${projection.ownerUserId}::uuid, 'applications', ${projection.applicationId}::uuid,
+          ${projection.revision}, ${now})
+        ON CONFLICT (owner_user_id, source_service, aggregate_id)
+        DO UPDATE SET last_revision = EXCLUDED.last_revision, updated_at = EXCLUDED.updated_at
+      `;
+      if (projection.resolves.length > 0) {
+        await transaction`
+          UPDATE notifications.inbox_items SET state = 'expired', updated_at = ${now}
+          WHERE owner_user_id = ${projection.ownerUserId}::uuid AND source_service = 'applications'
+            AND aggregate_id = ${projection.applicationId}::uuid
+            AND kind = ANY(${[...projection.resolves]}::text[])
+            AND state IN ('unread', 'acknowledged')
+            AND source_revision <= ${projection.revision}
+        `;
+      }
+      if (!projection.open) {
+        await setOutcome("ignored");
+        return { outcome: "ignored" as const };
+      }
+      const id = uuidv7();
+      const created = await transaction<{ id: string }[]>`
+        INSERT INTO notifications.inbox_items
+          (id, owner_user_id, kind, urgency, state, source_service, aggregate_id, source_revision,
+           dedupe_key, created_at, updated_at, expires_at)
+        VALUES (${id}::uuid, ${projection.ownerUserId}::uuid, ${projection.open.kind},
+          ${projection.open.urgency}, 'unread', 'applications', ${projection.applicationId}::uuid,
+          ${projection.revision},
+          ${`${projection.open.kind}:${projection.applicationId}:${projection.revision}`},
+          ${now}, ${now}, ${new Date(now.getTime() + projection.open.lifetimeMs)})
+        ON CONFLICT (owner_user_id, dedupe_key) DO NOTHING
+        RETURNING id
+      `;
+      return created[0]
+        ? { outcome: "recorded" as const, itemId: created[0].id }
+        : { outcome: "duplicate" as const };
+    });
+  }
+
+  async listInbox(
+    ownerUserId: string,
+    options: {
+      states?: readonly InboxState[];
+      limit: number;
+      after?: { createdAt: Date; id: string };
+    },
+  ): Promise<InboxPage> {
+    const states = [...(options.states ?? (["unread", "acknowledged"] as const))];
+    const limit = Math.max(1, Math.min(100, Math.trunc(options.limit)));
+    const rows = await this.client<ItemRow[]>`
+      SELECT ${this.client.unsafe(ITEM_COLUMNS)}
+      FROM notifications.inbox_items
+      WHERE owner_user_id = ${ownerUserId}::uuid AND state = ANY(${states}::text[])
+        ${
+          options.after
+            ? this
+                .client`AND (created_at, id) < (${options.after.createdAt}, ${options.after.id}::uuid)`
+            : this.client``
+        }
+      ORDER BY created_at DESC, id DESC
+      LIMIT ${limit + 1}
+    `;
+    const items = rows.slice(0, limit).map(toItem);
+    const last = items.at(-1);
+    return {
+      items,
+      ...(rows.length > limit && last ? { next: { createdAt: last.createdAt, id: last.id } } : {}),
+    };
+  }
+
+  async countUnread(ownerUserId: string): Promise<number> {
+    const [row] = await this.client<{ count: string }[]>`
+      SELECT count(*)::text AS count FROM notifications.inbox_items
+      WHERE owner_user_id = ${ownerUserId}::uuid AND state = 'unread'
+    `;
+    return Number(row?.count ?? 0);
+  }
+
+  /**
+   * Candidate acknowledgement or dismissal. Never touches the source fact. A terminal item
+   * (dismissed or expired) is returned unchanged; an unknown or foreign id returns null.
+   */
+  async setItemState(
+    ownerUserId: string,
+    itemId: string,
+    to: "acknowledged" | "dismissed",
+    now: Date,
+  ): Promise<InboxItem | null> {
+    return this.client.begin(async (transaction) => {
+      const [current] = await transaction<ItemRow[]>`
+        SELECT ${transaction.unsafe(ITEM_COLUMNS)} FROM notifications.inbox_items
+        WHERE id = ${itemId}::uuid AND owner_user_id = ${ownerUserId}::uuid FOR UPDATE
+      `;
+      if (!current) return null;
+      const allowed =
+        current.state === "unread" || (current.state === "acknowledged" && to === "dismissed");
+      if (!allowed) return toItem(current);
+      const [updated] = await transaction<ItemRow[]>`
+        UPDATE notifications.inbox_items SET state = ${to}, updated_at = GREATEST(updated_at, ${now})
+        WHERE id = ${itemId}::uuid AND owner_user_id = ${ownerUserId}::uuid
+        RETURNING ${transaction.unsafe(ITEM_COLUMNS)}
+      `;
+      return updated ? toItem(updated) : null;
+    });
+  }
+
+  /** Items past their lifetime stop being offered. Returns how many changed. */
+  async expireDue(now: Date): Promise<number> {
+    const rows = await this.client`
+      UPDATE notifications.inbox_items SET state = 'expired', updated_at = GREATEST(updated_at, ${now})
+      WHERE expires_at <= ${now} AND state IN ('unread', 'acknowledged')
+      RETURNING id
+    `;
+    return rows.length;
+  }
+
+  async readPreferences(ownerUserId: string, now: Date): Promise<NotificationPreferences> {
+    const [row] = await this.client<PreferencesRow[]>`
+      SELECT version, email_enabled, push_enabled, quiet_hours_enabled, quiet_start_minute,
+        quiet_end_minute, time_zone, updated_at
+      FROM notifications.preferences WHERE owner_user_id = ${ownerUserId}::uuid
+    `;
+    return row
+      ? toPreferences(row)
+      : {
+          version: 0,
+          inAppEnabled: true,
+          emailEnabled: false,
+          pushEnabled: false,
+          quietHours: { ...defaultQuietHours },
+          updatedAt: now,
+        };
+  }
+
+  /** Compare-and-set on the version (0 for a first write). Returns null on a version conflict. */
+  async updatePreferences(
+    ownerUserId: string,
+    expectedVersion: number,
+    update: { emailEnabled: boolean; pushEnabled: boolean; quietHours: QuietHours },
+    now: Date,
+  ): Promise<NotificationPreferences | null> {
+    const values = {
+      email: update.emailEnabled,
+      push: update.pushEnabled,
+      quiet: update.quietHours.enabled,
+      start: update.quietHours.startMinute,
+      end: update.quietHours.endMinute,
+      zone: update.quietHours.timeZone,
+    };
+    const rows =
+      expectedVersion === 0
+        ? await this.client<PreferencesRow[]>`
+            INSERT INTO notifications.preferences
+              (owner_user_id, version, in_app_enabled, email_enabled, push_enabled,
+               quiet_hours_enabled, quiet_start_minute, quiet_end_minute, time_zone, updated_at)
+            VALUES (${ownerUserId}::uuid, 1, true, ${values.email}, ${values.push}, ${values.quiet},
+              ${values.start}, ${values.end}, ${values.zone}, ${now})
+            ON CONFLICT (owner_user_id) DO NOTHING
+            RETURNING version, email_enabled, push_enabled, quiet_hours_enabled, quiet_start_minute,
+              quiet_end_minute, time_zone, updated_at
+          `
+        : await this.client<PreferencesRow[]>`
+            UPDATE notifications.preferences SET version = version + 1,
+              email_enabled = ${values.email}, push_enabled = ${values.push},
+              quiet_hours_enabled = ${values.quiet}, quiet_start_minute = ${values.start},
+              quiet_end_minute = ${values.end}, time_zone = ${values.zone}, updated_at = ${now}
+            WHERE owner_user_id = ${ownerUserId}::uuid AND version = ${expectedVersion}
+            RETURNING version, email_enabled, push_enabled, quiet_hours_enabled, quiet_start_minute,
+              quiet_end_minute, time_zone, updated_at
+          `;
+    return rows[0] ? toPreferences(rows[0]) : null;
+  }
+}
