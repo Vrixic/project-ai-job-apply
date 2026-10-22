@@ -1458,17 +1458,25 @@ aside {
   color: #14633e;
 }
 
-.apply-flow .resume-preview {
+.apply-flow .resume-ready {
   display: grid;
-  gap: 8px;
-  padding: 12px 14px;
-  border-radius: 10px;
-  background: #f4f9f6;
+  gap: 10px;
 }
 
-.apply-flow .resume-preview ul {
-  margin: 0;
-  padding-left: 20px;
+.apply-flow .resume-pdf {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #e4ece7;
+}
+
+.apply-flow .resume-pdf-page {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: white;
+  box-shadow: 0 1px 4px rgb(20 60 40 / 20%);
 }
 
 .apply-flow .link-button {

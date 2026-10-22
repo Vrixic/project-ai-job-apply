@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { CandidateNameProvider } from "../candidate-name-context";
 
 const navItems = [
   { href: "/jobs", label: "Jobs" },
@@ -42,7 +43,9 @@ export function DashboardShell({
             ))}
           </nav>
         </aside>
-        <div className="dashboard-content">{children}</div>
+        <div className="dashboard-content">
+          <CandidateNameProvider value={displayName}>{children}</CandidateNameProvider>
+        </div>
       </div>
     </div>
   );

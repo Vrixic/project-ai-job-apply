@@ -7,6 +7,18 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplicationsWorkspace } from "./applications-workspace";
+import { CandidateNameProvider } from "./candidate-name-context";
+
+// The viewer needs a canvas that jsdom does not have; it is proven in a real browser separately.
+vi.mock("./resume-pdf-viewer", async () => {
+  const react = await import("react");
+  return {
+    ResumePdfViewer: ({ label, onRendered }: { label: string; onRendered(): void }) => {
+      react.useEffect(() => onRendered(), [onRendered]);
+      return react.createElement("div", { role: "img", "aria-label": label });
+    },
+  };
+});
 
 const APP = "00000000-0000-7000-8000-000000000001";
 const JOB = "00000000-0000-7000-8000-000000000002";
@@ -270,25 +282,7 @@ class FakeBff {
           contentBase64: PDF_BASE64,
           temporaryMaterial: this.material,
         });
-      return json({
-        status: "ready",
-        matchesPacket: true,
-        tailoringVersion: "1",
-        contentSha256: CONTENT_HASH,
-        temporaryMaterial: this.material,
-        sections: [
-          {
-            kind: "experience",
-            heading: "Experience",
-            entries: [
-              {
-                lines: ["Engineer, Example Co"],
-                bullets: [{ text: "Built the billing service", change: "moved_up" }],
-              },
-            ],
-          },
-        ],
-      });
+      return json({ code: "not_found" }, 404);
     }
     return json({ code: "application_not_found" }, 404);
   });
@@ -345,13 +339,15 @@ async function mount(
 ) {
   await act(async () => {
     root.render(
-      <ApplicationsWorkspace
-        jobId={JOB}
-        applyUrl={APPLY_URL}
-        fetchImplementation={bff.fetch}
-        coverLetterPreparationEnabled={false}
-        {...props}
-      />,
+      <CandidateNameProvider value="Vrij Patel">
+        <ApplicationsWorkspace
+          jobId={JOB}
+          applyUrl={APPLY_URL}
+          fetchImplementation={bff.fetch}
+          coverLetterPreparationEnabled={false}
+          {...props}
+        />
+      </CandidateNameProvider>,
     );
   });
   await settle();
@@ -445,8 +441,7 @@ describe("ApplicationsWorkspace: generate, then apply", () => {
     await advance(3_100);
     expect(container.textContent).toContain("Generating your resume");
     await advance(3_100);
-    expect(container.textContent).toContain("Built the billing service");
-    expect(container.textContent).toContain("(Moved up)");
+    expect(container.querySelector('[role="img"]')).not.toBeNull();
     expect(container.textContent).toContain("deleted 30 minutes after it was made");
     expect(container.textContent).not.toContain("Generating your resume");
     expect(button("Apply")?.disabled).toBe(false);
@@ -494,7 +489,7 @@ describe("ApplicationsWorkspace: generate, then apply", () => {
     await click("Try again");
     expect(bff.packetRequests()).toHaveLength(2);
     await advance(6_500);
-    expect(container.textContent).toContain("Built the billing service");
+    expect(container.querySelector('[role="img"]')).not.toBeNull();
   });
 
   it("shows expiry and regenerates in one click", async () => {
@@ -503,12 +498,12 @@ describe("ApplicationsWorkspace: generate, then apply", () => {
     await mount(bff);
     await click("Generate resume");
     await advance(6_500);
-    expect(container.textContent).toContain("Built the billing service");
+    expect(container.querySelector('[role="img"]')).not.toBeNull();
     await advance(1_800_000);
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
       "expired and was deleted",
     );
-    expect(container.textContent).not.toContain("Built the billing service");
+    expect(container.querySelector('[role="img"]')).toBeNull();
     expect(container.textContent).toContain("Apply will use your own uploaded resume");
     expect(button("Apply")?.disabled).toBe(false);
     await click("Generate again");
@@ -855,7 +850,7 @@ describe("ApplicationsWorkspace: extension hand-off", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     currentBff = new FakeBff();
     const messages = extension(["unselected", "unselected", "ok"]);
-    await mount(currentBff);
+    await mount(currentBff, { jobTitle: "Billing Engineer" });
     await click("Generate resume");
     await advance(6_500);
     await click("Apply");
@@ -873,7 +868,12 @@ describe("ApplicationsWorkspace: extension hand-off", () => {
     expect(commit).toBeDefined();
     const files = (commit?.files ?? []) as Array<Record<string, unknown>>;
     expect(files).toHaveLength(1);
-    expect(files[0]).toMatchObject({ format: "pdf", mediaType: "application/pdf" });
+    // The employer sees the User_Job_Name_ID name, not the generator's own file name.
+    expect(files[0]).toMatchObject({
+      format: "pdf",
+      mediaType: "application/pdf",
+      fileName: `Vrij_Patel_Billing_Engineer_${APP}.pdf`,
+    });
     expect(JSON.stringify(messages)).not.toMatch(/docx|wordprocessingml/iu);
     expect(container.textContent).toContain("It will use your generated resume (PDF)");
   });
