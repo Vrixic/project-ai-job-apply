@@ -1,13 +1,13 @@
 # Delivery Tracker
 
-Last updated: 2026-10-21. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
+Last updated: 2026-10-22. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
 
 ## Summary
 
 | Delivery | Scope | Status | Start | Completion | Details |
 |---|---|---|---|---|---|
 | D0 | Product, data, and legal foundation | Complete | 2026-07-27 | 2026-08-12 | [Phase 0 tasks](phase-0-foundation.md) |
-| D1 | Useful web product and canonical job catalog | In progress | 2026-08-11 | Not completed | [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
+| D1 | Useful web product and canonical job catalog | Complete | 2026-08-11 | 2026-10-22 | [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
 | D2 | Extension and community loop | Complete | 2026-09-01 | 2026-09-18 | [Phase 2 tasks](phase-2-extension-and-community.md) |
 | D3 | High-quality application preparation | In progress | 2026-09-18 | Not completed | [Phase 3 tasks](phase-3-application-preparation.md) |
 | D3.1 | Structured candidate profile | Not started | Not started | Not completed | [Phase 3.1 tasks](phase-3-1-structured-profile.md) |
@@ -19,7 +19,7 @@ Last updated: 2026-10-21. Program status: In progress. Started: 2026-07-27. Comp
 ## D1 — Useful web product and canonical job catalog
 
 Authentication, canonical jobs, onboarding, search/saved jobs, moderation, entitlements and public-page source are implemented.
-Final hosted/public acceptance, maintenance deployment and real-candidate/privacy/accessibility reviews remain.
+Completed 2026-10-22 by owner direction, in development only. D1-011 was removed (sources are user-contributed and vetted by an automated AI system, D7-012). Items needing AWS or production resources are carried to D6: maintenance-Lambda deployment and the ADR-023 DNS residual (D6-021), production and moderator identity (D6-014), public publication (D6-012).
 [Implemented and remaining capabilities](phase-1-web-and-job-catalog.md).
 
 ## D3 — High-quality application preparation
@@ -356,7 +356,7 @@ inputs pass focused checks, independent review and all 43 repository stages. Man
 start before D3 completes. The `AGENTS.md` testing section and the `govern-delivery` skill now
 reflect this.
 
-Applications history belongs to D3, the generic inbox to D5, and structured Profile replacement to D3.1.
+Applications history belongs to D3, the generic inbox to D5, and structured Profile replacement to D3.1. D1 was completed 2026-10-22 with its deployment items carried to D6.
 CI/CD work is deferred until production launch; independent launch security review remains required by ADR-015.
 Real-candidate data and capability activation require their recorded authority; local tests do not establish production approval.
 

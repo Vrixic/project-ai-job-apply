@@ -21,7 +21,7 @@ Real candidates on a production domain, in a production AWS account and a produc
 |---|---|
 | AWS | Development and staging accounts only ([ADR-007](../../adr/007-isolated-aws-environments.md)). No production account, state, bootstrap, or Terraform environment. |
 | Identity | One Auth0 tenant shared by development and synthetic staging. Production never trusts it. |
-| D1 web and catalog | In progress: resume import, ingestion, search, reporting and moderation, entitlements, and public job pages each still have open work. |
+| D1 web and catalog | Complete (2026-10-22) in development. Carried here: retention-Lambda deployment, production and moderator identity, public publication. |
 | D2 extension | Complete for controlled development only. Store review, live sign-in matrix, screen-reader testing and load/abuse acceptance are unpassed. |
 | D3 application preparation | In progress (D3-023 open, D3-028 new, ADR-032 and ADR-033 unaccepted). |
 | D3.1, D4, D5, D6 | Not started (D6 starts with this plan). |
