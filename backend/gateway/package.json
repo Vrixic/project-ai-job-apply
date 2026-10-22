@@ -27,6 +27,7 @@
     "@ai-job-apply/domain": "workspace:*",
     "@ai-job-apply/jobs-service": "workspace:*",
     "@ai-job-apply/matching-service": "workspace:*",
+    "@ai-job-apply/notifications-service": "workspace:*",
     "@ai-job-apply/observability": "workspace:*",
     "@ai-job-apply/profile-service": "workspace:*",
     "@ai-job-apply/trust-service": "workspace:*",

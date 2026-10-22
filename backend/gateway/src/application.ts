@@ -33,6 +33,7 @@ import {
   AppModule,
   applyRequestContext,
   type CandidateDataExportDownloadSigner,
+  type NotificationsApi,
 } from "./app.module.js";
 import type { NativeMaterialWithdrawalApi } from "./native-owner-material-cleanup.js";
 import { type StripeBillingGateway, installStripeWebhookRawBody } from "./stripe-billing.js";
@@ -61,6 +62,7 @@ export interface GatewayApplicationOptions {
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
   stripeBilling?: StripeBillingGateway;
+  notifications?: NotificationsApi;
   documents: DocumentStore;
   trust?: TrustApplicationService;
   trustReviewerAssignments?: readonly TrustReviewerAssignment[];
@@ -164,6 +166,7 @@ export async function createGatewayApplication(
       matchAssessments: options.matchAssessments,
       entitlements: options.entitlements,
       ...(options.stripeBilling ? { stripeBilling: options.stripeBilling } : {}),
+      ...(options.notifications ? { notifications: options.notifications } : {}),
       documents: options.documents,
       trust: options.trust ?? new TrustApplicationService(),
       trustReviewerAuthority: new OidcTrustReviewerAuthority(

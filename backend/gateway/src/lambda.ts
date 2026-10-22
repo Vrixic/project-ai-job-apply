@@ -93,6 +93,10 @@ import { LambdaOriginalResumeClient } from "./original-resume-client.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
 import { KmsRestrictedAnswerCipher } from "./restricted-answer-kms-cipher.js";
 import { resumeLimitsFromEntitlements } from "./resume-limits.js";
+import {
+  NotificationsService,
+  PostgresNotificationsStore,
+} from "@ai-job-apply/notifications-service";
 import { createStripeBillingGateway } from "./stripe-billing.js";
 import { LambdaResumeTailoringClient } from "./resume-tailoring-client.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
@@ -199,7 +203,11 @@ const PROTECTED_EXACT_ROUTES = new Set([
   "POST /v1/saved-jobs",
   "POST /v1/saved-jobs/search",
   "GET /v1/entitlements",
+  "GET /v1/notifications/preferences",
+  "PUT /v1/notifications/preferences",
 ]);
+const NOTIFICATION_COMMAND_PATH_PATTERN =
+  /^\/v1\/notifications\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/(?:acknowledgement|dismissal)$/;
 const OPERATION_PATH_PATTERN =
   /^\/v1\/operations\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const JOB_PATH_PATTERN =
@@ -340,6 +348,7 @@ interface AllowedRoute {
   acceptsApplicationResumeFormatQuery?: true;
   acceptsRestrictedAnswerContextQuery?: true;
   acceptsProfileExpectedVersionQuery?: true;
+  acceptsNotificationsQuery?: true;
 }
 
 function exactD2RouteKey(routeKey: string, expected: string): boolean {
@@ -372,6 +381,12 @@ function allowedRoute(
   // Stripe signature over the raw body, and the app registers it only when billing is configured.
   if (method === "POST" && path === "/v1/billing/webhooks/stripe") {
     return { acceptsBody: true, protected: false };
+  }
+  if (method === "GET" && path === "/v1/notifications") {
+    return { acceptsBody: false, protected: true, acceptsNotificationsQuery: true };
+  }
+  if (method === "POST" && NOTIFICATION_COMMAND_PATH_PATTERN.test(path)) {
+    return { acceptsBody: false, protected: true };
   }
   if (PROTECTED_EXACT_ROUTES.has(`${method} ${path}`)) {
     return { acceptsBody: method === "PUT" || method === "POST", protected: true };
@@ -665,7 +680,8 @@ function requestPayload(
       (route.acceptsRestrictedAnswerContextQuery &&
         validRestrictedAnswerContextQuery(event.rawQueryString)) ||
       (route.acceptsProfileExpectedVersionQuery &&
-        validProfileExpectedVersionQuery(event.rawQueryString))
+        validProfileExpectedVersionQuery(event.rawQueryString)) ||
+      (route.acceptsNotificationsQuery && validNotificationsQuery(event.rawQueryString))
     )
   ) {
     return {
@@ -716,6 +732,21 @@ function validReviewQueueQuery(raw: string): boolean {
     if (key === "state" && ["needs_review", "appeal_pending"].includes(value)) continue;
     if (key === "pageSize" && /^(?:[1-9]|1[0-9]|2[0-5])$/u.test(value)) continue;
     if (key === "cursor" && /^[A-Za-z0-9_-]{1,400}$/u.test(value)) continue;
+    return false;
+  }
+  return seen.size > 0;
+}
+
+/** The inbox list takes only a known state, a bounded page size and an opaque cursor, each once. */
+function validNotificationsQuery(raw: string): boolean {
+  if (raw.length > 400) return false;
+  const seen = new Set<string>();
+  for (const [key, value] of new URLSearchParams(raw)) {
+    if (seen.has(key)) return false;
+    seen.add(key);
+    if (key === "state" && ["open", "unread", "dismissed", "expired"].includes(value)) continue;
+    if (key === "limit" && /^(?:[1-9]|[1-9][0-9]|100)$/u.test(value)) continue;
+    if (key === "cursor" && /^[A-Za-z0-9_-]{1,300}$/u.test(value)) continue;
     return false;
   }
   return seen.size > 0;
@@ -1041,7 +1072,8 @@ export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiG
               route.acceptsApplicationGenerationQuery ||
               route.acceptsApplicationResumeFormatQuery ||
               route.acceptsRestrictedAnswerContextQuery ||
-              route.acceptsProfileExpectedVersionQuery) &&
+              route.acceptsProfileExpectedVersionQuery ||
+              route.acceptsNotificationsQuery) &&
             event.rawQueryString
               ? `${path}?${event.rawQueryString}`
               : path,
@@ -1235,6 +1267,10 @@ async function createConfiguredApplication(
     reader: billingStore,
     writer: entitlements,
   });
+  const notifications =
+    process.env.NOTIFICATIONS_ENABLED === "true"
+      ? new NotificationsService(new PostgresNotificationsStore(database.client))
+      : undefined;
   const documents =
     config.DOCUMENT_UPLOAD_BUCKET && config.DOCUMENT_UPLOAD_KMS_KEY_ARN
       ? new PostgresDocumentStore(
@@ -1357,6 +1393,7 @@ async function createConfiguredApplication(
     matchAssessments,
     entitlements,
     ...(stripeBilling ? { stripeBilling } : {}),
+    ...(notifications ? { notifications } : {}),
     documents,
     ...(trust ? { trust: trust.service, trustReviewerAssignments: trust.reviewerAssignments } : {}),
     ...(candidateDataExportDownloads ? { candidateDataExportDownloads } : {}),

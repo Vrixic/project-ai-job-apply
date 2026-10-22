@@ -36,6 +36,10 @@ import type {
   DecideTrustCaseRequest,
   EntitlementSummary,
   FileTrustAppealRequest,
+  NotificationInboxPage as NotificationInboxPageResponse,
+  NotificationItem as NotificationItemResponse,
+  NotificationPreferences as NotificationPreferencesResponse,
+  UpdateNotificationPreferencesRequest,
   GrantUgcContributionConsentRequest,
   JobContribution,
   JobContributionHistory,
@@ -81,6 +85,13 @@ import type {
   WithdrawTrustContributionRequest,
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
+import {
+  type InboxItem,
+  type InboxState,
+  type NotificationPreferences as NotificationPreferencesValue,
+  NotificationsError,
+  type NotificationsService,
+} from "@ai-job-apply/notifications-service";
 import {
   type ApplicationsApi,
   ApplicationsUnavailableError,
@@ -253,6 +264,7 @@ const PRIVATE_SAVED_PAGE_CAPTURES = Symbol("PRIVATE_SAVED_PAGE_CAPTURES");
 const MATCH_ASSESSMENTS = Symbol("MATCH_ASSESSMENTS");
 const ENTITLEMENTS = Symbol("ENTITLEMENTS");
 const STRIPE_BILLING = Symbol("STRIPE_BILLING");
+const NOTIFICATIONS = Symbol("NOTIFICATIONS");
 const DOCUMENT_STORE = Symbol("DOCUMENT_STORE");
 const CANDIDATE_DATA_EXPORT_DOWNLOADS = Symbol("CANDIDATE_DATA_EXPORT_DOWNLOADS");
 const TOKEN_VERIFIER = Symbol("TOKEN_VERIFIER");
@@ -932,6 +944,30 @@ class ProblemDetailsFilter implements ExceptionFilter {
       code = "billing_unavailable";
       title = "Billing unavailable";
       detail = "Billing is temporarily unavailable";
+    } else if (exception instanceof NotificationsError) {
+      status =
+        exception.code === "not_found"
+          ? HttpStatus.NOT_FOUND
+          : exception.code === "version_conflict"
+            ? HttpStatus.CONFLICT
+            : HttpStatus.BAD_REQUEST;
+      code =
+        exception.code === "version_conflict" ? "notifications_version_conflict" : exception.code;
+      title =
+        exception.code === "not_found"
+          ? "Notification not found"
+          : exception.code === "version_conflict"
+            ? "Preferences changed"
+            : "Invalid request";
+      detail =
+        exception.code === "version_conflict"
+          ? "The preferences changed; reload and try again"
+          : "The notification request is invalid";
+    } else if (exception instanceof NotificationsUnavailableError) {
+      status = HttpStatus.SERVICE_UNAVAILABLE;
+      code = "notifications_unavailable";
+      title = "Notifications unavailable";
+      detail = "Notifications are temporarily unavailable";
     } else if (exception instanceof EntitlementUnavailableError) {
       status = HttpStatus.SERVICE_UNAVAILABLE;
       code = "entitlement_unavailable";
@@ -3697,6 +3733,181 @@ class StripeBillingController {
   }
 }
 
+/** The candidate's in-app action inbox and delivery preferences (ADR-055). */
+export type NotificationsApi = Pick<
+  NotificationsService,
+  "listInbox" | "acknowledge" | "dismiss" | "getPreferences" | "updatePreferences"
+>;
+
+class NotificationsUnavailableError extends Error {
+  constructor() {
+    super("Notifications are unavailable");
+    this.name = "NotificationsUnavailableError";
+  }
+}
+
+const validateUpdateNotificationPreferences = compileComponentValidator(
+  "UpdateNotificationPreferencesRequest",
+);
+const NOTIFICATION_STATES: Readonly<Record<string, readonly InboxState[]>> = Object.freeze({
+  open: ["unread", "acknowledged"],
+  unread: ["unread"],
+  dismissed: ["dismissed"],
+  expired: ["expired"],
+});
+
+function projectNotificationItem(item: InboxItem): NotificationItemResponse {
+  return {
+    id: item.id,
+    kind: item.kind,
+    urgency: item.urgency,
+    state: item.state,
+    applicationId: item.applicationId,
+    sourceRevision: item.sourceRevision,
+    createdAt: item.createdAt.toISOString(),
+    updatedAt: item.updatedAt.toISOString(),
+    expiresAt: item.expiresAt.toISOString(),
+  };
+}
+
+function projectNotificationPreferences(
+  preferences: NotificationPreferencesValue,
+): NotificationPreferencesResponse {
+  return {
+    version: preferences.version,
+    inAppEnabled: true,
+    emailEnabled: preferences.emailEnabled,
+    pushEnabled: preferences.pushEnabled,
+    quietHours: { ...preferences.quietHours },
+    updatedAt: preferences.updatedAt.toISOString(),
+  };
+}
+
+async function notificationsOperation<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof NotificationsError) throw error;
+    throw new NotificationsUnavailableError();
+  }
+}
+
+/** Present only when Notifications is configured. Every route is scoped to the signed-in candidate. */
+@Controller("/v1/notifications")
+@UseFilters(ProblemDetailsFilter)
+class NotificationsController {
+  constructor(
+    @Inject(RequestIdentity) private readonly identity: RequestIdentity,
+    @Inject(NOTIFICATIONS) private readonly notifications: NotificationsApi,
+  ) {}
+
+  @Get()
+  @Header("cache-control", "no-store")
+  async list(@Req() request: AuthenticatedRequest): Promise<NotificationInboxPageResponse> {
+    const user = await this.identity.resolve(request, "profile:read");
+    if (
+      request.body !== undefined ||
+      (request.headers["content-length"] !== undefined && request.headers["content-length"] !== "0")
+    )
+      throw new HttpException("Request input is invalid", HttpStatus.BAD_REQUEST);
+    const query = (request.query ?? {}) as Record<string, unknown>;
+    const allowed = new Set(["state", "limit", "cursor"]);
+    if (
+      Object.keys(query).some((key) => !allowed.has(key)) ||
+      Object.values(query).some((value) => typeof value !== "string")
+    )
+      throw new HttpException("Request input is invalid", HttpStatus.BAD_REQUEST);
+    const state = query.state === undefined ? "open" : String(query.state);
+    const states = NOTIFICATION_STATES[state];
+    const limit = query.limit === undefined ? 25 : Number(query.limit);
+    if (
+      !states ||
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      limit > 100 ||
+      (query.limit !== undefined && !/^[0-9]{1,3}$/u.test(String(query.limit))) ||
+      (query.cursor !== undefined && !/^[A-Za-z0-9_-]{1,300}$/u.test(String(query.cursor)))
+    )
+      throw new HttpException("Request input is invalid", HttpStatus.BAD_REQUEST);
+    const page = await notificationsOperation(() =>
+      this.notifications.listInbox(user.id, {
+        states,
+        limit,
+        ...(query.cursor !== undefined ? { cursor: String(query.cursor) } : {}),
+      }),
+    );
+    return {
+      items: page.items.map(projectNotificationItem),
+      ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
+      unreadCount: page.unreadCount,
+    };
+  }
+
+  @Get("/preferences")
+  @Header("cache-control", "no-store")
+  async getPreferences(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<NotificationPreferencesResponse> {
+    assertNoRequestInput(request);
+    const user = await this.identity.resolve(request, "profile:read");
+    return projectNotificationPreferences(
+      await notificationsOperation(() => this.notifications.getPreferences(user.id)),
+    );
+  }
+
+  @Put("/preferences")
+  @Header("cache-control", "no-store")
+  async updatePreferences(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<NotificationPreferencesResponse> {
+    const user = await this.identity.resolve(request, "profile:write");
+    if (!validateUpdateNotificationPreferences(request.body)) {
+      throw new HttpException(
+        formatValidationErrors(validateUpdateNotificationPreferences.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const input = request.body as UpdateNotificationPreferencesRequest;
+    return projectNotificationPreferences(
+      await notificationsOperation(() =>
+        this.notifications.updatePreferences(user.id, input.expectedVersion, {
+          emailEnabled: input.emailEnabled,
+          pushEnabled: input.pushEnabled,
+          quietHours: { ...input.quietHours },
+        }),
+      ),
+    );
+  }
+
+  @Post("/:notificationId/acknowledgement")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async acknowledge(
+    @Req() request: AuthenticatedRequest,
+    @Param("notificationId") notificationId: string,
+  ): Promise<NotificationItemResponse> {
+    assertNoRequestInput(request);
+    const user = await this.identity.resolve(request, "profile:write");
+    return projectNotificationItem(
+      await notificationsOperation(() => this.notifications.acknowledge(user.id, notificationId)),
+    );
+  }
+
+  @Post("/:notificationId/dismissal")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async dismiss(
+    @Req() request: AuthenticatedRequest,
+    @Param("notificationId") notificationId: string,
+  ): Promise<NotificationItemResponse> {
+    assertNoRequestInput(request);
+    const user = await this.identity.resolve(request, "profile:write");
+    return projectNotificationItem(
+      await notificationsOperation(() => this.notifications.dismiss(user.id, notificationId)),
+    );
+  }
+}
+
 @Controller("/v1/material-withdrawals")
 @UseFilters(ProblemDetailsFilter)
 class NativeMaterialWithdrawalsController {
@@ -3757,6 +3968,7 @@ export interface AppModuleOptions {
   matchAssessments: MatchAssessments;
   entitlements: EntitlementReadService;
   stripeBilling?: StripeBillingGateway;
+  notifications?: NotificationsApi;
   documents: DocumentStore;
   trust: TrustApplicationService;
   trustReviewerAuthority: OidcTrustReviewerAuthority;
@@ -3785,6 +3997,7 @@ export class AppModule {
           ? [ExtensionContributionCapabilityPolicyController]
           : []),
         ...(options.stripeBilling ? [StripeBillingController] : []),
+        ...(options.notifications ? [NotificationsController] : []),
       ],
       providers: [
         RequestIdentity,
@@ -3816,6 +4029,7 @@ export class AppModule {
         { provide: MATCH_ASSESSMENTS, useValue: options.matchAssessments },
         { provide: ENTITLEMENTS, useValue: options.entitlements },
         { provide: STRIPE_BILLING, useValue: options.stripeBilling ?? null },
+        { provide: NOTIFICATIONS, useValue: options.notifications ?? null },
         { provide: DOCUMENT_STORE, useValue: options.documents },
         { provide: TRUST_APPLICATION, useValue: options.trust },
         { provide: TRUST_REVIEWER_AUTHORITY, useValue: options.trustReviewerAuthority },
