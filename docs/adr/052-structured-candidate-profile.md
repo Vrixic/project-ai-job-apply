@@ -61,8 +61,10 @@ id. Confidence scores and supporting spans are not carried over.
 ### 4. Versioning, idempotency and ownership
 
 Entries use the append-only pattern already used by `profile.profile_fact_versions`: immutable
-version rows, `expectedVersion` on updates, an idempotency key on every write, a tombstone version
-for delete, and a reject-update trigger. Every record belongs to exactly one `user_id`, enforced
+version rows, `expectedVersion` on updates, an idempotency key on every write, and a reject-update
+trigger. Deleting an entry removes it and all its versions (and the idempotency replay records that
+still carry its text) instead of writing a tombstone, so deletion erases the text. Display order is
+stored on the entry, not the version, so reordering creates no new version. Every record belongs to exactly one `user_id`, enforced
 and tested on real PostgreSQL as for the existing tables. The Personal section is a single record
 per user. Education, Work experience and Skills carry `displayOrder` and support reorder.
 

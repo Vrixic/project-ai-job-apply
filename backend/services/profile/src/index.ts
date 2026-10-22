@@ -2313,6 +2313,7 @@ export class ProfileFactTransitionConflictError extends Error {
   }
 }
 
+export * from "./profile-sections.js";
 export {
   type CandidateExportAdmissionQuery,
   type CandidateExportAdmissionScope,

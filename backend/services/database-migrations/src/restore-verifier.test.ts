@@ -42,6 +42,7 @@ function preReportRetentionManifest(source: RestoreManifestSource) {
             "0013_native_material_withdrawals",
             "0014_native_material_cleanup_queue",
             "0015_legacy_receipt_archive",
+            "0012_profile_sections",
           ].includes(migration.version),
       ),
       relations: contributor.relations.filter(
@@ -55,6 +56,10 @@ function preReportRetentionManifest(source: RestoreManifestSource) {
             "jobs.job_report_retention_totals",
             "jobs.job_moderation_blocks",
             "jobs.source_moderation_pauses",
+            "profile.entries",
+            "profile.entry_versions",
+            "profile.import_drafts",
+            "profile.personal_versions",
           ].includes(relation),
       ),
     })),
@@ -136,13 +141,13 @@ describe("current restore manifest", () => {
     expect([...migrationRunners].map((runner) => runner.owner).sort()).toEqual(
       source.manifest.contributors.map((contributor) => contributor.owner),
     );
-    expect(expectedRelations(source)).toHaveLength(96);
+    expect(expectedRelations(source)).toHaveLength(100);
     expect(
       source.manifest.contributors.reduce(
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(81);
+    ).toBe(82);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // The exact seven-owner assertion above bounds I/O concurrency. Each owner still enumerates
@@ -294,8 +299,8 @@ describe("read-only aggregate restore verification", () => {
         "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1",
       manifestSha256: source.sha256,
       ownerCount: 7,
-      relationCount: 96,
-      migrationCount: 81,
+      relationCount: 100,
+      migrationCount: 82,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([

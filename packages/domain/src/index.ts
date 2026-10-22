@@ -5,6 +5,7 @@ import type {
 } from "@ai-job-apply/api-contracts";
 
 export * from "./answer-vault.js";
+export * from "./application-answer.js";
 export {
   type CandidateDataExportValidationIssue,
   candidateDataExportValidationIssue,
