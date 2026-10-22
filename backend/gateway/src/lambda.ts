@@ -97,6 +97,8 @@ import {
   NotificationsService,
   PostgresNotificationsStore,
 } from "@ai-job-apply/notifications-service";
+import { ApplicationEventOutbox } from "@ai-job-apply/applications-service";
+import { withApplicationEventFeed } from "./notifications-feed.js";
 import { createStripeBillingGateway } from "./stripe-billing.js";
 import { LambdaResumeTailoringClient } from "./resume-tailoring-client.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
@@ -1267,10 +1269,16 @@ async function createConfiguredApplication(
     reader: billingStore,
     writer: entitlements,
   });
-  const notifications =
+  const notificationsService =
     process.env.NOTIFICATIONS_ENABLED === "true"
       ? new NotificationsService(new PostgresNotificationsStore(database.client))
       : undefined;
+  const notifications = notificationsService
+    ? withApplicationEventFeed({
+        notifications: notificationsService,
+        events: new ApplicationEventOutbox(database.client),
+      })
+    : undefined;
   const documents =
     config.DOCUMENT_UPLOAD_BUCKET && config.DOCUMENT_UPLOAD_KMS_KEY_ARN
       ? new PostgresDocumentStore(
