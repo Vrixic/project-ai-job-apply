@@ -23,7 +23,8 @@ Do not rely on a prior summary when evidence can be inspected directly.
 - Use only the documented status vocabulary.
 - Add discovered work to the task register; never hide it to make a phase appear complete.
 - Append meaningful work-log and decision entries; preserve history.
-- Link evidence to code, tests, reviews, deployment artifacts, dashboards, or records.
+- Keep records lean (owner decision 2026-10-21): one short work-log line per change and a link to
+  the PR. Do not create evidence files for non-security work.
 - Update the phase document and master tracker together when status, start, or completion changes.
 - Keep external approvals and unavailable credentials as explicit blockers.
 - Never turn technical implementation into legal, privacy, research, or production approval.
@@ -48,16 +49,17 @@ changes keep their per-change verification evidence as usual.
 
 ## Complete a delivery
 
-Schedule hosted admin acceptance only after the phase is fully implemented and relevant automated
-checks pass. Pending hosted admin acceptance does not block independent implementation work;
-it remains a required phase-completion gate.
+Hosted admin acceptance and other non-security acceptance gates were removed by the owner on
+2026-10-21 and are not completion gates. Security, privacy, legal and launch-assessment gates
+(ADR-015, ADR-019, ADR-020) remain.
 
 A delivery is complete only when:
 
-- Every exit criterion has linked, inspected evidence.
+- Every remaining exit criterion is met; security and privacy criteria have linked evidence.
 - Every required task is complete or formally removed with a recorded reason.
 - Blockers are closed or explicitly accepted by an accountable owner.
-- Required deployed, restore, security, privacy, legal, research, and quality evidence exists.
+- Required security, privacy and legal evidence exists. Restore, accessibility, load and product
+  acceptance evidence is not required.
 - The completion date and completion record are written in the phase document.
 - The same date/status appears in the master tracker.
 

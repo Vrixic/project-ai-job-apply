@@ -29,7 +29,7 @@ or ownership boundaries; remove or scale down capacity whose value is not demons
 | D7-006 | Advance SOC 2/security readiness, restore evidence, operational controls, and warm-region disaster recovery when justified. | Ready | Unassigned | Stable production operation | Open |
 | D7-007 | Define an explicit go/no-go decision and separate architecture for any employer product. | Ready | Unassigned | Candidate product evidence | Open |
 | D7-008 | If approved, implement verified organizations, employer RBAC, jobs, application receipt, applicant consent/visibility, ATS handoff, and separate billing without candidate outcome tracking. | Ready | Unassigned | D7-007 | Optional; not assumed. |
-| D7-009 | Verify that expansion has no regression in candidate privacy, application quality, fairness, reliability, cost, or support quality. | Ready | Unassigned | Each expansion task | Open |
+| D7-009 | Verify that expansion has no regression in candidate privacy and security. Application-quality, reliability, cost and support-quality verification removed 2026-10-21. | Ready | Unassigned | Each expansion task | Open |
 | D7-010 | Obtain a legal, security, and privacy delta approval for every new country, source, ATS, data use, or employer-side capability. | Ready | Legal/privacy counsel; security/privacy reviewers | Concrete expansion readiness record | Release gate LR-D7-01; each expansion remains independently disabled until approved. |
 | D7-011 | Operate vulnerability intake/remediation and repeat independent security assessment at least annually and after every material trust-boundary change or serious control failure. | Ready | Security owner; independent security reviewer | D6-015 launch assessment; public operation | Follow [ADR-015](../../adr/015-independent-prelaunch-security-review.md) and retain scoped assessment, remediation, retest, risk-expiry, and exact-release evidence. |
 
@@ -43,7 +43,7 @@ or ownership boundaries; remove or scale down capacity whose value is not demons
 - [ ] Company/job context is permitted, cited, fresh enough for application tailoring, and resistant to unsupported claims.
 - [ ] Security/operational maturity changes have tested evidence rather than compliance-only documentation.
 - [ ] Any employer product has an approved go/no-go record, separate bounded context, explicit candidate visibility/consent, and no hidden candidate-data subsidy.
-- [ ] Expansion meets application-quality and reliability guardrails without compromising prior deliveries.
+- [ ] Expansion does not weaken candidate privacy or security. Quality and reliability guardrails were removed 2026-10-21.
 - [ ] Vulnerability intake is staffed, accepted security risks have not expired, and annual plus
       material-change independent reassessments and retests are current for the deployed surface.
 
@@ -51,6 +51,7 @@ or ownership boundaries; remove or scale down capacity whose value is not demons
 
 | Date | Update | Tasks | Evidence |
 |---|---|---|---|
+| 2026-10-21 | Owner removed non-security testing and acceptance work; D7-009 is reduced to privacy and security regression checks. | D7-009 | Owner direction 2026-10-21 |
 | 2026-07-28 | Assigned per-expansion delta approval to D7 without starting implementation. | D7-010 | [Legal review register](../foundation/legal-review-register.md), [security/privacy plan](../../security/security-privacy-approval-plan.md) |
 | 2026-07-31 | Assigned ongoing vulnerability operations and annual/material-change independent reassessment to D7 without starting implementation. | D7-011 | [API security and final-review baseline](../../security/api-security-and-final-review.md), [ADR-015](../../adr/015-independent-prelaunch-security-review.md) |
 
