@@ -17,6 +17,9 @@ direct(
   [
     "identity.external_identities",
     "profile.job_preferences",
+    "profile.entries",
+    "profile.personal_versions",
+    "profile.import_drafts",
     "profile.profile_facts",
     "profile.restricted_answers",
     "profile.resume_fact_imports",
@@ -106,6 +109,7 @@ child(
   "user_id",
 );
 child(["profile.restricted_answer_versions"], "profile.restricted_answers", "answer_id", "user_id");
+child(["profile.entry_versions"], "profile.entries", "entry_id", "user_id");
 child(
   ["documents.processing_dispositions", "documents.processing_receipts"],
   "documents.resume_documents",
@@ -227,7 +231,11 @@ export const PRESERVATION_RELATIONS: readonly string[] = Object.freeze([
   "privacy.account_deletion_ledger",
   "profile.account_deletion_requests",
   "profile.candidate_data_exports",
+  "profile.entries",
+  "profile.entry_versions",
+  "profile.import_drafts",
   "profile.job_preferences",
+  "profile.personal_versions",
   "profile.profile_fact_evidence",
   "profile.profile_fact_versions",
   "profile.profile_facts",
@@ -245,7 +253,7 @@ export const PRESERVATION_RELATIONS: readonly string[] = Object.freeze([
 
 export interface RestoreDataDigest {
   sha256: string;
-  relationCount: 96;
+  relationCount: 100;
   rowCount: number;
   byteCount: number;
 }
@@ -423,6 +431,6 @@ export async function digestRestoredData(
     if (budget.rowCount > MAX_ROWS || budget.byteCount > MAX_BYTES) refuse();
     hash.update(JSON.stringify([relation, row.schema, count, bytes, row.sha])).update("\0");
   }
-  if (PRESERVATION_RELATIONS.length !== 96 || signal?.aborted || Date.now() >= deadline) refuse();
-  return { sha256: hash.digest("hex"), relationCount: 96, rowCount, byteCount };
+  if (PRESERVATION_RELATIONS.length !== 100 || signal?.aborted || Date.now() >= deadline) refuse();
+  return { sha256: hash.digest("hex"), relationCount: 100, rowCount, byteCount };
 }

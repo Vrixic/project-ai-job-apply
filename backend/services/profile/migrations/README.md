@@ -9,6 +9,14 @@ inside a bounded object-write transaction so account quarantine cannot race the 
 cross-owner table access. Public execution is revoked; runtime grants remain a separately
 reviewed deployment prerequisite. This adds no external API or new account state.
 
+`0012_profile_sections` adds the structured candidate Profile (ADR-052): `personal_versions`, `entries`,
+`entry_versions` and `import_drafts`. Records are standard sensitivity, owner scoped with cascade on
+account deletion, and append-only: update triggers are rejected, and an insert trigger refuses unknown
+keys, missing required keys, reversed date ranges and invalid bullets per section. Deleting an entry
+removes it and all its versions. Releasing it needs the migration image inventory and the Lambda
+release guards (`publish-development-migration-image.ps1`, `development-d2-runtime-release.ps1`)
+updated to include it; they still list the earlier set and fail closed.
+
 Provider retirement migrations must fail before mutation when undispatched work remains.
 Historical published routing values may be normalized only to a provider-neutral retired label;
 operation, audit, idempotency, and user-owned data remain unchanged.

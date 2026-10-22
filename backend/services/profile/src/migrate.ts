@@ -20,6 +20,7 @@ const migrationVersions = [
   "0009_ugc_contribution_consent_candidate_rights",
   "0010_restricted_answer_vault",
   "0011_active_candidate_lease",
+  "0012_profile_sections",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -96,6 +97,10 @@ try {
         (to_regclass('profile.account_deletion_requests') IS NOT NULL)::int +
         (to_regclass('privacy.account_deletion_ledger') IS NOT NULL)::int
         + (to_regclass('profile.ugc_contribution_consents') IS NOT NULL)::int
+        + (to_regclass('profile.personal_versions') IS NOT NULL)::int
+        + (to_regclass('profile.entries') IS NOT NULL)::int
+        + (to_regclass('profile.entry_versions') IS NOT NULL)::int
+        + (to_regclass('profile.import_drafts') IS NOT NULL)::int
       )::int AS table_count,
       (
         SELECT count(*)::int
@@ -147,7 +152,7 @@ try {
       ) AS ugc_consent_delete_guard_count
     `;
     if (
-      verification?.table_count !== 18 ||
+      verification?.table_count !== 22 ||
       verification.migration_count !== migrationVersions.length ||
       verification.outbox_column_count !== 11 ||
       verification.profile_fact_trigger_count !== 1 ||

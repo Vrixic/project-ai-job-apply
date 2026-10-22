@@ -427,6 +427,10 @@
         {
           "version": "0011_active_candidate_lease",
           "checksum": "e8d9df19b5a96e56adced2c7540cab3bc8afa8015f648047690f3fb96e7530ea"
+        },
+        {
+          "version": "0012_profile_sections",
+          "checksum": "859f9f3c0683c964ff39904431c4b39c2ceaa3004d3b0278955050031166186b"
         }
       ],
       "relations": [
@@ -440,7 +444,11 @@
         "privacy.account_deletion_ledger",
         "profile.account_deletion_requests",
         "profile.candidate_data_exports",
+        "profile.entries",
+        "profile.entry_versions",
+        "profile.import_drafts",
         "profile.job_preferences",
+        "profile.personal_versions",
         "profile.profile_fact_evidence",
         "profile.profile_fact_versions",
         "profile.profile_facts",

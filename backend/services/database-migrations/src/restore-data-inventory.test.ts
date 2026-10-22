@@ -42,7 +42,7 @@ function changeRelation(relation: string, update: Record<string, unknown>): Rest
 
 describe("restore data comparison refuses unproven equality", () => {
   it("compares all current manifest relations", () => {
-    expect(inventory().relations).toHaveLength(96);
+    expect(inventory().relations).toHaveLength(100);
     expect(compareRestoreDataInventories(inventory(), inventory())).toEqual({
       equal: true,
       manifestEqual: true,

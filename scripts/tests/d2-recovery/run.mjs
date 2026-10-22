@@ -207,7 +207,7 @@ try {
   const source = loadCurrentRestoreManifest();
   assert.equal(source.manifest.contributors.length, 7);
   assert.equal(source.manifest.contributors.flatMap((owner) => owner.schemas).length, 12);
-  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 96);
+  assert.equal(source.manifest.contributors.flatMap((owner) => owner.relations).length, 100);
   assert.equal(source.manifest.contributors.flatMap((owner) => owner.migrations).length, 79);
   assert.equal(
     source.manifest.contributors.find((owner) => owner.owner === "trust").migrations.at(-1).version,
@@ -373,7 +373,7 @@ try {
     migrationCount: 79,
     ownerCount: 7,
     schemaCount: 12,
-    exactRelationRowSetsMatched: 96,
+    exactRelationRowSetsMatched: 100,
     nonemptyD2RelationsMatched: requiredNonemptyD2Relations.length,
     aggregateVerifierMatched: true,
     wholeRowDigestRelationsMatched: sourceInventory.relations.length,

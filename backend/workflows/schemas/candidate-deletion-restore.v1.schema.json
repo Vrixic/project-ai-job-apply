@@ -907,7 +907,7 @@
           "type": "integer"
         },
         "relationCount": {
-          "const": 96
+          "const": 100
         }
       },
       "type": "object"

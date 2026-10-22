@@ -61,20 +61,20 @@ describe("bounded restored whole-row preservation", () => {
     expect(PRESERVATION_RELATIONS).toEqual(
       manifest.contributors.flatMap((c: { relations: string[] }) => c.relations),
     );
-    expect(new Set(PRESERVATION_RELATIONS).size).toBe(96);
+    expect(new Set(PRESERVATION_RELATIONS).size).toBe(100);
     expect(Object.isFrozen(PRESERVATION_RELATIONS)).toBe(true);
   });
   it("returns only an aggregate and accounts shared work across passes", async () => {
     const h = harness();
     const b = budget();
     const first = await digestRestoredData(h.sql, [], b);
-    expect(first).toMatchObject({ relationCount: 96, rowCount: 96, byteCount: 3840 });
+    expect(first).toMatchObject({ relationCount: 100, rowCount: 100, byteCount: 4000 });
     expect(Object.keys(first).sort()).toEqual(["byteCount", "relationCount", "rowCount", "sha256"]);
     const second = await digestRestoredData(h.sql, [], b);
     expect(second).toEqual(first);
-    expect(b.rowCount).toBe(192);
-    expect(b.byteCount).toBe(7680);
-    expect(h.calls.filter((q) => q.startsWith("WITH row_hashes"))).toHaveLength(192);
+    expect(b.rowCount).toBe(200);
+    expect(b.byteCount).toBe(8000);
+    expect(h.calls.filter((q) => q.startsWith("WITH row_hashes"))).toHaveLength(200);
   });
   it.each([
     { rows: "10001" },

@@ -109,7 +109,7 @@ function replayResult() {
 
 describe("cross-runtime restore contract fixture", () => {
   it("accepts bounded committed preservation evidence and rejects partial or extra fields", () => {
-    const digest = { sha256: "a".repeat(64), relationCount: 96, rowCount: 12, byteCount: 240 };
+    const digest = { sha256: "a".repeat(64), relationCount: 100, rowCount: 12, byteCount: 240 };
     const preservation = { schemaVersion: 1, unchanged: digest, reconciled: digest };
     expect(validateRestoreReplayResult({ ...replayResult(), preservation })).toBe(true);
     for (const mutation of [
@@ -165,7 +165,7 @@ describe("cross-runtime restore contract fixture", () => {
     ).toEqual(fixture.replay);
   });
 
-  it("binds primary recovery to current 81-migration source while retaining the isolated fixture", () => {
+  it("binds primary recovery to current 82-migration source while retaining the isolated fixture", () => {
     const bytes = readFileSync(
       new URL("../../services/database-migrations/restore-manifest.v1.json", import.meta.url),
     );
@@ -175,7 +175,7 @@ describe("cross-runtime restore contract fixture", () => {
     const manifest = JSON.parse(bytes.toString("utf8"));
     expect(
       manifest.contributors.flatMap((owner: { migrations: unknown[] }) => owner.migrations),
-    ).toHaveLength(81);
+    ).toHaveLength(82);
     expect(
       manifest.contributors
         .find((owner: { owner: string }) => owner.owner === "documents")
