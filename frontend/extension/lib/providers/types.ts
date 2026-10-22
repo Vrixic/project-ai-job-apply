@@ -60,5 +60,10 @@ export interface ApplicationProvider {
   submitControl(root: Element, profile: Readonly<ExecutionProfile>): HTMLElement;
   /** Whether every required control in the root currently satisfies the page's own validation. */
   rootValid(root: Element): boolean;
+  /**
+   * Whether the candidate has completed a control the extension may not fill. Answers only yes or
+   * no (a required control must also be non-empty); the entered value is never kept or sent.
+   */
+  controlsSatisfied(controls: readonly Element[], required: boolean): boolean;
   profile(variantId: string, adapterVersion: string): Readonly<ExecutionProfile> | undefined;
 }

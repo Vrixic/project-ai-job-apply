@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { extractGenericForm } from "./extract.js";
+import { extractGenericForm, interactiveCaptchaPresent } from "./extract.js";
 import { formStructureHash } from "./form-model.js";
 import { mapFormFields } from "./mapping.js";
 import { buildFillPlan, type PacketValue, planAssistedManual } from "./plan.js";
@@ -476,5 +476,60 @@ describe("adapter registry gate", () => {
       const declaration = ADAPTER_DECLARATIONS.find((entry) => entry.provider === provider);
       expect(declaration?.variants).toEqual([]);
     }
+  });
+});
+
+describe("page fit for real application pages (ADR-053)", () => {
+  // Structure modeled on read-only inspection of public Greenhouse and Ashby pages on 2026-10-22.
+  const mount = (html: string) => {
+    document.body.innerHTML = `<form>${html}</form>`;
+    return document.body;
+  };
+  const invisibleBadge =
+    '<div class="grecaptcha-badge"><iframe src="https://www.recaptcha.net/recaptcha/enterprise/anchor"></iframe></div><textarea id="g-recaptcha-response-100000" class="g-recaptcha-response"></textarea>';
+  const hiddenChallenge =
+    '<div style="visibility:hidden;opacity:0"><iframe title="recaptcha challenge expires in two minutes" src="https://www.recaptcha.net/recaptcha/enterprise/bframe"></iframe></div>';
+  const visibleChallenge =
+    '<div><iframe title="recaptcha challenge expires in two minutes" src="https://www.recaptcha.net/recaptcha/enterprise/bframe"></iframe></div>';
+
+  it.each([
+    ["the invisible badge and response field", invisibleBadge, false],
+    ["the badge with a hidden challenge frame", invisibleBadge + hiddenChallenge, false],
+    [
+      "an invisible widget on a button",
+      '<button class="g-recaptcha" data-sitekey="k" data-size="invisible">Go</button>',
+      false,
+    ],
+    ["a visible challenge frame", invisibleBadge + visibleChallenge, true],
+    ["a checkbox widget", '<div class="g-recaptcha" data-sitekey="k"></div>', true],
+    ["hCaptcha", '<iframe src="https://newassets.hcaptcha.com/captcha/v1"></iframe>', true],
+    ["Turnstile", '<div class="cf-turnstile"></div>', true],
+  ])("classifies %s", (_name, html, expected) => {
+    const root = mount(`<input name="a">${html}`);
+    expect(extractGenericForm(root).challengePresent).toBe(expected);
+    // The exported classifier and the copy serialized into the page must agree.
+    expect(interactiveCaptchaPresent(root)).toBe(expected);
+  });
+
+  it("ignores a hidden validation shim and leaves a custom combobox to the candidate", () => {
+    const root = mount(
+      `<div><label id="q-label" for="question_1">Do you require visa sponsorship? *</label>
+         <input id="question_1" type="text" role="combobox" aria-haspopup="true" aria-required="true">
+         <input required tabindex="-1" aria-hidden="true" value=""></div>
+       <label for="email">Email</label><input id="email" type="text" autocomplete="email" aria-required="true">`,
+    );
+    const form = extractGenericForm(root);
+    expect(form.fields.map((field) => [field.name, field.type, field.required])).toEqual([
+      ["question_1", "unknown", true],
+      ["email", "text", true],
+    ]);
+    const plan = buildFillPlan(
+      form,
+      [{ fieldKey: "contact.email", value: "a@example.invalid", needsUserAction: false }],
+      { resume: false, coverLetter: false },
+    );
+    expect(plan.actions.filter((action) => action.kind === "fill")).toHaveLength(1);
+    // Never filled; handed back to the candidate.
+    expect(plan.actions.find((action) => action.ref === "f0")?.kind).toBe("require_user");
   });
 });
