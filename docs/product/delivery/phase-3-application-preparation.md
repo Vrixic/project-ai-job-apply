@@ -258,7 +258,7 @@ Implemented means merged source; deployment and live acceptance are stated separ
 
 | Capability / task IDs | Implemented | Remaining |
 |---|---|---|
-| Facts and saved answers (D3-001, D3-039, D3-055, D3-056, D3-075, D3-076) | Fact grounding, encrypted answer storage, selected-version checks and expiry/correction/quarantine guards are locally verified. | Compatible release and live saved-answer reuse acceptance; D3-087 supplies locally verified selection/review and reuse remains off. |
+| Facts and saved answers (profile facts were replaced by saved Profile entries in D3.1, ADR-052; D3-001, D3-039, D3-055, D3-056, D3-075, D3-076) | Fact grounding, encrypted answer storage, selected-version checks and expiry/correction/quarantine guards are locally verified. | Compatible release and live saved-answer reuse acceptance; D3-087 supplies locally verified selection/review and reuse remains off. |
 | Resume import (D3-002, D3-023, D3-024) | Immutable import, normalized resume structure and upload registration are implemented; synthetic scan/parse has development evidence. | Real-resume processing approval and final connected onboarding acceptance. |
 | Resume preparation (D3-003, D3-016, D3-022) | Deterministic tailoring, visible diffs, factuality checks and verified PDF/DOCX rendering are implemented. | Managed synthetic native generation/direct downloads pass; candidate output-quality acceptance remains. |
 | AI generation (D3-004, D3-037, D3-038) | A gated model adapter, grounded output validation and fresh disclosure checks are locally verified. | Externally blocked: owner confirms no provider/account policy meeting ADR-038's 30-minute all-copy retention limit. Keep live AI off. Provider configuration, evaluation and live acceptance remain. |

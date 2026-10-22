@@ -14,8 +14,6 @@ export type FoundationResponseSchemaName =
   | "SavedJobPage"
   | "ResumeDocumentCollection"
   | "CreateResumeUploadResponse"
-  | "ProfileFactCollection"
-  | "ProfileFact"
   | "ProfilePersonal"
   | "ProfileEntryReference"
   | "ProfileImportDraftCollection"
@@ -46,8 +44,6 @@ const validators = new Map<
   ["SavedJobPage", compileComponentValidator("SavedJobPage")],
   ["ResumeDocumentCollection", compileComponentValidator("ResumeDocumentCollection")],
   ["CreateResumeUploadResponse", compileComponentValidator("CreateResumeUploadResponse")],
-  ["ProfileFactCollection", compileComponentValidator("ProfileFactCollection")],
-  ["ProfileFact", compileComponentValidator("ProfileFact")],
   ["ProfilePersonal", compileComponentValidator("ProfilePersonal")],
   ["ProfileEntryReference", compileComponentValidator("ProfileEntryReference")],
   ["ProfileImportDraftCollection", compileComponentValidator("ProfileImportDraftCollection")],

@@ -29,7 +29,6 @@ import type {
   CreateJobContributionRequest,
   CreateJobReportRequest,
   CreatePrivateSavedPageCaptureRequest,
-  CreateProfileFactRequest,
   CreateResumeUploadRequest,
   CreateResumeUploadResponse,
   CreateSavedJobRequest,
@@ -56,8 +55,6 @@ import type {
   PrivateSavedPageCapture as PrivateSavedPageCaptureResponse,
   ProblemDetails,
   ProfileEntryReference,
-  ProfileFact,
-  ProfileFactCollection,
   ProfileImportDraft,
   ProfilePersonal,
   PutJobPreferencesRequest,
@@ -81,7 +78,6 @@ import type {
   StartManualApplicationSubmissionRequest,
   TakeDownTrustCaseRequest,
   UgcContributionConsentGrant,
-  UpdateProfileFactRequest,
   WithdrawTrustContributionRequest,
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
@@ -164,8 +160,6 @@ import {
   CandidateRightsPolicyError,
   CandidateRightsTransitionError,
   IdempotencyConflictError,
-  ProfileFactTransitionConflictError,
-  ProfileFactVersionConflictError,
   type ProfileEntryRecord,
   type ProfileEntrySection,
   ProfileSectionDuplicateError,
@@ -341,8 +335,6 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/me/account-deletion-requests",
   "/v1/me/account-deletion-requests/:deletionRequestId",
   "/v1/me/account-deletion-requests/:deletionRequestId/confirm",
-  "/v1/profile/facts",
-  "/v1/profile/facts/:factId",
   "/v1/profile/personal",
   "/v1/profile/import-drafts",
   "/v1/profile/import-drafts/:draftId",
@@ -614,16 +606,6 @@ class ProblemDetailsFilter implements ExceptionFilter {
       status = HttpStatus.CONFLICT;
       code = "idempotency_conflict";
       title = "Idempotency key conflict";
-      detail = exception.message;
-    } else if (exception instanceof ProfileFactVersionConflictError) {
-      status = HttpStatus.CONFLICT;
-      code = "version_conflict";
-      title = "Profile fact version conflict";
-      detail = exception.message;
-    } else if (exception instanceof ProfileFactTransitionConflictError) {
-      status = HttpStatus.CONFLICT;
-      code = "profile_fact_transition_conflict";
-      title = "Profile fact transition conflict";
       detail = exception.message;
     } else if (exception instanceof ProfileSectionVersionConflictError) {
       status = HttpStatus.CONFLICT;
@@ -1059,8 +1041,6 @@ const validateCreateAccountDeletionRequest = compileComponentValidator(
 const validateConfirmAccountDeletionRequest = compileComponentValidator(
   "ConfirmAccountDeletionRequest",
 );
-const validateCreateProfileFact = compileComponentValidator("CreateProfileFactRequest");
-const validateUpdateProfileFact = compileComponentValidator("UpdateProfileFactRequest");
 const validateSaveRestrictedAnswer = compileComponentValidator("SaveRestrictedAnswerRequest");
 const validatePutProfilePersonal = compileComponentValidator("PutProfilePersonalRequest");
 const validateReorderProfileEntries = compileComponentValidator("ReorderProfileEntriesRequest");
@@ -2172,64 +2152,6 @@ class CandidateController {
       request.traceId ?? correlationId(undefined),
       activeTraceparent(),
     );
-  }
-
-  @Get("/profile/facts")
-  async listProfileFacts(@Req() request: AuthenticatedRequest): Promise<ProfileFactCollection> {
-    const user = await this.identity.resolve(request, "profile:read");
-    return this.store.listProfileFacts(user.id);
-  }
-
-  @Post("/profile/facts")
-  @HttpCode(HttpStatus.CREATED)
-  async createProfileFact(
-    @Req() request: AuthenticatedRequest,
-    @Headers("idempotency-key") idempotencyKey: string | undefined,
-  ): Promise<ProfileFact> {
-    const user = await this.identity.resolve(request, "profile:write");
-    const commandKey = requireIdempotencyKey(idempotencyKey);
-    if (!validateCreateProfileFact(request.body)) {
-      throw new HttpException(
-        formatValidationErrors(validateCreateProfileFact.errors),
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    return this.store.createProfileFact(
-      user.id,
-      request.body as CreateProfileFactRequest,
-      commandKey,
-      request.traceId ?? correlationId(undefined),
-    );
-  }
-
-  @Patch("/profile/facts/:factId")
-  async updateProfileFact(
-    @Req() request: AuthenticatedRequest,
-    @Param("factId") factId: string,
-    @Headers("idempotency-key") idempotencyKey: string | undefined,
-  ): Promise<ProfileFact> {
-    const user = await this.identity.resolve(request, "profile:write");
-    const commandKey = requireIdempotencyKey(idempotencyKey);
-    if (!UUID_PATTERN.test(factId)) {
-      throw new HttpException("Profile fact identifier is invalid", HttpStatus.BAD_REQUEST);
-    }
-    if (!validateUpdateProfileFact(request.body)) {
-      throw new HttpException(
-        formatValidationErrors(validateUpdateProfileFact.errors),
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    const fact = await this.store.updateProfileFact(
-      user.id,
-      factId,
-      request.body as UpdateProfileFactRequest,
-      commandKey,
-      request.traceId ?? correlationId(undefined),
-    );
-    if (!fact) {
-      throw new HttpException("Profile fact was not found", HttpStatus.NOT_FOUND);
-    }
-    return fact;
   }
 
   private profileSectionStore(): ProfileSectionStore {

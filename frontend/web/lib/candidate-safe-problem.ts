@@ -1,7 +1,6 @@
 export type CandidateProblemSurface =
   | "operation"
   | "preferences"
-  | "profile_facts"
   | "profile_sections"
   | "restricted_answers"
   | "resume";
@@ -25,12 +24,6 @@ const copyBySurface: Readonly<Record<CandidateProblemSurface, SurfaceCopy>> = {
     invalid: "Check your job preferences and try again.",
     missing: "Your saved preferences are no longer available. Refresh and try again.",
     unavailable: "Job preferences are temporarily unavailable.",
-  },
-  profile_facts: {
-    conflict: "This profile fact changed. Refresh and review it again.",
-    invalid: "Check the profile fact and try again.",
-    missing: "This profile fact is no longer available. Refresh and try again.",
-    unavailable: "Profile facts are temporarily unavailable.",
   },
   profile_sections: {
     conflict: "This profile entry changed. Refresh and review it again.",
@@ -83,7 +76,6 @@ const profileSectionCodeCopy: ReadonlyMap<string, string> = new Map([
 const authenticationCodes = new Set(["authentication_required", "session_expired"]);
 const conflictCodes = new Set([
   "idempotency_conflict",
-  "profile_fact_transition_conflict",
   "version_conflict",
 ]);
 const invalidCodes = new Set(["invalid_request", "payload_too_large", "unsupported_media_type"]);

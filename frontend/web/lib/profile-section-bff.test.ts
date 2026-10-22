@@ -33,7 +33,9 @@ const record = {
   updatedAt: at,
 };
 
-const params = (value: Record<string, string>) => ({ params: Promise.resolve(value) });
+const params = <T extends Record<string, string>>(value: T) => ({
+  params: Promise.resolve(value),
+});
 const jsonRequest = (method: string, url: string, body: unknown) =>
   new Request(`http://localhost${url}`, {
     method,

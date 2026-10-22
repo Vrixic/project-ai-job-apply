@@ -49,10 +49,6 @@ export type ApplicationNativeTransferDiscard =
 export type ApplicationNativeTransferCancel =
   components["schemas"]["ApplicationNativeTransferCancel"];
 export type CurrentUser = components["schemas"]["CurrentUser"];
-export type ProfileFact = components["schemas"]["ProfileFact"];
-export type ProfileFactCollection = components["schemas"]["ProfileFactCollection"];
-export type CreateProfileFactRequest = components["schemas"]["CreateProfileFactRequest"];
-export type UpdateProfileFactRequest = components["schemas"]["UpdateProfileFactRequest"];
 export type ProfilePersonal = components["schemas"]["ProfilePersonal"];
 export type PutProfilePersonalRequest = components["schemas"]["PutProfilePersonalRequest"];
 export type ProfileEducationEntry = components["schemas"]["ProfileEducationEntry"];

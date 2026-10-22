@@ -2,12 +2,6 @@
   "version": 1,
   "schemas": [
     {
-      "name": "ProfileFact",
-      "file": "profile-fact.schema.json",
-      "owner": "profile",
-      "classification": "confidential"
-    },
-    {
       "name": "AnswerVaultEntry",
       "file": "answer-vault-entry.schema.json",
       "owner": "profile",

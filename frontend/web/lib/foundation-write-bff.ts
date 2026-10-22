@@ -9,8 +9,6 @@ const JSON_CONTENT_TYPE_PATTERN = /^application\/json(?:\s*;\s*charset=utf-8)?$/
 export type FoundationWriteSchemaName =
   | "PutJobPreferencesRequest"
   | "CreateResumeUploadRequest"
-  | "CreateProfileFactRequest"
-  | "UpdateProfileFactRequest"
   | "PutProfilePersonalRequest"
   | "ReorderProfileEntriesRequest"
   | "SaveProfileImportDraftRequest"
@@ -31,8 +29,6 @@ const validators = new Map<FoundationWriteSchemaName, ReturnType<typeof compileC
   [
     ["PutJobPreferencesRequest", compileComponentValidator("PutJobPreferencesRequest")],
     ["CreateResumeUploadRequest", compileComponentValidator("CreateResumeUploadRequest")],
-    ["CreateProfileFactRequest", compileComponentValidator("CreateProfileFactRequest")],
-    ["UpdateProfileFactRequest", compileComponentValidator("UpdateProfileFactRequest")],
     ["PutProfilePersonalRequest", compileComponentValidator("PutProfilePersonalRequest")],
     ["ReorderProfileEntriesRequest", compileComponentValidator("ReorderProfileEntriesRequest")],
     ["SaveProfileImportDraftRequest", compileComponentValidator("SaveProfileImportDraftRequest")],

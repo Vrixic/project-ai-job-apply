@@ -3,11 +3,11 @@ import {
   GET as getJobPreferences,
   PUT as putJobPreferences,
 } from "../app/api/platform/job-preferences/route";
-import { PATCH as patchProfileFact } from "../app/api/platform/profile-facts/[factId]/route";
+import { PATCH as patchProfileEntry } from "../app/api/platform/profile/[section]/[recordId]/route";
 import {
-  GET as getProfileFacts,
-  POST as postProfileFact,
-} from "../app/api/platform/profile-facts/route";
+  GET as getProfileSection,
+  POST as postProfileSection,
+} from "../app/api/platform/profile/[section]/route";
 import { GET as getResumes, POST as postResume } from "../app/api/platform/resumes/route";
 import { type FoundationWriteSchemaName, readFoundationWriteRequest } from "./foundation-write-bff";
 
@@ -43,16 +43,6 @@ const validBodies: Record<FoundationWriteSchemaName, Record<string, unknown>> = 
     mediaType: "application/pdf",
     sizeBytes: 4096,
     sha256: "a".repeat(64),
-  },
-  CreateProfileFactRequest: {
-    kind: "skill",
-    key: "programming_language",
-    value: "TypeScript",
-    sensitivity: "standard",
-  },
-  UpdateProfileFactRequest: {
-    expectedVersion: 1,
-    value: "TypeScript and JavaScript",
   },
   SaveRestrictedAnswerRequest: {
     expectedVersion: 0,
@@ -98,11 +88,15 @@ const responseDocument = {
   createdAt: "2026-08-17T12:00:00.000Z",
   updatedAt: "2026-08-17T12:00:00.000Z",
 };
+const skillSection = { params: Promise.resolve({ section: "skill-entries" }) };
+const getProfileFacts = (candidate?: Request) =>
+  getProfileSection(candidate ?? new Request("http://localhost/x"), skillSection);
+const postProfileFact = (candidate: Request) => postProfileSection(candidate, skillSection);
 const responseFact = {
   id: factId,
-  ...validBodies.CreateProfileFactRequest,
-  verification: "confirmed",
-  source: { type: "user", reference: "direct-entry" },
+  ...validBodies.CreateProfileSkillEntryRequest,
+  origin: "entered",
+  displayOrder: 0,
   version: 1,
   createdAt: "2026-08-17T12:00:00.000Z",
   updatedAt: "2026-08-17T12:00:00.000Z",
@@ -168,11 +162,11 @@ describe("foundation write request boundary", () => {
     const result = await readFoundationWriteRequest(
       request(
         JSON.stringify({
-          ...validBodies.CreateProfileFactRequest,
+          ...validBodies.CreateProfileSkillEntryRequest,
           interviewOutcome: privateCanary,
         }),
       ),
-      "CreateProfileFactRequest",
+      "CreateProfileSkillEntryRequest",
     );
 
     const problemBody = await expectProblem(result, 400, "invalid_request");
@@ -243,7 +237,7 @@ describe("foundation write request boundary", () => {
     );
     const result = await readFoundationWriteRequest(
       request(stream, overrides),
-      "CreateProfileFactRequest",
+      "CreateProfileSkillEntryRequest",
     );
 
     await expectProblem(
@@ -262,7 +256,7 @@ describe("foundation write request boundary", () => {
   it("accepts the byte ceiling for reading but rejects an invalid schema", async () => {
     const result = await readFoundationWriteRequest(
       request(new Uint8Array(64 * 1024).fill("x".charCodeAt(0))),
-      "CreateProfileFactRequest",
+      "CreateProfileSkillEntryRequest",
     );
 
     await expectProblem(result, 400, "invalid_request");
@@ -285,7 +279,10 @@ describe("foundation write request boundary", () => {
       },
       { highWaterMark: 0 },
     );
-    const result = await readFoundationWriteRequest(request(stream), "CreateProfileFactRequest");
+    const result = await readFoundationWriteRequest(
+      request(stream),
+      "CreateProfileSkillEntryRequest",
+    );
 
     await expectProblem(result, 413, "payload_too_large");
     expect(pulls).toBe(1);
@@ -301,7 +298,11 @@ describe("foundation write request boundary", () => {
         return new Promise<void>(() => undefined);
       },
     });
-    const result = await readFoundationWriteRequest(request(stream), "CreateProfileFactRequest", 1);
+    const result = await readFoundationWriteRequest(
+      request(stream),
+      "CreateProfileSkillEntryRequest",
+      1,
+    );
 
     await expectProblem(result, 400, "invalid_request");
     expect(cancellationRequested).toBe(true);
@@ -321,13 +322,17 @@ describe("foundation write request boundary", () => {
       ),
       request(new Uint8Array([0xc3, 0x28])),
       request('{"private":"candidate-private-malformed"'),
-      request(JSON.stringify(validBodies.CreateProfileFactRequest), {
+      request(JSON.stringify(validBodies.CreateProfileSkillEntryRequest), {
         headers: { "content-length": "1" },
       }),
     ];
 
     for (const candidate of cases) {
-      const result = await readFoundationWriteRequest(candidate, "CreateProfileFactRequest", 5);
+      const result = await readFoundationWriteRequest(
+        candidate,
+        "CreateProfileSkillEntryRequest",
+        5,
+      );
       const problemBody = await expectProblem(result, 400, "invalid_request");
       expect(JSON.stringify(problemBody)).not.toContain("candidate-private");
     }
@@ -338,11 +343,7 @@ describe("foundation write route composition", () => {
   it.each([
     [getJobPreferences, "/v1/me/job-preferences", responsePreferenceSet],
     [getResumes, "/v1/resumes", { documents: [responseDocument] }],
-    [
-      getProfileFacts,
-      "/v1/profile/facts",
-      { facts: [responseFact], confirmedCount: 1, proposedCount: 0 },
-    ],
+    [getProfileFacts, "/v1/profile/skill-entries", { entries: [responseFact] }],
   ])("leaves the existing authenticated GET forward unchanged", async (handler, path, value) => {
     mocks.forwardPlatformRequest.mockResolvedValueOnce(Response.json(value));
 
@@ -390,8 +391,8 @@ describe("foundation write route composition", () => {
       "profile fact create",
       postProfileFact,
       "POST",
-      "/v1/profile/facts",
-      validBodies.CreateProfileFactRequest,
+      "/v1/profile/skill-entries",
+      validBodies.CreateProfileSkillEntryRequest,
       201,
       responseFact,
     ],
@@ -430,14 +431,16 @@ describe("foundation write route composition", () => {
 
   it("forwards an exact validated profile-fact correction", async () => {
     mocks.forwardPlatformRequest.mockResolvedValueOnce(Response.json(responseFact));
-    const body = JSON.stringify(validBodies.UpdateProfileFactRequest);
+    const body = JSON.stringify(validBodies.UpdateProfileSkillEntryRequest);
     const candidate = request(body, { method: "PATCH" });
 
-    const response = await patchProfileFact(candidate, { params: Promise.resolve({ factId }) });
+    const response = await patchProfileEntry(candidate, {
+      params: Promise.resolve({ section: "skill-entries", recordId: factId }),
+    });
 
     expect(response.status).toBe(200);
     expect(mocks.forwardPlatformRequest).toHaveBeenCalledWith(
-      `/v1/profile/facts/${factId}`,
+      `/v1/profile/skill-entries/${factId}`,
       {
         method: "PATCH",
         body,
@@ -467,8 +470,11 @@ describe("foundation write route composition", () => {
   });
 
   it("preserves the existing invalid profile-fact identifier response before body processing", async () => {
-    const response = await patchProfileFact(request(null, { method: "PATCH" }), {
-      params: Promise.resolve({ factId: "candidate-private-invalid-id" }),
+    const response = await patchProfileEntry(request(null, { method: "PATCH" }), {
+      params: Promise.resolve({
+        section: "skill-entries",
+        recordId: "candidate-private-invalid-id",
+      }),
     });
 
     expect(response.status).toBe(400);

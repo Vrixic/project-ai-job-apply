@@ -435,6 +435,10 @@
         {
           "version": "0013_profile_sections_candidate_rights",
           "checksum": "bb5ed49230e1272151a6414682047962662a20a187e3091804812e3165e16919"
+        },
+        {
+          "version": "0014_retire_profile_facts",
+          "checksum": "b15cb2e663d7a275a2852eeb9ce5cc15b31cb988c114594d634b343bb3e6bfac"
         }
       ],
       "relations": [
@@ -453,12 +457,9 @@
         "profile.import_drafts",
         "profile.job_preferences",
         "profile.personal_versions",
-        "profile.profile_fact_evidence",
-        "profile.profile_fact_versions",
-        "profile.profile_facts",
         "profile.restricted_answer_versions",
         "profile.restricted_answers",
-        "profile.resume_fact_imports",
+        "profile.resume_imports",
         "profile.ugc_contribution_consents"
       ]
     },

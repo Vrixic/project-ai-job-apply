@@ -23,6 +23,12 @@ export carries the new sections (`personal`, `education`, `workExperience`, `ski
 idempotency replay records. It adds the helper `profile.export_candidate_entries`. The release guards
 mentioned above also need 0013.
 
+`0014_retire_profile_facts` retires the profile-fact model: it drops `profile_facts`, `profile_fact_versions`
+and `profile_fact_evidence` with their helper functions and triggers, renames `resume_fact_imports` to
+`resume_imports` (it now only records one import per document, version and parser), and replaces the
+export and deletion functions so they no longer name the fact tables. It is destructive for development
+facts by the owner's decision and must be released with the Gateway and web changes of D3.1-010.
+
 Provider retirement migrations must fail before mutation when undispatched work remains.
 Historical published routing values may be normalized only to a provider-neutral retired label;
 operation, audit, idempotency, and user-owned data remain unchanged.

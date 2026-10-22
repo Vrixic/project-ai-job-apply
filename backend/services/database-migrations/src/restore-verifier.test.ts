@@ -44,6 +44,7 @@ function preReportRetentionManifest(source: RestoreManifestSource) {
             "0015_legacy_receipt_archive",
             "0012_profile_sections",
             "0013_profile_sections_candidate_rights",
+            "0014_retire_profile_facts",
           ].includes(migration.version),
       ),
       relations: contributor.relations.filter(
@@ -142,13 +143,13 @@ describe("current restore manifest", () => {
     expect([...migrationRunners].map((runner) => runner.owner).sort()).toEqual(
       source.manifest.contributors.map((contributor) => contributor.owner),
     );
-    expect(expectedRelations(source)).toHaveLength(100);
+    expect(expectedRelations(source)).toHaveLength(97);
     expect(
       source.manifest.contributors.reduce(
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(83);
+    ).toBe(84);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // The exact seven-owner assertion above bounds I/O concurrency. Each owner still enumerates
@@ -300,8 +301,8 @@ describe("read-only aggregate restore verification", () => {
         "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1",
       manifestSha256: source.sha256,
       ownerCount: 7,
-      relationCount: 100,
-      migrationCount: 83,
+      relationCount: 97,
+      migrationCount: 84,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([
@@ -527,7 +528,7 @@ describe("read-only aggregate restore verification", () => {
       await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
         manifestSha256: historical.sha256,
         ownerCount: migrationCount === 52 ? 7 : 6,
-        relationCount: migrationCount === 52 ? 78 : 68,
+        relationCount: migrationCount === 52 ? 75 : 65,
         migrationCount,
       });
       // Historical evidence cannot verify the expanded current Applications/Documents/Profile boundary.
@@ -566,7 +567,7 @@ describe("read-only aggregate restore verification", () => {
       };
       await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
         ownerCount: 7,
-        relationCount: restrictedAbsent ? 86 : 88,
+        relationCount: restrictedAbsent ? 83 : 85,
         migrationCount: 65,
       });
       await expect(verifyRestoreDatabase(client, current)).rejects.toThrow();
@@ -601,7 +602,7 @@ describe("read-only aggregate restore verification", () => {
     };
     await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
       ownerCount: 7,
-      relationCount: 86,
+      relationCount: 83,
       migrationCount: 64,
     });
     await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(
@@ -647,7 +648,7 @@ describe("read-only aggregate restore verification", () => {
       };
       await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
         ownerCount: 7,
-        relationCount: 84,
+        relationCount: 81,
         migrationCount,
       });
       await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(
@@ -697,7 +698,7 @@ describe("read-only aggregate restore verification", () => {
     };
     await expect(verifyRestoreDatabase(client, historical)).resolves.toMatchObject({
       ownerCount: 7,
-      relationCount: 83,
+      relationCount: 80,
       migrationCount: 57,
     });
     await expect(verifyRestoreDatabase(client, current)).rejects.toThrow(

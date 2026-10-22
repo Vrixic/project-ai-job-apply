@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { coverLetterContext } from "@ai-job-apply/ai-sdk/context";
-import type { ProfileFact } from "@ai-job-apply/api-contracts";
 import { activeJobRevisionDigestInput } from "@ai-job-apply/api-contracts/job-revision-canonical";
 import {
   type ApplicationCoverLetters,
@@ -34,7 +33,6 @@ import {
 import type { GraphFact, TemporaryMaterialReference } from "@ai-job-apply/domain";
 import { validateTemporaryMaterialReference } from "@ai-job-apply/domain/temporary-material";
 import type { JobCatalogReader } from "@ai-job-apply/jobs-service";
-import { profileFactToGraphFact } from "@ai-job-apply/profile-service";
 import type postgres from "postgres";
 import type { ResumeTailoringClient } from "./resume-tailoring-client.js";
 
@@ -72,10 +70,6 @@ export interface ApplicationsRuntimeOptions {
   restrictedAnswerReuseEnabled?: boolean;
   clock?: () => Date;
   metrics?: MetricSink;
-}
-
-export function toGraphFact(fact: ProfileFact): GraphFact {
-  return profileFactToGraphFact(fact);
 }
 
 /** Field definitions from `data/taxonomies/application-fields.v1.json`. */

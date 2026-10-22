@@ -22,6 +22,7 @@ const migrationVersions = [
   "0011_active_candidate_lease",
   "0012_profile_sections",
   "0013_profile_sections_candidate_rights",
+  "0014_retire_profile_facts",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
@@ -74,7 +75,6 @@ try {
         table_count: number;
         migration_count: number;
         outbox_column_count: number;
-        profile_fact_trigger_count: number;
         ugc_consent_trigger_count: number;
         ugc_consent_delete_guard_count: number;
       }[]
@@ -83,10 +83,7 @@ try {
         (to_regclass('identity.users') IS NOT NULL)::int +
         (to_regclass('identity.external_identities') IS NOT NULL)::int +
         (to_regclass('profile.job_preferences') IS NOT NULL)::int +
-        (to_regclass('profile.profile_facts') IS NOT NULL)::int +
-        (to_regclass('profile.profile_fact_versions') IS NOT NULL)::int +
-        (to_regclass('profile.resume_fact_imports') IS NOT NULL)::int +
-        (to_regclass('profile.profile_fact_evidence') IS NOT NULL)::int +
+        (to_regclass('profile.resume_imports') IS NOT NULL)::int +
         (to_regclass('profile.restricted_answers') IS NOT NULL)::int +
         (to_regclass('profile.restricted_answer_versions') IS NOT NULL)::int +
         (to_regclass('platform.operations') IS NOT NULL)::int +
@@ -130,13 +127,6 @@ try {
       (
         SELECT count(*)::int
         FROM pg_trigger
-        WHERE tgrelid = 'profile.profile_fact_versions'::regclass
-          AND tgname = 'profile_fact_versions_reject_update'
-          AND NOT tgisinternal
-      ) AS profile_fact_trigger_count
-      , (
-        SELECT count(*)::int
-        FROM pg_trigger
         WHERE tgrelid = 'profile.ugc_contribution_consents'::regclass
           AND tgname IN (
             'ugc_contribution_consents_validate_insert',
@@ -153,10 +143,9 @@ try {
       ) AS ugc_consent_delete_guard_count
     `;
     if (
-      verification?.table_count !== 22 ||
+      verification?.table_count !== 19 ||
       verification.migration_count !== migrationVersions.length ||
       verification.outbox_column_count !== 11 ||
-      verification.profile_fact_trigger_count !== 1 ||
       verification.ugc_consent_trigger_count !== 2 ||
       verification.ugc_consent_delete_guard_count !== 1
     ) {

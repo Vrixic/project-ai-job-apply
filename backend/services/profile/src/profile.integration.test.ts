@@ -7,10 +7,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   AccountQuarantinedError,
   createDatabase,
+  createProfileSectionStore,
   loadCandidateRightsPolicy,
   PostgresProfileStore,
   PostgresResumeProposalWriter,
-  ProfileFactVersionConflictError,
+  ResumeProposalConflictError,
 } from "./index.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -43,10 +44,10 @@ describeWithDatabase("PostgresProfileStore", () => {
     });
 
     expect(first.stdout.trim()).toBe(
-      "Database migrations through 0013_profile_sections_candidate_rights applied and verified.",
+      "Database migrations through 0014_retire_profile_facts applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Database migrations through 0013_profile_sections_candidate_rights applied and verified.",
+      "Database migrations through 0014_retire_profile_facts applied and verified.",
     );
     expect(
       await database.client`
@@ -399,405 +400,6 @@ describeWithDatabase("PostgresProfileStore", () => {
     }
   });
 
-  it("imports resume proposals idempotently and changes provenance on candidate correction", async () => {
-    const runId = crypto.randomUUID();
-    const user = await store.resolveUser(
-      { ...principal, subject: `resume-proposal-${runId}` },
-      "integration-trace",
-    );
-    const documentId = crypto.randomUUID();
-    const writer = new PostgresResumeProposalWriter();
-    const proposal = {
-      kind: "skill" as const,
-      key: "skill",
-      value: "TypeScript",
-      sensitivity: "standard" as const,
-      evidence: {
-        supportingSpans: [
-          {
-            documentId,
-            documentVersion: 1,
-            parserVersion: "resume-parser-v1",
-            blockIndex: 0,
-            startOffset: 8,
-            endOffset: 18,
-            page: 1,
-          },
-        ],
-      },
-    };
-    const supportingSpan = proposal.evidence.supportingSpans[0];
-    if (!supportingSpan) throw new Error("expected proposal evidence");
-    await expect(
-      database.client.begin((transaction) =>
-        writer.import(transaction, {
-          userId: user.id,
-          documentId,
-          documentVersion: 1,
-          parserVersion: "resume-parser-v1",
-          traceId: "resume-import-mismatch",
-          proposals: [
-            {
-              ...proposal,
-              evidence: {
-                supportingSpans: [{ ...supportingSpan, documentId: crypto.randomUUID() }],
-              },
-            },
-          ],
-        }),
-      ),
-    ).rejects.toThrow("InvalidResumeProposalEvidence");
-    await database.client.begin((transaction) =>
-      writer.import(transaction, {
-        userId: user.id,
-        documentId,
-        documentVersion: 1,
-        parserVersion: "resume-parser-v1",
-        traceId: "resume-import",
-        proposals: [proposal],
-      }),
-    );
-    await database.client.begin((transaction) =>
-      writer.import(transaction, {
-        userId: user.id,
-        documentId,
-        documentVersion: 1,
-        parserVersion: "resume-parser-v1",
-        traceId: "resume-import-replay",
-        proposals: [proposal],
-      }),
-    );
-
-    const proposed = (await store.listProfileFacts(user.id)).facts[0];
-    expect(proposed).toMatchObject({
-      value: "TypeScript",
-      verification: "proposed",
-      source: { type: "resume" },
-      evidence: { supportingSpans: [{ documentId, startOffset: 8, endOffset: 18 }] },
-    });
-    if (!proposed) throw new Error("expected imported proposal");
-    const corrected = await store.updateProfileFact(
-      user.id,
-      proposed.id,
-      { expectedVersion: 1, value: "TypeScript 6", verification: "confirmed" },
-      `resume-correction-${runId}`,
-      "resume-correction",
-    );
-    expect(corrected).toMatchObject({
-      value: "TypeScript 6",
-      verification: "confirmed",
-      source: { type: "user", reference: `resume-correction:${proposed.id}` },
-      version: 2,
-    });
-    expect(corrected).not.toHaveProperty("evidence");
-    const datedProposal = {
-      ...proposal,
-      key: "dated_skill",
-      evidence: {
-        supportingSpans: [
-          {
-            ...supportingSpan,
-            documentVersion: 2,
-          },
-        ],
-      },
-    };
-    await database.client.begin((transaction) =>
-      writer.import(transaction, {
-        userId: user.id,
-        documentId,
-        documentVersion: 2,
-        parserVersion: "resume-parser-v1",
-        traceId: "resume-import-dated",
-        proposals: [datedProposal],
-      }),
-    );
-    const dated = (await store.listProfileFacts(user.id)).facts.find(
-      (fact) => fact.key === "dated_skill",
-    );
-    if (!dated) throw new Error("expected dated proposal");
-    const datedCorrection = await store.updateProfileFact(
-      user.id,
-      dated.id,
-      { expectedVersion: 1, effectiveFrom: "2026-01-01", verification: "confirmed" },
-      `resume-date-correction-${runId}`,
-      "resume-date-correction",
-    );
-    expect(datedCorrection).toMatchObject({
-      verification: "confirmed",
-      effectiveFrom: "2026-01-01",
-      source: { type: "user", reference: `resume-correction:${dated.id}` },
-    });
-    expect(datedCorrection).not.toHaveProperty("evidence");
-    const receipts = await database.client<
-      Array<{ documentVersion: number; parserVersion: string }>
-    >`
-      SELECT
-        document_version AS "documentVersion",
-        parser_version AS "parserVersion"
-      FROM profile.resume_fact_imports
-      WHERE user_id = ${user.id} AND document_id = ${documentId}
-      ORDER BY document_version
-    `;
-    expect(receipts).toEqual([
-      { documentVersion: 1, parserVersion: "resume-parser-v1" },
-      { documentVersion: 2, parserVersion: "resume-parser-v1" },
-    ]);
-  });
-
-  it("keeps profile facts owner-scoped, versioned, idempotent, and immutable in place", async () => {
-    const runId = crypto.randomUUID();
-    const owner = await store.resolveUser(
-      { ...principal, subject: `fact-owner-${runId}` },
-      "integration-trace",
-    );
-    const other = await store.resolveUser(
-      { ...principal, subject: `fact-other-${runId}` },
-      "integration-trace",
-    );
-    let factId: string | undefined;
-    try {
-      const input = {
-        kind: "skill" as const,
-        key: "programming_language",
-        value: "TypeScript",
-        sensitivity: "standard" as const,
-      };
-      const first = await store.createProfileFact(
-        owner.id,
-        input,
-        `fact-create-${runId}`,
-        "integration-trace",
-      );
-      factId = first.id;
-      const replay = await store.createProfileFact(
-        owner.id,
-        input,
-        `fact-create-${runId}`,
-        "integration-trace",
-      );
-      expect(replay).toEqual(first);
-      expect(await store.listProfileFacts(owner.id)).toMatchObject({
-        facts: [{ id: first.id, value: "TypeScript", version: 1 }],
-        confirmedCount: 1,
-        proposedCount: 0,
-      });
-      expect(await store.listProfileFacts(other.id)).toEqual({
-        facts: [],
-        confirmedCount: 0,
-        proposedCount: 0,
-      });
-      expect(
-        await store.updateProfileFact(
-          other.id,
-          first.id,
-          { expectedVersion: 1, value: "Unauthorized" },
-          `fact-other-update-${runId}`,
-          "integration-trace",
-        ),
-      ).toBe(null);
-
-      const corrected = await store.updateProfileFact(
-        owner.id,
-        first.id,
-        { expectedVersion: 1, value: "TypeScript and JavaScript" },
-        `fact-update-${runId}`,
-        "integration-trace",
-      );
-      expect(corrected).toMatchObject({
-        id: first.id,
-        value: "TypeScript and JavaScript",
-        version: 2,
-      });
-      await expect(
-        store.updateProfileFact(
-          owner.id,
-          first.id,
-          { expectedVersion: 1, verification: "rejected" },
-          `fact-stale-${runId}`,
-          "integration-trace",
-        ),
-      ).rejects.toBeInstanceOf(ProfileFactVersionConflictError);
-
-      const concurrent = await Promise.allSettled([
-        store.updateProfileFact(
-          owner.id,
-          first.id,
-          { expectedVersion: 2, value: "TypeScript, JavaScript, and SQL" },
-          `fact-concurrent-a-${runId}`,
-          "integration-trace",
-        ),
-        store.updateProfileFact(
-          owner.id,
-          first.id,
-          { expectedVersion: 2, value: "TypeScript, JavaScript, and Python" },
-          `fact-concurrent-b-${runId}`,
-          "integration-trace",
-        ),
-      ]);
-      expect(concurrent.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
-      const rejected = concurrent.filter(
-        (outcome): outcome is PromiseRejectedResult => outcome.status === "rejected",
-      );
-      expect(rejected).toHaveLength(1);
-      expect(rejected[0]?.reason).toBeInstanceOf(ProfileFactVersionConflictError);
-
-      let invalidValueCode: string | undefined;
-      try {
-        await database.client`
-          INSERT INTO profile.profile_fact_versions (
-            fact_id,
-            version,
-            kind,
-            fact_key,
-            fact_value,
-            verification,
-            sensitivity,
-            source_type,
-            source_reference
-          ) VALUES (
-            ${first.id},
-            4,
-            'skill',
-            'programming_language',
-            ${JSON.stringify(["valid", 42])}::jsonb,
-            'confirmed',
-            'standard',
-            'user',
-            'direct-entry'
-          )
-        `;
-      } catch (error) {
-        invalidValueCode = (error as { code?: string }).code;
-      }
-      expect(invalidValueCode).toBe("23514");
-
-      let mutationCode: string | undefined;
-      try {
-        await database.client`
-          UPDATE profile.profile_fact_versions
-          SET fact_key = 'mutated'
-          WHERE fact_id = ${first.id} AND version = 1
-        `;
-      } catch (error) {
-        mutationCode = (error as { code?: string }).code;
-      }
-      expect(mutationCode).toBe("55000");
-
-      const versions = await database.client<Array<{ version: number }>>`
-        SELECT version
-        FROM profile.profile_fact_versions
-        WHERE fact_id = ${first.id}
-        ORDER BY version
-      `;
-      expect(versions.map((row) => row.version)).toEqual([1, 2, 3]);
-    } finally {
-      if (factId) {
-        await database.client`
-          DELETE FROM platform.audit_events WHERE resource_id = ${factId}
-        `;
-      }
-      await database.client`
-        DELETE FROM identity.users WHERE id IN (${owner.id}, ${other.id})
-      `;
-    }
-  });
-
-  it("refreshes the latest fact version after competing updates wait for the parent lock", async () => {
-    const runId = crypto.randomUUID();
-    const owner = await store.resolveUser(
-      { ...principal, subject: `fact-lock-owner-${runId}` },
-      "integration-trace",
-    );
-    const fact = await store.createProfileFact(
-      owner.id,
-      { kind: "skill", key: "programming_language", value: "TypeScript", sensitivity: "standard" },
-      `fact-lock-create-${runId}`,
-      "integration-trace",
-    );
-    let releaseLock = () => {};
-    const release = new Promise<void>((resolve) => {
-      releaseLock = resolve;
-    });
-    let signalLocked = () => {};
-    const locked = new Promise<void>((resolve) => {
-      signalLocked = resolve;
-    });
-    const holder = database.client.begin(async (transaction) => {
-      await transaction`
-        SELECT id FROM profile.profile_facts
-        WHERE id = ${fact.id} AND user_id = ${owner.id}
-        FOR UPDATE
-      `;
-      signalLocked();
-      await release;
-    });
-    let updates:
-      | Promise<PromiseSettledResult<Awaited<ReturnType<typeof store.updateProfileFact>>>[]>
-      | undefined;
-    try {
-      await locked;
-      const firstInput = { expectedVersion: 1, value: "TypeScript and SQL" };
-      const secondInput = { expectedVersion: 1, value: "TypeScript and Python" };
-      const firstKey = `fact-lock-update-a-${runId}`;
-      const secondKey = `fact-lock-update-b-${runId}`;
-      updates = Promise.allSettled([
-        store.updateProfileFact(owner.id, fact.id, firstInput, firstKey, "integration-trace"),
-        store.updateProfileFact(owner.id, fact.id, secondInput, secondKey, "integration-trace"),
-      ]);
-      await expect
-        .poll(
-          async () => {
-            const [waiting] = await database.client<Array<{ count: number }>>`
-          SELECT count(*)::integer AS count FROM pg_stat_activity
-          WHERE datname = current_database() AND pid <> pg_backend_pid()
-            AND state = 'active' AND wait_event_type = 'Lock'
-            AND query LIKE '%profile.profile_facts%'
-        `;
-            return waiting?.count;
-          },
-          { timeout: 5_000 },
-        )
-        .toBe(2);
-      releaseLock();
-      await holder;
-      const outcomes = await updates;
-      const succeeded = outcomes.filter((outcome) => outcome.status === "fulfilled");
-      const failed = outcomes.filter((outcome) => outcome.status === "rejected");
-      expect(succeeded).toHaveLength(1);
-      expect(failed).toHaveLength(1);
-      expect(failed[0]?.reason).toBeInstanceOf(ProfileFactVersionConflictError);
-      const firstWon = outcomes[0]?.status === "fulfilled";
-      const replay = await store.updateProfileFact(
-        owner.id,
-        fact.id,
-        firstWon ? firstInput : secondInput,
-        firstWon ? firstKey : secondKey,
-        "integration-trace",
-      );
-      expect(replay).toEqual(succeeded[0]?.value);
-      const versions = await database.client<Array<{ version: number; value: string }>>`
-        SELECT version, fact_value AS value FROM profile.profile_fact_versions
-        WHERE fact_id = ${fact.id} ORDER BY version
-      `;
-      expect(versions).toEqual([
-        { version: 1, value: "TypeScript" },
-        { version: 2, value: firstWon ? firstInput.value : secondInput.value },
-      ]);
-      const receipts = await database.client<Array<{ key: string }>>`
-        SELECT key FROM platform.idempotency_keys
-        WHERE user_id = ${owner.id} AND scope = ${`profile.fact.update.v1:${fact.id}`}
-      `;
-      expect(receipts).toEqual([{ key: firstWon ? firstKey : secondKey }]);
-    } finally {
-      releaseLock();
-      await holder;
-      await updates;
-      await database.client`DELETE FROM platform.audit_events WHERE resource_id = ${fact.id}`;
-      await database.client`DELETE FROM identity.users WHERE id = ${owner.id}`;
-    }
-  });
-
   it("keeps committed work recoverable when the post-commit SQS nudge fails", async () => {
     const runId = crypto.randomUUID();
     let operationId: string | undefined;
@@ -931,136 +533,77 @@ describeWithDatabase("PostgresProfileStore", () => {
       `;
     }
   });
-  it("retires only the unreviewed proposals whose sole source is a purged resume (ADR-034)", async () => {
+  it("imports resume drafts idempotently and retires only a purged resume's unsaved drafts (ADR-034, ADR-052)", async () => {
     const runId = crypto.randomUUID();
     const user = await store.resolveUser(
-      { ...principal, subject: `resume-retire-${runId}` },
+      { ...principal, subject: `resume-drafts-${runId}` },
       "integration-trace",
     );
     const other = await store.resolveUser(
-      { ...principal, subject: `resume-retire-other-${runId}` },
+      { ...principal, subject: `resume-drafts-other-${runId}` },
       "integration-trace",
     );
     const documentA = crypto.randomUUID();
     const documentB = crypto.randomUUID();
+    const sections = createProfileSectionStore(database.client);
     const writer = new PostgresResumeProposalWriter();
-    const span = (documentId: string, start: number) => ({
-      documentId,
-      documentVersion: 1,
-      parserVersion: "resume-parser-v1",
-      blockIndex: 0,
-      startOffset: start,
-      endOffset: start + 5,
-      page: 1,
-    });
-    const proposal = (value: string, spans: ReturnType<typeof span>[]) => ({
-      kind: "skill" as const,
-      key: "skill",
-      value,
-      sensitivity: "standard" as const,
-      evidence: { supportingSpans: spans },
-    });
-    const importFor = (
-      owner: string,
-      documentId: string,
-      proposals: ReturnType<typeof proposal>[],
-    ) =>
+    const importFor = (owner: string, documentId: string, names: string[]) =>
       database.client.begin((transaction) =>
-        writer.import(transaction, {
+        writer.importDrafts(transaction, {
           userId: owner,
           documentId,
           documentVersion: 1,
           parserVersion: "resume-parser-v1",
-          traceId: "retire-import",
-          proposals,
+          traceId: "drafts-import",
+          drafts: names.map((name) => ({ section: "skill" as const, values: { name } })),
         }),
       );
-    await importFor(user.id, documentA, [
-      proposal("Unreviewed one", [span(documentA, 0)]),
-      proposal("Unreviewed two", [span(documentA, 10)]),
-      proposal("Confirmed later", [span(documentA, 20)]),
-      proposal("Rejected later", [span(documentA, 30)]),
-    ]);
-    await importFor(user.id, documentB, [proposal("Other resume", [span(documentB, 0)])]);
-    await importFor(other.id, documentA, [proposal("Someone else's", [span(documentA, 40)])]);
 
-    const factIdOf = async (owner: string, value: string) => {
-      const [row] = await database.client<Array<{ id: string }>>`
-        SELECT fact.id FROM profile.profile_facts AS fact
-        JOIN profile.profile_fact_versions AS version ON version.fact_id = fact.id
-        WHERE fact.user_id = ${owner} AND version.fact_value = ${JSON.stringify(value)}::jsonb`;
-      if (!row) throw new Error(`fact ${value} missing`);
-      return row.id;
-    };
-    const review = async (factId: string, verification: "confirmed" | "rejected") => {
-      await database.client`
-        INSERT INTO profile.profile_fact_versions (
-          fact_id, version, kind, fact_key, fact_value, verification, sensitivity, source_type, source_reference
-        )
-        SELECT fact_id, 2, kind, fact_key, fact_value, ${verification}, sensitivity, source_type, source_reference
-        FROM profile.profile_fact_versions WHERE fact_id = ${factId} AND version = 1`;
-    };
-    await review(await factIdOf(user.id, "Confirmed later"), "confirmed");
-    await review(await factIdOf(user.id, "Rejected later"), "rejected");
-    // a proposal that also rests on a second document keeps its other source
-    const mixedId = await factIdOf(user.id, "Other resume");
-    await database.client`
-      INSERT INTO profile.profile_fact_evidence (
-        fact_id, fact_version, ordinal, document_id, document_version, parser_version,
-        block_index, start_offset, end_offset, page
-      ) VALUES (${mixedId}, 1, 1, ${documentA}, 1, 'resume-parser-v1', 0, 50, 55, 1)`;
+    expect(await importFor(user.id, documentA, ["Draft one", "Draft two", "Saved later"])).toBe(3);
+    // The same import identity is idempotent, and different content under it is refused.
+    expect(await importFor(user.id, documentA, ["Draft one", "Draft two", "Saved later"])).toBe(3);
+    await expect(importFor(user.id, documentA, ["Different"])).rejects.toThrow(
+      ResumeProposalConflictError,
+    );
+    expect(await importFor(user.id, documentB, ["Other resume"])).toBe(1);
+    expect(await importFor(other.id, documentA, ["Someone else's"])).toBe(1);
+    expect(await sections.listDrafts(user.id)).toHaveLength(4);
+    expect(await sections.listEntries(user.id, "skill")).toEqual([]);
 
-    const result = await database.client.begin((transaction) =>
+    // The candidate saves one suggestion; it becomes their own record.
+    const drafts = await sections.listDrafts(user.id);
+    const saved = drafts.find((draft) => (draft.values as { name: string }).name === "Saved later");
+    if (!saved) throw new Error("expected a draft");
+    await sections.saveDraft(user.id, saved.id, {}, `save-${crypto.randomUUID()}`, "drafts-save");
+    // A candidate who saved or discarded a suggestion is never given it again.
+    expect(await importFor(user.id, documentA, ["Draft one", "Draft two", "Saved later"])).toBe(3);
+    expect(await sections.listDrafts(user.id)).toHaveLength(3);
+
+    // Purging resume A removes its unsaved drafts only; the saved skill, resume B and other candidates stay.
+    await database.client.begin((transaction) =>
       writer.retireDocumentProposals(transaction, {
         userId: user.id,
         documentId: documentA,
-        traceId: "retire-a",
+        traceId: "drafts-retire",
       }),
     );
-    expect(result).toEqual({ proposalsErased: 2, importsErased: 1 });
-
-    const remaining = async (owner: string) =>
-      (
-        await database.client<Array<{ value: string }>>`
-          SELECT DISTINCT version.fact_value #>> '{}' AS value
-          FROM profile.profile_facts AS fact
-          JOIN profile.profile_fact_versions AS version ON version.fact_id = fact.id
-          WHERE fact.user_id = ${owner} ORDER BY 1`
-      ).map((row) => row.value);
-    expect(await remaining(user.id)).toEqual(["Confirmed later", "Other resume", "Rejected later"]);
-    expect(await remaining(other.id)).toEqual(["Someone else's"]);
-    expect(
-      await database.client`SELECT 1 FROM profile.resume_fact_imports WHERE user_id = ${user.id} AND document_id = ${documentA}`,
-    ).toHaveLength(0);
-    expect(
-      await database.client`SELECT 1 FROM profile.resume_fact_imports WHERE user_id = ${user.id} AND document_id = ${documentB}`,
-    ).toHaveLength(1);
-    expect(
-      await database.client`SELECT 1 FROM profile.profile_fact_evidence AS evidence
-        JOIN profile.profile_facts AS fact ON fact.id = evidence.fact_id
-        WHERE fact.user_id = ${user.id} AND evidence.start_offset IN (0, 10) AND evidence.document_id = ${documentA}`,
-    ).toHaveLength(0);
-    const audits = await database.client<Array<{ metadata: unknown }>>`
-      SELECT metadata FROM platform.audit_events
-      WHERE user_id = ${user.id} AND action = 'profile.resume.proposals.retired'`;
-    expect(audits).toEqual([{ metadata: { erasedProposalCount: 2 } }]);
-
-    // idempotent: a second call finds nothing and writes no second audit event
-    expect(
-      await database.client.begin((transaction) =>
-        writer.retireDocumentProposals(transaction, {
-          userId: user.id,
-          documentId: documentA,
-          traceId: "retire-a-again",
-        }),
-      ),
-    ).toEqual({ proposalsErased: 0, importsErased: 0 });
-    expect(
-      await database.client`SELECT 1 FROM platform.audit_events WHERE user_id = ${user.id} AND action = 'profile.resume.proposals.retired'`,
-    ).toHaveLength(1);
+    const left = await sections.listDrafts(user.id);
+    expect(left.map((draft) => (draft.values as { name: string }).name)).toEqual(["Other resume"]);
+    expect(await sections.listEntries(user.id, "skill")).toMatchObject([
+      { name: "Saved later", origin: "imported" },
+    ]);
+    expect(await sections.listDrafts(other.id)).toHaveLength(1);
+    const again = await database.client.begin((transaction) =>
+      writer.retireDocumentProposals(transaction, {
+        userId: user.id,
+        documentId: documentA,
+        traceId: "drafts-retire-again",
+      }),
+    );
+    expect(again).toEqual({ proposalsErased: 0, importsErased: 0 });
   });
 
-  it("retires a deleted resume's unreviewed proposals through the store, for the caller only (ADR-034)", async () => {
+  it("retires a deleted resume's drafts through the store, for the caller only (ADR-034)", async () => {
     const runId = crypto.randomUUID();
     const user = await store.resolveUser(
       { ...principal, subject: `resume-store-retire-${runId}` },
@@ -1071,60 +614,33 @@ describeWithDatabase("PostgresProfileStore", () => {
       "integration-trace",
     );
     const documentId = crypto.randomUUID();
+    const sections = createProfileSectionStore(database.client);
     const writer = new PostgresResumeProposalWriter();
-    const importFor = (owner: string, value: string, start: number) =>
+    const importFor = (owner: string, name: string) =>
       database.client.begin((transaction) =>
-        writer.import(transaction, {
+        writer.importDrafts(transaction, {
           userId: owner,
           documentId,
           documentVersion: 1,
           parserVersion: "resume-parser-v1",
           traceId: "store-retire-import",
-          proposals: [
-            {
-              kind: "skill" as const,
-              key: "skill",
-              value,
-              sensitivity: "standard" as const,
-              evidence: {
-                supportingSpans: [
-                  {
-                    documentId,
-                    documentVersion: 1,
-                    parserVersion: "resume-parser-v1",
-                    blockIndex: 0,
-                    startOffset: start,
-                    endOffset: start + 5,
-                    page: 1,
-                  },
-                ],
-              },
-            },
-          ],
+          drafts: [{ section: "skill" as const, values: { name } }],
         }),
       );
-    await importFor(user.id, "Unreviewed", 0);
-    await importFor(other.id, "Someone else's", 10);
-    const countFacts = async (owner: string) =>
-      (
-        await database.client<Array<{ id: string }>>`
-          SELECT id FROM profile.profile_facts WHERE user_id = ${owner}`
-      ).length;
-    expect(await countFacts(user.id)).toBe(1);
+    await importFor(user.id, "Unsaved");
+    await importFor(other.id, "Someone else's");
+    expect(await sections.listDrafts(user.id)).toHaveLength(1);
 
-    // the caller's identity is what scopes the erase: another candidate naming this document changes nothing of the caller's
+    // The caller's identity scopes the erase: another candidate naming this document changes nothing.
     expect(
       await store.retireResumeProposals(other.id, crypto.randomUUID(), "store-retire-x"),
-    ).toEqual({
-      proposalsErased: 0,
-    });
-    expect(await countFacts(user.id)).toBe(1);
-
+    ).toEqual({ proposalsErased: 0 });
+    expect(await sections.listDrafts(user.id)).toHaveLength(1);
     expect(await store.retireResumeProposals(user.id, documentId, "store-retire-a")).toEqual({
       proposalsErased: 1,
     });
-    expect(await countFacts(user.id)).toBe(0);
-    expect(await countFacts(other.id)).toBe(1);
+    expect(await sections.listDrafts(user.id)).toEqual([]);
+    expect(await sections.listDrafts(other.id)).toHaveLength(1);
     expect(await store.retireResumeProposals(user.id, documentId, "store-retire-b")).toEqual({
       proposalsErased: 0,
     });

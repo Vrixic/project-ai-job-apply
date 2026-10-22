@@ -17,7 +17,7 @@ export interface FactEvidenceSpan {
   page?: number;
 }
 
-/** The subset of the version-one `ProfileFact` contract the graph reads. */
+/** The evidence shape the graph reads; saved Profile records are adapted to it (`profile-entry-facts.ts`). */
 export interface GraphFact {
   id: string;
   kind: string;
