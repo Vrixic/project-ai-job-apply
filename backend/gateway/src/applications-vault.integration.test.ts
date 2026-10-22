@@ -18,6 +18,7 @@ import {
 import { createTestTokenIssuer } from "@ai-job-apply/auth/testing";
 import {
   createDatabase,
+  createProfileSectionStore,
   PostgresProfileStore,
   PostgresRestrictedAnswerVaultStore,
   type RestrictedAnswerCipher,
@@ -111,11 +112,12 @@ suite("Applications selected vault owner composition", () => {
     },
   };
   const realProfile = new PostgresProfileStore(profileDb);
+  const realSections = createProfileSectionStore(profileDb.client);
   const state = { at: new Date() };
   function runtime(enabled = true, afterMetadata?: () => void, admissionEnabled = true) {
     return createApplicationsRuntime({
       client: appDb,
-      profile: realProfile,
+      profile: realSections,
       catalog,
       definitions: defaultFieldDefinitions(),
       restrictedPackets: packetProtection.options,
@@ -204,7 +206,7 @@ suite("Applications selected vault owner composition", () => {
     };
     const native = createApplicationsRuntime({
       client: appDb,
-      profile: realProfile,
+      profile: realSections,
       catalog: { ...catalog, getActiveJob: async () => job as never },
       definitions: defaultFieldDefinitions(),
       restrictedPackets: packetProtection.options,
@@ -284,8 +286,8 @@ suite("Applications selected vault owner composition", () => {
       const native = createApplicationsRuntime({
         client: appDb,
         profile: {
-          listProfileFacts: async (owner) => {
-            const facts = await realProfile.listProfileFacts(owner);
+          listGroundingFacts: async (owner) => {
+            const facts = await realSections.listGroundingFacts(owner);
             if (failure === "withdrawn") enabled = false;
             return facts;
           },

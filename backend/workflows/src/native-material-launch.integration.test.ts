@@ -36,11 +36,7 @@ import { createNativeResumeDnsRoute } from "@ai-job-apply/documents-service/nati
 import { nativeTaskLaunchConfiguration } from "@ai-job-apply/documents-service/native-task-launch";
 import { createNativeTaskRetirement } from "@ai-job-apply/documents-service/native-task-retirement";
 import { PostgresJobCatalog } from "@ai-job-apply/jobs-service";
-import {
-  createDatabase,
-  PostgresProfileStore,
-  profileFactToGraphFact,
-} from "@ai-job-apply/profile-service";
+import { createDatabase, createProfileSectionStore } from "@ai-job-apply/profile-service";
 import { withDurableExecution } from "@aws/durable-execution-sdk-js";
 import { ExecutionStatus, LocalDurableTestRunner } from "@aws/durable-execution-sdk-js-testing";
 import { type InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
@@ -649,14 +645,15 @@ describe.runIf(requested)(
       await sql`INSERT INTO identity.users (id) VALUES (${owner})`;
       const profilePool = createDatabase(url ?? "postgres://invalid", { maxConnections: 1 });
       runtimes.push({ close: () => profilePool.client.end() });
-      const profile = new PostgresProfileStore(profilePool);
-      await profile.createProfileFact(
+      const profile = createProfileSectionStore(profilePool.client);
+      await profile.createEntry(
         owner,
-        { kind: "skill", key: "language", value: "TypeScript", sensitivity: "standard" },
+        "skill",
+        { name: "TypeScript" },
         uuidv7(),
         "synthetic-native-preparation",
       );
-      const facts = (await profile.listProfileFacts(owner)).facts.map(profileFactToGraphFact);
+      const facts = await profile.listGroundingFacts(owner);
       const catalog = new PostgresJobCatalog(sql, {
         searchCursorKeys: {
           active: { id: "synthetic-native-preparation", key: Buffer.alloc(32, 1) },
@@ -826,7 +823,7 @@ describe.runIf(requested)(
     it("connects original owner SQL generation to durable routing, attachment and observed retirement", async () => {
       const profilePool = createDatabase(url ?? "postgres://invalid", { maxConnections: 1 });
       runtimes.push({ close: () => profilePool.client.end() });
-      const profile = new PostgresProfileStore(profilePool);
+      const profile = createProfileSectionStore(profilePool.client);
       const catalog = new PostgresJobCatalog(sql, {
         searchCursorKeys: { active: { id: "synthetic-native", key: Buffer.alloc(32, 1) } },
       });
@@ -855,18 +852,14 @@ describe.runIf(requested)(
       const request = await original(
         900_000,
         async (owner) => {
-          await profile.createProfileFact(
+          await profile.createEntry(
             owner,
-            {
-              kind: "skill",
-              key: "programming_language",
-              value: "TypeScript",
-              sensitivity: "standard",
-            },
+            "skill",
+            { name: "TypeScript" },
             uuidv7(),
             "synthetic-native-rpc",
           );
-          const facts = (await profile.listProfileFacts(owner)).facts.map(profileFactToGraphFact);
+          const facts = await profile.listGroundingFacts(owner);
           return {
             jobId: posting.job.id,
             context: coverLetterContext({ facts, job, now: observedAt }),
@@ -874,9 +867,7 @@ describe.runIf(requested)(
         },
         true,
       );
-      const facts = (await profile.listProfileFacts(request.ownerUserId)).facts.map(
-        profileFactToGraphFact,
-      );
+      const facts = await profile.listGroundingFacts(request.ownerUserId);
       const approvedContext = coverLetterContext({ facts, job, now: observedAt });
       const f = fixture();
       const capture = await f.client.launch(request);

@@ -13,6 +13,7 @@ export {
   validateCandidateDataExportV1,
 } from "./candidate-data-export.js";
 export * from "./fact-graph.js";
+export * from "./profile-entry-facts.js";
 export * from "./temporary-material.js";
 
 export type UserId = string & { readonly __brand: "UserId" };

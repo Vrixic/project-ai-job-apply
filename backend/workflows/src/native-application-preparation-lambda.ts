@@ -11,7 +11,7 @@ import { createNativeLaunchControlClient } from "@ai-job-apply/documents-service
 import { createJobCatalogDatabase, PostgresJobCatalog } from "@ai-job-apply/jobs-service";
 import {
   createDatabase,
-  PostgresProfileStore,
+  createProfileSectionStore,
   PostgresRestrictedAnswerVaultStore,
   resolveLambdaDatabaseUrl,
 } from "@ai-job-apply/profile-service";
@@ -152,7 +152,7 @@ export function createNativeApplicationPreparationRuntime(
       enabled: () => enabled() && packetProtection.enabled(),
     },
   });
-  const profile = new PostgresProfileStore(profilePool);
+  const profile = createProfileSectionStore(profilePool.client);
   const catalog = new PostgresJobCatalog(jobsPool, {
     searchCursorKeys: { active: { id: "native-preparation-unused", key: randomBytes(32) } },
   });

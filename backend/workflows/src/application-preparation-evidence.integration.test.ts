@@ -9,7 +9,11 @@ import {
 } from "@ai-job-apply/applications-service";
 import { PostgresCoverLetterStore } from "@ai-job-apply/documents-service/cover-letter-runtime";
 import { createJobCatalogDatabase, PostgresJobCatalog } from "@ai-job-apply/jobs-service";
-import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-service";
+import {
+  createDatabase,
+  createProfileSectionStore,
+  PostgresProfileStore,
+} from "@ai-job-apply/profile-service";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createOwnedCoverLetterEvidenceSource } from "./application-preparation-evidence.js";
@@ -46,6 +50,7 @@ describe.skipIf(!requested)(
     let jobsDatabase: ReturnType<typeof createJobCatalogDatabase>;
     let applicationsDatabase: ReturnType<typeof createApplicationsDatabase>;
     let profile: PostgresProfileStore;
+    let profileSections: ReturnType<typeof createProfileSectionStore>;
     let catalog: PostgresJobCatalog;
     let applications: PostgresApplicationStore;
     let documents: PostgresCoverLetterStore;
@@ -73,6 +78,7 @@ describe.skipIf(!requested)(
         maxConnections: 1,
       });
       profile = new PostgresProfileStore(database);
+      profileSections = createProfileSectionStore(database.client);
       catalog = new PostgresJobCatalog(jobsDatabase, {
         searchCursorKeys: { active: { id: "synthetic-v1", key: Buffer.alloc(32, 1) } },
       });
@@ -90,7 +96,7 @@ describe.skipIf(!requested)(
       });
       source = createOwnedCoverLetterEvidenceSource({
         applications,
-        profile,
+        profile: profileSections,
         catalog,
         candidateLease: documents,
         enabled: () => true,
@@ -115,14 +121,10 @@ describe.skipIf(!requested)(
         },
         "synthetic",
       );
-      const fact = await profile.createProfileFact(
+      const fact = await profileSections.createEntry(
         user.id,
-        {
-          kind: "skill",
-          key: "programming_language",
-          value: "TypeScript",
-          sensitivity: "standard",
-        },
+        "skill",
+        { name: "TypeScript" },
         uuidv7(),
         "synthetic",
       );
@@ -149,17 +151,6 @@ describe.skipIf(!requested)(
     it("reads only the owned current Profile facts and the actual bound active posting", async () => {
       const first = await seed();
       const second = await seed();
-      await profile.createProfileFact(
-        first.owner,
-        {
-          kind: "skill",
-          key: "synthetic_sensitive",
-          value: "Synthetic restricted fact",
-          sensitivity: "restricted",
-        },
-        uuidv7(),
-        "synthetic",
-      );
       const result = await source.load(first.owner, first.applicationId);
       expect(result.facts.map((fact) => fact.id)).toEqual([first.fact.id]);
       expect(result.facts.map((fact) => fact.id)).not.toContain(second.fact.id);

@@ -44,7 +44,8 @@ export interface ApplicationsRuntimeOptions {
   /** Default absent; private exact-key storage capabilities require separate release acceptance. */
   restrictedPackets?: ApplicationStoreOptions["restrictedPackets"];
   legacyReceipts?: ApplicationStoreOptions["legacyReceipts"];
-  profile: { listProfileFacts(userId: string): Promise<{ facts: ProfileFact[] }> };
+  /** The candidate's saved Profile records as grounding evidence (ADR-052). */
+  profile: { listGroundingFacts(userId: string): Promise<readonly GraphFact[]> };
   /** The Documents runtime; without it packets carry no resume and the preview is unavailable. */
   tailoring?: ResumeTailoringClient;
   /** The candidate's own uploaded resume, read from its Documents owner. Absent: fallback off. */
@@ -127,9 +128,9 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
         job.expiresAt.getTime() <= at.getTime()
       )
         throw new ApplicationsUnavailableError();
-      const { facts } = await options.profile.listProfileFacts(ownerUserId);
+      const facts = await options.profile.listGroundingFacts(ownerUserId);
       const context = coverLetterContext({
-        facts: facts.filter((fact) => fact.sensitivity !== "restricted").map(toGraphFact),
+        facts: facts.filter((fact) => fact.sensitivity !== "restricted"),
         now: at,
         job: { title: job.title, company: job.company.name, description: job.description },
       });
@@ -354,8 +355,7 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
     ...(options.restrictedAnswerReuseEnabled === true && options.restrictedAnswers
       ? { vault: options.restrictedAnswers }
       : {}),
-    facts: async (ownerUserId) =>
-      (await options.profile.listProfileFacts(ownerUserId)).facts.map(toGraphFact),
+    facts: async (ownerUserId) => [...(await options.profile.listGroundingFacts(ownerUserId))],
     jobRevision: (application: ApplicationRecord) =>
       jobRevision(application.canonicalJobId, clock()),
     artifacts: (ownerUserId, application) => artifacts(ownerUserId, application.canonicalJobId),

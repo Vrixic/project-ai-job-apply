@@ -26,7 +26,11 @@ import {
   PostgresCoverLetterWorkStore,
 } from "@ai-job-apply/documents-service/cover-letter-runtime";
 import { createJobCatalogDatabase, PostgresJobCatalog } from "@ai-job-apply/jobs-service";
-import { createDatabase, PostgresProfileStore } from "@ai-job-apply/profile-service";
+import {
+  createDatabase,
+  createProfileSectionStore,
+  PostgresProfileStore,
+} from "@ai-job-apply/profile-service";
 import { ExecutionStatus, LocalDurableTestRunner } from "@aws/durable-execution-sdk-js-testing";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import {
@@ -79,6 +83,7 @@ describe.skipIf(!requested)(
     const workDb = createApplicationsDatabase(url, { maxConnections: 1 });
     const leaseDb = createApplicationsDatabase(url, { maxConnections: 1 });
     const profile = new PostgresProfileStore(profileDb);
+    const profileSections = createProfileSectionStore(profileDb.client);
     const catalog = new PostgresJobCatalog(jobsDb, {
       searchCursorKeys: { active: { id: "synthetic-v1", key: Buffer.alloc(32, 1) } },
     });
@@ -160,14 +165,10 @@ describe.skipIf(!requested)(
           },
           "synthetic",
         );
-        const fact = await profile.createProfileFact(
+        const fact = await profileSections.createEntry(
           user.id,
-          {
-            kind: "skill",
-            key: "programming_language",
-            value: "TypeScript",
-            sensitivity: "standard",
-          },
+          "skill",
+          { name: "TypeScript" },
           uuidv7(),
           "synthetic",
         );
@@ -319,7 +320,7 @@ describe.skipIf(!requested)(
           },
         );
         const port = createIsolatedCoverLetterPreparationPort({
-          owners: { applications, profile, catalog },
+          owners: { applications, profile: profileSections, catalog },
           documents,
           candidateLease,
           objects: { find, read, putIfAbsent: create },

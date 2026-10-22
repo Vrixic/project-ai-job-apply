@@ -80,7 +80,7 @@ export async function prepareNativeApproval(ids, kind = "cover_letter") {
     client: sql,
     restrictedPackets,
     definitions: new Map(),
-    profile: { listProfileFacts: async () => ({ facts: [] }) },
+    profile: { listGroundingFacts: async () => [] },
     catalog: {
       getActiveJob: async () => null,
       resolveActiveJobSummaries: async () => ({

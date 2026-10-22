@@ -35,7 +35,12 @@ export function reconciledRuntimeFixture() {
     preservation: {
       schemaVersion: 1 as const,
       unchanged: { sha256: "f".repeat(64), relationCount: 100 as const, rowCount: 0, byteCount: 0 },
-      reconciled: { sha256: "f".repeat(64), relationCount: 100 as const, rowCount: 0, byteCount: 0 },
+      reconciled: {
+        sha256: "f".repeat(64),
+        relationCount: 100 as const,
+        rowCount: 0,
+        byteCount: 0,
+      },
     },
   };
   const configuration: ReconciledCopyConfiguration = {

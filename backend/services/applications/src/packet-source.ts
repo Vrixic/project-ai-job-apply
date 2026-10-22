@@ -1,5 +1,10 @@
 import type { TemporaryMaterialReference } from "@ai-job-apply/domain";
-import { FactGraph, factConfidence, type GraphFact } from "@ai-job-apply/domain";
+import {
+  FactGraph,
+  factConfidence,
+  type GraphFact,
+  profileEntryReference,
+} from "@ai-job-apply/domain";
 import { canonicalHash } from "./canonical.js";
 import type { ProposedField } from "./field-policy.js";
 import { type FieldDefinition, isDirectActionField } from "./field-policy.js";
@@ -191,7 +196,8 @@ export class FactBackedPacketSource implements PacketPreparationSource {
         fieldKey: mapping.fieldKey,
         value: scalar(only.value),
         origin: "confirmed_fact",
-        sourceFactIds: [only.id],
+        // A Profile-derived fact cites its saved record (ADR-052); other facts cite themselves.
+        sourceFactIds: [profileEntryReference(only)?.entryId ?? only.id],
         sourceConfirmed: true,
         confidence: factConfidence(only),
       });

@@ -1179,6 +1179,7 @@ async function createConfiguredApplication(
   // The cipher is optional: listing and deleting a restricted answer never need it, and saving or
   // reading its value fails closed with a clean 503 (RestrictedAnswerVaultConfigurationError)
   // rather than a silent no-op when no key is configured yet.
+  const profileSections = createProfileSectionStore(database.client);
   const restrictedAnswerVaultKmsKeyArn = process.env.RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN;
   const restrictedAnswerVault = new PostgresRestrictedAnswerVaultStore(
     database.client,
@@ -1269,7 +1270,7 @@ async function createConfiguredApplication(
   const nativeMaterialDisposal = nativeMaterialDisposalFromEnvironment(databaseUrl, process.env);
   const applications = createApplicationsRuntime({
     client: createApplicationsDatabase(databaseUrl, { maxConnections: 2 }),
-    profile: store,
+    profile: profileSections,
     ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
     ...(legacyReceipts ? { legacyReceipts } : {}),
     ...(nativeMaterialLocations ? { nativeMaterialLocations } : {}),
@@ -1321,7 +1322,7 @@ async function createConfiguredApplication(
   return createGatewayApplication({
     store,
     restrictedAnswerVault,
-    profileSections: createProfileSectionStore(database.client),
+    profileSections,
     catalog,
     jobReports,
     jobContributions,

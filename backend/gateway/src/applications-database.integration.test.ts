@@ -43,7 +43,7 @@ function runtimeFor(
     definitions: defaultFieldDefinitions(),
     restrictedPackets: packetProtection.options,
     clock: () => state?.at ?? new Date(),
-    profile: { listProfileFacts: async () => ({ facts: [] }) },
+    profile: { listGroundingFacts: async () => [] },
     catalog: {
       async getActiveJob() {
         return null;

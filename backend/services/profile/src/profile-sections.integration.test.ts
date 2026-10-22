@@ -301,6 +301,48 @@ describeWithDatabase("PostgresProfileSectionStore (ADR-052)", () => {
     expect(await store.matchApplicationAnswer(owner, "Why do you want to work here?")).toBeNull();
   });
 
+  it("reads grounding facts from saved records only, for the owner only", async () => {
+    const owner = await user();
+    const other = await user();
+    await store.putPersonal(
+      owner,
+      { expectedVersion: 0, fullName: "Grounded Person", email: "grounded@example.test" },
+      key(),
+      trace,
+    );
+    const job = await store.createEntry(owner, "workExperience", work, key(), trace);
+    await store.createEntry(owner, "skill", { name: "Grounded Skill" }, key(), trace);
+    await store.createDraft(owner, uuidv7(), "skill", { name: "Unsaved Draft Skill" });
+    await store.createEntry(other, "skill", { name: "Other Candidate Skill" }, key(), trace);
+
+    const facts = await store.listGroundingFacts(owner);
+    const text = JSON.stringify(facts);
+    expect(text).toContain("Grounded Skill");
+    expect(text).toContain("Synthetic Systems");
+    expect(text).toContain("grounded@example.test");
+    expect(text).not.toContain("Unsaved Draft Skill");
+    expect(text).not.toContain("Other Candidate Skill");
+    const role = facts.find((fact) => fact.id === job.id);
+    expect(role).toMatchObject({ kind: "employment", key: "role", verification: "confirmed" });
+    expect(role?.source.reference).toBe(`profile-entry:workExperience:${job.id}:v1`);
+    expect(await store.listGroundingFacts(await user())).toEqual([]);
+
+    // An edit changes the evidence the next read returns.
+    await store.updateEntry(
+      owner,
+      "workExperience",
+      job.id,
+      { expectedVersion: 1, title: "Staff Engineer" },
+      key(),
+      trace,
+    );
+    const edited = await store.listGroundingFacts(owner);
+    expect(JSON.stringify(edited.find((fact) => fact.id === job.id)?.value)).toContain(
+      "Staff Engineer",
+    );
+    expect(edited.find((fact) => fact.id === job.id)?.version).toBe(2);
+  });
+
   it("makes the database refuse invalid content even if the API check is bypassed", async () => {
     const owner = await user();
     const id = uuidv7();
