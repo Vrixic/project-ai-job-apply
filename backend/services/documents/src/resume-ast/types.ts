@@ -1,3 +1,5 @@
+import type { LayoutRule, LayoutRun, PageGeometry } from "../parsing/layout.js";
+
 export const RESUME_AST_VERSION = "resume-ast.v1" as const;
 
 export const sectionKinds = [
@@ -12,11 +14,27 @@ export const sectionKinds = [
 ] as const;
 export type SectionKind = (typeof sectionKinds)[number];
 
-/** One whole normalized block. `span` points at the exact source text so provenance is checkable. */
+/** One source line as it looked: where it sat and how it was set, for drawing it again. */
+export interface AstLine {
+  page: number;
+  /** Baseline from the top of the page, in points. */
+  y: number;
+  /** Baseline distance from the line before it in the source; absent for the first line of a page. */
+  dy?: number;
+  runs: LayoutRun[];
+  rules?: LayoutRule[];
+}
+
+/**
+ * One whole source block, or a bullet with the wrapped lines that continue it. `span` points at the
+ * exact source text so provenance is checkable.
+ */
 export interface AstNode {
   id: string;
   text: string;
   span: { blockIndex: number; startOffset: number; endOffset: number; page?: number };
+  /** The source lines of this node, when the document carries layout. */
+  lines?: AstLine[];
 }
 
 export interface AstEntry {
@@ -44,5 +62,7 @@ export interface ResumeAst {
   documentVersion: number;
   parserVersion: string;
   sourceSha256: string;
+  /** Page size, when the document carries layout. */
+  page?: PageGeometry;
   sections: AstSection[];
 }

@@ -114,3 +114,15 @@ describe("resumes with visual bullet markers", () => {
     });
   });
 });
+
+describe("Windows-1252 characters in the standard fonts", () => {
+  it("draws and re-reads trademark, euro, dagger and curly quotes", async () => {
+    const expected = [line("Acme™ Platform – €5M ARR † “quoted” ‘single’ …")];
+    const pdf = renderPdf(expected);
+    expect(await verifyRenderedResume(pdf, expected)).toMatchObject({ ok: true, issues: [] });
+  });
+
+  it("still refuses a character outside Windows-1252", () => {
+    expect(() => renderPdf([line("Arrow → here")])).toThrow(RenderError);
+  });
+});

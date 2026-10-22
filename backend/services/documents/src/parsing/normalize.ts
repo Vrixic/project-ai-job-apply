@@ -1,9 +1,11 @@
 import { canonicalizeLeadingBullet } from "../leading-bullet.js";
+import { assertLayoutShape, type BlockLayout, type PageGeometry } from "./layout.js";
 import { DOCUMENT_LIMITS, InvalidDocumentError, ParseLimitError } from "./limits.js";
 
 export interface ParsedTextBlock {
   text: string;
   page?: number;
+  layout?: BlockLayout;
 }
 
 export interface NormalizedResumeBlock {
@@ -12,6 +14,8 @@ export interface NormalizedResumeBlock {
   startOffset: number;
   endOffset: number;
   page?: number;
+  /** How the source line looked; present on every block or on none. */
+  layout?: BlockLayout;
 }
 
 export interface NormalizedResumeDocument {
@@ -23,6 +27,8 @@ export interface NormalizedResumeDocument {
     | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   sourceSha256: string;
   blocks: NormalizedResumeBlock[];
+  /** Page size of a laid-out document; present exactly when every block has a layout. */
+  page?: PageGeometry;
   createdAt: string;
 }
 
@@ -64,11 +70,16 @@ export function normalizeBlocks(blocks: readonly ParsedTextBlock[]): NormalizedR
       startOffset,
       endOffset,
       ...(candidate.page ? { page: candidate.page } : {}),
+      ...(candidate.layout ? { layout: candidate.layout } : {}),
     });
     documentOffset = endOffset + 1;
   }
   if (normalized.length === 0) {
     throw new InvalidDocumentError("NO_USABLE_TEXT");
+  }
+  // A layout is all or nothing, so a partly described document is drawn without any.
+  if (normalized.some((block) => block.layout === undefined)) {
+    for (const block of normalized) delete block.layout;
   }
   return normalized;
 }
@@ -126,5 +137,6 @@ export function parseNormalizedResumeDocument(value: unknown): NormalizedResumeD
     expectedIndex += 1;
     priorEnd = block.endOffset;
   }
+  assertLayoutShape(candidate.page, candidate.blocks);
   return candidate as NormalizedResumeDocument;
 }

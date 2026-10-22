@@ -45,6 +45,11 @@ export function validateNativeResumeSource(
         "sourceSha256",
         "blocks",
         "createdAt",
+        ...(typeof value.document === "object" &&
+        value.document !== null &&
+        Object.hasOwn(value.document, "page")
+          ? ["page"]
+          : []),
       ]) ||
       Buffer.byteLength(nativeOwnerJson(value)) > 2_000_000
     )
@@ -58,6 +63,7 @@ export function validateNativeResumeSource(
           "startOffset",
           "endOffset",
           ...(b.page === undefined ? [] : ["page"]),
+          ...(b.layout === undefined ? [] : ["layout"]),
         ]),
       )
     )

@@ -1,28 +1,12 @@
-import { createHash } from "node:crypto";
 import { ZipFile } from "yazl";
+import type { PageGeometry } from "../parsing/layout.js";
 import type { RenderBlock } from "../tailoring/tailor.js";
+import { digest, pdfString, RenderError, type RenderedDocument } from "./pdf-text.js";
+import { canRenderStyled, renderStyledPdf } from "./styled.js";
 
-export class RenderError extends Error {
-  constructor(readonly reasonCode: "UNSUPPORTED_CHARACTER" | "EMPTY_DOCUMENT" | "TOO_LONG") {
-    super("The resume cannot be rendered in this format");
-    this.name = "RenderError";
-  }
-}
-
-export interface RenderedDocument {
-  mediaType:
-    | "application/pdf"
-    | "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  bytes: Uint8Array;
-  sha256: string;
-  pageCount?: number;
-}
+export { RenderError, type RenderedDocument } from "./pdf-text.js";
 
 const MAX_BLOCKS = 2_000;
-
-function digest(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
-}
 
 function escapeXml(value: string): string {
   return value
@@ -76,38 +60,6 @@ export async function renderDocx(blocks: readonly RenderBlock[]): Promise<Render
   };
 }
 
-// WinAnsi code points that differ from Latin-1 and are common in resumes.
-const WIN_ANSI: ReadonlyMap<number, number> = new Map([
-  [0x2022, 0x95],
-  [0x2013, 0x96],
-  [0x2014, 0x97],
-  [0x2018, 0x91],
-  [0x2019, 0x92],
-  [0x201c, 0x93],
-  [0x201d, 0x94],
-  [0x2026, 0x85],
-]);
-
-function pdfString(text: string): string {
-  let encoded = "";
-  for (const character of text) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    const mapped = WIN_ANSI.get(codePoint);
-    // Mapped WinAnsi codes live in 0x80-0x9F, which are only valid as the mapped characters.
-    const code = mapped ?? codePoint;
-    if (
-      mapped === undefined &&
-      (codePoint < 32 || (codePoint > 126 && codePoint < 160) || codePoint > 255)
-    ) {
-      throw new RenderError("UNSUPPORTED_CHARACTER");
-    }
-    if (character === "\\" || character === "(" || character === ")") encoded += `\\${character}`;
-    else if (code > 126) encoded += `\\${code.toString(8).padStart(3, "0")}`;
-    else encoded += character;
-  }
-  return encoded;
-}
-
 const PAGE = { width: 612, height: 792, margin: 54, fontSize: 10.5, leading: 13.5 } as const;
 const MAX_LINE_CHARS = 88;
 const LINES_PER_PAGE = Math.floor((PAGE.height - 2 * PAGE.margin) / PAGE.leading);
@@ -137,8 +89,12 @@ function wrap(text: string): string[] {
   return lines;
 }
 
-/** Minimal PDF 1.4 with the standard Helvetica font. Text is selectable and re-extractable. */
-export function renderPdf(blocks: readonly RenderBlock[]): RenderedDocument {
+/**
+ * Minimal PDF 1.4 with the standard fonts. Text is selectable and re-extractable. When the source
+ * resume's layout is known the tailored copy is set the way it was; otherwise it is plain text.
+ */
+export function renderPdf(blocks: readonly RenderBlock[], page?: PageGeometry): RenderedDocument {
+  if (canRenderStyled(blocks, page)) return renderStyledPdf(blocks, page);
   if (blocks.length === 0) throw new RenderError("EMPTY_DOCUMENT");
   if (blocks.length > MAX_BLOCKS) throw new RenderError("TOO_LONG");
   const lines = blocks.flatMap((block) =>

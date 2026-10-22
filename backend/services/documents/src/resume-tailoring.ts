@@ -181,7 +181,7 @@ export function createResumeTailoringService(dependencies: ResumeTailoringDepend
 
     try {
       const format = request.format as ResumeArtifactFormat;
-      const rendered = renderPdf(blocks);
+      const rendered = renderPdf(blocks, ast.page);
       const verification = await verifyRenderedResume(rendered, blocks);
       if (!verification.ok) return unavailable("render_failed");
       // The response carries the file inline, so it stays within the contract's size ceiling.

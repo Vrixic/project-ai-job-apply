@@ -15,7 +15,7 @@ import { createNativeResumeSourceRpcHandler } from "./native-resume-source-rpc-h
 import type { NativeResumeTaskBinding } from "./native-resume-task-binding.js";
 import { createNativeResumeTaskCallerClient } from "./native-resume-task-caller-client.js";
 import { S3NormalizedDocumentReader } from "./normalized-document-reader.js";
-import { normalizeBlocks } from "./parsing/normalize.js";
+import { type NormalizedResumeDocument, normalizeBlocks } from "./parsing/normalize.js";
 
 const id = (n: number) => `019a4000-0000-7000-8000-${String(n).padStart(12, "0")}`;
 const target = "arn:aws:lambda:us-east-2:123456789012:function:native-resume-source:7";
@@ -322,6 +322,25 @@ describe("original native resume source", () => {
       expect(validateNativeResumeSource(value, f.bootstrap)).toBe(false);
     },
   );
+  it("accepts a laid-out document and refuses a layout with anything extra", () => {
+    const f = fixture(),
+      document: NormalizedResumeDocument = structuredClone(f.document);
+    document.page = { width: 612, height: 792 };
+    document.blocks.forEach((block, index) => {
+      block.layout = {
+        y: 50 + index * 14,
+        runs: [{ x: 36, w: 100, size: 12, text: block.text }],
+      };
+    });
+    const job = structuredClone(f.job);
+    expect(validateNativeResumeSource({ document, job }, f.bootstrap)).toBe(true);
+    const extra = structuredClone(document);
+    Object.assign(extra.blocks[0]?.layout?.runs[0] ?? {}, { href: "https://example.test" });
+    expect(validateNativeResumeSource({ document: extra, job }, f.bootstrap)).toBe(false);
+    const partial = structuredClone(document);
+    delete partial.blocks[0]?.layout;
+    expect(validateNativeResumeSource({ document: partial, job }, f.bootstrap)).toBe(false);
+  });
   it("refuses a scalar-control proof on the source endpoint before owners", async () => {
     const f = fixture(),
       request = await f.signed();

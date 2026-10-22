@@ -35,3 +35,42 @@ export const SYNTHETIC_RESUME = [
   "Skills",
   "TypeScript, PostgreSQL, Kubernetes",
 ] as const;
+
+export interface SyntheticLine {
+  text: string;
+  /** Baseline from the top of the page. */
+  y: number;
+  x?: number;
+  size?: number;
+  /** Explicit runs; otherwise one run spans the text. */
+  runs?: Array<{ x: number; w: number; text: string; bold?: true; color?: string }>;
+  rules?: Array<{ x0: number; x1: number; dy: number; h: number }>;
+}
+
+/** A document whose every line carries layout, as a PDF parsed with PDF.js would. */
+export function laidOutDocument(
+  lines: readonly SyntheticLine[],
+  page = { width: 612, height: 792 },
+): NormalizedResumeDocument {
+  const base = syntheticDocument(lines.map((line) => line.text));
+  return {
+    ...base,
+    page,
+    blocks: base.blocks.map((block, index) => {
+      const line = lines[index] as SyntheticLine;
+      const size = line.size ?? 12;
+      const x = line.x ?? 36;
+      return {
+        ...block,
+        page: 1,
+        layout: {
+          y: line.y,
+          runs: (
+            line.runs ?? [{ x, w: Math.round(line.text.length * size * 0.5), text: line.text }]
+          ).map((run) => ({ ...run, size })),
+          ...(line.rules ? { rules: line.rules } : {}),
+        },
+      };
+    }),
+  };
+}

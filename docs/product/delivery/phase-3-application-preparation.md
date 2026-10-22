@@ -1,5 +1,11 @@
 # D3 — High-Quality Application Preparation
 
+2026-10-21: D3-152 web preview as the rendered PDF with a User_Job_Name_ID download and attachment name
+(merged, #705); D3-153 style-preserving generation ([ADR-051](../../adr/051-style-preserving-generated-resume.md);
+[evidence](evidence/d3-style-preserving-resume-2026-10-21.md)): PDF layout capture in the parser, wrapped
+bullets kept whole, standard-font redraw of the source lines. Local source and tests only; parser and
+native image releases, re-upload of existing resumes and live acceptance remain.
+
 2026-10-20: D3-147 to D3-151 reshape the candidate flow to Generate-or-Apply
 ([ADR-050](../../adr/050-generate-then-apply-flow.md); [evidence](evidence/d3-generate-then-apply-flow-2026-10-20.md)). Implemented and locally
 tested: BFF material reads with no popup sign-in, honest generation states with retry, Apply as the
@@ -65,7 +71,7 @@ components and the connected journey. Historical proof records remain historical
 reconciled-copy operators and physical restore rehearsals are not D3 dependencies. Independent
 D1/admin acceptance stays deferred.
 
-Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 2026-10-20.
+Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 2026-10-21.
 
 ## Task register
 

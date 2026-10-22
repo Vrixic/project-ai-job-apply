@@ -19,8 +19,12 @@ export interface RenderVerification {
 
 const MAX_PAGES = 2;
 
+/**
+ * Compared without any spacing: a styled page is drawn run by run, and where one run ends and the
+ * next begins PDF.js may or may not report a space. Every character and its order is still checked.
+ */
 function squash(value: string): string {
-  return value.normalize("NFKC").replace(/\s+/gu, " ").trim();
+  return value.normalize("NFKC").replace(/\s+/gu, "");
 }
 
 /**

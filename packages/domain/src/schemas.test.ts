@@ -1449,3 +1449,65 @@ describe("portable one-off document metadata", () => {
     ).toBe(false);
   });
 });
+
+describe("resume document layout", () => {
+  async function validator() {
+    const schema = JSON.parse(
+      await readFile(new URL("../schemas/v1/resume-document.schema.json", import.meta.url), "utf8"),
+    );
+    const ajv = new Ajv2020({ strict: true });
+    const addFormats = addFormatsModule.default as unknown as (instance: Ajv2020) => Ajv2020;
+    addFormats(ajv);
+    return ajv.compile(schema);
+  }
+  const block = (extra: Record<string, unknown> = {}) => ({
+    index: 0,
+    text: "Alex Example",
+    startOffset: 0,
+    endOffset: 12,
+    ...extra,
+  });
+  const document = (blocks: unknown[], extra: Record<string, unknown> = {}) => ({
+    documentId: "019d04cf-1f80-7000-8000-000000000001",
+    version: 1,
+    parserVersion: "synthetic-1",
+    mediaType: "application/pdf",
+    sourceSha256: "a".repeat(64),
+    blocks,
+    createdAt: "2026-10-21T12:00:00.000Z",
+    ...extra,
+  });
+  const layout = {
+    y: 52.9,
+    runs: [{ x: 36, w: 92.1, size: 26, text: "Alex Example", bold: true, color: "#1155cc" }],
+    rules: [{ x0: 36, x1: 576, dy: 6, h: 0.7 }],
+  };
+
+  it("accepts documents with and without layout", async () => {
+    const validate = await validator();
+    expect(validate(document([block()]))).toBe(true);
+    expect(validate(document([block({ layout })], { page: { width: 612, height: 792 } }))).toBe(
+      true,
+    );
+  });
+
+  it.each([
+    ["an unknown layout property", { ...layout, href: "https://example.test" }],
+    ["a color that is not #rrggbb", { ...layout, runs: [{ ...layout.runs[0], color: "blue" }] }],
+    ["a run without text", { ...layout, runs: [{ x: 1, w: 2, size: 12 }] }],
+    ["no runs", { ...layout, runs: [] }],
+    ["a rule below the allowed height", { ...layout, rules: [{ x0: 0, x1: 9, dy: 1, h: 40 }] }],
+  ])("refuses %s", async (_name, value) => {
+    const validate = await validator();
+    expect(
+      validate(document([block({ layout: value })], { page: { width: 612, height: 792 } })),
+    ).toBe(false);
+  });
+
+  it("refuses an absurd page size", async () => {
+    const validate = await validator();
+    expect(validate(document([block({ layout })], { page: { width: 90000, height: 792 } }))).toBe(
+      false,
+    );
+  });
+});
