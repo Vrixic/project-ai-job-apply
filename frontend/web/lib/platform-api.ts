@@ -61,6 +61,27 @@ const declaredProblems = new Map<string, Readonly<DeclaredProblem>>([
   ],
   ["409:version_conflict", { code: "version_conflict", title: "Profile fact changed" }],
   [
+    "404:profile_record_not_found",
+    { code: "profile_record_not_found", title: "Profile record was not found" },
+  ],
+  [
+    "409:profile_section_limit",
+    { code: "profile_section_limit", title: "Profile section is full" },
+  ],
+  [
+    "409:profile_record_duplicate",
+    { code: "profile_record_duplicate", title: "Profile record already exists" },
+  ],
+  [
+    "409:profile_order_conflict",
+    { code: "profile_order_conflict", title: "Profile order changed" },
+  ],
+  ["400:restricted_question", { code: "restricted_question", title: "Restricted question" }],
+  [
+    "400:invalid_profile_record",
+    { code: "invalid_profile_record", title: "Profile record is invalid" },
+  ],
+  [
     "409:profile_fact_transition_conflict",
     { code: "profile_fact_transition_conflict", title: "Profile fact transition conflict" },
   ],

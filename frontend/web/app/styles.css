@@ -1538,3 +1538,105 @@ aside {
   flex-wrap: wrap;
   gap: 10px;
 }
+
+.profile-area {
+  display: grid;
+  gap: 16px;
+}
+
+.profile-tablist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid #cfdcd4;
+}
+
+.profile-tablist [role="tab"] {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: #14221a;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.profile-tablist [role="tab"][aria-selected="true"] {
+  border-bottom-color: #14633e;
+  color: #14633e;
+}
+
+.profile-tablist [role="tab"]:focus-visible {
+  outline: 3px solid #14633e;
+  outline-offset: -3px;
+}
+
+.profile-tab-count {
+  font-weight: 500;
+}
+
+.profile-import-banner {
+  display: block;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #eef5f1;
+  color: #14221a;
+}
+
+.profile-entry-list,
+.profile-drafts ul {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0 0 16px;
+  list-style: none;
+}
+
+.profile-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 12px 16px;
+  border: 1px solid #cfdcd4;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.profile-entry > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.profile-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-drafts {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border: 1px dashed #14633e;
+  border-radius: 8px;
+}
+
+.profile-entry-form {
+  display: grid;
+  gap: 12px;
+  max-width: 640px;
+}
+
+.profile-entry-field {
+  display: grid;
+  gap: 4px;
+}
+
+.profile-entry-field input,
+.profile-entry-field textarea {
+  width: 100%;
+}

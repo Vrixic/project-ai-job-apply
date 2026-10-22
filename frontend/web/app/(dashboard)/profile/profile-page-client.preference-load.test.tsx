@@ -6,9 +6,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProfilePageClient } from "./profile-page-client";
 
-vi.mock("../../profile-facts-form", () => ({ ProfileFactsForm: () => null }));
-vi.mock("../../profile-personal-card", () => ({ ProfilePersonalCard: () => null }));
-vi.mock("../../profile-skills-card", () => ({ ProfileSkillsCard: () => null }));
+// These tests cover the preference lifecycle, so the section tabs are replaced by the
+// preferences panel they would host.
+vi.mock("../../profile-sections/profile-area", () => ({
+  ProfileArea: ({ preferences }: { preferences: React.ReactNode }) => <>{preferences}</>,
+}));
 
 const privateCanary = "private-preference-problem-must-not-render";
 

@@ -16,6 +16,17 @@ export type FoundationResponseSchemaName =
   | "CreateResumeUploadResponse"
   | "ProfileFactCollection"
   | "ProfileFact"
+  | "ProfilePersonal"
+  | "ProfileEntryReference"
+  | "ProfileImportDraftCollection"
+  | "ProfileEducationEntry"
+  | "ProfileEducationEntryCollection"
+  | "ProfileWorkExperienceEntry"
+  | "ProfileWorkExperienceEntryCollection"
+  | "ProfileSkillEntry"
+  | "ProfileSkillEntryCollection"
+  | "ProfileApplicationAnswer"
+  | "ProfileApplicationAnswerCollection"
   | "RestrictedAnswerCollection"
   | "RestrictedAnswer"
   | "CandidateDataExport"
@@ -37,6 +48,23 @@ const validators = new Map<
   ["CreateResumeUploadResponse", compileComponentValidator("CreateResumeUploadResponse")],
   ["ProfileFactCollection", compileComponentValidator("ProfileFactCollection")],
   ["ProfileFact", compileComponentValidator("ProfileFact")],
+  ["ProfilePersonal", compileComponentValidator("ProfilePersonal")],
+  ["ProfileEntryReference", compileComponentValidator("ProfileEntryReference")],
+  ["ProfileImportDraftCollection", compileComponentValidator("ProfileImportDraftCollection")],
+  ["ProfileEducationEntry", compileComponentValidator("ProfileEducationEntry")],
+  ["ProfileEducationEntryCollection", compileComponentValidator("ProfileEducationEntryCollection")],
+  ["ProfileWorkExperienceEntry", compileComponentValidator("ProfileWorkExperienceEntry")],
+  [
+    "ProfileWorkExperienceEntryCollection",
+    compileComponentValidator("ProfileWorkExperienceEntryCollection"),
+  ],
+  ["ProfileSkillEntry", compileComponentValidator("ProfileSkillEntry")],
+  ["ProfileSkillEntryCollection", compileComponentValidator("ProfileSkillEntryCollection")],
+  ["ProfileApplicationAnswer", compileComponentValidator("ProfileApplicationAnswer")],
+  [
+    "ProfileApplicationAnswerCollection",
+    compileComponentValidator("ProfileApplicationAnswerCollection"),
+  ],
   ["RestrictedAnswerCollection", compileComponentValidator("RestrictedAnswerCollection")],
   ["RestrictedAnswer", compileComponentValidator("RestrictedAnswer")],
   ["CandidateDataExport", compileComponentValidator("CandidateDataExport")],
