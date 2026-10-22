@@ -4,8 +4,8 @@
  *
  * 1. its kill switch is on (default off),
  * 2. live ATS effects are approved (D3-012, LR-D3-01/02; default off),
- * 3. it has authorized, sanitized, QA-accepted, unexpired provider-derived fixture evidence for the
- *    exact variant (ADR-021). Synthetic fixtures never count.
+ * 3. it has authorized, sanitized, unexpired provider-derived fixture evidence for the exact
+ *    variant (ADR-021). Synthetic fixtures never count.
  *
  * Without 2 and 3 an adapter can at most suggest values (no page action).
  */
@@ -33,7 +33,8 @@ export interface FixtureEvidence {
   kind: "provider_derived" | "synthetic";
   authorizationRecordId: string;
   sanitizationScanPassedAt: string;
-  qaRepresentativenessAcceptedAt: string;
+  /** Not required since the owner removed QA representativeness acceptance on 2026-10-21. */
+  qaRepresentativenessAcceptedAt?: string;
   expiresAt: string;
   variantIds: readonly string[];
 }
@@ -146,7 +147,6 @@ export class AdapterRegistry {
         reasons.push("fixture_evidence_not_provider_derived");
       if (!evidence.authorizationRecordId) reasons.push("fixture_source_not_authorized");
       if (!evidence.sanitizationScanPassedAt) reasons.push("fixture_scan_missing");
-      if (!evidence.qaRepresentativenessAcceptedAt) reasons.push("fixture_qa_acceptance_missing");
       if (!(Date.parse(evidence.expiresAt) > now.getTime()))
         reasons.push("fixture_evidence_expired");
       if (!evidence.variantIds.includes(variantId) || !adapter.variants.includes(variantId)) {

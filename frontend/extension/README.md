@@ -335,6 +335,15 @@ existing `applications:write` scope; the actual public-client delegated grant st
 verification. It grants no employer host access and store packaging rejects execution. Manual
 handoff builds retain their read-only application scope and no external listener.
 
+Filling and submitting are off in that build until it names a provider (ADR-053):
+`EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON='["greenhouse","ashby"]'` (any unique subset; Lever
+and the generic adapter cannot be named). The build then enables exactly those adapters, records the
+owner's live-effects approval, and binds evidence to the adapter version and a hash of the provider
+source it contains. That evidence expires 90 days after the build, after which the extension stops
+acting and the candidate uses the manual path until it is rebuilt. Without the variable every kill
+switch stays off. The candidate still approves each application on the website and confirms in the
+extension on the employer tab; the click happens once.
+
 The web native workspace separately requires `NEXT_PUBLIC_APPLICATION_EXTENSION_TRANSFER_ENABLED=true`
 and `NEXT_PUBLIC_APPLICATION_EXTENSION_ID` set to one exact installed Chrome extension ID. Pressing
 **Apply** in the website opens the employer page and sends an identifiers-only apply intent

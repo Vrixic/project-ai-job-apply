@@ -71,6 +71,16 @@ because that needs a real submission, which was not made.
    the exact adapter version and implementation hash. The production extension distribution still needs
    the legal and security reviews (LR-D3-01/02); this ADR changes nothing about those gates.
 
+## Enabling (D3-159)
+
+The execution build enables providers by name through `EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON`
+(unique subset of `greenhouse` and `ashby`; empty or absent leaves every kill switch off). The build
+records the owner's live-effects approval and evidence naming the exact adapter version, the reviewed
+variant and a SHA-256 of the provider source it contains. The evidence is structure-only (no provider
+content is stored, so there is nothing to scan) and expires 90 days after the build, which makes an old
+build stop acting rather than trust page structure that may have changed. The registry no longer
+requires a QA-representativeness date (removed by the owner on 2026-10-21).
+
 ## Consequences
 
 - Backend: one new rule in the Applications binding resolver and a test, no schema change.

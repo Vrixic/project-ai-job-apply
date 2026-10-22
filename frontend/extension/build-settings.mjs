@@ -1,5 +1,7 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { readdir, readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 
 export function parseDevelopmentContributions(value) {
   if (value === undefined || value === "false") return false;
@@ -42,6 +44,67 @@ export function applicationExecutionForBuild(environment, fileEnvironment, hando
   if (!handoffOrigin)
     throw new Error("Application execution requires the exact handoff website origin");
   return true;
+}
+
+const executionProviderNames = ["greenhouse", "ashby"];
+
+/**
+ * Which providers a build switches on (ADR-053). Absent means none: the execution entry is built
+ * but every kill switch stays off. Naming one requires the execution build and is exact.
+ */
+export function applicationExecutionProvidersForBuild(environment, fileEnvironment, execution) {
+  const value =
+    environment.EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON ??
+    fileEnvironment.EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON;
+  if (value === undefined) return Object.freeze([]);
+  if (execution !== true)
+    throw new Error("Execution providers require EXTENSION_APPLICATION_EXECUTION_ENABLED=true");
+  let parsed;
+  try {
+    if (typeof value === "string" && value.length <= 64) parsed = JSON.parse(value);
+  } catch {
+    // An invalid selection must fail the build, not broaden what it may do.
+  }
+  if (
+    !Array.isArray(parsed) ||
+    parsed.length > executionProviderNames.length ||
+    new Set(parsed).size !== parsed.length ||
+    parsed.some((provider) => !executionProviderNames.includes(provider))
+  )
+    throw new Error(
+      "EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON must be a JSON array of unique names from greenhouse and ashby",
+    );
+  return Object.freeze([...parsed]);
+}
+
+/**
+ * Binds the registry evidence to the exact provider code a build contains: the executor, the
+ * provider modules and the built ats-sdk pieces they rely on. A source change changes the hash.
+ */
+export async function applicationImplementationHash(extensionRoot) {
+  // Labels are fixed names so the same source hashes the same wherever it is built.
+  const entries = [
+    ["lib/application-run.ts", join(extensionRoot, "lib", "application-run.ts")],
+    ["lib/command-fields.ts", join(extensionRoot, "lib", "command-fields.ts")],
+  ];
+  for (const directory of ["providers", "greenhouse", "ashby"]) {
+    const path = join(extensionRoot, "lib", directory);
+    for (const name of (await readdir(path)).sort()) {
+      if (name.endsWith(".ts")) entries.push([`lib/${directory}/${name}`, join(path, name)]);
+    }
+  }
+  const sdk = dirname(
+    createRequire(join(extensionRoot, "package.json")).resolve("@ai-job-apply/ats-sdk/registry"),
+  );
+  for (const name of ["extract", "form-model", "mapping", "observed-form", "plan", "registry"])
+    entries.push([`ats-sdk/${name}.js`, join(sdk, `${name}.js`)]);
+  const hash = createHash("sha256");
+  for (const [label, path] of entries) {
+    hash.update(`${label}\u0000`);
+    hash.update((await readFile(path, "utf8")).replaceAll("\r\n", "\n"));
+    hash.update("\u0000");
+  }
+  return hash.digest("hex");
 }
 
 export function developmentContributionProvidersForBuild(
