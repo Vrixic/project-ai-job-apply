@@ -147,6 +147,11 @@ export type SavedJobSnapshot = components["schemas"]["SavedJobSnapshot"];
 export type SavedJobPage = components["schemas"]["SavedJobPage"];
 export type MatchAssessment = components["schemas"]["MatchAssessment"];
 export type EntitlementSummary = components["schemas"]["EntitlementSummary"];
+export type NotificationItem = components["schemas"]["NotificationItem"];
+export type NotificationInboxPage = components["schemas"]["NotificationInboxPage"];
+export type NotificationPreferences = components["schemas"]["NotificationPreferences"];
+export type UpdateNotificationPreferencesRequest =
+  components["schemas"]["UpdateNotificationPreferencesRequest"];
 export type ApplicationStatus = components["schemas"]["ApplicationStatus"];
 export type ApplicationCurrentAction = components["schemas"]["ApplicationCurrentAction"];
 export type ApplicationPacketField = components["schemas"]["ApplicationPacketField"];

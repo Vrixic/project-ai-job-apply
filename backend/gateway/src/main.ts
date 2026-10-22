@@ -72,6 +72,10 @@ import { LambdaOriginalResumeClient } from "./original-resume-client.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
 import { KmsRestrictedAnswerCipher } from "./restricted-answer-kms-cipher.js";
 import { resumeLimitsFromEntitlements } from "./resume-limits.js";
+import {
+  NotificationsService,
+  PostgresNotificationsStore,
+} from "@ai-job-apply/notifications-service";
 import { createStripeBillingGateway } from "./stripe-billing.js";
 import { LambdaResumeTailoringClient } from "./resume-tailoring-client.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
@@ -159,6 +163,10 @@ const stripeBilling = createStripeBillingGateway({
   reader: billingStore,
   writer: entitlements,
 });
+const notifications =
+  process.env.NOTIFICATIONS_ENABLED === "true"
+    ? new NotificationsService(new PostgresNotificationsStore(database.client))
+    : undefined;
 const documents =
   config.DOCUMENT_UPLOAD_BUCKET && config.DOCUMENT_UPLOAD_KMS_KEY_ARN
     ? new PostgresDocumentStore(
@@ -297,6 +305,7 @@ const app = await createGatewayApplication({
   matchAssessments,
   entitlements,
   ...(stripeBilling ? { stripeBilling } : {}),
+  ...(notifications ? { notifications } : {}),
   documents,
   ...(candidateDataExportDownloads ? { candidateDataExportDownloads } : {}),
   verifier,

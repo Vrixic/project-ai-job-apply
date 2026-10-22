@@ -100,6 +100,9 @@ importers:
       '@ai-job-apply/matching-service':
         specifier: workspace:*
         version: link:../services/matching
+      '@ai-job-apply/notifications-service':
+        specifier: workspace:*
+        version: link:../services/notifications
       '@ai-job-apply/observability':
         specifier: workspace:*
         version: link:../../packages/observability

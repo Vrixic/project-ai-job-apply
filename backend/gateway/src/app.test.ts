@@ -124,7 +124,8 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { privacySafeRequestFailure } from "./app.module.js";
+import { NotificationsError } from "@ai-job-apply/notifications-service";
+import { type NotificationsApi, privacySafeRequestFailure } from "./app.module.js";
 import { createGatewayApplication } from "./application.js";
 import { type StripeBillingGateway, createStripeBillingGateway } from "./stripe-billing.js";
 import { createApplicationsRuntime, loadFieldDefinitions } from "./applications-runtime.js";
@@ -896,6 +897,7 @@ async function createApp(
     restrictedAnswerVault?: RestrictedAnswerVaultStore;
     profileSections?: ProfileSectionStore;
     stripeBilling?: StripeBillingGateway;
+    notifications?: NotificationsApi;
     privilegedModerationAudit?: PrivilegedModerationAuditWriter;
   } = {},
 ) {
@@ -959,6 +961,7 @@ async function createApp(
     matchAssessments,
     entitlements,
     ...(options.stripeBilling ? { stripeBilling: options.stripeBilling } : {}),
+    ...(options.notifications ? { notifications: options.notifications } : {}),
     documents,
     ...(options.applications ? { applications: options.applications } : {}),
     ...(options.trust ? { trust: options.trust } : {}),
@@ -6463,5 +6466,273 @@ describe("Stripe billing routes (D6-005)", () => {
     expect(() =>
       createStripeBillingGateway({ env: { STRIPE_SECRET_KEY: "sk_test_abc123" }, ...base }),
     ).toThrow(/partially/u);
+  });
+});
+
+describe("Notifications routes (D5-001)", () => {
+  const ITEM = "019d04cf-1f80-7000-8000-00000000a111";
+  const APPLICATION = "019d04cf-1f80-7000-8000-00000000a222";
+  const at = new Date("2026-10-22T12:00:00.000Z");
+  const item = (overrides: Record<string, unknown> = {}) => ({
+    id: ITEM,
+    kind: "application_review_needed" as const,
+    urgency: "normal" as const,
+    state: "unread" as const,
+    applicationId: APPLICATION,
+    sourceRevision: 3,
+    createdAt: at,
+    updatedAt: at,
+    expiresAt: new Date(at.getTime() + 86_400_000),
+    ...overrides,
+  });
+  const preferences = (version = 0) => ({
+    version,
+    inAppEnabled: true as const,
+    emailEnabled: false,
+    pushEnabled: false,
+    quietHours: { enabled: false, startMinute: 1320, endMinute: 420, timeZone: "UTC" },
+    updatedAt: at,
+  });
+
+  function fake(overrides: Partial<NotificationsApi> = {}) {
+    const calls: unknown[][] = [];
+    const notifications: NotificationsApi = {
+      async listInbox(...args) {
+        calls.push(["list", ...args]);
+        return { items: [item()], unreadCount: 1, nextCursor: "abc_DEF-1" };
+      },
+      async acknowledge(...args) {
+        calls.push(["acknowledge", ...args]);
+        return item({ state: "acknowledged" });
+      },
+      async dismiss(...args) {
+        calls.push(["dismiss", ...args]);
+        return item({ state: "dismissed" });
+      },
+      async getPreferences(...args) {
+        calls.push(["getPreferences", ...args]);
+        return preferences();
+      },
+      async updatePreferences(...args) {
+        calls.push(["updatePreferences", ...args]);
+        return preferences(1);
+      },
+      ...overrides,
+    };
+    return { notifications, calls };
+  }
+
+  it("registers no route unless Notifications is configured", async () => {
+    const { app, issuer } = await createApp();
+    const token = await issuer.issue("notif-off", { scope: "profile:read profile:write" });
+    for (const [method, url] of [
+      ["GET", "/v1/notifications"],
+      ["GET", "/v1/notifications/preferences"],
+      ["POST", `/v1/notifications/${ITEM}/acknowledgement`],
+    ] as const) {
+      const response = await app.inject({
+        method,
+        url,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(response.statusCode).toBe(404);
+    }
+    await app.close();
+  });
+
+  it("requires authentication and the right scope", async () => {
+    const { notifications, calls } = fake();
+    const { app, issuer } = await createApp({ notifications });
+    expect((await app.inject({ method: "GET", url: "/v1/notifications" })).statusCode).toBe(401);
+    const readOnly = await issuer.issue("notif-ro", { scope: "profile:read" });
+    const denied = await app.inject({
+      method: "POST",
+      url: `/v1/notifications/${ITEM}/dismissal`,
+      headers: { authorization: `Bearer ${readOnly}` },
+    });
+    expect(denied.statusCode).toBe(403);
+    const none = await issuer.issue("notif-none", { scope: "openid" });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/v1/notifications",
+          headers: { authorization: `Bearer ${none}` },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(calls).toEqual([]);
+    await app.close();
+  });
+
+  it("lists the signed-in candidate's inbox with a bounded query and contract-valid output", async () => {
+    const { notifications, calls } = fake();
+    const { app, issuer } = await createApp({ notifications });
+    const token = await issuer.issue("notif-owner", { scope: "profile:read profile:write" });
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/notifications?state=unread&limit=10&cursor=abc_DEF-1",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.json()).toEqual({
+      items: [
+        {
+          id: ITEM,
+          kind: "application_review_needed",
+          urgency: "normal",
+          state: "unread",
+          applicationId: APPLICATION,
+          sourceRevision: 3,
+          createdAt: at.toISOString(),
+          updatedAt: at.toISOString(),
+          expiresAt: new Date(at.getTime() + 86_400_000).toISOString(),
+        },
+      ],
+      nextCursor: "abc_DEF-1",
+      unreadCount: 1,
+    });
+    expect(calls[0]?.[0]).toBe("list");
+    expect(calls[0]?.[2]).toEqual({ states: ["unread"], limit: 10, cursor: "abc_DEF-1" });
+    await app.close();
+  });
+
+  it.each([
+    "state=everything",
+    "limit=0",
+    "limit=101",
+    "limit=abc",
+    "cursor=bad%20cursor",
+    "unknown=1",
+    "state=open&state=unread",
+  ])("refuses the list query %s", async (query) => {
+    const { notifications, calls } = fake();
+    const { app, issuer } = await createApp({ notifications });
+    const token = await issuer.issue("notif-q", { scope: "profile:read" });
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/notifications?${query}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(calls).toEqual([]);
+    await app.close();
+  });
+
+  it("acknowledges and dismisses only through bodyless commands for the caller", async () => {
+    const { notifications, calls } = fake();
+    const { app, issuer } = await createApp({ notifications });
+    const token = await issuer.issue("notif-cmd", { scope: "profile:read profile:write" });
+    const headers = { authorization: `Bearer ${token}` };
+    const ack = await app.inject({
+      method: "POST",
+      url: `/v1/notifications/${ITEM}/acknowledgement`,
+      headers,
+    });
+    expect(ack.statusCode).toBe(200);
+    expect(ack.json().state).toBe("acknowledged");
+    const dismiss = await app.inject({
+      method: "POST",
+      url: `/v1/notifications/${ITEM}/dismissal`,
+      headers,
+    });
+    expect(dismiss.json().state).toBe("dismissed");
+    const withBody = await app.inject({
+      method: "POST",
+      url: `/v1/notifications/${ITEM}/dismissal`,
+      headers: { ...headers, "content-type": "application/json" },
+      payload: "{}",
+    });
+    expect(withBody.statusCode).toBe(400);
+    expect(calls.map((call) => call[0])).toEqual(["acknowledge", "dismiss"]);
+    expect(calls[0]?.[1]).not.toBe(ITEM);
+    await app.close();
+  });
+
+  it("maps a missing item to 404 and a service failure to 503", async () => {
+    const { notifications } = fake({
+      async acknowledge() {
+        throw new NotificationsError("not_found");
+      },
+      async dismiss() {
+        throw new Error("database down");
+      },
+    });
+    const { app, issuer } = await createApp({ notifications });
+    const token = await issuer.issue("notif-err", { scope: "profile:read profile:write" });
+    const headers = { authorization: `Bearer ${token}` };
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/v1/notifications/${ITEM}/acknowledgement`,
+          headers,
+        })
+      ).statusCode,
+    ).toBe(404);
+    const failed = await app.inject({
+      method: "POST",
+      url: `/v1/notifications/${ITEM}/dismissal`,
+      headers,
+    });
+    expect(failed.statusCode).toBe(503);
+    expect(JSON.stringify(failed.json())).not.toContain("database down");
+    await app.close();
+  });
+
+  it("reads and writes preferences with compare-and-set and strict input", async () => {
+    const { notifications } = fake({
+      async updatePreferences(_user, expectedVersion) {
+        if (expectedVersion === 9) throw new NotificationsError("version_conflict");
+        return preferences(expectedVersion + 1);
+      },
+    });
+    const { app, issuer } = await createApp({ notifications });
+    const token = await issuer.issue("notif-pref", { scope: "profile:read profile:write" });
+    const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+    const read = await app.inject({
+      method: "GET",
+      url: "/v1/notifications/preferences",
+      headers,
+    });
+    expect(read.statusCode).toBe(200);
+    expect(read.json()).toMatchObject({ version: 0, inAppEnabled: true, emailEnabled: false });
+    const body = {
+      expectedVersion: 0,
+      emailEnabled: true,
+      pushEnabled: false,
+      quietHours: { enabled: true, startMinute: 1320, endMinute: 420, timeZone: "UTC" },
+    };
+    const saved = await app.inject({
+      method: "PUT",
+      url: "/v1/notifications/preferences",
+      headers,
+      payload: JSON.stringify(body),
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().version).toBe(1);
+    const conflict = await app.inject({
+      method: "PUT",
+      url: "/v1/notifications/preferences",
+      headers,
+      payload: JSON.stringify({ ...body, expectedVersion: 9 }),
+    });
+    expect(conflict.statusCode).toBe(409);
+    for (const bad of [
+      { ...body, extra: true },
+      { ...body, emailEnabled: "yes" },
+      { ...body, quietHours: { ...body.quietHours, startMinute: 1440 } },
+      { expectedVersion: 0 },
+    ]) {
+      const response = await app.inject({
+        method: "PUT",
+        url: "/v1/notifications/preferences",
+        headers,
+        payload: JSON.stringify(bad),
+      });
+      expect(response.statusCode).toBe(400);
+    }
+    await app.close();
   });
 });

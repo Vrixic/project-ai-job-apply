@@ -578,6 +578,73 @@ describe("API Gateway Lambda boundary", () => {
     expect(trailing.statusCode).toBe(404);
   });
 
+  it("allows the notifications inbox routes with a bounded query only on the list (D5-001)", async () => {
+    const inject = vi.fn().mockResolvedValue({
+      statusCode: 200,
+      body: "{}",
+      headers: { "content-type": "application/json" },
+    });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge: createInvocationPrincipalBridge(),
+    });
+    const id = "019d04cf-1f80-7000-8000-00000000a111";
+    const status = async (method: string, path: string, extra: Record<string, unknown> = {}) =>
+      (await invoke(handler, routedEvent(method, path, extra as never))).statusCode;
+
+    expect(await status("GET", "/v1/notifications")).toBe(200);
+    expect(
+      await status("GET", "/v1/notifications", {
+        rawQueryString: "state=open&limit=25&cursor=abc_DEF-1",
+      }),
+    ).toBe(200);
+    for (const bad of [
+      "state=all",
+      "limit=0",
+      "limit=101",
+      "cursor=a%20b",
+      "owner=other",
+      "state=open&state=unread",
+    ])
+      expect(await status("GET", "/v1/notifications", { rawQueryString: bad })).toBe(400);
+    expect(await status("GET", "/v1/notifications/preferences")).toBe(200);
+    expect(
+      await status("GET", "/v1/notifications/preferences", { rawQueryString: "state=open" }),
+    ).toBe(400);
+    expect(
+      await status("PUT", "/v1/notifications/preferences", {
+        body: "{}",
+        headers: {
+          authorization: "Bearer opaque-api-gateway-token",
+          "content-type": "application/json",
+        },
+      }),
+    ).toBe(200);
+    expect(await status("PUT", "/v1/notifications/preferences")).toBe(400);
+    for (const command of ["acknowledgement", "dismissal"]) {
+      expect(await status("POST", `/v1/notifications/${id}/${command}`)).toBe(200);
+      expect(
+        await status("POST", `/v1/notifications/${id}/${command}`, {
+          body: "{}",
+          headers: {
+            authorization: "Bearer opaque-api-gateway-token",
+            "content-type": "application/json",
+          },
+        }),
+      ).toBe(400);
+      expect(await status("GET", `/v1/notifications/${id}/${command}`)).toBe(404);
+      expect(await status("POST", `/v1/notifications/not-a-uuid/${command}`)).toBe(404);
+      expect(await status("POST", `/v1/notifications/${id}/${command}/`)).toBe(404);
+    }
+    expect(await status("DELETE", `/v1/notifications/${id}`)).toBe(404);
+    expect(await status("POST", "/v1/notifications")).toBe(404);
+    const anonymous = routedEvent("GET", "/v1/notifications");
+    delete anonymous.requestContext.authorizer;
+    expect((await invoke(handler, anonymous)).statusCode).toBe(401);
+  });
+
   it("allows only an exact lowercase UUIDv7 bodyless match-assessment route", async () => {
     const inject = vi.fn().mockResolvedValue({
       statusCode: 200,

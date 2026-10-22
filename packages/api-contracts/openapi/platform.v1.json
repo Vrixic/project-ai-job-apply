@@ -6942,6 +6942,303 @@
           }
         }
       }
+    },
+    "/notifications": {
+      "get": {
+        "operationId": "listNotifications",
+        "summary": "List the candidate's in-app inbox, newest first. Present only when Notifications is configured.",
+        "security": [
+          {
+            "oidc": ["profile:read"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "description": "open (default) is unread and acknowledged items.",
+            "schema": {
+              "type": "string",
+              "enum": ["open", "unread", "dismissed", "expired"]
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The inbox page",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationInboxPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/notifications/preferences": {
+      "get": {
+        "operationId": "getNotificationPreferences",
+        "security": [
+          {
+            "oidc": ["profile:read"]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The candidate's notification preferences",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferences"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateNotificationPreferences",
+        "summary": "Replace the preferences, compare-and-set on the version.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotificationPreferencesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The saved preferences",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferences"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      }
+    },
+    "/notifications/{notificationId}/acknowledgement": {
+      "post": {
+        "operationId": "acknowledgeNotification",
+        "summary": "Mark the item as seen. Idempotent. Never changes the application.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notificationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The item after the change",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/notifications/{notificationId}/dismissal": {
+      "post": {
+        "operationId": "dismissNotification",
+        "summary": "Dismiss the item. Terminal. Never changes the application.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notificationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The item after the change",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -13894,6 +14191,173 @@
             "type": "boolean"
           }
         }
+      },
+      "NotificationItem": {
+        "type": "object",
+        "description": "An in-app action inbox item (ADR-055). A classification and an opaque application reference, never candidate content. Acknowledging or dismissing it never changes the application.",
+        "required": [
+          "id",
+          "kind",
+          "urgency",
+          "state",
+          "applicationId",
+          "sourceRevision",
+          "createdAt",
+          "updatedAt",
+          "expiresAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "application_review_needed",
+              "application_outcome_needed",
+              "application_confirmed"
+            ]
+          },
+          "urgency": {
+            "type": "string",
+            "enum": ["low", "normal", "high"]
+          },
+          "state": {
+            "type": "string",
+            "enum": ["unread", "acknowledged", "dismissed", "expired"]
+          },
+          "applicationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NotificationInboxPage": {
+        "type": "object",
+        "required": ["items", "unreadCount"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/NotificationItem"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "unreadCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "additionalProperties": false
+      },
+      "NotificationQuietHours": {
+        "type": "object",
+        "required": ["enabled", "startMinute", "endMinute", "timeZone"],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "startMinute": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1439
+          },
+          "endMinute": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1439
+          },
+          "timeZone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "additionalProperties": false
+      },
+      "NotificationPreferences": {
+        "type": "object",
+        "description": "Delivery preferences. The in-app inbox cannot be turned off; email and push are off until the candidate turns them on. Version 0 means defaults that were never saved.",
+        "required": [
+          "version",
+          "inAppEnabled",
+          "emailEnabled",
+          "pushEnabled",
+          "quietHours",
+          "updatedAt"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "inAppEnabled": {
+            "type": "boolean",
+            "const": true
+          },
+          "emailEnabled": {
+            "type": "boolean"
+          },
+          "pushEnabled": {
+            "type": "boolean"
+          },
+          "quietHours": {
+            "$ref": "#/components/schemas/NotificationQuietHours"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateNotificationPreferencesRequest": {
+        "type": "object",
+        "required": ["expectedVersion", "emailEnabled", "pushEnabled", "quietHours"],
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "emailEnabled": {
+            "type": "boolean"
+          },
+          "pushEnabled": {
+            "type": "boolean"
+          },
+          "quietHours": {
+            "$ref": "#/components/schemas/NotificationQuietHours"
+          }
+        },
+        "additionalProperties": false
       }
     }
   }
