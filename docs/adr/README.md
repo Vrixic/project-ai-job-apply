@@ -75,3 +75,4 @@ ADRs are immutable historical records after acceptance. A new ADR supersedes an 
 - [ADR-050: Generate-then-apply flow, server-side material reads and PDF-only delivery](050-generate-then-apply-flow.md) (proposed; owner-directed, locally verified, live acceptance pending)
 - [ADR-051: Style-preserving generated resume](051-style-preserving-generated-resume.md) (proposed; owner-directed, locally verified, release and live acceptance pending)
 - [ADR-052: Structured candidate Profile replaces profile facts](052-structured-candidate-profile.md) (accepted 2026-10-22; implementation not started)
+- [ADR-053: Candidate-approved submission for Greenhouse and Ashby](053-candidate-approved-submission-greenhouse-and-ashby.md) (accepted 2026-10-22; owner-directed, implementation in progress)
