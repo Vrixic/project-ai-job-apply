@@ -604,6 +604,7 @@ function Assert-GatewayCapturedSeedInputs {
       "privileged_audit_retention_schedule_enabled",
       "privileged_moderation_audit_enabled",
       "restricted_packet_export_enabled",
+      "restricted_answer_reuse_enabled",
       "restricted_packet_keys_provisioned"
     )
   foreach ($name in $DeclaredVariableNames) {

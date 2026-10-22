@@ -95,8 +95,8 @@ claim public endpoint or alarm health. Exact-target emergency cleanup keeps its 
    application security group from encrypted Terraform state.
 2. Require the task image to be digest-pinned, scanned, and compatible with `linux/amd64`.
 3. Run a read-only one-off Fargate verifier against the source connection secret. It must:
-   - find the current seven-contributor/twelve-schema/96-relation restore manifest;
-   - find all 79 expected migration journal entries from the maintained current manifest;
+   - find the current seven-contributor/twelve-schema/97-relation restore manifest;
+   - find all 84 expected migration journal entries from the maintained current manifest;
    - query only aggregate row counts; and
    - emit one aggregate result for in-memory hashing.
 4. Retain only the table/journal pass state and aggregate digest comparison value in operator
@@ -132,7 +132,7 @@ After the target becomes available:
 2. Run the same immutable one-off verifier. Keep the Terraform-managed source `DATABASE_URL` in
    Secrets Manager; pass only the non-secret restored hostname as `RESTORE_HOST`, and replace the
    hostname in memory inside the task.
-3. Require the exact seven-contributor/twelve-schema/96-relation/79-migration manifest and an exact
+3. Require the exact seven-contributor/twelve-schema/97-relation/84-migration manifest and an exact
    aggregate digest match with the source baseline.
 4. Measure functional recovery through the successful verifier exit.
 5. Inspect only the two verifier streams in memory. Require zero credential/candidate-field,
