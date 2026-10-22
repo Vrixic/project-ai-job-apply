@@ -28,6 +28,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
+import { assertValidDraftValues, PROFILE_DRAFT_CAPACITY } from "./profile-sections.js";
 import {
   type AccountDeletionRecord,
   assertCandidateRightsAuthentication,
@@ -414,6 +415,18 @@ export interface ResumeProposalImport {
   }>;
 }
 
+export interface ResumeDraftImport {
+  userId: string;
+  documentId: string;
+  documentVersion: number;
+  parserVersion: string;
+  traceId: string;
+  drafts: ReadonlyArray<{
+    section: "personal" | "education" | "workExperience" | "skill";
+    values: Record<string, unknown>;
+  }>;
+}
+
 export class ResumeProposalConflictError extends Error {
   constructor() {
     super("The resume proposal import identity was reused with different content");
@@ -531,6 +544,95 @@ export class PostgresResumeProposalWriter {
     return input.proposals.length;
   }
 
+  /**
+   * Stores parsed resume content as import drafts (ADR-052). Drafts are not profile records: no
+   * consumer reads them and they join the profile only when the candidate saves them. The import
+   * identity is idempotent by document, version and parser, and the same identity with different
+   * content is refused. A candidate who already saved or discarded a draft is never given it again.
+   */
+  async importDrafts(
+    transaction: postgres.TransactionSql,
+    input: ResumeDraftImport,
+  ): Promise<number> {
+    for (const draft of input.drafts) assertValidDraftValues(draft.section, draft.values);
+    const digest = createHash("sha256")
+      .update("resume-drafts-v1 ")
+      .update(JSON.stringify(input.drafts))
+      .digest("hex");
+    await transaction`
+      SELECT pg_advisory_xact_lock(
+        hashtext(${`resume-proposals:${input.userId}:${input.documentId}:${input.documentVersion}:${input.parserVersion}`})
+      )
+    `;
+    const prior = await transaction<Array<{ proposalDigest: string; proposalCount: number }>>`
+      SELECT proposal_digest AS "proposalDigest", proposal_count AS "proposalCount"
+      FROM profile.resume_fact_imports
+      WHERE user_id = ${input.userId}
+        AND document_id = ${input.documentId}
+        AND document_version = ${input.documentVersion}
+        AND parser_version = ${input.parserVersion}
+    `;
+    if (prior[0]) {
+      if (prior[0].proposalDigest !== digest) throw new ResumeProposalConflictError();
+      return prior[0].proposalCount;
+    }
+    await transaction`SELECT pg_advisory_xact_lock(hashtext(${`profile-drafts:${input.userId}`}))`;
+    const [existing] = await transaction<Array<{ count: number }>>`
+      SELECT count(*)::int AS count FROM profile.import_drafts WHERE user_id = ${input.userId}
+    `;
+    const room = Math.max(0, PROFILE_DRAFT_CAPACITY - (existing?.count ?? 0));
+    const accepted = input.drafts.slice(0, room);
+    const importId = uuidv7();
+    await transaction`
+      INSERT INTO profile.resume_fact_imports (
+        id, user_id, document_id, document_version, parser_version, proposal_digest, proposal_count
+      ) VALUES (
+        ${importId}, ${input.userId}, ${input.documentId}, ${input.documentVersion},
+        ${input.parserVersion}, ${digest}, ${accepted.length}
+      )
+    `;
+    for (const draft of accepted) {
+      await transaction`
+        INSERT INTO profile.import_drafts (id, user_id, import_id, section, draft_values)
+        VALUES (
+          ${uuidv7()}, ${input.userId}, ${importId}, ${draft.section},
+          ${JSON.stringify(draft.values)}::text::jsonb
+        )
+      `;
+    }
+    await transaction`
+      INSERT INTO platform.audit_events (
+        id, user_id, action, resource_type, resource_id, trace_id, metadata
+      ) VALUES (
+        ${uuidv7()}, ${input.userId}, 'profile.resume.drafts.imported',
+        'resume_document', ${input.documentId}, ${input.traceId},
+        ${JSON.stringify({
+          documentVersion: input.documentVersion,
+          parserVersion: input.parserVersion,
+          draftCount: accepted.length,
+        })}::text::jsonb
+      )
+    `;
+    return accepted.length;
+  }
+
+  /** Removes the still-unsaved drafts parsed from one document; saved records are the candidate's own. */
+  private async eraseDocumentDrafts(
+    transaction: postgres.TransactionSql,
+    input: { userId: string; documentId: string },
+  ): Promise<number> {
+    const erased = await transaction<Array<{ id: string }>>`
+      DELETE FROM profile.import_drafts AS draft
+      WHERE draft.user_id = ${input.userId}
+        AND draft.import_id IN (
+          SELECT id FROM profile.resume_fact_imports
+          WHERE user_id = ${input.userId} AND document_id = ${input.documentId}
+        )
+      RETURNING draft.id
+    `;
+    return erased.length;
+  }
+
   async holdDocumentProposals(
     transaction: postgres.TransactionSql,
     input: { userId: string; documentId: string; traceId: string },
@@ -607,7 +709,7 @@ export class PostgresResumeProposalWriter {
         )
       `;
     }
-    return rows.length;
+    return rows.length + (await this.eraseDocumentDrafts(transaction, input));
   }
 
   /**
@@ -646,6 +748,7 @@ export class PostgresResumeProposalWriter {
         )
       RETURNING fact.id
     `;
+    const draftsErased = await this.eraseDocumentDrafts(transaction, input);
     const imports = await transaction<Array<{ id: string }>>`
       DELETE FROM profile.resume_fact_imports
       WHERE user_id = ${input.userId} AND document_id = ${input.documentId}
@@ -662,7 +765,7 @@ export class PostgresResumeProposalWriter {
         )
       `;
     }
-    return { proposalsErased: erased.length, importsErased: imports.length };
+    return { proposalsErased: erased.length + draftsErased, importsErased: imports.length };
   }
 }
 
