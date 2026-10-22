@@ -263,6 +263,44 @@ describeWithDatabase("PostgresProfileSectionStore (ADR-052)", () => {
     ).rejects.toThrow(ProfileSectionRestrictedQuestionError);
   });
 
+  it("matches a saved answer only by the exact normalized question key, for its owner", async () => {
+    const owner = await user();
+    const other = await user();
+    const saved = await store.createEntry(
+      owner,
+      "applicationAnswer",
+      { question: "Why do you want to work here?", answer: "Synthetic reason." },
+      key(),
+      trace,
+    );
+    const asked = await store.matchApplicationAnswer(owner, "  WHY do you want to work here?? ");
+    expect(asked).toMatchObject({ id: saved.id, answer: "Synthetic reason." });
+    // Similar wording, other owners and restricted questions never match.
+    expect(await store.matchApplicationAnswer(owner, "Why do you want to join us?")).toBeNull();
+    expect(await store.matchApplicationAnswer(other, "Why do you want to work here?")).toBeNull();
+    expect(
+      await store.matchApplicationAnswer(owner, "Are you authorized to work in the US?"),
+    ).toBeNull();
+    expect(await store.matchApplicationAnswer(owner, "   ")).toBeNull();
+    // An edited answer is what matches afterwards; a deleted one no longer does.
+    await store.updateEntry(
+      owner,
+      "applicationAnswer",
+      saved.id,
+      { expectedVersion: 1, answer: "Edited." },
+      key(),
+      trace,
+    );
+    expect(await store.matchApplicationAnswer(owner, "why do you want to work here")).toMatchObject(
+      {
+        answer: "Edited.",
+        version: 2,
+      },
+    );
+    await store.deleteEntry(owner, "applicationAnswer", saved.id, 2, key(), trace);
+    expect(await store.matchApplicationAnswer(owner, "Why do you want to work here?")).toBeNull();
+  });
+
   it("makes the database refuse invalid content even if the API check is bypassed", async () => {
     const owner = await user();
     const id = uuidv7();
