@@ -53,6 +53,40 @@ export type ProfileFact = components["schemas"]["ProfileFact"];
 export type ProfileFactCollection = components["schemas"]["ProfileFactCollection"];
 export type CreateProfileFactRequest = components["schemas"]["CreateProfileFactRequest"];
 export type UpdateProfileFactRequest = components["schemas"]["UpdateProfileFactRequest"];
+export type ProfilePersonal = components["schemas"]["ProfilePersonal"];
+export type PutProfilePersonalRequest = components["schemas"]["PutProfilePersonalRequest"];
+export type ProfileEducationEntry = components["schemas"]["ProfileEducationEntry"];
+export type ProfileEducationEntryCollection =
+  components["schemas"]["ProfileEducationEntryCollection"];
+export type CreateProfileEducationEntryRequest =
+  components["schemas"]["CreateProfileEducationEntryRequest"];
+export type UpdateProfileEducationEntryRequest =
+  components["schemas"]["UpdateProfileEducationEntryRequest"];
+export type ProfileWorkExperienceEntry = components["schemas"]["ProfileWorkExperienceEntry"];
+export type ProfileWorkExperienceEntryCollection =
+  components["schemas"]["ProfileWorkExperienceEntryCollection"];
+export type CreateProfileWorkExperienceEntryRequest =
+  components["schemas"]["CreateProfileWorkExperienceEntryRequest"];
+export type UpdateProfileWorkExperienceEntryRequest =
+  components["schemas"]["UpdateProfileWorkExperienceEntryRequest"];
+export type ProfileSkillEntry = components["schemas"]["ProfileSkillEntry"];
+export type ProfileSkillEntryCollection = components["schemas"]["ProfileSkillEntryCollection"];
+export type CreateProfileSkillEntryRequest =
+  components["schemas"]["CreateProfileSkillEntryRequest"];
+export type UpdateProfileSkillEntryRequest =
+  components["schemas"]["UpdateProfileSkillEntryRequest"];
+export type ProfileApplicationAnswer = components["schemas"]["ProfileApplicationAnswer"];
+export type ProfileApplicationAnswerCollection =
+  components["schemas"]["ProfileApplicationAnswerCollection"];
+export type CreateProfileApplicationAnswerRequest =
+  components["schemas"]["CreateProfileApplicationAnswerRequest"];
+export type UpdateProfileApplicationAnswerRequest =
+  components["schemas"]["UpdateProfileApplicationAnswerRequest"];
+export type ReorderProfileEntriesRequest = components["schemas"]["ReorderProfileEntriesRequest"];
+export type ProfileEntryReference = components["schemas"]["ProfileEntryReference"];
+export type ProfileImportDraft = components["schemas"]["ProfileImportDraft"];
+export type ProfileImportDraftCollection = components["schemas"]["ProfileImportDraftCollection"];
+export type SaveProfileImportDraftRequest = components["schemas"]["SaveProfileImportDraftRequest"];
 export type RestrictedAnswer = components["schemas"]["RestrictedAnswer"];
 export type RestrictedAnswerCollection = components["schemas"]["RestrictedAnswerCollection"];
 export type SaveRestrictedAnswerRequest = components["schemas"]["SaveRestrictedAnswerRequest"];

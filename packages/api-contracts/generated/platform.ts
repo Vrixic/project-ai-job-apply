@@ -229,6 +229,270 @@ export interface paths {
         patch: operations["updateProfileFact"];
         trace?: never;
     };
+    "/profile/personal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The current candidate's saved Personal record. Returns 404 until the candidate first saves it. */
+        get: operations["getProfilePersonal"];
+        /** @description Replaces the Personal record. Use expectedVersion 0 for the first save and the current version afterwards; fields left out are cleared. */
+        put: operations["putProfilePersonal"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/education-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Latest versions of the current candidate's saved education entries, in display order. */
+        get: operations["listProfileEducationEntries"];
+        put?: never;
+        /** @description Saves a new candidate-entered education entry. */
+        post: operations["createProfileEducationEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/education-entries/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Sets the display order. The list must name every saved entry of the section exactly once. */
+        post: operations["reorderProfileEducationEntries"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/education-entries/{entryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Deletes the saved record by writing a tombstone version. The current version must be named. */
+        delete: operations["deleteProfileEducationEntry"];
+        options?: never;
+        head?: never;
+        /** @description Creates a new immutable version. Optional fields set to null are cleared. */
+        patch: operations["updateProfileEducationEntry"];
+        trace?: never;
+    };
+    "/profile/work-experience-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Latest versions of the current candidate's saved work experience entries, in display order. */
+        get: operations["listProfileWorkExperienceEntries"];
+        put?: never;
+        /** @description Saves a new candidate-entered work experience entry. */
+        post: operations["createProfileWorkExperienceEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/work-experience-entries/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Sets the display order. The list must name every saved entry of the section exactly once. */
+        post: operations["reorderProfileWorkExperienceEntries"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/work-experience-entries/{entryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Deletes the saved record by writing a tombstone version. The current version must be named. */
+        delete: operations["deleteProfileWorkExperienceEntry"];
+        options?: never;
+        head?: never;
+        /** @description Creates a new immutable version. Optional fields set to null are cleared. */
+        patch: operations["updateProfileWorkExperienceEntry"];
+        trace?: never;
+    };
+    "/profile/skill-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Latest versions of the current candidate's saved skill entries, in display order. */
+        get: operations["listProfileSkillEntries"];
+        put?: never;
+        /** @description Saves a new candidate-entered skill entry. */
+        post: operations["createProfileSkillEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/skill-entries/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Sets the display order. The list must name every saved entry of the section exactly once. */
+        post: operations["reorderProfileSkillEntries"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/skill-entries/{entryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Deletes the saved record by writing a tombstone version. The current version must be named. */
+        delete: operations["deleteProfileSkillEntry"];
+        options?: never;
+        head?: never;
+        /** @description Creates a new immutable version. Optional fields set to null are cleared. */
+        patch: operations["updateProfileSkillEntry"];
+        trace?: never;
+    };
+    "/profile/application-answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Latest versions of the current candidate's saved application answers. */
+        get: operations["listProfileApplicationAnswers"];
+        put?: never;
+        /** @description Saves a new candidate-entered application answer. */
+        post: operations["createProfileApplicationAnswer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/application-answers/{answerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Deletes the saved record by writing a tombstone version. The current version must be named. */
+        delete: operations["deleteProfileApplicationAnswer"];
+        options?: never;
+        head?: never;
+        /** @description Creates a new immutable version. Optional fields set to null are cleared. */
+        patch: operations["updateProfileApplicationAnswer"];
+        trace?: never;
+    };
+    "/profile/import-drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Draft entries parsed from the candidate's resume uploads. Drafts are not part of the profile until saved. */
+        get: operations["listProfileImportDrafts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/import-drafts/{draftId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Discards one draft. Repeating the call after it is gone returns 404. */
+        delete: operations["discardProfileImportDraft"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile/import-drafts/{draftId}/save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Saves the draft as a profile record, optionally with the candidate's edited values. A personal draft requires expectedPersonalVersion. */
+        post: operations["saveProfileImportDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/profile/restricted-answers": {
         parameters: {
             query?: never;
@@ -1488,6 +1752,269 @@ export interface components {
             facts: components["schemas"]["ProfileFact"][];
             confirmedCount: number;
             proposedCount: number;
+        };
+        /** @enum {string} */
+        ProfileEntryOrigin: "entered" | "imported";
+        ProfilePersonal: {
+            fullName?: string;
+            /** Format: email */
+            email?: string;
+            phone?: string;
+            address?: {
+                street?: string;
+                city?: string;
+                region?: string;
+                postalCode?: string;
+                country?: string;
+            };
+            links?: {
+                /** @enum {string} */
+                kind: "linkedin" | "github" | "portfolio" | "other";
+                /** Format: uri */
+                url: string;
+            }[];
+            version: number;
+            /** @enum {string} */
+            origin: "entered" | "imported";
+            /** Format: uuid */
+            importId?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        PutProfilePersonalRequest: {
+            expectedVersion: number;
+            fullName?: string;
+            /** Format: email */
+            email?: string;
+            phone?: string;
+            address?: {
+                street?: string;
+                city?: string;
+                region?: string;
+                postalCode?: string;
+                country?: string;
+            };
+            links?: {
+                /** @enum {string} */
+                kind: "linkedin" | "github" | "portfolio" | "other";
+                /** Format: uri */
+                url: string;
+            }[];
+        };
+        ProfileEducationEntry: {
+            /** Format: uuid */
+            id: string;
+            school: string;
+            degree?: string;
+            fieldOfStudy?: string;
+            /** Format: date */
+            startDate?: string;
+            /** Format: date */
+            endDate?: string;
+            version: number;
+            /** @enum {string} */
+            origin: "entered" | "imported";
+            /** Format: uuid */
+            importId?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            displayOrder: number;
+        };
+        CreateProfileEducationEntryRequest: {
+            school: string;
+            degree?: string;
+            fieldOfStudy?: string;
+            /** Format: date */
+            startDate?: string;
+            /** Format: date */
+            endDate?: string;
+        };
+        UpdateProfileEducationEntryRequest: {
+            expectedVersion: number;
+            school?: string;
+            degree?: string | null;
+            fieldOfStudy?: string | null;
+            startDate?: string | null;
+            endDate?: string | null;
+        };
+        ProfileEducationEntryCollection: {
+            entries: components["schemas"]["ProfileEducationEntry"][];
+        };
+        ProfileWorkExperienceEntry: {
+            /** Format: uuid */
+            id: string;
+            company: string;
+            title: string;
+            location?: string;
+            /** Format: date */
+            startDate: string;
+            /** Format: date */
+            endDate?: string;
+            bullets?: string[];
+            version: number;
+            /** @enum {string} */
+            origin: "entered" | "imported";
+            /** Format: uuid */
+            importId?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            displayOrder: number;
+        };
+        CreateProfileWorkExperienceEntryRequest: {
+            company: string;
+            title: string;
+            location?: string;
+            /** Format: date */
+            startDate: string;
+            /** Format: date */
+            endDate?: string;
+            bullets?: string[];
+        };
+        UpdateProfileWorkExperienceEntryRequest: {
+            expectedVersion: number;
+            company?: string;
+            title?: string;
+            location?: string | null;
+            /** Format: date */
+            startDate?: string;
+            endDate?: string | null;
+            bullets?: string[] | null;
+        };
+        ProfileWorkExperienceEntryCollection: {
+            entries: components["schemas"]["ProfileWorkExperienceEntry"][];
+        };
+        ProfileSkillEntry: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            category?: string;
+            version: number;
+            /** @enum {string} */
+            origin: "entered" | "imported";
+            /** Format: uuid */
+            importId?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            displayOrder: number;
+        };
+        CreateProfileSkillEntryRequest: {
+            name: string;
+            category?: string;
+        };
+        UpdateProfileSkillEntryRequest: {
+            expectedVersion: number;
+            name?: string;
+            category?: string | null;
+        };
+        ProfileSkillEntryCollection: {
+            entries: components["schemas"]["ProfileSkillEntry"][];
+        };
+        ProfileApplicationAnswer: {
+            /** Format: uuid */
+            id: string;
+            question: string;
+            answer: string;
+            version: number;
+            /** @enum {string} */
+            origin: "entered" | "imported";
+            /** Format: uuid */
+            importId?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            questionKey: string;
+        };
+        CreateProfileApplicationAnswerRequest: {
+            question: string;
+            answer: string;
+        };
+        UpdateProfileApplicationAnswerRequest: {
+            expectedVersion: number;
+            question?: string;
+            answer?: string;
+        };
+        ProfileApplicationAnswerCollection: {
+            answers: components["schemas"]["ProfileApplicationAnswer"][];
+        };
+        ReorderProfileEntriesRequest: {
+            orderedEntryIds: string[];
+        };
+        ProfileEntryReference: {
+            /** @constant */
+            section: "personal";
+            version: number;
+        } | {
+            /** @enum {string} */
+            section: "education" | "workExperience" | "skill" | "applicationAnswer";
+            /** Format: uuid */
+            entryId: string;
+            version: number;
+        };
+        ProfileImportDraftValues: {
+            fullName?: string;
+            /** Format: email */
+            email?: string;
+            phone?: string;
+            address?: {
+                street?: string;
+                city?: string;
+                region?: string;
+                postalCode?: string;
+                country?: string;
+            };
+            links?: {
+                /** @enum {string} */
+                kind: "linkedin" | "github" | "portfolio" | "other";
+                /** Format: uri */
+                url: string;
+            }[];
+        } | {
+            school: string;
+            degree?: string;
+            fieldOfStudy?: string;
+            /** Format: date */
+            startDate?: string;
+            /** Format: date */
+            endDate?: string;
+        } | {
+            company: string;
+            title: string;
+            location?: string;
+            /** Format: date */
+            startDate: string;
+            /** Format: date */
+            endDate?: string;
+            bullets?: string[];
+        } | {
+            name: string;
+            category?: string;
+        };
+        ProfileImportDraft: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            importId: string;
+            /** @enum {string} */
+            section: "personal" | "education" | "workExperience" | "skill";
+            values: components["schemas"]["ProfileImportDraftValues"];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ProfileImportDraftCollection: {
+            drafts: components["schemas"]["ProfileImportDraft"][];
+        };
+        SaveProfileImportDraftRequest: {
+            values?: components["schemas"]["ProfileImportDraftValues"];
+            expectedPersonalVersion?: number;
         };
         RestrictedAnswerFieldKey: string;
         RestrictedAnswer: {
@@ -3445,6 +3972,742 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProfileFact"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    getProfilePersonal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The saved Personal record */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfilePersonal"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putProfilePersonal: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutProfilePersonalRequest"];
+            };
+        };
+        responses: {
+            /** @description A new immutable version of the Personal record was saved */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfilePersonal"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    listProfileEducationEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved education entries owned by the current candidate */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileEducationEntryCollection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createProfileEducationEntry: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProfileEducationEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileEducationEntry"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    reorderProfileEducationEntries: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderProfileEntriesRequest"];
+            };
+        };
+        responses: {
+            /** @description The reordered entries */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileEducationEntryCollection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    deleteProfileEducationEntry: {
+        parameters: {
+            query: {
+                expectedVersion: number;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                entryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateProfileEducationEntry: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                entryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfileEducationEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description A new immutable version was saved */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileEducationEntry"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    listProfileWorkExperienceEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved work experience entries owned by the current candidate */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileWorkExperienceEntryCollection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createProfileWorkExperienceEntry: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProfileWorkExperienceEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileWorkExperienceEntry"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    reorderProfileWorkExperienceEntries: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderProfileEntriesRequest"];
+            };
+        };
+        responses: {
+            /** @description The reordered entries */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileWorkExperienceEntryCollection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    deleteProfileWorkExperienceEntry: {
+        parameters: {
+            query: {
+                expectedVersion: number;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                entryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateProfileWorkExperienceEntry: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                entryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfileWorkExperienceEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description A new immutable version was saved */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileWorkExperienceEntry"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    listProfileSkillEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved skill entries owned by the current candidate */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileSkillEntryCollection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createProfileSkillEntry: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProfileSkillEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileSkillEntry"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    reorderProfileSkillEntries: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderProfileEntriesRequest"];
+            };
+        };
+        responses: {
+            /** @description The reordered entries */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileSkillEntryCollection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    deleteProfileSkillEntry: {
+        parameters: {
+            query: {
+                expectedVersion: number;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                entryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateProfileSkillEntry: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                entryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfileSkillEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description A new immutable version was saved */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileSkillEntry"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    listProfileApplicationAnswers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved application answers owned by the current candidate */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileApplicationAnswerCollection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createProfileApplicationAnswer: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProfileApplicationAnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileApplicationAnswer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    deleteProfileApplicationAnswer: {
+        parameters: {
+            query: {
+                expectedVersion: number;
+            };
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                answerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateProfileApplicationAnswer: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                answerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfileApplicationAnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description A new immutable version was saved */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileApplicationAnswer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    listProfileImportDrafts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unsaved import drafts */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileImportDraftCollection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    discardProfileImportDraft: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discarded */
+            204: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    saveProfileImportDraft: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveProfileImportDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description The saved record's reference */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileEntryReference"];
                 };
             };
             400: components["responses"]["BadRequest"];

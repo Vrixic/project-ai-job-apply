@@ -66,6 +66,12 @@
       "file": "candidate-data-export.schema.json",
       "owner": "profile",
       "classification": "confidential_or_restricted"
+    },
+    {
+      "name": "ProfileSections",
+      "file": "profile-sections.schema.json",
+      "owner": "profile",
+      "classification": "confidential"
     }
   ]
 }
