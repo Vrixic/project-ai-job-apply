@@ -5,8 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { fillGreenhouseFields } from "../lib/greenhouse/fill";
 import {
   greenhouseApplicationIdentity,
+  greenhouseChallengePresent,
   inspectGreenhouseApplication,
 } from "../lib/greenhouse/inspect";
+import { greenhouseProvider } from "../lib/greenhouse/provider";
 
 const URL = "https://boards.greenhouse.io/synthetic/jobs/123";
 const EMAIL =
@@ -374,4 +376,72 @@ describe("Greenhouse local adapter primitives", () => {
       expect(change).not.toHaveBeenCalled();
     },
   );
+});
+
+// Synthetic page whose structure follows a public job-boards.greenhouse.io board inspected read-only
+// on 2026-10-22 (ADR-053): id-only controls, a custom combobox with a hidden required shim, and an
+// invisible reCAPTCHA badge outside the form. It is not provider evidence.
+const BOARD = `
+  <form id="application-form" class="application--form" method="get">
+    <div><label id="first_name-label" for="first_name">First Name<span aria-hidden="true">*</span></label>
+      <input id="first_name" class="input" aria-label="First Name" aria-required="true" type="text"></div>
+    <div><label id="email-label" for="email">Email<span aria-hidden="true">*</span></label>
+      <input id="email" class="input" aria-label="Email" aria-required="true" type="text" autocomplete="email"></div>
+    <div><label id="question_1-label" for="question_1">Do you require visa sponsorship? *</label>
+      <input id="question_1" class="select__input" type="text" role="combobox" aria-haspopup="true"
+        aria-autocomplete="list" aria-required="true">
+      <input required tabindex="-1" aria-hidden="true" value=""></div>
+    <div><label id="website-label" for="website">Website</label>
+      <input id="website" class="input" aria-label="Website" aria-required="false" type="text"></div>
+    <button type="submit">Submit application</button>
+  </form>
+  <div class="grecaptcha-badge"><iframe src="https://www.recaptcha.net/recaptcha/enterprise/anchor"></iframe></div>`;
+const board = () => {
+  window.history.replaceState(null, "", URL);
+  document.body.innerHTML = BOARD;
+  return document;
+};
+
+describe("modern Greenhouse board page (ADR-053)", () => {
+  it("inspects despite the invisible reCAPTCHA badge and the combobox shim", () => {
+    const doc = board();
+    expect(greenhouseChallengePresent(doc)).toBe(false);
+    const inspected = inspectGreenhouseApplication(doc, URL);
+    expect(inspected.form.challengePresent).toBe(false);
+    expect(inspected.form.fields.map((field) => [field.name, field.type, field.required])).toEqual([
+      ["first_name", "text", true],
+      ["email", "text", true],
+      ["question_1", "unknown", true],
+      ["website", "text", false],
+    ]);
+    inspected.dispose();
+  });
+
+  it("treats a visible challenge frame or a credential prompt as a challenge", () => {
+    const doc = board();
+    doc.body.insertAdjacentHTML(
+      "beforeend",
+      '<div><iframe src="https://www.recaptcha.net/recaptcha/enterprise/bframe"></iframe></div>',
+    );
+    expect(greenhouseChallengePresent(doc)).toBe(true);
+    board();
+    document.body.insertAdjacentHTML("beforeend", '<input type="password">');
+    expect(greenhouseChallengePresent(document)).toBe(true);
+  });
+
+  it("asks a required control to be completed by the candidate before any click", () => {
+    const doc = board();
+    const inspected = inspectGreenhouseApplication(doc, URL);
+    const email = inspected.resolve("f1");
+    const website = inspected.resolve("f3");
+    expect(greenhouseProvider.controlsSatisfied(email, true)).toBe(false);
+    // An optional empty control does not block.
+    expect(greenhouseProvider.controlsSatisfied(website, false)).toBe(true);
+    (email[0] as HTMLInputElement).value = "candidate@example.invalid";
+    expect(greenhouseProvider.controlsSatisfied(email, true)).toBe(true);
+    // A combobox is judged by the form's own required shim at submit time.
+    expect(greenhouseProvider.controlsSatisfied(inspected.resolve("f2"), true)).toBe(true);
+    expect(greenhouseProvider.rootValid(greenhouseProvider.root(doc))).toBe(false);
+    inspected.dispose();
+  });
 });

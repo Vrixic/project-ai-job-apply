@@ -160,17 +160,10 @@ export async function executeApplication(options: {
     // Required candidate-only controls may already be completed; inspect validity, never values.
     for (const action of takeover ? [] : plan.actions) {
       if (action.kind !== "require_user") continue;
-      for (const control of inspection.resolve(action.ref)) {
-        if (
-          !(
-            control instanceof view.HTMLInputElement ||
-            control instanceof view.HTMLSelectElement ||
-            control instanceof view.HTMLTextAreaElement
-          ) ||
-          !control.validity.valid
-        )
-          return { kind: "precondition_failed" };
-      }
+      const required =
+        inspection.form.fields.find((field) => field.ref === action.ref)?.required === true;
+      if (!provider.controlsSatisfied(inspection.resolve(action.ref), required))
+        return { kind: "precondition_failed" };
     }
     const button = provider.submitControl(root, profile);
     actionable(button);

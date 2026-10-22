@@ -1,5 +1,47 @@
 import type { ApplicationFormModel, FormField, FormFieldType } from "./form-model.js";
 
+const WIDGET_CHALLENGE_SELECTOR =
+  'iframe[src*="hcaptcha"], iframe[src*="turnstile"], .h-captcha, .cf-turnstile, [class*="captcha" i]:not([class*="recaptcha" i]), [id*="captcha" i]:not([id*="recaptcha" i])';
+const RECAPTCHA_WIDGET_SELECTOR = ".g-recaptcha, [data-sitekey]";
+
+/** Whether the element, or any ancestor, is not shown. Computed style only; no layout is read. */
+function hiddenByStyle(element: Element): boolean {
+  const view = element.ownerDocument.defaultView;
+  if (!view) return false; // cannot tell, so treat it as shown (fail closed)
+  for (let node: Element | null = element; node; node = node.parentElement) {
+    const style = view.getComputedStyle(node);
+    if (
+      node.hasAttribute("hidden") ||
+      style.display === "none" ||
+      style.visibility === "hidden" ||
+      style.visibility === "collapse" ||
+      style.opacity === "0"
+    )
+      return true;
+  }
+  return false;
+}
+
+/**
+ * An interactive CAPTCHA the candidate would have to solve (ADR-053). The invisible reCAPTCHA
+ * badge, its response field and its hidden challenge frame are not one: they sit on most ATS pages
+ * and need no action. A visible challenge frame, a checkbox widget, hCaptcha or Turnstile is one.
+ * This only classifies the page; nothing is ever solved, read or bypassed.
+ */
+export function interactiveCaptchaPresent(root: ParentNode): boolean {
+  if (root.querySelector(WIDGET_CHALLENGE_SELECTOR) !== null) return true;
+  for (const widget of Array.from(root.querySelectorAll(RECAPTCHA_WIDGET_SELECTOR))) {
+    if (widget.closest(".grecaptcha-badge") || widget.getAttribute("data-size") === "invisible")
+      continue;
+    return true;
+  }
+  for (const frame of Array.from(root.querySelectorAll('iframe[src*="recaptcha"]'))) {
+    if (frame.closest(".grecaptcha-badge")) continue;
+    if (!hiddenByStyle(frame)) return true;
+  }
+  return false;
+}
+
 /**
  * Provider-neutral extraction from standard form semantics only (labels, aria, fieldsets). It reads
  * structure and never reads or records any value a candidate typed. Hidden, disabled, and
@@ -7,9 +49,42 @@ import type { ApplicationFormModel, FormField, FormFieldType } from "./form-mode
  * field, option or normalized text limits are exceeded. Callers must leave the page to the candidate.
  */
 export function extractGenericForm(root: ParentNode = document): ApplicationFormModel {
-  const CHALLENGE_SELECTOR =
-    'iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="turnstile"], .g-recaptcha, .h-captcha, [data-sitekey], [class*="captcha" i], [id*="captcha" i]';
-
+  // Serialized into the page with this function, so it cannot import the exported classifier; a test
+  // keeps the two identical in behavior.
+  function captchaPresent(scope: ParentNode): boolean {
+    const hidden = (element: Element): boolean => {
+      const view = element.ownerDocument.defaultView;
+      if (!view) return false; // cannot tell, so treat it as shown (fail closed)
+      for (let node: Element | null = element; node; node = node.parentElement) {
+        const style = view.getComputedStyle(node);
+        if (
+          node.hasAttribute("hidden") ||
+          style.display === "none" ||
+          style.visibility === "hidden" ||
+          style.visibility === "collapse" ||
+          style.opacity === "0"
+        )
+          return true;
+      }
+      return false;
+    };
+    if (
+      scope.querySelector(
+        'iframe[src*="hcaptcha"], iframe[src*="turnstile"], .h-captcha, .cf-turnstile, [class*="captcha" i]:not([class*="recaptcha" i]), [id*="captcha" i]:not([id*="recaptcha" i])',
+      ) !== null
+    )
+      return true;
+    for (const widget of Array.from(scope.querySelectorAll(".g-recaptcha, [data-sitekey]"))) {
+      if (widget.closest(".grecaptcha-badge") || widget.getAttribute("data-size") === "invisible")
+        continue;
+      return true;
+    }
+    for (const frame of Array.from(scope.querySelectorAll('iframe[src*="recaptcha"]'))) {
+      if (frame.closest(".grecaptcha-badge")) continue;
+      if (!hidden(frame)) return true;
+    }
+    return false;
+  }
   const MAX_FIELDS = 200;
   const MAX_OPTIONS = 250;
   const MAX_LABEL = 300;
@@ -69,6 +144,14 @@ export function extractGenericForm(root: ParentNode = document): ApplicationForm
 
   function fieldType(element: Element): FormFieldType {
     const tag = element.tagName.toLowerCase();
+    // A custom combobox (for example react-select) holds its chosen value outside the input, so
+    // writing text into it selects nothing. Hand it to the candidate rather than guess.
+    if (
+      element.getAttribute("role") === "combobox" ||
+      element.hasAttribute("aria-haspopup") ||
+      element.hasAttribute("aria-autocomplete")
+    )
+      return "unknown";
     if (tag === "textarea") return "textarea";
     if (tag === "select") return "select";
     const type = (element.getAttribute("type") ?? "text").toLowerCase();
@@ -119,9 +202,12 @@ export function extractGenericForm(root: ParentNode = document): ApplicationForm
   for (const control of Array.from(controls)) {
     const type = fieldType(control);
     const inputType = (control.getAttribute("type") ?? "").toLowerCase();
+    // A control hidden from assistive technology and the tab order is not something a person can
+    // operate; custom widgets use one as a validation shim for the visible combobox.
     if (
       ["hidden", "submit", "button", "reset", "image", "password"].includes(inputType) ||
-      control.hasAttribute("disabled")
+      control.hasAttribute("disabled") ||
+      (control.getAttribute("aria-hidden") === "true" && control.getAttribute("tabindex") === "-1")
     ) {
       continue;
     }
@@ -173,5 +259,5 @@ export function extractGenericForm(root: ParentNode = document): ApplicationForm
       options,
     });
   }
-  return { fields, challengePresent: root.querySelector(CHALLENGE_SELECTOR) !== null };
+  return { fields, challengePresent: captchaPresent(root) };
 }
