@@ -29,8 +29,10 @@ export type ExtensionHandoffState =
 /**
  * Shown once the candidate pressed Apply. The employer page is open and, when the extension is
  * installed, it already knows this application and which resume to use. Nothing is submitted from
- * here or by the extension: the candidate confirms every sensitive answer and the final submit on
- * the employer page. Recording what happened opens a small dialog, so the page stays minimal.
+ * here. For Greenhouse and Ashby the candidate answers every sensitive question on the employer
+ * page and then presses the extension's fill-and-submit button, which submits once (ADR-053);
+ * anywhere else the candidate submits by hand. Recording what happened opens a small dialog, so the
+ * page stays minimal.
  */
 export function ApplyPanel({
   application,
@@ -154,7 +156,9 @@ export function ApplyPanel({
         <p role="status">The extension did not answer. Finish on the employer's page by hand.</p>
       ) : handoff.phase !== "none" ? (
         <p role="status">
-          Open the ApplyDash extension on the employer's page. It will use your {resumeName}.
+          Answer any sensitive questions yourself on the employer's page, then open the ApplyDash
+          extension and press "Fill and submit my application". It will use your {resumeName} and
+          submit once. If it cannot, finish by hand.
         </p>
       ) : null}
       {href && !expired && !withheld ? (

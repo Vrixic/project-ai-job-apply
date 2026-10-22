@@ -48,7 +48,7 @@ export function mountApplicationHandoff() {
               ? "The employer confirmed submission. Return to the application workspace to view history."
               : response.outcome === "unknown"
                 ? "The submission outcome is uncertain. Return to the workspace to review it; do not submit again."
-                : "Application needs review. Check the employer page and current application workspace before continuing.";
+                : "Not submitted by the extension, or not confirmed. Check the employer page, finish by hand if needed, then record the outcome in the application workspace.";
           return;
         }
         if (!response.ok) throw Error();
