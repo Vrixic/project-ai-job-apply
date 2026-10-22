@@ -75,6 +75,8 @@ Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 20
 
 ## Task register
 
+2026-10-22 (owner direction: Greenhouse and Ashby work fully, [ADR-053](../../adr/053-candidate-approved-submission-greenhouse-and-ashby.md)): D3-154 decision and design (this ADR); D3-155 late-bound form for packets with no form binding (Applications binding resolver); D3-156 provider-neutral execution modules in the extension; D3-157 Greenhouse challenge classification, reviewed profile and controls; D3-158 Ashby inspection, fill, attach and submit; D3-159 enable both providers in the execution build. Each lands as its own PR with synthetic-page tests; nothing is run against a live employer by me, and the confirmation markers need the owner's first real run.
+
 D3-147 to D3-151 started and implemented 2026-10-20 on one branch (local source and tests only; no
 deployment, no paid runtime): D3-147 replace the popup material sign-in with authenticated BFF reads
 (ADR-044 superseded); D3-148 server-derived `resumeGeneration` state with loading, failed-with-retry
@@ -375,7 +377,7 @@ remain; privacy reviews were removed 2026-10-22.
 - [ ] Truthful preparation, review, approval, Apply and confirmed-submission history work for the candidate.
 - [ ] Immutable approval bindings and duplicate-submission safety hold.
 - [ ] No generated-content persistence and all-copy expiry within 30 minutes (ADR-038).
-- [ ] The Greenhouse adapter works with a safe manual fallback.
+- [ ] The Greenhouse and Ashby adapters fill, attach and submit after the candidate's approval, with a safe manual fallback.
 - [ ] Candidate export and deletion complete (the canonical rights run is still FAILED) and accountable legal and security review is done.
 
 ## Evidence
