@@ -72,6 +72,7 @@ import { LambdaOriginalResumeClient } from "./original-resume-client.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
 import { KmsRestrictedAnswerCipher } from "./restricted-answer-kms-cipher.js";
 import { resumeLimitsFromEntitlements } from "./resume-limits.js";
+import { createStripeBillingGateway } from "./stripe-billing.js";
 import { LambdaResumeTailoringClient } from "./resume-tailoring-client.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
 
@@ -148,10 +149,16 @@ const privateSavedPageCaptures = new PrivateSavedPageCapturesService(
   new PostgresProfilePrivateCaptureAccountStatus(database.client),
 );
 const matchAssessments = new MatchAssessmentService(store, catalog);
+const billingStore = new PostgresBillingStore(database.client);
 const entitlements = new BillingEntitlementService(
-  new PostgresBillingStore(database.client),
+  billingStore,
   new EntitlementCache({ capacity: 1_000, freshTtlMs: 5_000 }),
 );
+const stripeBilling = createStripeBillingGateway({
+  env: process.env,
+  reader: billingStore,
+  writer: entitlements,
+});
 const documents =
   config.DOCUMENT_UPLOAD_BUCKET && config.DOCUMENT_UPLOAD_KMS_KEY_ARN
     ? new PostgresDocumentStore(
@@ -289,6 +296,7 @@ const app = await createGatewayApplication({
   privateSavedPageCaptures,
   matchAssessments,
   entitlements,
+  ...(stripeBilling ? { stripeBilling } : {}),
   documents,
   ...(candidateDataExportDownloads ? { candidateDataExportDownloads } : {}),
   verifier,

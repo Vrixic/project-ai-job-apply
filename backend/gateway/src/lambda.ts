@@ -93,6 +93,7 @@ import { LambdaOriginalResumeClient } from "./original-resume-client.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
 import { KmsRestrictedAnswerCipher } from "./restricted-answer-kms-cipher.js";
 import { resumeLimitsFromEntitlements } from "./resume-limits.js";
+import { createStripeBillingGateway } from "./stripe-billing.js";
 import { LambdaResumeTailoringClient } from "./resume-tailoring-client.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
 import { SqsOutboxNudgePublisher } from "./sqs-outbox-nudge-publisher.js";
@@ -359,6 +360,17 @@ function allowedRoute(
     new RegExp(`^/v1/material-withdrawals/${APPLICATION_ID}$`, "u").test(path)
   )
     return { acceptsBody: false, protected: true };
+  if (
+    method === "POST" &&
+    (path === "/v1/billing/checkout-sessions" || path === "/v1/billing/portal-sessions")
+  ) {
+    return { acceptsBody: false, protected: true };
+  }
+  // The Stripe webhook is the one public write route. It authenticates itself by verifying the
+  // Stripe signature over the raw body, and the app registers it only when billing is configured.
+  if (method === "POST" && path === "/v1/billing/webhooks/stripe") {
+    return { acceptsBody: true, protected: false };
+  }
   if (PROTECTED_EXACT_ROUTES.has(`${method} ${path}`)) {
     return { acceptsBody: method === "PUT" || method === "POST", protected: true };
   }
@@ -1211,10 +1223,16 @@ async function createConfiguredApplication(
     new PostgresProfilePrivateCaptureAccountStatus(database.client),
   );
   const matchAssessments = new MatchAssessmentService(store, catalog);
+  const billingStore = new PostgresBillingStore(database.client);
   const entitlements = new BillingEntitlementService(
-    new PostgresBillingStore(database.client),
+    billingStore,
     new EntitlementCache({ capacity: 1_000, freshTtlMs: 5_000 }),
   );
+  const stripeBilling = createStripeBillingGateway({
+    env: process.env,
+    reader: billingStore,
+    writer: entitlements,
+  });
   const documents =
     config.DOCUMENT_UPLOAD_BUCKET && config.DOCUMENT_UPLOAD_KMS_KEY_ARN
       ? new PostgresDocumentStore(
@@ -1336,6 +1354,7 @@ async function createConfiguredApplication(
     privateSavedPageCaptures,
     matchAssessments,
     entitlements,
+    ...(stripeBilling ? { stripeBilling } : {}),
     documents,
     ...(trust ? { trust: trust.service, trustReviewerAssignments: trust.reviewerAssignments } : {}),
     ...(candidateDataExportDownloads ? { candidateDataExportDownloads } : {}),
