@@ -77,3 +77,4 @@ ADRs are immutable historical records after acceptance. A new ADR supersedes an 
 - [ADR-052: Structured candidate Profile replaces profile facts](052-structured-candidate-profile.md) (accepted 2026-10-22; implementation not started)
 - [ADR-053: Candidate-approved submission for Greenhouse and Ashby](053-candidate-approved-submission-greenhouse-and-ashby.md) (accepted 2026-10-22; owner-directed, implementation in progress)
 - [ADR-054: Automated vetting of contributed job sources](054-automated-source-vetting.md) (accepted 2026-10-22; owner-directed, code in progress, no deployment)
+- [ADR-055: Notifications-owned inbox and delivery preferences](055-notifications-inbox-and-preferences.md) (accepted 2026-10-22; owner-approved schema, service built, not deployed)

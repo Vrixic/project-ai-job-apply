@@ -12,7 +12,7 @@ Last updated: 2026-10-22. Program status: In progress. Started: 2026-07-27. Comp
 | D3 | High-quality application preparation | In progress | 2026-09-18 | Not completed | [Phase 3 tasks](phase-3-application-preparation.md) |
 | D3.1 | Structured candidate profile | In progress | 2026-10-22 | Not completed | [Phase 3.1 tasks](phase-3-1-structured-profile.md) |
 | D4 | Workday and remote preparation | Not started | Not started | Not completed | [Phase 4 tasks](phase-4-workday-and-remote.md) |
-| D5 | Personalized outreach and application notifications | Not started | Not started | Not completed | [Phase 5 tasks](phase-5-outreach-and-notifications.md) |
+| D5 | Personalized outreach and application notifications | In progress | 2026-10-22 | Not completed | [Phase 5 tasks](phase-5-outreach-and-notifications.md) |
 | D6 | Mobile and paid launch | In progress | 2026-09-28 | Not completed | [Phase 6 tasks](phase-6-mobile-and-paid.md) |
 | D7 | Quality optimization, expansion, and optional employer product | Not started | Not started | Not completed | [Phase 7 tasks](phase-7-quality-and-expansion.md) |
 
