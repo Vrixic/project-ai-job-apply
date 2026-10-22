@@ -113,7 +113,9 @@ export async function executeApplication(options: {
     : undefined;
   const confirmationNodes = () =>
     Array.from(document.querySelectorAll(profile.confirmationSelector)).filter(
-      (node) => !confirmationText || confirmationText.test(node.textContent ?? ""),
+      (node) =>
+        (!profile.confirmationLeafOnly || node.childElementCount === 0) &&
+        (!confirmationText || confirmationText.test(node.textContent ?? "")),
     );
   const confirmation = () => {
     const matches = confirmationNodes();
@@ -372,15 +374,8 @@ export async function executeApplication(options: {
           },
         };
       }
-      // After a confirmation navigation the form is gone; keep waiting for the message itself.
-      if (document.location.href === options.employerUrl) {
-        const inspected = provider.inspect(document, options.employerUrl);
-        try {
-          if (inspected.form.challengePresent) return { kind: "challenge_required" };
-        } finally {
-          inspected.dispose();
-        }
-      }
+      // The form may be replaced by the confirmation message, so only the document-wide challenge
+      // scan above applies here; a missing message ends in a timeout the candidate reconciles.
       await Promise.race([new Promise<void>((resolve) => setTimeout(resolve, 200)), stopped]);
     }
     return { kind: "timeout" };

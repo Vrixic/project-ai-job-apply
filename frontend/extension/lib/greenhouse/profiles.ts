@@ -1,16 +1,8 @@
+import { applicationImplementationSha256 } from "../providers/implementation";
 import type { ExecutionProfile } from "../providers/types";
 
 /** The Greenhouse profile type predates the second provider and stays as a name for it. */
 export type GreenhouseExecutionProfile = ExecutionProfile;
-
-declare const __APPLICATION_IMPLEMENTATION_SHA256__: string | undefined;
-
-/** The build binds the registry evidence to the exact provider code it was built from. */
-export const applicationImplementationSha256 =
-  typeof __APPLICATION_IMPLEMENTATION_SHA256__ === "string" &&
-  /^[a-f0-9]{64}$/u.test(__APPLICATION_IMPLEMENTATION_SHA256__)
-    ? __APPLICATION_IMPLEMENTATION_SHA256__
-    : "0".repeat(64);
 
 export const greenhouseAdapterVersion = "1.0.0";
 export const greenhouseVariantId = "greenhouse-standard-v1";

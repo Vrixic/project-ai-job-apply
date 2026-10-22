@@ -475,7 +475,7 @@ describe("adapter registry gate", () => {
     for (const [provider, variants] of [
       ["greenhouse", ["greenhouse-standard-v1"]],
       ["lever", []],
-      ["ashby", []],
+      ["ashby", ["ashby-standard-v1"]],
     ] as const) {
       const declaration = ADAPTER_DECLARATIONS.find((entry) => entry.provider === provider);
       expect(declaration?.variants).toEqual(variants);

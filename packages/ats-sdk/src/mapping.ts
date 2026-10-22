@@ -17,6 +17,11 @@ const SYNONYMS: readonly Synonym[] = [
     key: "identity.legal_name.first",
     patterns: [/^(?:legal\s+)?first\s+name$/u, /\bgiven\s+name\b/u],
   },
+  {
+    // The packet derives this from the first and last name (ADR-053); it is not stored itself.
+    key: "identity.legal_name.full",
+    patterns: [/^(?:(?:full|legal|your)\s+)?name$/u],
+  },
   { key: "identity.legal_name.middle", patterns: [/^middle\s+(?:name|initial)$/u] },
   {
     key: "identity.legal_name.last",

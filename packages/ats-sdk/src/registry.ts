@@ -81,8 +81,8 @@ export const ADAPTER_DECLARATIONS: readonly AdapterDeclaration[] = [
   {
     id: "ashby-application-v1",
     provider: "ashby",
-    version: "0.0.0",
-    variants: [],
+    version: "1.0.0",
+    variants: ["ashby-standard-v1"],
     capabilities: { autofill: true, fileAttach: true, confirmationDetection: true },
   },
   {

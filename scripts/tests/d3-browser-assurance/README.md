@@ -31,6 +31,13 @@ are intercepted and form submission is prevented: zero actual uploads or externa
 The background and content-entry regressions separately cover write-ahead dispatch, lost
 acknowledgements, exact proof ownership and complete payload disposal during stalled hashing.
 
+`node scripts/tests/d3-browser-assurance/ashby-execution.mjs` runs 8 synthetic cases against a page
+shaped like a public hosted Ashby posting (no form element, Yes/No button pair, sibling submit
+button, invisible reCAPTCHA badge) with a real File/DataTransfer resume attach, one submit click
+and in-place confirmation. It also checks the off switch, an unanswered required question, a
+changed form, a challenge before and after the click, a missing confirmation message and an
+unexpected navigation. Requests are intercepted: zero uploads or external submissions.
+
 ## Try the generate-then-apply flow by hand
 
 `pnpm playground:d3-apply` (opens your browser) serves the production candidate

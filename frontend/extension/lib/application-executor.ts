@@ -16,6 +16,7 @@ import {
 import { activeJobRevisionDigestInput } from "@ai-job-apply/api-contracts/job-revision-canonical";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 import { applicationExecutionApi } from "./application-execution-api";
+import { commandFieldsFromPacket } from "./command-fields";
 import { plainHttpsUrl, readJson } from "./application-handoff";
 import type { NativeTransferSelection, TransferredNativeFile } from "./native-material-transfer";
 import { sameNativeTransferBinding } from "./native-transfer-binding";
@@ -450,23 +451,7 @@ export async function executeApprovedApplication(options: {
       variantId: profile.variantId,
       adapterVersion: profile.adapterVersion,
       deadline,
-      fields: originalPacket.fields
-        .filter(
-          (field) =>
-            field.origin !== "answer_vault" &&
-            !field.reasons.includes("restricted_answer") &&
-            !/^(?:authorization|demographic|disclosure|attestation|signature|challenge|captcha|mfa|documents?)\./u.test(
-              field.fieldKey,
-            ),
-        )
-        .map((field) => ({
-          fieldKey: field.fieldKey,
-          value: field.value,
-          needsUserAction:
-            field.disposition === "user_action" ||
-            field.reasons.includes("direct_user_action") ||
-            field.origin === "generated",
-        })),
+      fields: commandFieldsFromPacket(originalPacket),
       files: options.owned.files.map((file) => ({
         kind: file.kind,
         ...(file.generationId ? { generationId: file.generationId } : {}),

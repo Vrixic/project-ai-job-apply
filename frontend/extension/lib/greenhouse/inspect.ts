@@ -1,5 +1,6 @@
-import { extractGenericForm, interactiveCaptchaPresent } from "@ai-job-apply/ats-sdk/extract";
+import { extractGenericForm } from "@ai-job-apply/ats-sdk/extract";
 import { formStructureDigestInput } from "@ai-job-apply/ats-sdk/observed-form";
+import { pageChallengePresent } from "../providers/challenge";
 
 export interface GreenhouseInspection {
   identity: { tenant: string; jobId: string };
@@ -12,18 +13,11 @@ export interface GreenhouseInspection {
 const HOSTS = new Set(["boards.greenhouse.io", "job-boards.greenhouse.io"]);
 const TENANT = /^[a-zA-Z0-9_-]{1,100}$/u;
 const JOB = /^[0-9]{1,20}$/u;
-// An invisible reCAPTCHA badge is on every board page and is not a challenge (ADR-053).
-const CREDENTIAL_PROMPT = 'input[autocomplete="one-time-code"], input[type="password"]';
 const refused = () => new Error("GreenhouseInspectionUnavailable");
 
 /** Global stop signal also applies after the application form has disappeared. */
 export function greenhouseChallengePresent(document: Document): boolean {
-  const walker = document.createTreeWalker(document, 1);
-  let nodes = 0;
-  while (walker.nextNode()) {
-    if (++nodes > 10_000) throw refused();
-  }
-  return document.querySelector(CREDENTIAL_PROMPT) !== null || interactiveCaptchaPresent(document);
+  return pageChallengePresent(document, refused);
 }
 
 /** Exact supported host/path metadata only. This is not provider fixture acceptance. */
