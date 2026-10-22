@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { CandidateNameProvider } from "../candidate-name-context";
+import { useInboxUnread } from "../use-inbox-unread";
 
 const navItems = [
   { href: "/jobs", label: "Jobs" },
@@ -22,6 +23,16 @@ export function DashboardShell({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const unread = useInboxUnread(true);
+  // The inbox link appears only when the platform serves an inbox.
+  const items =
+    unread === undefined
+      ? navItems
+      : [
+          navItems[0],
+          { href: "/inbox", label: unread > 0 ? `Inbox (${unread})` : "Inbox" },
+          ...navItems.slice(1),
+        ];
   return (
     <div className="app-shell">
       <header className="app-topbar">
@@ -31,7 +42,7 @@ export function DashboardShell({
       <div className="dashboard">
         <aside className="dashboard-sidebar">
           <nav aria-label="Sections" className="dashboard-nav">
-            {navItems.map((item) => (
+            {items.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

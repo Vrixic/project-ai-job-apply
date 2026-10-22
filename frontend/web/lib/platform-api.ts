@@ -123,6 +123,14 @@ const declaredProblems = new Map<string, Readonly<DeclaredProblem>>([
   ["409:billing_no_account", { code: "billing_no_account", title: "No billing account" }],
   ["503:billing_unavailable", { code: "billing_unavailable", title: "Billing unavailable" }],
   [
+    "409:notifications_version_conflict",
+    { code: "notifications_version_conflict", title: "Preferences changed" },
+  ],
+  [
+    "503:notifications_unavailable",
+    { code: "notifications_unavailable", title: "Notifications unavailable" },
+  ],
+  [
     "400:invalid_application_cursor",
     { code: "invalid_application_cursor", title: "Invalid application cursor" },
   ],

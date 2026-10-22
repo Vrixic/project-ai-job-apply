@@ -284,6 +284,26 @@ const validValues: Record<FoundationResponseSchemaName, unknown> = {
   AccountDeletionRequest: accountDeletionRequest,
   BillingSessionLink: { url: "https://checkout.stripe.com/c/pay/cs_test" },
   BillingSubscriptionSync: { changed: true },
+  NotificationItem: {
+    id: "019d04cf-1f80-7000-8000-00000000a111",
+    kind: "application_review_needed",
+    urgency: "normal",
+    state: "unread",
+    applicationId: "019d04cf-1f80-7000-8000-00000000a222",
+    sourceRevision: 3,
+    createdAt: "2026-10-22T12:00:00.000Z",
+    updatedAt: "2026-10-22T12:00:00.000Z",
+    expiresAt: "2026-10-23T12:00:00.000Z",
+  },
+  NotificationInboxPage: { items: [], unreadCount: 0 },
+  NotificationPreferences: {
+    version: 0,
+    inAppEnabled: true,
+    emailEnabled: false,
+    pushEnabled: false,
+    quietHours: { enabled: false, startMinute: 1320, endMinute: 420, timeZone: "UTC" },
+    updatedAt: "2026-10-22T12:00:00.000Z",
+  },
 };
 const validUpstreamValues: Record<FoundationResponseSchemaName, unknown> = {
   ...validValues,

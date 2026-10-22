@@ -1637,3 +1637,37 @@ aside {
 .profile-entry-field textarea {
   width: 100%;
 }
+
+.inbox-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.inbox-list li {
+  border: 1px solid var(--border, #d0d5dd);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+
+.inbox-list li[data-state="acknowledged"] {
+  opacity: 0.8;
+}
+
+.inbox-list h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.inbox-flag {
+  font-weight: 600;
+}
+
+.inbox-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
