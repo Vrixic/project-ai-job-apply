@@ -24,6 +24,8 @@ export interface ExecutionProfile {
   confirmationSelector: string;
   /** Case-insensitive pattern a candidate node's text must match, when the page has no reference. */
   confirmationText?: string;
+  /** Only elements with no child elements count, so a wrapper's inherited text never matches. */
+  confirmationLeafOnly?: boolean;
   /** Attribute holding the provider's reference; empty when the page shows none. */
   confirmationReferenceAttribute: string;
 }
