@@ -20,7 +20,11 @@ export interface ExecutionProfile {
   adapterVersion: string;
   implementationSha256: string;
   submitSelector: string;
+  /** Candidate nodes for the provider's confirmation message. */
   confirmationSelector: string;
+  /** Case-insensitive pattern a candidate node's text must match, when the page has no reference. */
+  confirmationText?: string;
+  /** Attribute holding the provider's reference; empty when the page shows none. */
   confirmationReferenceAttribute: string;
 }
 
@@ -65,5 +69,10 @@ export interface ApplicationProvider {
    * no (a required control must also be non-empty); the entered value is never kept or sent.
    */
   controlsSatisfied(controls: readonly Element[], required: boolean): boolean;
+  /**
+   * A provider that confirms by moving the same document to another URL (client-side navigation)
+   * says which one. Only honored after the one click; any other URL change stops the run.
+   */
+  isConfirmationUrl?(employerUrl: string, currentUrl: string): boolean;
   profile(variantId: string, adapterVersion: string): Readonly<ExecutionProfile> | undefined;
 }

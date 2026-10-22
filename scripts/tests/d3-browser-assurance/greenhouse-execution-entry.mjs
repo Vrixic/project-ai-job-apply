@@ -15,6 +15,12 @@ window.runGreenhouseExecutionFixture = async (mode) => {
     confirmationSelector: "#synthetic-confirmation",
     confirmationReferenceAttribute: "data-synthetic-reference",
   };
+  if (mode.startsWith("confirmation-url")) {
+    // A board that confirms by moving the same document to its confirmation URL (ADR-053).
+    profile.confirmationSelector = "h1";
+    profile.confirmationText = "thank you for applying";
+    profile.confirmationReferenceAttribute = "";
+  }
   const controls = {
     enabled: { "greenhouse-application-v1": mode !== "off" },
     liveEffectsApproved: true,
@@ -103,7 +109,18 @@ window.runGreenhouseExecutionFixture = async (mode) => {
   document.querySelector("form").addEventListener("submit", (event) => {
     event.preventDefault();
     submits++;
-    if (mode === "generic-thank-you")
+    const moveTo = (path, heading) => {
+      history.pushState(null, "", path);
+      document.querySelector("form").remove();
+      document.body.insertAdjacentHTML("beforeend", `<h1>${heading}</h1>`);
+    };
+    if (mode === "confirmation-url")
+      moveTo("/synthetic/jobs/123/confirmation", "Thank you for applying");
+    else if (mode === "confirmation-url-wrong-page")
+      moveTo("/synthetic/jobs/123/other", "Thank you for applying");
+    else if (mode === "confirmation-url-no-message")
+      moveTo("/synthetic/jobs/123/confirmation", "Something else");
+    else if (mode === "generic-thank-you")
       document.body.insertAdjacentHTML("beforeend", "<p>Thank you</p>");
     else if (mode === "navigation") history.pushState(null, "", "/synthetic/jobs/other");
     else confirm();
@@ -169,7 +186,13 @@ window.runGreenhouseExecutionFixture = async (mode) => {
       files,
       profile,
       registry,
-      deadline: Date.now() + (mode === "generic-thank-you" ? 400 : mode === "expired" ? -1 : 5000),
+      deadline:
+        Date.now() +
+        (["generic-thank-you", "confirmation-url-no-message"].includes(mode)
+          ? 400
+          : mode === "expired"
+            ? -1
+            : 5000),
       signal: controller.signal,
       claim() {
         if (mode === "claim-denied" || claimed) return false;

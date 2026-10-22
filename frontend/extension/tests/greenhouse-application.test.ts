@@ -445,3 +445,28 @@ describe("modern Greenhouse board page (ADR-053)", () => {
     inspected.dispose();
   });
 });
+
+describe("Greenhouse confirmation navigation (ADR-053)", () => {
+  const employer = "https://job-boards.greenhouse.io/acme/jobs/42?jr_id=abc";
+  it.each([
+    ["https://job-boards.greenhouse.io/acme/jobs/42/confirmation", true],
+    ["https://job-boards.greenhouse.io/acme/jobs/42/confirmation?x=1", true],
+    ["https://job-boards.greenhouse.io/acme/jobs/43/confirmation", false],
+    ["https://job-boards.greenhouse.io/other/jobs/42/confirmation", false],
+    ["https://job-boards.greenhouse.io/acme/jobs/42/confirmation/extra", false],
+    ["https://boards.greenhouse.io/acme/jobs/42/confirmation", false],
+    ["https://job-boards.greenhouse.io.evil.invalid/acme/jobs/42/confirmation", false],
+    ["https://user@job-boards.greenhouse.io/acme/jobs/42/confirmation", false],
+    ["https://job-boards.greenhouse.io/acme/jobs/42", false],
+  ])("treats %s as the confirmation page: %s", (current, expected) => {
+    expect(greenhouseProvider.isConfirmationUrl?.(employer, current)).toBe(expected);
+  });
+  it("expects no navigation for an embedded application", () => {
+    expect(
+      greenhouseProvider.isConfirmationUrl?.(
+        "https://job-boards.greenhouse.io/embed/job_app?for=acme&token=42",
+        "https://job-boards.greenhouse.io/acme/jobs/42/confirmation",
+      ),
+    ).toBe(false);
+  });
+});

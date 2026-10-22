@@ -65,11 +65,15 @@ export async function executeApplication(options: {
   });
   // An already aborted operation may never enter a race; keep its rejection handled.
   void stopped.catch(() => undefined);
+  const atExpectedUrl = () =>
+    document.location.href === options.employerUrl ||
+    (submitted &&
+      provider.isConfirmationUrl?.(options.employerUrl, document.location.href) === true);
   const current = () => {
     if (
       !view ||
       controller.signal.aborted ||
-      document.location.href !== options.employerUrl ||
+      !atExpectedUrl() ||
       Date.now() >= deadline ||
       deadline > Date.now() + 60_000 ||
       !Number.isFinite(deadline) ||
@@ -104,19 +108,26 @@ export async function executeApplication(options: {
         throw unavailable();
     }
   };
+  const confirmationText = profile.confirmationText
+    ? new RegExp(profile.confirmationText, "iu")
+    : undefined;
+  const confirmationNodes = () =>
+    Array.from(document.querySelectorAll(profile.confirmationSelector)).filter(
+      (node) => !confirmationText || confirmationText.test(node.textContent ?? ""),
+    );
   const confirmation = () => {
-    const matches = document.querySelectorAll(profile.confirmationSelector);
+    const matches = confirmationNodes();
     if (matches.length !== 1) return undefined;
     const node = matches[0];
     if (!node?.isConnected) return undefined;
     actionable(node);
+    if (!profile.confirmationReferenceAttribute) return { node, reference: undefined };
     const reference = node.getAttribute(profile.confirmationReferenceAttribute);
     return reference && /^[a-zA-Z0-9_-]{1,200}$/u.test(reference) ? { node, reference } : undefined;
   };
   try {
     await fresh();
-    if (!view || document.querySelectorAll(profile.confirmationSelector).length !== 0)
-      throw unavailable();
+    if (!view || confirmationNodes().length !== 0) throw unavailable();
     inspection = provider.inspect(document, options.employerUrl);
     const bytes = new TextEncoder().encode(inspection.structure);
     const digest = new Uint8Array(
@@ -304,7 +315,7 @@ export async function executeApplication(options: {
     if (
       !root.isConnected ||
       (!takeover && !provider.rootValid(root)) ||
-      document.querySelectorAll(profile.confirmationSelector).length !== 0 ||
+      confirmationNodes().length !== 0 ||
       provider.submitControl(root, profile) !== button
     )
       throw unavailable();
@@ -332,7 +343,7 @@ export async function executeApplication(options: {
             documentId: options.documentId,
             clickedAt,
             observedAt,
-            reference: observed.reference,
+            ...(observed.reference ? { reference: observed.reference } : {}),
           }),
         );
         const hash = new Uint8Array(
@@ -357,15 +368,18 @@ export async function executeApplication(options: {
             kind: "provider_confirmation_page",
             observedAt: new Date(observedAt).toISOString(),
             fingerprintSha256,
-            providerReference: observed.reference,
+            ...(observed.reference ? { providerReference: observed.reference } : {}),
           },
         };
       }
-      const inspected = provider.inspect(document, options.employerUrl);
-      try {
-        if (inspected.form.challengePresent) return { kind: "challenge_required" };
-      } finally {
-        inspected.dispose();
+      // After a confirmation navigation the form is gone; keep waiting for the message itself.
+      if (document.location.href === options.employerUrl) {
+        const inspected = provider.inspect(document, options.employerUrl);
+        try {
+          if (inspected.form.challengePresent) return { kind: "challenge_required" };
+        } finally {
+          inspected.dispose();
+        }
       }
       await Promise.race([new Promise<void>((resolve) => setTimeout(resolve, 200)), stopped]);
     }

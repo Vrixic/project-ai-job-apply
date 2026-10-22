@@ -122,7 +122,8 @@ if (!Object.hasOwn(globalThis, installed)) {
             active !== state ||
             controller.signal.aborted ||
             Date.now() >= message.deadline ||
-            location.href !== message.employerUrl
+            (location.href !== message.employerUrl &&
+              provider.isConfirmationUrl?.(message.employerUrl, location.href) !== true)
           )
             throw Error("ApplicationExecutionUnavailable");
         };
