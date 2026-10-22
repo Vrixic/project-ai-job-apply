@@ -8,7 +8,7 @@ import {
   employerPageForSource,
   parseObservedApplicationForm,
 } from "@ai-job-apply/ats-sdk/observed-form";
-import { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
+import { applicationExecutionRegistry } from "../lib/providers";
 import { safeActionErrorMessage } from "../lib/action-error";
 import {
   type ApprovedHandoff,
@@ -295,7 +295,7 @@ const nativeTransfer =
         webOrigin: extensionConfiguration.applicationHandoffWebOrigin,
         apiOrigin: extensionConfiguration.apiOrigin,
         // Fixture acceptance and accountable live-effect approval remain default dark.
-        registry: new AdapterRegistry(),
+        registry: applicationExecutionRegistry,
         async identity(signal) {
           const generation = identityGeneration;
           assertIdentityGeneration(generation);

@@ -6,7 +6,7 @@ import {
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 import { executeApprovedApplication } from "./application-executor";
 import { parseHandoffLink, readApprovedHandoff, readJson } from "./application-handoff";
-import { greenhouseApplicationIdentity } from "./greenhouse/inspect";
+import { providerForUrl } from "./providers";
 import {
   createNativeMaterialTransfer,
   type NativeTransferSelection,
@@ -160,14 +160,8 @@ export function installNativeTransferBackground(options: {
   ): Promise<NativeTransferSelection> {
     const link = parseHandoffLink(reviewLink, options.webOrigin);
     const tab = await chrome.tabs.get(tabId);
-    if (
-      !link ||
-      !tab.url ||
-      tab.incognito ||
-      !greenhouseApplicationIdentity(tab.url) ||
-      signal.aborted
-    )
-      throw unavailable();
+    const provider = tab.url ? providerForUrl(tab.url) : undefined;
+    if (!link || !tab.url || tab.incognito || !provider || signal.aborted) throw unavailable();
     const session = await options.identity(signal);
     const snapshot = await readApprovedHandoff(
       link,
@@ -245,7 +239,7 @@ export function installNativeTransferBackground(options: {
       tabId,
       documentId: captured.documentId,
       employerUrl: tab.url,
-      variantId: "greenhouse-standard-v1",
+      variantId: provider.variantId,
     };
   }
 

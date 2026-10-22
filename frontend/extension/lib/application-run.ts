@@ -1,24 +1,18 @@
 import type { ApplicationSubmissionResultRequest } from "@ai-job-apply/api-contracts";
 import { buildFillPlan, type PacketValue } from "@ai-job-apply/ats-sdk/plan";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
-import type { TransferredNativeFile } from "../native-material-transfer";
-import { fillGreenhouseFields } from "./fill";
-import { greenhouseChallengePresent, inspectGreenhouseApplication } from "./inspect";
+import type { TransferredNativeFile } from "./native-material-transfer";
+import type {
+  ApplicationInspection,
+  ApplicationProvider,
+  ExecutionProfile,
+} from "./providers/types";
 
-/** Only reviewed adapter source supplies this profile. Page data never chooses selectors. */
-export interface GreenhouseExecutionProfile {
-  variantId: string;
-  adapterVersion: string;
-  implementationSha256: string;
-  submitSelector: string;
-  confirmationSelector: string;
-  confirmationReferenceAttribute: string;
-}
-
-const unavailable = () => Error("GreenhouseExecutionUnavailable");
+const unavailable = () => Error("ApplicationExecutionUnavailable");
 
 /** One document/attempt command, already durably dispatched. No retry or navigation recovery. */
-export async function executeGreenhouseApplication(options: {
+export async function executeApplication(options: {
+  provider: ApplicationProvider;
   document: Document;
   employerUrl: string;
   documentId: string;
@@ -27,7 +21,7 @@ export async function executeGreenhouseApplication(options: {
   attemptId: string;
   packet: readonly PacketValue[];
   files: readonly TransferredNativeFile[];
-  profile: Readonly<GreenhouseExecutionProfile>;
+  profile: Readonly<ExecutionProfile>;
   registry: AdapterRegistry;
   deadline: number;
   signal: AbortSignal;
@@ -37,6 +31,7 @@ export async function executeGreenhouseApplication(options: {
   revalidateDispatched(): Promise<void>;
 }): Promise<ApplicationSubmissionResultRequest> {
   const { document } = options;
+  const { provider } = options;
   const profile = Object.freeze(structuredClone(options.profile));
   const view = document.defaultView;
   const deadline = options.deadline;
@@ -62,7 +57,7 @@ export async function executeGreenhouseApplication(options: {
   options.signal.addEventListener("abort", abort, { once: true });
   const timer = setTimeout(abort, Math.max(0, deadline - Date.now()));
   if (options.signal.aborted) abort();
-  let inspection: ReturnType<typeof inspectGreenhouseApplication> | undefined;
+  let inspection: ApplicationInspection | undefined;
   let submitted = false;
   let claimed = false;
   const stopped = new Promise<never>((_, reject) => {
@@ -79,7 +74,7 @@ export async function executeGreenhouseApplication(options: {
       deadline > Date.now() + 60_000 ||
       !Number.isFinite(deadline) ||
       options.registry.executionStatus(
-        "greenhouse-application-v1",
+        provider.adapterId,
         profile.variantId,
         profile.adapterVersion,
         profile.implementationSha256,
@@ -122,7 +117,7 @@ export async function executeGreenhouseApplication(options: {
     await fresh();
     if (!view || document.querySelectorAll(profile.confirmationSelector).length !== 0)
       throw unavailable();
-    inspection = inspectGreenhouseApplication(document, options.employerUrl);
+    inspection = provider.inspect(document, options.employerUrl);
     const bytes = new TextEncoder().encode(inspection.structure);
     const digest = new Uint8Array(
       await Promise.race([crypto.subtle.digest("SHA-256", bytes), stopped]),
@@ -161,8 +156,7 @@ export async function executeGreenhouseApplication(options: {
       )
     )
       throw unavailable();
-    const root = document.querySelector("form#application_form, form#application-form");
-    if (!(root instanceof view.HTMLFormElement)) throw unavailable();
+    const root = provider.root(document);
     // Required candidate-only controls may already be completed; inspect validity, never values.
     for (const action of takeover ? [] : plan.actions) {
       if (action.kind !== "require_user") continue;
@@ -178,20 +172,12 @@ export async function executeGreenhouseApplication(options: {
           return { kind: "precondition_failed" };
       }
     }
-    const buttons = root.querySelectorAll(profile.submitSelector);
-    const button = buttons[0];
-    if (
-      buttons.length !== 1 ||
-      !(button instanceof view.HTMLButtonElement || button instanceof view.HTMLInputElement) ||
-      button.type !== "submit" ||
-      button.form !== root
-    )
-      throw unavailable();
+    const button = provider.submitControl(root, profile);
     actionable(button);
     await fresh();
     if (!options.claim()) throw unavailable();
     claimed = true;
-    const filled = await fillGreenhouseFields(inspection, options.packet, {
+    const filled = await provider.fill(inspection, options.packet, {
       registry: options.registry,
       variantId: profile.variantId,
       deadline,
@@ -324,10 +310,9 @@ export async function executeGreenhouseApplication(options: {
     for (const field of inspection.form.fields) inspection.resolve(field.ref);
     if (
       !root.isConnected ||
-      (!takeover && !root.checkValidity()) ||
+      (!takeover && !provider.rootValid(root)) ||
       document.querySelectorAll(profile.confirmationSelector).length !== 0 ||
-      root.querySelectorAll(profile.submitSelector).length !== 1 ||
-      root.querySelector(profile.submitSelector) !== button
+      provider.submitControl(root, profile) !== button
     )
       throw unavailable();
     actionable(button);
@@ -339,7 +324,7 @@ export async function executeGreenhouseApplication(options: {
     button.click();
     while (Date.now() < deadline) {
       await fresh();
-      if (greenhouseChallengePresent(document)) return { kind: "challenge_required" };
+      if (provider.challengePresent(document)) return { kind: "challenge_required" };
       const observed = confirmation();
       if (observed) {
         const observedAt = Date.now();
@@ -366,7 +351,7 @@ export async function executeGreenhouseApplication(options: {
           .join("");
         hash.fill(0);
         await fresh();
-        if (greenhouseChallengePresent(document)) return { kind: "challenge_required" };
+        if (provider.challengePresent(document)) return { kind: "challenge_required" };
         const finalConfirmation = confirmation();
         if (
           finalConfirmation?.node !== observed.node ||
@@ -383,7 +368,7 @@ export async function executeGreenhouseApplication(options: {
           },
         };
       }
-      const inspected = inspectGreenhouseApplication(document, options.employerUrl);
+      const inspected = provider.inspect(document, options.employerUrl);
       try {
         if (inspected.form.challengePresent) return { kind: "challenge_required" };
       } finally {

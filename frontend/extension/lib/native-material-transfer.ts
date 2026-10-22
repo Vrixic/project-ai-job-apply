@@ -14,7 +14,7 @@ import {
 } from "@ai-job-apply/api-contracts/browser-validators";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 import { parseHandoffLink } from "./application-handoff";
-import { greenhouseApplicationIdentity } from "./greenhouse/inspect";
+import { providerForUrl } from "./providers";
 import { sameNativeTransferBinding as same } from "./native-transfer-binding";
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
@@ -99,8 +99,14 @@ export function createNativeMaterialTransfer(options: {
       current === state &&
       !state.controller.signal.aborted &&
       Date.now() < state.deadline &&
-      options.registry.status("greenhouse-application-v1", state.selection.variantId, new Date())
-        .mode === "autofill"
+      (() => {
+        const provider = providerForUrl(state.selection.employerUrl);
+        return (
+          provider !== undefined &&
+          options.registry.status(provider.adapterId, state.selection.variantId, new Date())
+            .mode === "autofill"
+        );
+      })()
     );
   }
   function senderMatches(state: NonNullable<typeof current>, sender: chrome.runtime.MessageSender) {
@@ -192,7 +198,7 @@ export function createNativeMaterialTransfer(options: {
         !UUID.test(selection.documentId) ||
         !Number.isSafeInteger(selection.tabId) ||
         selection.tabId < 0 ||
-        !greenhouseApplicationIdentity(selection.employerUrl) ||
+        !providerForUrl(selection.employerUrl) ||
         !selection.ownerFence ||
         selection.ownerFence.length > 256 ||
         parseHandoffLink(selection.reviewLink, options.webOrigin)?.jobId !== selection.jobId ||

@@ -17,9 +17,9 @@ import { activeJobRevisionDigestInput } from "@ai-job-apply/api-contracts/job-re
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 import { applicationExecutionApi } from "./application-execution-api";
 import { plainHttpsUrl, readJson } from "./application-handoff";
-import { greenhouseExecutionProfile } from "./greenhouse/profiles";
 import type { NativeTransferSelection, TransferredNativeFile } from "./native-material-transfer";
 import { sameNativeTransferBinding } from "./native-transfer-binding";
+import { providerForUrl } from "./providers";
 
 const unavailable = () => Error("ApplicationExecutionUnavailable");
 
@@ -37,10 +37,10 @@ export async function executeApprovedApplication(options: {
   };
 }) {
   const selection = structuredClone(options.owned.selection);
-  const declaration = options.registry.get("greenhouse-application-v1");
-  const profile =
-    declaration && greenhouseExecutionProfile(selection.variantId, declaration.version);
-  if (!profile) throw unavailable();
+  const provider = providerForUrl(selection.employerUrl);
+  const declaration = provider && options.registry.get(provider.adapterId);
+  const profile = declaration && provider?.profile(selection.variantId, declaration.version);
+  if (!provider || !profile) throw unavailable();
   const controller = new AbortController();
   const abort = () => controller.abort();
   let deadline = Math.min(
@@ -73,7 +73,7 @@ export async function executeApprovedApplication(options: {
       Date.now() >= deadline ||
       !Number.isFinite(deadline) ||
       options.registry.executionStatus(
-        "greenhouse-application-v1",
+        provider.adapterId,
         profile.variantId,
         profile.adapterVersion,
         profile.implementationSha256,
@@ -305,9 +305,11 @@ export async function executeApprovedApplication(options: {
       application.status !== "approved" ||
       application.revision !== selection.revision ||
       application.approval?.id !== selection.approvalId ||
-      !application.currentPacket?.form ||
-      application.currentPacket.form.adapterId !== "greenhouse-application-v1" ||
-      application.currentPacket.form.variantId !== selection.variantId
+      !application.currentPacket ||
+      // A packet with no form binding is bound late (ADR-053); a bound one must match exactly.
+      (application.currentPacket.form &&
+        (application.currentPacket.form.adapterId !== provider.adapterId ||
+          application.currentPacket.form.variantId !== selection.variantId))
     )
       throw unavailable();
     originalPacket = structuredClone(application.currentPacket);
@@ -347,7 +349,7 @@ export async function executeApprovedApplication(options: {
     await bounded(
       chrome.scripting.executeScript({
         target: { tabId: selection.tabId, documentIds: [selection.documentId] },
-        files: ["greenhouse-execution.js"],
+        files: ["application-execution.js"],
         world: "ISOLATED",
       }),
     );
@@ -366,7 +368,7 @@ export async function executeApprovedApplication(options: {
     if (
       !validateApplicationExecutionInspection(inspection) ||
       inspection.nonce !== nonce ||
-      inspection.formHash !== originalPacket.form?.formHash
+      (originalPacket.form && inspection.formHash !== originalPacket.form.formHash)
     )
       throw unavailable();
     await bounded(options.preflight(selection, controller.signal));
@@ -383,7 +385,7 @@ export async function executeApprovedApplication(options: {
       api.start(
         {
           expectedRevision: selection.revision,
-          adapterId: "greenhouse-application-v1",
+          adapterId: provider.adapterId,
           adapterVersion: profile.adapterVersion,
           observedFormHash: inspection.formHash,
         },
@@ -405,7 +407,7 @@ export async function executeApprovedApplication(options: {
       candidates.length !== 1 ||
       !attempt ||
       attempt.status !== "started" ||
-      attempt.adapterId !== "greenhouse-application-v1" ||
+      attempt.adapterId !== provider.adapterId ||
       attempt.adapterVersion !== profile.adapterVersion ||
       Date.parse(attempt.startedAt) < startedAt - 5000 ||
       Date.parse(attempt.startedAt) > Date.now() + 5000 ||
