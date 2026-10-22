@@ -1,7 +1,10 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { PostgresResumeProposalWriter } from "@ai-job-apply/profile-service";
+import {
+  createProfileSectionStore,
+  PostgresResumeProposalWriter,
+} from "@ai-job-apply/profile-service";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { NormalizedResumeDocument } from "./parsing/index.js";
@@ -98,47 +101,29 @@ describeWithDatabase("PostgresDocumentProcessorStore", () => {
       await expect(store.completeParsed(accepted.job, result, normalized)).resolves.toBe(2);
       await expect(store.completeParsed(accepted.job, result, normalized)).resolves.toBe(2);
 
-      const [counts] = await client<Array<{ facts: number; imports: number; evidence: number }>>`
+      const [counts] = await client<Array<{ facts: number; imports: number; drafts: number }>>`
         SELECT
           (SELECT count(*)::int FROM profile.profile_facts WHERE user_id = ${userId}) AS facts,
           (SELECT count(*)::int FROM profile.resume_fact_imports WHERE user_id = ${userId}) AS imports,
-          (SELECT count(*)::int FROM profile.profile_fact_evidence AS evidence
-            JOIN profile.profile_facts AS fact ON fact.id = evidence.fact_id
-            WHERE fact.user_id = ${userId}) AS evidence
+          (SELECT count(*)::int FROM profile.import_drafts WHERE user_id = ${userId}) AS drafts
       `;
-      expect(counts).toEqual({ facts: 2, imports: 1, evidence: 2 });
+      // The resume becomes unsaved drafts, never profile facts or saved records.
+      expect(counts).toEqual({ facts: 0, imports: 1, drafts: 2 });
       const [document] = await client<Array<{ status: string; parserVersion: string }>>`
         SELECT status, parser_version AS "parserVersion"
         FROM documents.resume_documents WHERE id = ${documentId}
       `;
       expect(document).toEqual({ status: "parsed", parserVersion: "resume-parser-v1" });
 
-      const [confirmedFact] = await client<Array<{ id: string }>>`
-        SELECT id FROM profile.profile_facts WHERE user_id = ${userId} ORDER BY id LIMIT 1
-      `;
-      if (!confirmedFact) throw new Error("expected imported fact");
-      await client.begin(async (transaction) => {
-        await transaction`
-          INSERT INTO profile.profile_fact_versions (
-            fact_id, version, kind, fact_key, fact_value, verification, sensitivity,
-            source_type, source_reference
-          )
-          SELECT fact_id, 2, kind, fact_key, fact_value, 'confirmed', sensitivity,
-            source_type, source_reference
-          FROM profile.profile_fact_versions
-          WHERE fact_id = ${confirmedFact.id} AND version = 1
-        `;
-        await transaction`
-          INSERT INTO profile.profile_fact_evidence (
-            fact_id, fact_version, ordinal, document_id, document_version, parser_version,
-            block_index, start_offset, end_offset, page
-          )
-          SELECT fact_id, 2, ordinal, document_id, document_version, parser_version,
-            block_index, start_offset, end_offset, page
-          FROM profile.profile_fact_evidence
-          WHERE fact_id = ${confirmedFact.id} AND fact_version = 1
-        `;
-      });
+      // The candidate saves one draft; the other stays unsaved.
+      const sections = createProfileSectionStore(client);
+      const drafts = await sections.listDrafts(userId);
+      const saved = drafts.find(
+        (draft) => (draft.values as { name?: string }).name === "TypeScript",
+      );
+      if (!saved) throw new Error("expected a TypeScript draft");
+      await sections.saveDraft(userId, saved.id, {}, `save-draft-${crypto.randomUUID()}`, "trace");
+
       await expect(
         store.acceptScan({
           ...scan,
@@ -146,17 +131,10 @@ describeWithDatabase("PostgresDocumentProcessorStore", () => {
           scanResult: "THREATS_FOUND",
         }),
       ).resolves.toEqual({ kind: "security_contradiction" });
-      const latest = await client<Array<{ verification: string; availabilityState: string }>>`
-        SELECT version.verification, version.availability_state AS "availabilityState"
-        FROM profile.profile_facts AS fact
-        JOIN LATERAL (
-          SELECT verification, availability_state FROM profile.profile_fact_versions
-          WHERE fact_id = fact.id ORDER BY version DESC LIMIT 1
-        ) AS version ON true
-        WHERE fact.user_id = ${userId}
-      `;
-      expect(latest.map((fact) => fact.availabilityState)).toEqual(["invalidated", "invalidated"]);
-      expect(latest.map((fact) => fact.verification).sort()).toEqual(["confirmed", "proposed"]);
+      // A security hold removes the unsaved draft but leaves what the candidate saved.
+      expect(await sections.listDrafts(userId)).toEqual([]);
+      const kept = await sections.listEntries(userId, "skill");
+      expect(kept).toMatchObject([{ name: "TypeScript", origin: "imported" }]);
       const [held] = await client<Array<{ status: string; securityHold: boolean }>>`
         SELECT status, security_hold AS "securityHold"
         FROM documents.resume_documents WHERE id = ${documentId}

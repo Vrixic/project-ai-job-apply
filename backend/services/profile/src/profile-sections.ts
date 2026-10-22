@@ -320,6 +320,20 @@ const ENTRY_SELECT = `
   e.created_at AS "createdAt", v.version, v.content, v.origin, v.import_id AS "importId",
   v.created_at AS "updatedAt"`;
 
+/** Draft values must already satisfy the contract of the record they would become. */
+export function assertValidDraftValues(
+  section: ProfileDraftSection,
+  values: Record<string, unknown>,
+): void {
+  const valid =
+    section === "personal"
+      ? compileComponentValidator("PutProfilePersonalRequest")({ expectedVersion: 0, ...values })
+      : CREATE_VALIDATORS[section]()(values);
+  if (!valid) throw new ProfileSectionInputError("draft values are invalid");
+}
+
+export const PROFILE_DRAFT_CAPACITY = MAX_DRAFTS;
+
 export class PostgresProfileSectionStore implements ProfileSectionStore {
   constructor(private readonly client: postgres.Sql) {}
 
@@ -450,7 +464,7 @@ export class PostgresProfileSectionStore implements ProfileSectionStore {
           await tx`
             INSERT INTO profile.entry_versions (entry_id, version, content, origin, import_id, created_at)
             VALUES (
-              ${entryId}, ${version}, ${JSON.stringify(next)}::jsonb, ${current.origin},
+              ${entryId}, ${version}, ${JSON.stringify(next)}::text::jsonb, ${current.origin},
               ${current.importId}, ${updatedAt}::timestamptz
             )
           `;
@@ -597,11 +611,7 @@ export class PostgresProfileSectionStore implements ProfileSectionStore {
     section: ProfileDraftSection,
     values: Record<string, unknown>,
   ): Promise<ProfileImportDraft> {
-    const check =
-      section === "personal"
-        ? compileComponentValidator("PutProfilePersonalRequest")({ expectedVersion: 0, ...values })
-        : CREATE_VALIDATORS[section]()(values);
-    if (!check) throw new ProfileSectionInputError("draft values are invalid");
+    assertValidDraftValues(section, values);
     const id = uuidv7();
     return this.client.begin(async (tx) => {
       await tx`SELECT identity.require_active_candidate(${userId}::uuid)`;
@@ -614,7 +624,7 @@ export class PostgresProfileSectionStore implements ProfileSectionStore {
       await tx`
         INSERT INTO profile.import_drafts (id, user_id, import_id, section, draft_values, created_at)
         VALUES (
-          ${id}, ${userId}, ${importId}, ${section}, ${JSON.stringify(values)}::jsonb,
+          ${id}, ${userId}, ${importId}, ${section}, ${JSON.stringify(values)}::text::jsonb,
           ${createdAt}::timestamptz
         )
       `;
@@ -737,7 +747,7 @@ export class PostgresProfileSectionStore implements ProfileSectionStore {
       const { response, audit } = await run(tx);
       await tx`
         INSERT INTO platform.idempotency_keys (user_id, scope, key, request_hash, response)
-        VALUES (${userId}, ${scope}, ${idempotencyKey}, ${hash}, ${JSON.stringify(response)}::jsonb)
+        VALUES (${userId}, ${scope}, ${idempotencyKey}, ${hash}, ${JSON.stringify(response)}::text::jsonb)
       `;
       if (audit) {
         await tx`
@@ -745,7 +755,7 @@ export class PostgresProfileSectionStore implements ProfileSectionStore {
             id, user_id, action, resource_type, resource_id, trace_id, metadata
           ) VALUES (
             ${uuidv7()}, ${userId}, ${audit.action}, 'profile_section', ${audit.resourceId},
-            ${traceId}, ${JSON.stringify(audit.metadata)}::jsonb
+            ${traceId}, ${JSON.stringify(audit.metadata)}::text::jsonb
           )
         `;
       }
@@ -810,7 +820,7 @@ export class PostgresProfileSectionStore implements ProfileSectionStore {
     await tx`
       INSERT INTO profile.personal_versions (user_id, version, content, origin, import_id, created_at)
       VALUES (
-        ${userId}, ${version}, ${JSON.stringify(content)}::jsonb, ${keptOrigin}, ${keptImportId},
+        ${userId}, ${version}, ${JSON.stringify(content)}::text::jsonb, ${keptOrigin}, ${keptImportId},
         ${savedAt}::timestamptz
       )
     `;
@@ -859,7 +869,7 @@ export class PostgresProfileSectionStore implements ProfileSectionStore {
       await tx`
         INSERT INTO profile.entry_versions (entry_id, version, content, origin, import_id, created_at)
         VALUES (
-          ${id}, 1, ${JSON.stringify(content)}::jsonb, ${origin}, ${importId}, ${createdAt}::timestamptz
+          ${id}, 1, ${JSON.stringify(content)}::text::jsonb, ${origin}, ${importId}, ${createdAt}::timestamptz
         )
       `;
     } catch (error) {

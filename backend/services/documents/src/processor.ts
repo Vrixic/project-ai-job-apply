@@ -3,7 +3,7 @@ import type { PostgresResumeProposalWriter } from "@ai-job-apply/profile-service
 import type postgres from "postgres";
 import type { DocumentParserResult, DocumentParserSuccess } from "./parser-lambda.js";
 import type { NormalizedResumeDocument } from "./parsing/normalize.js";
-import { extractResumeFactProposals } from "./proposals.js";
+import { extractResumeDrafts } from "./resume-drafts.js";
 
 export interface DocumentProcessingJob {
   userId: string;
@@ -67,7 +67,7 @@ function terminalFailure(result: DocumentScanResultV1["scanResult"]): {
 }
 
 export interface ResumeProposalWriter {
-  import: PostgresResumeProposalWriter["import"];
+  importDrafts: PostgresResumeProposalWriter["importDrafts"];
   holdDocumentProposals: PostgresResumeProposalWriter["holdDocumentProposals"];
 }
 
@@ -283,7 +283,7 @@ export class PostgresDocumentProcessorStore {
     ) {
       throw new Error("NormalizedDocumentIdentityMismatch");
     }
-    const proposals = extractResumeFactProposals(normalized);
+    const drafts = extractResumeDrafts(normalized);
     return this.client.begin(async (transaction) => {
       const rows = await transaction<Array<{ status: string; securityHold: boolean }>>`
         SELECT status, security_hold AS "securityHold"
@@ -294,15 +294,15 @@ export class PostgresDocumentProcessorStore {
       const current = rows[0];
       if (!current) throw new Error("DocumentParseTargetNotFound");
       if (current.securityHold) throw new Error("DocumentSecurityHold");
-      if (current.status === "parsed") return proposals.length;
+      if (current.status === "parsed") return drafts.length;
       if (current.status !== "parsing") throw new Error("DocumentParseStateConflict");
-      const proposalCount = await this.proposalWriter.import(transaction, {
+      const proposalCount = await this.proposalWriter.importDrafts(transaction, {
         userId: job.userId,
         documentId: job.documentId,
         documentVersion: job.documentVersion,
         parserVersion: result.parserVersion,
         traceId: job.traceId,
-        proposals,
+        drafts,
       });
       await transaction`
         UPDATE documents.resume_documents
