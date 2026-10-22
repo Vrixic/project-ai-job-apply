@@ -1,6 +1,6 @@
 # ADR-036: Structured Education and Work Experience Entries
 
-Status: Input to D3.1-001; not independently accepted
+Status: Superseded by [ADR-052](052-structured-candidate-profile.md) (2026-10-22)
 Date: 2026-10-02
 
 [D3.1 - Structured candidate profile](../product/delivery/phase-3-1-structured-profile.md) already

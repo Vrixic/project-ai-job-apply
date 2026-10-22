@@ -10,7 +10,7 @@ Last updated: 2026-10-22. Program status: In progress. Started: 2026-07-27. Comp
 | D1 | Useful web product and canonical job catalog | Complete | 2026-08-11 | 2026-10-22 | [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
 | D2 | Extension and community loop | Complete | 2026-09-01 | 2026-09-18 | [Phase 2 tasks](phase-2-extension-and-community.md) |
 | D3 | High-quality application preparation | In progress | 2026-09-18 | Not completed | [Phase 3 tasks](phase-3-application-preparation.md) |
-| D3.1 | Structured candidate profile | Not started | Not started | Not completed | [Phase 3.1 tasks](phase-3-1-structured-profile.md) |
+| D3.1 | Structured candidate profile | In progress | 2026-10-22 | Not completed | [Phase 3.1 tasks](phase-3-1-structured-profile.md) |
 | D4 | Workday and remote preparation | Not started | Not started | Not completed | [Phase 4 tasks](phase-4-workday-and-remote.md) |
 | D5 | Personalized outreach and application notifications | Not started | Not started | Not completed | [Phase 5 tasks](phase-5-outreach-and-notifications.md) |
 | D6 | Mobile and paid launch | In progress | 2026-09-28 | Not completed | [Phase 6 tasks](phase-6-mobile-and-paid.md) |
@@ -217,6 +217,10 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 
 ## D3.1 - Structured candidate profile
 
+2026-10-22: D3.1 started. D3.1-001 is complete: [ADR-052](../../adr/052-structured-candidate-profile.md)
+is accepted (structured Profile sections, draft-then-save resume import, entry references for
+grounding, existing development facts discarded, restricted answers kept out) with a consumer map.
+Next: D3.1-003 contracts, then D3.1-004 persistence. No code, contract or migration has changed.
 [Phase 3.1 tasks](phase-3-1-structured-profile.md).
 
 ## D4 — Workday and remote preparation
