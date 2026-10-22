@@ -124,10 +124,37 @@ describe("PlanBilling", () => {
     expect(container.textContent).toContain("already have a Pro subscription");
   });
 
-  it("acknowledges returning from checkout", async () => {
+  it("syncs from Stripe on returning from checkout and reports an updated plan", async () => {
     window.history.replaceState(null, "", "/settings?plan=success");
-    stubFetch(free);
+    const fetchMock = stubFetch(free, Response.json({ changed: true }));
     await render();
-    expect(container.textContent).toContain("updates as soon as the payment is confirmed");
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/platform/billing/subscription-syncs",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(container.textContent).toContain("Your plan is updated.");
+  });
+
+  it("says the payment is not confirmed yet and lets the candidate check again", async () => {
+    window.history.replaceState(null, "", "/settings?plan=success");
+    const fetchMock = stubFetch(free, Response.json({ changed: false }));
+    await render();
+    await act(async () => {});
+    expect(container.textContent).toContain("Payment not confirmed yet");
+    await act(async () => button(/check payment status/i)?.click());
+    await act(async () => {});
+    const syncs = fetchMock.mock.calls.filter(([input]) =>
+      String(input).includes("subscription-syncs"),
+    );
+    expect(syncs).toHaveLength(2);
+  });
+
+  it("does not sync when the candidate did not arrive from checkout", async () => {
+    const fetchMock = stubFetch(free);
+    await render();
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).includes("subscription-syncs")),
+    ).toBe(false);
   });
 });

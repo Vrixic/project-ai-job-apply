@@ -4,7 +4,7 @@ import type { EntitlementSummary } from "@ai-job-apply/api-contracts";
 import { useEffect, useState } from "react";
 import { useEntitlementSummary } from "./use-entitlement-summary";
 
-type Action = "checkout" | "portal";
+type Action = "checkout" | "portal" | "sync";
 
 const STRIPE_HOSTS = new Set(["checkout.stripe.com", "billing.stripe.com"]);
 
@@ -40,17 +40,19 @@ export function PlanBilling({
   /** Replaceable so tests need not leave the page. */
   navigate?: (url: string) => void;
 }) {
-  const { view } = useEntitlementSummary(authenticated);
+  const { view, retry } = useEntitlementSummary(authenticated);
   const [pending, setPending] = useState<Action>();
   const [message, setMessage] = useState<string>();
 
   // Stripe returns here after checkout; the plan changes when the verified webhook arrives.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once on arrival from Stripe.
   useEffect(() => {
     const returned = new URLSearchParams(window.location.search).get("plan");
     if (returned === "success") {
       setMessage(
-        "Thanks. Your plan updates as soon as the payment is confirmed; refresh in a moment.",
+        "Thanks. Your plan updates as soon as the payment is confirmed; we are checking now.",
       );
+      if (authenticated) void sync();
     } else if (returned === "cancelled") {
       setMessage("Checkout was cancelled. You have not been charged.");
     }
@@ -59,7 +61,33 @@ export function PlanBilling({
   if (!authenticated) return null;
   const summary = view.status === "ready" ? view.summary : undefined;
 
-  async function go(action: Action) {
+  /** Asks the platform to read the subscription from Stripe, in case the webhook is late. */
+  async function sync() {
+    setPending("sync");
+    try {
+      const response = await fetch("/api/platform/billing/subscription-syncs", {
+        method: "POST",
+        cache: "no-store",
+      });
+      const body = (await response.json().catch(() => ({}))) as { changed?: unknown };
+      if (response.ok) {
+        retry();
+        setMessage(
+          body.changed === true
+            ? "Your plan is updated."
+            : "Payment not confirmed yet. Check again in a moment.",
+        );
+        return;
+      }
+      setMessage("Billing is temporarily unavailable. Try again shortly.");
+    } catch {
+      setMessage("Billing is temporarily unavailable. Try again shortly.");
+    } finally {
+      setPending(undefined);
+    }
+  }
+
+  async function go(action: "checkout" | "portal") {
     setPending(action);
     setMessage(undefined);
     try {
@@ -129,6 +157,9 @@ export function PlanBilling({
                 {pending === "portal" ? "Opening portal…" : "Manage subscription"}
               </button>
             )}
+            <button type="button" disabled={pending !== undefined} onClick={() => void sync()}>
+              {pending === "sync" ? "Checking…" : "Check payment status"}
+            </button>
           </div>
         </>
       )}

@@ -6895,6 +6895,53 @@
           }
         }
       }
+    },
+    "/billing/subscription-syncs": {
+      "post": {
+        "operationId": "createBillingSubscriptionSync",
+        "summary": "Pull the candidate's own subscription from Stripe and project it onto the entitlement. Repairs a lost or delayed webhook. Present only when Stripe billing is configured.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The sync ran; changed tells whether the entitlement was updated",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingSubscriptionSync"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -13835,6 +13882,16 @@
             "format": "uri",
             "pattern": "^https://",
             "maxLength": 2048
+          }
+        }
+      },
+      "BillingSubscriptionSync": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["changed"],
+        "properties": {
+          "changed": {
+            "type": "boolean"
           }
         }
       }

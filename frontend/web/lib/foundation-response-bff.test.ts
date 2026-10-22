@@ -283,6 +283,7 @@ const validValues: Record<FoundationResponseSchemaName, unknown> = {
   CandidateDataExportAccess: candidateDataExportAccess,
   AccountDeletionRequest: accountDeletionRequest,
   BillingSessionLink: { url: "https://checkout.stripe.com/c/pay/cs_test" },
+  BillingSubscriptionSync: { changed: true },
 };
 const validUpstreamValues: Record<FoundationResponseSchemaName, unknown> = {
   ...validValues,

@@ -528,7 +528,11 @@ describe("API Gateway Lambda boundary", () => {
       principalBridge,
     });
 
-    for (const path of ["/v1/billing/checkout-sessions", "/v1/billing/portal-sessions"]) {
+    for (const path of [
+      "/v1/billing/checkout-sessions",
+      "/v1/billing/portal-sessions",
+      "/v1/billing/subscription-syncs",
+    ]) {
       const accepted = await invoke(handler, routedEvent("POST", path));
       const withBody = await invoke(
         handler,
@@ -549,7 +553,7 @@ describe("API Gateway Lambda boundary", () => {
       expect(anonymous.statusCode).toBe(401);
       expect(get.statusCode).toBe(404);
     }
-    expect(inject).toHaveBeenCalledTimes(2);
+    expect(inject).toHaveBeenCalledTimes(3);
 
     inject.mockClear();
     const webhookPath = "/v1/billing/webhooks/stripe";

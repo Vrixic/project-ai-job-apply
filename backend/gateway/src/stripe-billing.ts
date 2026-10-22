@@ -6,6 +6,7 @@ import {
   StripeBillingService,
   StripeClient,
   handleStripeWebhook,
+  reconcileStripeSubscription,
   loadStripeConfig,
 } from "@ai-job-apply/billing-service";
 import { PayloadTooLargeException } from "@nestjs/common";
@@ -24,6 +25,8 @@ export const maximumStripeWebhookBytes = 256 * 1024;
 export interface StripeBillingGateway {
   startCheckout(userId: string): Promise<{ url: string }>;
   openPortal(userId: string): Promise<{ url: string }>;
+  /** Pulls the candidate's subscription from Stripe; true when the entitlement changed. */
+  syncSubscription(userId: string): Promise<{ changed: boolean }>;
   handleWebhook(rawBody: Buffer, signature: string | undefined): Promise<void>;
 }
 
@@ -59,6 +62,21 @@ export function createStripeBillingGateway(
   return {
     startCheckout: (userId) => service.startCheckout(userId),
     openPortal: (userId) => service.openPortal(userId),
+    async syncSubscription(userId) {
+      const outcome = await reconcileStripeSubscription(
+        {
+          api,
+          billing: {
+            readEntitlement: (id) => composition.reader.readEntitlement(id),
+            applyEntitlementChange: (input) => composition.writer.applyEntitlementChange(input),
+          },
+          ...(composition.clock ? { clock: composition.clock } : {}),
+          ...(config.graceSeconds !== undefined ? { graceSeconds: config.graceSeconds } : {}),
+        },
+        userId,
+      );
+      return { changed: outcome === "applied" };
+    },
     async handleWebhook(rawBody, signature) {
       await handleStripeWebhook(
         {

@@ -362,7 +362,9 @@ function allowedRoute(
     return { acceptsBody: false, protected: true };
   if (
     method === "POST" &&
-    (path === "/v1/billing/checkout-sessions" || path === "/v1/billing/portal-sessions")
+    (path === "/v1/billing/checkout-sessions" ||
+      path === "/v1/billing/portal-sessions" ||
+      path === "/v1/billing/subscription-syncs")
   ) {
     return { acceptsBody: false, protected: true };
   }
