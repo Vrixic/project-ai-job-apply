@@ -12,6 +12,11 @@ with the same words in each run) and the document a `page` size, all or none, so
 can be drawn the way the candidate's own resume was set. Documents parsed before this addition
 have neither and are drawn as plain text.
 
+`profile-sections.schema.json` defines the owner-scoped records of the structured candidate Profile
+(Personal, Education, Work experience, Skills, Application answers), import drafts and the entry
+reference used by grounding and packets ([ADR-052](../../../../docs/adr/052-structured-candidate-profile.md)).
+All records are standard sensitivity; restricted answers stay in the answer vault.
+
 `saved-job.schema.json` defines the Matching-owned Confidential association. It preserves the
 owner, immutable requested target, resolved canonical identifier at save time, and a bounded public
 snapshot; descriptions, source payloads, profile data, and post-submission outcomes are forbidden.

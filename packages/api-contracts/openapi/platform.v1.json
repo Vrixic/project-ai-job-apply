@@ -955,6 +955,1571 @@
         }
       }
     },
+    "/profile/personal": {
+      "get": {
+        "operationId": "getProfilePersonal",
+        "description": "The current candidate's saved Personal record. Returns 404 until the candidate first saves it.",
+        "security": [
+          {
+            "oidc": ["profile:read"]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The saved Personal record",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfilePersonal"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "operationId": "putProfilePersonal",
+        "description": "Replaces the Personal record. Use expectedVersion 0 for the first save and the current version afterwards; fields left out are cleared.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutProfilePersonalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A new immutable version of the Personal record was saved",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfilePersonal"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      }
+    },
+    "/profile/education-entries": {
+      "get": {
+        "operationId": "listProfileEducationEntries",
+        "description": "Latest versions of the current candidate's saved education entries, in display order.",
+        "security": [
+          {
+            "oidc": ["profile:read"]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved education entries owned by the current candidate",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileEducationEntryCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProfileEducationEntry",
+        "description": "Saves a new candidate-entered education entry.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProfileEducationEntryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Saved",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileEducationEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      }
+    },
+    "/profile/education-entries/reorder": {
+      "post": {
+        "operationId": "reorderProfileEducationEntries",
+        "description": "Sets the display order. The list must name every saved entry of the section exactly once.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderProfileEntriesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The reordered entries",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileEducationEntryCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      }
+    },
+    "/profile/education-entries/{entryId}": {
+      "patch": {
+        "operationId": "updateProfileEducationEntry",
+        "description": "Creates a new immutable version. Optional fields set to null are cleared.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entryId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileEducationEntryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A new immutable version was saved",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileEducationEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteProfileEducationEntry",
+        "description": "Deletes the saved record by writing a tombstone version. The current version must be named.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entryId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expectedVersion",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/profile/work-experience-entries": {
+      "get": {
+        "operationId": "listProfileWorkExperienceEntries",
+        "description": "Latest versions of the current candidate's saved work experience entries, in display order.",
+        "security": [
+          {
+            "oidc": ["profile:read"]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved work experience entries owned by the current candidate",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileWorkExperienceEntryCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProfileWorkExperienceEntry",
+        "description": "Saves a new candidate-entered work experience entry.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProfileWorkExperienceEntryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Saved",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileWorkExperienceEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      }
+    },
+    "/profile/work-experience-entries/reorder": {
+      "post": {
+        "operationId": "reorderProfileWorkExperienceEntries",
+        "description": "Sets the display order. The list must name every saved entry of the section exactly once.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderProfileEntriesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The reordered entries",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileWorkExperienceEntryCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      }
+    },
+    "/profile/work-experience-entries/{entryId}": {
+      "patch": {
+        "operationId": "updateProfileWorkExperienceEntry",
+        "description": "Creates a new immutable version. Optional fields set to null are cleared.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entryId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileWorkExperienceEntryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A new immutable version was saved",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileWorkExperienceEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteProfileWorkExperienceEntry",
+        "description": "Deletes the saved record by writing a tombstone version. The current version must be named.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entryId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expectedVersion",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/profile/skill-entries": {
+      "get": {
+        "operationId": "listProfileSkillEntries",
+        "description": "Latest versions of the current candidate's saved skill entries, in display order.",
+        "security": [
+          {
+            "oidc": ["profile:read"]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved skill entries owned by the current candidate",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileSkillEntryCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProfileSkillEntry",
+        "description": "Saves a new candidate-entered skill entry.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProfileSkillEntryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Saved",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileSkillEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      }
+    },
+    "/profile/skill-entries/reorder": {
+      "post": {
+        "operationId": "reorderProfileSkillEntries",
+        "description": "Sets the display order. The list must name every saved entry of the section exactly once.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderProfileEntriesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The reordered entries",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileSkillEntryCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      }
+    },
+    "/profile/skill-entries/{entryId}": {
+      "patch": {
+        "operationId": "updateProfileSkillEntry",
+        "description": "Creates a new immutable version. Optional fields set to null are cleared.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entryId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileSkillEntryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A new immutable version was saved",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileSkillEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteProfileSkillEntry",
+        "description": "Deletes the saved record by writing a tombstone version. The current version must be named.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entryId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expectedVersion",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/profile/application-answers": {
+      "get": {
+        "operationId": "listProfileApplicationAnswers",
+        "description": "Latest versions of the current candidate's saved application answers.",
+        "security": [
+          {
+            "oidc": ["profile:read"]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saved application answers owned by the current candidate",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileApplicationAnswerCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProfileApplicationAnswer",
+        "description": "Saves a new candidate-entered application answer.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProfileApplicationAnswerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Saved",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileApplicationAnswer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      }
+    },
+    "/profile/application-answers/{answerId}": {
+      "patch": {
+        "operationId": "updateProfileApplicationAnswer",
+        "description": "Creates a new immutable version. Optional fields set to null are cleared.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "answerId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileApplicationAnswerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A new immutable version was saved",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileApplicationAnswer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteProfileApplicationAnswer",
+        "description": "Deletes the saved record by writing a tombstone version. The current version must be named.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "answerId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expectedVersion",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/profile/import-drafts": {
+      "get": {
+        "operationId": "listProfileImportDrafts",
+        "description": "Draft entries parsed from the candidate's resume uploads. Drafts are not part of the profile until saved.",
+        "security": [
+          {
+            "oidc": ["profile:read"]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Unsaved import drafts",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileImportDraftCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/profile/import-drafts/{draftId}": {
+      "delete": {
+        "operationId": "discardProfileImportDraft",
+        "description": "Discards one draft. Repeating the call after it is gone returns 404.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draftId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Discarded",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/profile/import-drafts/{draftId}/save": {
+      "post": {
+        "operationId": "saveProfileImportDraft",
+        "description": "Saves the draft as a profile record, optionally with the candidate's edited values. A personal draft requires expectedPersonalVersion.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draftId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveProfileImportDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The saved record's reference",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileEntryReference"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      }
+    },
     "/profile/restricted-answers": {
       "get": {
         "operationId": "listRestrictedAnswers",
@@ -6507,6 +8072,1087 @@
         },
         "additionalProperties": false
       },
+      "ProfileEntryOrigin": {
+        "type": "string",
+        "enum": ["entered", "imported"]
+      },
+      "ProfilePersonal": {
+        "type": "object",
+        "required": ["version", "origin", "createdAt", "updatedAt"],
+        "properties": {
+          "fullName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "phone": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 40,
+            "pattern": "^[0-9+().\\-\\s]+$"
+          },
+          "address": {
+            "type": "object",
+            "properties": {
+              "street": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              "city": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "\\S"
+              },
+              "region": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "\\S"
+              },
+              "postalCode": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32,
+                "pattern": "\\S"
+              },
+              "country": {
+                "type": "string",
+                "pattern": "^[A-Z]{2}$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "links": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "required": ["kind", "url"],
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["linkedin", "github", "portfolio", "other"]
+                },
+                "url": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 500,
+                  "pattern": "^https://"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "origin": {
+            "type": "string",
+            "enum": ["entered", "imported"]
+          },
+          "importId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PutProfilePersonalRequest": {
+        "type": "object",
+        "required": ["expectedVersion"],
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fullName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "phone": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 40,
+            "pattern": "^[0-9+().\\-\\s]+$"
+          },
+          "address": {
+            "type": "object",
+            "properties": {
+              "street": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              "city": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "\\S"
+              },
+              "region": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120,
+                "pattern": "\\S"
+              },
+              "postalCode": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32,
+                "pattern": "\\S"
+              },
+              "country": {
+                "type": "string",
+                "pattern": "^[A-Z]{2}$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "links": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "required": ["kind", "url"],
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["linkedin", "github", "portfolio", "other"]
+                },
+                "url": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 500,
+                  "pattern": "^https://"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProfileEducationEntry": {
+        "type": "object",
+        "required": ["id", "school", "version", "origin", "createdAt", "updatedAt", "displayOrder"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "school": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "degree": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "fieldOfStudy": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "origin": {
+            "type": "string",
+            "enum": ["entered", "imported"]
+          },
+          "importId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "displayOrder": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 999
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateProfileEducationEntryRequest": {
+        "type": "object",
+        "required": ["school"],
+        "properties": {
+          "school": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "degree": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "fieldOfStudy": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateProfileEducationEntryRequest": {
+        "type": "object",
+        "required": ["expectedVersion"],
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "school": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "degree": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fieldOfStudy": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "startDate": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endDate": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 2
+      },
+      "ProfileEducationEntryCollection": {
+        "type": "object",
+        "required": ["entries"],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/ProfileEducationEntry"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProfileWorkExperienceEntry": {
+        "type": "object",
+        "required": [
+          "id",
+          "company",
+          "title",
+          "startDate",
+          "version",
+          "origin",
+          "createdAt",
+          "updatedAt",
+          "displayOrder"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "company": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "bullets": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "pattern": "\\S"
+            }
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "origin": {
+            "type": "string",
+            "enum": ["entered", "imported"]
+          },
+          "importId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "displayOrder": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 999
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateProfileWorkExperienceEntryRequest": {
+        "type": "object",
+        "required": ["company", "title", "startDate"],
+        "properties": {
+          "company": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "bullets": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "pattern": "\\S"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateProfileWorkExperienceEntryRequest": {
+        "type": "object",
+        "required": ["expectedVersion"],
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "company": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S"
+          },
+          "location": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bullets": {
+            "oneOf": [
+              {
+                "type": "array",
+                "maxItems": 20,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "pattern": "\\S"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 2
+      },
+      "ProfileWorkExperienceEntryCollection": {
+        "type": "object",
+        "required": ["entries"],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "$ref": "#/components/schemas/ProfileWorkExperienceEntry"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProfileSkillEntry": {
+        "type": "object",
+        "required": ["id", "name", "version", "origin", "createdAt", "updatedAt", "displayOrder"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "\\S"
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "pattern": "\\S"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "origin": {
+            "type": "string",
+            "enum": ["entered", "imported"]
+          },
+          "importId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "displayOrder": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 999
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateProfileSkillEntryRequest": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "\\S"
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "pattern": "\\S"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateProfileSkillEntryRequest": {
+        "type": "object",
+        "required": ["expectedVersion"],
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "\\S"
+          },
+          "category": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60,
+                "pattern": "\\S"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 2
+      },
+      "ProfileSkillEntryCollection": {
+        "type": "object",
+        "required": ["entries"],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/ProfileSkillEntry"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProfileApplicationAnswer": {
+        "type": "object",
+        "required": [
+          "id",
+          "question",
+          "answer",
+          "version",
+          "origin",
+          "createdAt",
+          "updatedAt",
+          "questionKey"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "pattern": "\\S"
+          },
+          "answer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "\\S"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "origin": {
+            "type": "string",
+            "enum": ["entered", "imported"]
+          },
+          "importId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "questionKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "pattern": "\\S"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateProfileApplicationAnswerRequest": {
+        "type": "object",
+        "required": ["question", "answer"],
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "pattern": "\\S"
+          },
+          "answer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "\\S"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateProfileApplicationAnswerRequest": {
+        "type": "object",
+        "required": ["expectedVersion"],
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "pattern": "\\S"
+          },
+          "answer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "\\S"
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 2
+      },
+      "ProfileApplicationAnswerCollection": {
+        "type": "object",
+        "required": ["answers"],
+        "properties": {
+          "answers": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/ProfileApplicationAnswer"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReorderProfileEntriesRequest": {
+        "type": "object",
+        "required": ["orderedEntryIds"],
+        "properties": {
+          "orderedEntryIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProfileEntryReference": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["section", "version"],
+            "properties": {
+              "section": {
+                "type": "string",
+                "const": "personal"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["section", "entryId", "version"],
+            "properties": {
+              "section": {
+                "type": "string",
+                "enum": ["education", "workExperience", "skill", "applicationAnswer"]
+              },
+              "entryId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "ProfileImportDraftValues": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "fullName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              "email": {
+                "type": "string",
+                "format": "email",
+                "maxLength": 254
+              },
+              "phone": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 40,
+                "pattern": "^[0-9+().\\-\\s]+$"
+              },
+              "address": {
+                "type": "object",
+                "properties": {
+                  "street": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "\\S"
+                  },
+                  "city": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "\\S"
+                  },
+                  "region": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "\\S"
+                  },
+                  "postalCode": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32,
+                    "pattern": "\\S"
+                  },
+                  "country": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{2}$"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "links": {
+                "type": "array",
+                "maxItems": 10,
+                "items": {
+                  "type": "object",
+                  "required": ["kind", "url"],
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": ["linkedin", "github", "portfolio", "other"]
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri",
+                      "maxLength": 500,
+                      "pattern": "^https://"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["school"],
+            "properties": {
+              "school": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              "degree": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              "fieldOfStudy": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              "startDate": {
+                "type": "string",
+                "format": "date"
+              },
+              "endDate": {
+                "type": "string",
+                "format": "date"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["company", "title", "startDate"],
+            "properties": {
+              "company": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              "location": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "\\S"
+              },
+              "startDate": {
+                "type": "string",
+                "format": "date"
+              },
+              "endDate": {
+                "type": "string",
+                "format": "date"
+              },
+              "bullets": {
+                "type": "array",
+                "maxItems": 20,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "pattern": "\\S"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": "\\S"
+              },
+              "category": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60,
+                "pattern": "\\S"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "ProfileImportDraft": {
+        "type": "object",
+        "required": ["id", "importId", "section", "values", "createdAt"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "importId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "section": {
+            "type": "string",
+            "enum": ["personal", "education", "workExperience", "skill"]
+          },
+          "values": {
+            "$ref": "#/components/schemas/ProfileImportDraftValues"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProfileImportDraftCollection": {
+        "type": "object",
+        "required": ["drafts"],
+        "properties": {
+          "drafts": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/ProfileImportDraft"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "SaveProfileImportDraftRequest": {
+        "type": "object",
+        "properties": {
+          "values": {
+            "$ref": "#/components/schemas/ProfileImportDraftValues"
+          },
+          "expectedPersonalVersion": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
       "RestrictedAnswerFieldKey": {
         "type": "string",
         "minLength": 1,
@@ -9726,13 +12372,32 @@
         },
         "not": {
           "allOf": [
-            { "properties": { "packetAvailability": {} }, "required": ["packetAvailability"] },
+            {
+              "properties": {
+                "packetAvailability": {}
+              },
+              "required": ["packetAvailability"]
+            },
             {
               "anyOf": [
-                { "properties": { "currentPacket": {} }, "required": ["currentPacket"] },
-                { "properties": { "approval": {} }, "required": ["approval"] },
                 {
-                  "properties": { "currentAction": { "const": "ready_to_submit" } },
+                  "properties": {
+                    "currentPacket": {}
+                  },
+                  "required": ["currentPacket"]
+                },
+                {
+                  "properties": {
+                    "approval": {}
+                  },
+                  "required": ["approval"]
+                },
+                {
+                  "properties": {
+                    "currentAction": {
+                      "const": "ready_to_submit"
+                    }
+                  },
                   "required": ["currentAction"]
                 }
               ]
@@ -10043,19 +12708,42 @@
         "additionalProperties": false,
         "allOf": [
           {
-            "if": { "properties": { "state": { "const": "failed" } }, "required": ["state"] },
+            "if": {
+              "properties": {
+                "state": {
+                  "const": "failed"
+                }
+              },
+              "required": ["state"]
+            },
             "then": {
               "required": ["errorCode"],
-              "properties": { "errorCode": { "type": "string" } }
+              "properties": {
+                "errorCode": {
+                  "type": "string"
+                }
+              }
             },
-            "else": { "properties": { "errorCode": false } }
+            "else": {
+              "properties": {
+                "errorCode": false
+              }
+            }
           },
           {
             "if": {
-              "properties": { "state": { "const": "not_requested" } },
+              "properties": {
+                "state": {
+                  "const": "not_requested"
+                }
+              },
               "required": ["state"]
             },
-            "then": { "properties": { "requestedAt": false } }
+            "then": {
+              "properties": {
+                "requestedAt": false
+              }
+            }
           }
         ],
         "description": "Honest, value-free status of the generated resume for the current application packet. Derived from owner metadata only; it never carries content, task identifiers or provider detail."
@@ -10072,22 +12760,38 @@
           "contentBase64"
         ],
         "properties": {
-          "documentId": { "type": "string", "format": "uuid" },
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
           "fileName": {
             "type": "string",
             "minLength": 1,
             "maxLength": 255,
             "pattern": "^[^\\u0000-\\u001f\\u007f/\\\\]+$"
           },
-          "format": { "type": "string", "enum": ["pdf", "docx"] },
-          "mediaType": { "$ref": "#/components/schemas/ResumeMediaType" },
+          "format": {
+            "type": "string",
+            "enum": ["pdf", "docx"]
+          },
+          "mediaType": {
+            "$ref": "#/components/schemas/ResumeMediaType"
+          },
           "sha256": {
             "type": "string",
             "pattern": "^[a-f0-9]{64}$",
             "description": "SHA-256 of the original file bytes. Equals the current packet's resume hash."
           },
-          "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 2097152 },
-          "contentBase64": { "type": "string", "minLength": 4, "maxLength": 2796212 }
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2097152
+          },
+          "contentBase64": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 2796212
+          }
         },
         "additionalProperties": false,
         "description": "The candidate's own original uploaded resume, byte for byte, in its original format. Files above 2 MiB are refused rather than attached."
@@ -10096,11 +12800,26 @@
         "type": "object",
         "required": ["schema", "applicationId", "jobId", "packetId", "packetHash"],
         "properties": {
-          "schema": { "const": "application-apply-intent.v1", "type": "string" },
-          "applicationId": { "type": "string", "format": "uuid" },
-          "jobId": { "type": "string", "format": "uuid" },
-          "packetId": { "type": "string", "format": "uuid" },
-          "packetHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          "schema": {
+            "const": "application-apply-intent.v1",
+            "type": "string"
+          },
+          "applicationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "jobId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "packetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "packetHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
         },
         "additionalProperties": false,
         "description": "First-party website-to-extension arming message sent when the candidate presses Apply. It carries identifiers only: no credential, file, answer or URL. The extension reads the packet itself with its own session and derives which resume to use from the packet."
@@ -10109,8 +12828,15 @@
         "type": "object",
         "required": ["schema", "expiresAtMs"],
         "properties": {
-          "schema": { "const": "application-apply-intent-receipt.v1", "type": "string" },
-          "expiresAtMs": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+          "schema": {
+            "const": "application-apply-intent-receipt.v1",
+            "type": "string"
+          },
+          "expiresAtMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
         },
         "additionalProperties": false,
         "description": "Acknowledges that the extension holds the identifiers in memory until this deadline. Not submission evidence."
@@ -10119,11 +12845,26 @@
         "type": "object",
         "required": ["schema", "applicationId", "packetId", "packetHash", "format"],
         "properties": {
-          "schema": { "const": "application-native-transfer-begin.v1", "type": "string" },
-          "applicationId": { "type": "string", "format": "uuid" },
-          "packetId": { "type": "string", "format": "uuid" },
-          "packetHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-          "format": { "type": "string", "const": "pdf" }
+          "schema": {
+            "const": "application-native-transfer-begin.v1",
+            "type": "string"
+          },
+          "applicationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "packetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "packetHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "format": {
+            "type": "string",
+            "const": "pdf"
+          }
         },
         "additionalProperties": false,
         "description": "Default-off first-party website-to-extension transport only; no REST route, credentials or submission authority."
@@ -10143,20 +12884,50 @@
           "materials"
         ],
         "properties": {
-          "schema": { "const": "application-native-transfer-admission.v1", "type": "string" },
-          "nonce": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-          "expiresAtMs": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-          "applicationId": { "type": "string", "format": "uuid" },
-          "packetId": { "type": "string", "format": "uuid" },
-          "packetHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-          "approvalId": { "type": "string", "format": "uuid" },
-          "revision": { "type": "integer", "minimum": 1 },
-          "format": { "type": "string", "const": "pdf" },
+          "schema": {
+            "const": "application-native-transfer-admission.v1",
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "expiresAtMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "applicationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "packetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "packetHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "approvalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "format": {
+            "type": "string",
+            "const": "pdf"
+          },
           "materials": {
             "type": "array",
             "minItems": 1,
             "maxItems": 2,
-            "items": { "$ref": "#/components/schemas/ApplicationTemporaryMaterial" }
+            "items": {
+              "$ref": "#/components/schemas/ApplicationTemporaryMaterial"
+            }
           }
         },
         "additionalProperties": false,
@@ -10164,12 +12935,16 @@
       },
       "ApplicationNativeTransferFile": {
         "allOf": [
-          { "$ref": "#/components/schemas/ApplicationResumeFile" },
+          {
+            "$ref": "#/components/schemas/ApplicationResumeFile"
+          },
           {
             "type": "object",
             "required": ["temporaryMaterial"],
             "properties": {
-              "temporaryMaterial": { "$ref": "#/components/schemas/ApplicationTemporaryMaterial" }
+              "temporaryMaterial": {
+                "$ref": "#/components/schemas/ApplicationTemporaryMaterial"
+              }
             }
           }
         ],
@@ -10179,13 +12954,20 @@
         "type": "object",
         "required": ["schema", "admission", "files"],
         "properties": {
-          "schema": { "const": "application-native-transfer-commit.v1", "type": "string" },
-          "admission": { "$ref": "#/components/schemas/ApplicationNativeTransferAdmission" },
+          "schema": {
+            "const": "application-native-transfer-commit.v1",
+            "type": "string"
+          },
+          "admission": {
+            "$ref": "#/components/schemas/ApplicationNativeTransferAdmission"
+          },
           "files": {
             "type": "array",
             "minItems": 1,
             "maxItems": 2,
-            "items": { "$ref": "#/components/schemas/ApplicationNativeTransferFile" }
+            "items": {
+              "$ref": "#/components/schemas/ApplicationNativeTransferFile"
+            }
           }
         },
         "additionalProperties": false,
@@ -10195,12 +12977,31 @@
         "type": "object",
         "required": ["schema", "nonce", "expiresAtMs", "applicationId", "packetId", "packetHash"],
         "properties": {
-          "schema": { "const": "application-native-transfer-receipt.v1", "type": "string" },
-          "nonce": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-          "expiresAtMs": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
-          "applicationId": { "type": "string", "format": "uuid" },
-          "packetId": { "type": "string", "format": "uuid" },
-          "packetHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          "schema": {
+            "const": "application-native-transfer-receipt.v1",
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "expiresAtMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "applicationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "packetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "packetHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
         },
         "additionalProperties": false,
         "description": "Private memory-transfer acknowledgement only. Expiry is the original material/approval minimum, not a renewed file lifetime. No submission-state meaning."
@@ -10209,8 +13010,13 @@
         "type": "object",
         "required": ["schema", "receipt"],
         "properties": {
-          "schema": { "const": "application-native-transfer-discard.v1", "type": "string" },
-          "receipt": { "$ref": "#/components/schemas/ApplicationNativeTransferReceipt" }
+          "schema": {
+            "const": "application-native-transfer-discard.v1",
+            "type": "string"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ApplicationNativeTransferReceipt"
+          }
         },
         "additionalProperties": false,
         "description": "Withdraw the exact retained transfer from its original trusted sender document. Confers no read, replacement, file upload or submission authority."
@@ -10219,8 +13025,13 @@
         "type": "object",
         "required": ["schema", "admission"],
         "properties": {
-          "schema": { "const": "application-native-transfer-cancel.v1", "type": "string" },
-          "admission": { "$ref": "#/components/schemas/ApplicationNativeTransferAdmission" }
+          "schema": {
+            "const": "application-native-transfer-cancel.v1",
+            "type": "string"
+          },
+          "admission": {
+            "$ref": "#/components/schemas/ApplicationNativeTransferAdmission"
+          }
         },
         "additionalProperties": false,
         "description": "Withdraw an admitted or committing transfer using its exact original sender and nonce, including after a lost acknowledgement. No replacement or ATS authority."
@@ -11106,13 +13917,25 @@
         "allOf": [
           {
             "if": {
-              "properties": { "kind": { "const": "uploaded_resume" } },
+              "properties": {
+                "kind": {
+                  "const": "uploaded_resume"
+                }
+              },
               "required": ["kind"]
             },
-            "then": { "properties": { "generationId": false } },
+            "then": {
+              "properties": {
+                "generationId": false
+              }
+            },
             "else": {
               "required": ["generationId"],
-              "properties": { "generationId": { "type": "string" } }
+              "properties": {
+                "generationId": {
+                  "type": "string"
+                }
+              }
             }
           }
         ]
