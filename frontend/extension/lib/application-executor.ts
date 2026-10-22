@@ -89,13 +89,19 @@ export async function executeApprovedApplication(options: {
     if (session.identityFence !== selection.ownerFence) throw unavailable();
     return session;
   };
+  // After the one click a provider may confirm by moving the same document to its confirmation URL.
+  const urlAllowed = (url: string | undefined) =>
+    url === selection.employerUrl ||
+    (commandSent &&
+      url !== undefined &&
+      provider.isConfirmationUrl?.(selection.employerUrl, url) === true);
   const documentProof = async () => {
     current();
     const tabs = await bounded(chrome.tabs.query({ active: true, currentWindow: true }));
     if (
       tabs.length !== 1 ||
       tabs[0]?.id !== selection.tabId ||
-      tabs[0].url !== selection.employerUrl ||
+      !urlAllowed(tabs[0].url) ||
       tabs[0].incognito
     )
       throw unavailable();
@@ -110,7 +116,7 @@ export async function executeApprovedApplication(options: {
       documents.length !== 1 ||
       documents[0]?.frameId !== 0 ||
       documents[0].documentId !== selection.documentId ||
-      documents[0].result?.url !== selection.employerUrl ||
+      !urlAllowed(documents[0].result?.url) ||
       !documents[0].result?.topFrame
     )
       throw unavailable();
@@ -235,7 +241,7 @@ export async function executeApprovedApplication(options: {
       sender.tab?.id !== selection.tabId ||
       sender.frameId !== 0 ||
       sender.documentId !== selection.documentId ||
-      sender.url !== selection.employerUrl ||
+      !urlAllowed(sender.url) ||
       sender.origin !== new URL(selection.employerUrl).origin ||
       sender.documentLifecycle !== "active" ||
       sender.tab.incognito ||
@@ -501,8 +507,8 @@ export async function executeApprovedApplication(options: {
         observed < Date.parse(attempt.dispatchedAt ?? "") ||
         observed > Date.now() ||
         observed >= deadline ||
-        !evidence.providerReference ||
-        !/^[a-zA-Z0-9_-]{1,200}$/u.test(evidence.providerReference)
+        (evidence.providerReference !== undefined &&
+          !/^[a-zA-Z0-9_-]{1,200}$/u.test(evidence.providerReference))
       )
         throw unavailable();
     }

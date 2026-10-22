@@ -56,6 +56,9 @@ const modes = [
   "stalled-confirmation-hash",
   "generic-thank-you",
   "navigation",
+  "confirmation-url",
+  "confirmation-url-wrong-page",
+  "confirmation-url-no-message",
   "uploaded-docx",
   "uploaded-docx-not-accepted",
 ];
@@ -88,7 +91,7 @@ try {
     const result = await page.evaluate((mode) => window.runGreenhouseExecutionFixture(mode), mode);
     assert.equal(
       result.result.kind === "confirmed",
-      ["success", "uploaded-docx"].includes(mode),
+      ["success", "uploaded-docx", "confirmation-url"].includes(mode),
       `${mode}: ${JSON.stringify(result)}`,
     );
     assert.equal(result.filesCleared, true, `${mode}: file controls must be cleared`);
@@ -102,6 +105,9 @@ try {
         "stalled-confirmation-hash",
         "generic-thank-you",
         "navigation",
+        "confirmation-url",
+        "confirmation-url-wrong-page",
+        "confirmation-url-no-message",
       ].includes(mode)
         ? 1
         : 0,
@@ -138,6 +144,15 @@ try {
       assert.deepEqual(result.attached, [], "a form that refuses Word never receives it");
     if (["confirmation-and-challenge", "challenge-during-final-proof"].includes(mode))
       assert.equal(result.result.kind, "challenge_required", mode);
+    if (mode === "confirmation-url") {
+      assert.equal(result.result.confirmation.providerReference, undefined, mode);
+      assert.equal(result.result.confirmation.kind, "provider_confirmation_page", mode);
+    }
+    if (["confirmation-url-wrong-page", "confirmation-url-no-message"].includes(mode))
+      assert.ok(
+        ["unrecognized_response", "timeout"].includes(result.result.kind),
+        `${mode}: ${result.result.kind}`,
+      );
     if (mode === "challenge-at-start") {
       // Everything is prepared for the candidate, but the submit control is never used.
       assert.equal(result.result.kind, "challenge_required", mode);
@@ -151,7 +166,7 @@ try {
       profile: "d3_greenhouse_execution_generated_synthetic_v1",
       cases: modes.length,
       uploadedResumeCases: 2,
-      confirmationCases: 2,
+      confirmationCases: 3,
       falsePositiveConfirmations: 0,
       externalRequests: 0,
       providerUploads: 0,

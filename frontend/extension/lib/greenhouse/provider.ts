@@ -10,6 +10,28 @@ import { greenhouseExecutionProfile } from "./profiles";
 const unavailable = () => Error("GreenhouseExecutionUnavailable");
 const ROOT = "form#application_form, form#application-form";
 
+/**
+ * A board page moves to `/<tenant>/jobs/<id>/confirmation` after a successful submit (public
+ * confirmation pages exist at that path). Same origin and exact path only; the query is ignored.
+ */
+function isConfirmationUrl(employerUrl: string, currentUrl: string): boolean {
+  try {
+    const identity = greenhouseApplicationIdentity(employerUrl);
+    const employer = new URL(employerUrl);
+    const current = new URL(currentUrl);
+    return (
+      identity !== undefined &&
+      employer.pathname === `/${identity.tenant}/jobs/${identity.jobId}` &&
+      current.origin === employer.origin &&
+      !current.username &&
+      !current.password &&
+      current.pathname === `${employer.pathname}/confirmation`
+    );
+  } catch {
+    return false;
+  }
+}
+
 export const greenhouseProvider: ApplicationProvider = {
   id: "greenhouse",
   adapterId: "greenhouse-application-v1",
@@ -74,5 +96,6 @@ export const greenhouseProvider: ApplicationProvider = {
       (first as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value.trim() !== ""
     );
   },
+  isConfirmationUrl,
   profile: greenhouseExecutionProfile,
 };

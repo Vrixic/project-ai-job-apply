@@ -471,10 +471,14 @@ describe("adapter registry gate", () => {
     ).toBe("off");
   });
 
-  it("declares the three provider adapters with no supported variants until fixtures exist", () => {
-    for (const provider of ["greenhouse", "lever", "ashby"]) {
+  it("declares the provider adapters; only reviewed variants are listed (ADR-053)", () => {
+    for (const [provider, variants] of [
+      ["greenhouse", ["greenhouse-standard-v1"]],
+      ["lever", []],
+      ["ashby", []],
+    ] as const) {
       const declaration = ADAPTER_DECLARATIONS.find((entry) => entry.provider === provider);
-      expect(declaration?.variants).toEqual([]);
+      expect(declaration?.variants).toEqual(variants);
     }
   });
 });

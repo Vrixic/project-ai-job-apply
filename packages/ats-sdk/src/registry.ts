@@ -67,8 +67,8 @@ export const ADAPTER_DECLARATIONS: readonly AdapterDeclaration[] = [
   {
     id: "greenhouse-application-v1",
     provider: "greenhouse",
-    version: "0.0.0",
-    variants: [],
+    version: "1.0.0",
+    variants: ["greenhouse-standard-v1"],
     capabilities: { autofill: true, fileAttach: true, confirmationDetection: true },
   },
   {
