@@ -55,7 +55,7 @@ function requestBody(request: ProviderRequest, background: boolean) {
   };
 }
 
-function completedText(value: unknown): { text: string } {
+export function completedText(value: unknown): { text: string } {
   if (!record(value) || value.status !== "completed" || !Array.isArray(value.output))
     throw new ModelGatewayError("PROVIDER_FAILED");
   const messages = value.output.filter((item: unknown) => record(item) && item.type === "message");
@@ -86,7 +86,7 @@ function completedText(value: unknown): { text: string } {
   return { text: content.text };
 }
 
-async function readResponse(response: Response): Promise<unknown> {
+export async function readResponse(response: Response): Promise<unknown> {
   if (!response.body) throw new ModelGatewayError("PROVIDER_FAILED");
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
