@@ -99,6 +99,7 @@ import {
   type SavedJobs,
 } from "@ai-job-apply/matching-service";
 import type {
+  ProfileSectionStore,
   ProfileStore,
   RestrictedAnswerVaultStore,
   UgcContributionConsent,
@@ -106,6 +107,11 @@ import type {
 } from "@ai-job-apply/profile-service";
 import {
   AccountQuarantinedError,
+  ProfileSectionDuplicateError,
+  ProfileSectionLimitError,
+  ProfileSectionNotFoundError,
+  ProfileSectionRestrictedQuestionError,
+  ProfileSectionVersionConflictError,
   RestrictedAnswerVaultConflictError,
   UgcContributionConsentConflictError,
 } from "@ai-job-apply/profile-service";
@@ -951,6 +957,7 @@ async function createApp(
     applications?: ApplicationsApi;
     documents?: DocumentStore;
     restrictedAnswerVault?: RestrictedAnswerVaultStore;
+    profileSections?: ProfileSectionStore;
     privilegedModerationAudit?: PrivilegedModerationAuditWriter;
   } = {},
 ) {
@@ -996,6 +1003,7 @@ async function createApp(
     ...(options.restrictedAnswerVault
       ? { restrictedAnswerVault: options.restrictedAnswerVault }
       : {}),
+    ...(options.profileSections ? { profileSections: options.profileSections } : {}),
     catalog: options.catalog ?? catalog,
     savedJobs,
     privateSavedPageCaptures,
@@ -6149,5 +6157,262 @@ describe("bounded privileged moderation audit boundary", () => {
     } finally {
       await f.app.close();
     }
+  });
+});
+
+describe("structured Profile section routes (ADR-052)", () => {
+  const entryId = "019d04cf-1f80-7000-8000-000000000002";
+  const key = "profile-sections-test-0001";
+  const record = {
+    id: entryId,
+    school: "Synthetic University",
+    version: 1,
+    origin: "entered",
+    displayOrder: 0,
+    createdAt: "2026-10-22T12:00:00.000Z",
+    updatedAt: "2026-10-22T12:00:00.000Z",
+  };
+
+  function fakeStore(overrides: Partial<Record<keyof ProfileSectionStore, unknown>> = {}) {
+    const calls: Array<{ method: string; args: unknown[] }> = [];
+    const track =
+      (method: string, result: unknown) =>
+      async (...args: unknown[]) => {
+        calls.push({ method, args });
+        if (result instanceof Error) throw result;
+        return result;
+      };
+    const results: Record<string, unknown> = {
+      getPersonal: null,
+      putPersonal: {
+        version: 1,
+        origin: "entered",
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+      },
+      listEntries: [record],
+      createEntry: record,
+      updateEntry: { ...record, version: 2 },
+      deleteEntry: undefined,
+      reorderEntries: [record],
+      listDrafts: [],
+      createDraft: undefined,
+      discardDraft: undefined,
+      saveDraft: { section: "education", entryId, version: 1 },
+      ...overrides,
+    };
+    const store = Object.fromEntries(
+      Object.entries(results).map(([method, result]) => [method, track(method, result)]),
+    ) as unknown as ProfileSectionStore;
+    return { store, calls };
+  }
+
+  type Sent = { statusCode: number; headers: Record<string, unknown>; json: () => unknown };
+
+  async function withApp<T>(
+    profileSections: ProfileSectionStore | undefined,
+    scope: string,
+    run: (
+      send: (
+        method: string,
+        url: string,
+        extra?: { headers?: Record<string, string>; payload?: object },
+      ) => Promise<Sent>,
+    ) => Promise<T>,
+  ): Promise<T> {
+    const { app, issuer } = await createApp(profileSections ? { profileSections } : {});
+    try {
+      const token = await issuer.issue("candidate-profile-sections", { scope });
+      return await run(
+        (method, url, extra = {}) =>
+          app.inject({
+            method: method as "GET",
+            url,
+            headers: { authorization: `Bearer ${token}`, ...extra.headers },
+            ...(extra.payload === undefined ? {} : { payload: extra.payload }),
+          }) as unknown as Promise<Sent>,
+      );
+    } finally {
+      await app.close();
+    }
+  }
+
+  it("fails closed with 503 when the store is not configured", async () => {
+    await withApp(undefined, "profile:read", async (send) => {
+      expect((await send("GET", "/v1/profile/education-entries")).statusCode).toBe(503);
+    });
+  });
+
+  it("scopes reads and writes and never lets a read token write", async () => {
+    const { store, calls } = fakeStore();
+    await withApp(store, "profile:read", async (send) => {
+      expect((await send("GET", "/v1/profile/education-entries")).statusCode).toBe(200);
+      const write = await send("POST", "/v1/profile/education-entries", {
+        headers: { "idempotency-key": key },
+        payload: { school: "Synthetic University" },
+      });
+      expect(write.statusCode).toBe(403);
+    });
+    expect(calls.map((call) => call.method)).toEqual(["listEntries"]);
+  });
+
+  it("returns no-store lists keyed by the authenticated owner, with sections named per contract", async () => {
+    const { store, calls } = fakeStore();
+    await withApp(store, "profile:read", async (send) => {
+      const education = await send("GET", "/v1/profile/education-entries");
+      expect(education.headers["cache-control"]).toBe("no-store");
+      expect(education.json()).toEqual({ entries: [record] });
+      const answers = await send("GET", "/v1/profile/application-answers");
+      expect(answers.json()).toEqual({ answers: [record] });
+      expect((await send("GET", "/v1/profile/personal")).statusCode).toBe(404);
+    });
+    expect(calls[0]?.args[1]).toBe("education");
+    expect(calls[1]?.args[1]).toBe("applicationAnswer");
+    expect(typeof calls[0]?.args[0]).toBe("string");
+  });
+
+  it("requires an idempotency key and strict bodies on every write", async () => {
+    const { store, calls } = fakeStore();
+    await withApp(store, "profile:read profile:write", async (send) => {
+      const noKey = await send("POST", "/v1/profile/skill-entries", { payload: { name: "Go" } });
+      expect(noKey.statusCode).toBe(400);
+      for (const payload of [
+        { name: "Go", sensitivity: "restricted" },
+        { name: "Go", userId: "019d04cf-1f80-7000-8000-000000000009" },
+        { name: "" },
+        {},
+      ]) {
+        const response = await send("POST", "/v1/profile/skill-entries", {
+          headers: { "idempotency-key": key },
+          payload,
+        });
+        expect(response.statusCode, JSON.stringify(payload)).toBe(400);
+      }
+      const ok = await send("POST", "/v1/profile/skill-entries", {
+        headers: { "idempotency-key": key },
+        payload: { name: "Go" },
+      });
+      expect(ok.statusCode).toBe(201);
+      expect(ok.headers["cache-control"]).toBe("no-store");
+    });
+    expect(calls.filter((call) => call.method === "createEntry")).toHaveLength(1);
+  });
+
+  it("updates, reorders and deletes with versions, and refuses malformed identifiers and queries", async () => {
+    const { store, calls } = fakeStore();
+    await withApp(store, "profile:read profile:write", async (send) => {
+      const headers = { "idempotency-key": key };
+      const patch = (url: string, payload: object) => send("PATCH", url, { headers, payload });
+      expect(
+        (
+          await patch(`/v1/profile/education-entries/${entryId}`, {
+            expectedVersion: 1,
+            degree: "BS",
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (await patch(`/v1/profile/education-entries/${entryId}`, { degree: "BS" })).statusCode,
+      ).toBe(400);
+      expect(
+        (
+          await patch("/v1/profile/education-entries/not-a-uuid", {
+            expectedVersion: 1,
+            degree: "BS",
+          })
+        ).statusCode,
+      ).toBe(400);
+      const reorder = (path: string) =>
+        send("POST", `/v1/profile/${path}/reorder`, {
+          headers,
+          payload: { orderedEntryIds: [entryId] },
+        });
+      expect((await reorder("work-experience-entries")).statusCode).toBe(200);
+      expect((await reorder("application-answers")).statusCode).toBe(404);
+      const deleted = await send(
+        "DELETE",
+        `/v1/profile/skill-entries/${entryId}?expectedVersion=3`,
+        {
+          headers,
+        },
+      );
+      expect(deleted.statusCode).toBe(204);
+      for (const query of [
+        "",
+        "?expectedVersion=0",
+        "?expectedVersion=x",
+        "?expectedVersion=1&extra=1",
+        "?other=1",
+      ]) {
+        const bad = await send("DELETE", `/v1/profile/skill-entries/${entryId}${query}`, {
+          headers,
+        });
+        expect(bad.statusCode, query).toBe(400);
+      }
+    });
+    const deleteCalls = calls.filter((call) => call.method === "deleteEntry");
+    expect(deleteCalls).toHaveLength(1);
+    expect(deleteCalls[0]?.args.slice(1, 4)).toEqual(["skill", entryId, 3]);
+  });
+
+  it("maps store failures to stable problems without echoing candidate text", async () => {
+    const cases: Array<[Error, number, string]> = [
+      [new ProfileSectionVersionConflictError(), 409, "version_conflict"],
+      [new ProfileSectionNotFoundError(), 404, "profile_record_not_found"],
+      [new ProfileSectionDuplicateError(), 409, "profile_record_duplicate"],
+      [new ProfileSectionLimitError("skill"), 409, "profile_section_limit"],
+      [new ProfileSectionRestrictedQuestionError(), 400, "restricted_question"],
+    ];
+    for (const [error, status, code] of cases) {
+      const { store } = fakeStore({ createEntry: error });
+      await withApp(store, "profile:write", async (send) => {
+        const response = await send("POST", "/v1/profile/application-answers", {
+          headers: { "idempotency-key": key },
+          payload: { question: "Why us?", answer: "synthetic-private-canary" },
+        });
+        expect(response.statusCode).toBe(status);
+        expect(response.json()).toMatchObject({ code });
+        expect(JSON.stringify(response.json())).not.toContain("synthetic-private-canary");
+      });
+    }
+  });
+
+  it("saves and discards drafts only by identifier, and saves Personal with a version", async () => {
+    const { store, calls } = fakeStore();
+    await withApp(store, "profile:read profile:write", async (send) => {
+      const headers = { "idempotency-key": key };
+      const draftId = "019d04cf-1f80-7000-8000-000000000003";
+      expect((await send("GET", "/v1/profile/import-drafts")).json()).toEqual({ drafts: [] });
+      const saved = await send("POST", `/v1/profile/import-drafts/${draftId}/save`, {
+        headers,
+        payload: {},
+      });
+      expect(saved.statusCode).toBe(201);
+      expect(saved.json()).toEqual({ section: "education", entryId, version: 1 });
+      const refused = await send("POST", `/v1/profile/import-drafts/${draftId}/save`, {
+        headers,
+        payload: { sensitivity: "restricted" },
+      });
+      expect(refused.statusCode).toBe(400);
+      expect(
+        (await send("DELETE", `/v1/profile/import-drafts/${draftId}`, { headers })).statusCode,
+      ).toBe(204);
+      const personal = await send("PUT", "/v1/profile/personal", {
+        headers,
+        payload: { expectedVersion: 0, fullName: "Synthetic Person" },
+      });
+      expect(personal.statusCode).toBe(200);
+      const unversioned = await send("PUT", "/v1/profile/personal", {
+        headers,
+        payload: { fullName: "x" },
+      });
+      expect(unversioned.statusCode).toBe(400);
+    });
+    expect(calls.map((call) => call.method)).toEqual([
+      "listDrafts",
+      "saveDraft",
+      "discardDraft",
+      "putPersonal",
+    ]);
   });
 });

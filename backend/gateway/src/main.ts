@@ -48,6 +48,7 @@ import {
   createDatabase,
   loadCandidateRightsPolicyIfConfigured,
   PostgresProfileStore,
+  createProfileSectionStore,
   PostgresRestrictedAnswerVaultStore,
   PostgresUgcContributionConsentStore,
 } from "@ai-job-apply/profile-service";
@@ -110,6 +111,7 @@ const restrictedAnswerVault = new PostgresRestrictedAnswerVaultStore(
     ? new KmsRestrictedAnswerCipher(restrictedAnswerVaultKmsKeyArn)
     : undefined,
 );
+const profileSections = createProfileSectionStore(database.client);
 const catalog = new PostgresJobCatalog(database.client, {
   searchCursorKeys: deriveJobSearchCursorKeys(config.DATABASE_URL),
 });
@@ -268,6 +270,7 @@ const applications =
 const app = await createGatewayApplication({
   store,
   restrictedAnswerVault,
+  profileSections,
   catalog,
   jobReports,
   jobContributions,

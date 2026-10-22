@@ -20,6 +20,7 @@ import {
 } from "@ai-job-apply/matching-service";
 import {
   type ProfileStore,
+  type ProfileSectionStore,
   type RestrictedAnswerVaultStore,
   type UgcContributionConsentStore,
   UgcContributionConsentUnavailableError,
@@ -43,6 +44,7 @@ import {
 export interface GatewayApplicationOptions {
   store: ProfileStore;
   restrictedAnswerVault?: RestrictedAnswerVaultStore;
+  profileSections?: ProfileSectionStore;
   catalog: JobCatalogReader;
   jobReports: JobReports;
   jobContributions: JobContributions;
@@ -109,6 +111,7 @@ export async function createGatewayApplication(
       ...(options.restrictedAnswerVault
         ? { restrictedAnswerVault: options.restrictedAnswerVault }
         : {}),
+      ...(options.profileSections ? { profileSections: options.profileSections } : {}),
       catalog: options.catalog,
       jobReports: options.jobReports,
       jobContributions: options.jobContributions,

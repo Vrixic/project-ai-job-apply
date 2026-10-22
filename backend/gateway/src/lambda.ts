@@ -60,6 +60,7 @@ import {
   createDatabase,
   loadCandidateRightsPolicyIfConfigured,
   PostgresProfileStore,
+  createProfileSectionStore,
   PostgresRestrictedAnswerVaultStore,
   PostgresUgcContributionConsentStore,
   resolveLambdaDatabaseUrl,
@@ -176,6 +177,20 @@ const PROTECTED_EXACT_ROUTES = new Set([
   "POST /v1/me/account-deletion-requests",
   "GET /v1/profile/facts",
   "POST /v1/profile/facts",
+  "GET /v1/profile/personal",
+  "PUT /v1/profile/personal",
+  "GET /v1/profile/import-drafts",
+  "GET /v1/profile/education-entries",
+  "POST /v1/profile/education-entries",
+  "GET /v1/profile/work-experience-entries",
+  "POST /v1/profile/work-experience-entries",
+  "GET /v1/profile/skill-entries",
+  "POST /v1/profile/skill-entries",
+  "GET /v1/profile/application-answers",
+  "POST /v1/profile/application-answers",
+  "POST /v1/profile/education-entries/reorder",
+  "POST /v1/profile/work-experience-entries/reorder",
+  "POST /v1/profile/skill-entries/reorder",
   "GET /v1/profile/restricted-answers",
   "GET /v1/resumes",
   "POST /v1/resumes/uploads",
@@ -200,6 +215,12 @@ const MODERATION_REPORT_SUMMARY_PATH_PATTERN =
   /^\/v1\/admin\/moderation\/jobs\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/report-summary$/;
 const PROFILE_FACT_PATH_PATTERN =
   /^\/v1\/profile\/facts\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PROFILE_RECORD_PATH_PATTERN =
+  /^\/v1\/profile\/(?:education-entries|work-experience-entries|skill-entries|application-answers)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PROFILE_DRAFT_PATH_PATTERN =
+  /^\/v1\/profile\/import-drafts\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PROFILE_DRAFT_SAVE_PATH_PATTERN =
+  /^\/v1\/profile\/import-drafts\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/save$/i;
 const RESTRICTED_ANSWER_PATH_PATTERN =
   /^\/v1\/profile\/restricted-answers\/[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$/;
 const SAVED_JOB_PATH_PATTERN =
@@ -321,6 +342,7 @@ interface AllowedRoute {
   acceptsApplicationGenerationQuery?: true;
   acceptsApplicationResumeFormatQuery?: true;
   acceptsRestrictedAnswerContextQuery?: true;
+  acceptsProfileExpectedVersionQuery?: true;
 }
 
 function exactD2RouteKey(routeKey: string, expected: string): boolean {
@@ -382,6 +404,18 @@ function allowedRoute(
     return { acceptsBody: false, protected: true, acceptsApplicationResumeFormatQuery: true };
   }
   if (method === "PATCH" && PROFILE_FACT_PATH_PATTERN.test(path)) {
+    return { acceptsBody: true, protected: true };
+  }
+  if (method === "PATCH" && PROFILE_RECORD_PATH_PATTERN.test(path)) {
+    return { acceptsBody: true, protected: true };
+  }
+  if (method === "DELETE" && PROFILE_RECORD_PATH_PATTERN.test(path)) {
+    return { acceptsBody: false, protected: true, acceptsProfileExpectedVersionQuery: true };
+  }
+  if (method === "DELETE" && PROFILE_DRAFT_PATH_PATTERN.test(path)) {
+    return { acceptsBody: false, protected: true };
+  }
+  if (method === "POST" && PROFILE_DRAFT_SAVE_PATH_PATTERN.test(path)) {
     return { acceptsBody: true, protected: true };
   }
   if (method === "PUT" && RESTRICTED_ANSWER_PATH_PATTERN.test(path)) {
@@ -605,7 +639,10 @@ function requestPayload(
   event: APIGatewayProxyEventV2,
   route: AllowedRoute,
 ): { failure?: APIGatewayProxyStructuredResultV2; payload?: string } {
-  if (route.acceptsApplicationGenerationQuery && !event.rawQueryString) {
+  if (
+    (route.acceptsApplicationGenerationQuery || route.acceptsProfileExpectedVersionQuery) &&
+    !event.rawQueryString
+  ) {
     return { failure: boundaryFailure(event, 400, "invalid_request", "Invalid request") };
   }
   if (
@@ -619,7 +656,9 @@ function requestPayload(
       (route.acceptsApplicationResumeFormatQuery &&
         validApplicationResumeFormatQuery(event.rawQueryString)) ||
       (route.acceptsRestrictedAnswerContextQuery &&
-        validRestrictedAnswerContextQuery(event.rawQueryString))
+        validRestrictedAnswerContextQuery(event.rawQueryString)) ||
+      (route.acceptsProfileExpectedVersionQuery &&
+        validProfileExpectedVersionQuery(event.rawQueryString))
     )
   ) {
     return {
@@ -718,6 +757,16 @@ function validRestrictedAnswerContextQuery(raw: string): boolean {
     typeof only[1] === "string" &&
     only[1].length >= 1 &&
     only[1].length <= 120
+  );
+}
+
+function validProfileExpectedVersionQuery(raw: string): boolean {
+  const parameters = [...new URLSearchParams(raw)];
+  const only = parameters[0];
+  return (
+    parameters.length === 1 &&
+    only?.[0] === "expectedVersion" &&
+    /^[1-9][0-9]{0,8}$/.test(only[1] ?? "")
   );
 }
 
@@ -984,7 +1033,8 @@ export function createApiGatewayHandler(options: ApiGatewayHandlerOptions): ApiG
               route.acceptsApplicationHistoryQuery ||
               route.acceptsApplicationGenerationQuery ||
               route.acceptsApplicationResumeFormatQuery ||
-              route.acceptsRestrictedAnswerContextQuery) &&
+              route.acceptsRestrictedAnswerContextQuery ||
+              route.acceptsProfileExpectedVersionQuery) &&
             event.rawQueryString
               ? `${path}?${event.rawQueryString}`
               : path,
@@ -1271,6 +1321,7 @@ async function createConfiguredApplication(
   return createGatewayApplication({
     store,
     restrictedAnswerVault,
+    profileSections: createProfileSectionStore(database.client),
     catalog,
     jobReports,
     jobContributions,

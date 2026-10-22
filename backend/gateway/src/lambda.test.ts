@@ -1612,3 +1612,90 @@ describe("Applications routes at the Lambda boundary", () => {
     expect(inject).not.toHaveBeenCalled();
   });
 });
+
+describe("structured Profile routes at the Lambda boundary (ADR-052)", () => {
+  const id = "019d04cf-1f80-7000-8000-000000000201";
+  const json = { "content-type": "application/json", authorization: "Bearer opaque" };
+  const invocation = (method: string, path: string, extra: Partial<AuthorizedHttpApiEvent> = {}) =>
+    routedEvent(method, path, { headers: json, ...extra });
+  const dispatcher = () => {
+    const inject = vi.fn(async () => ({
+      statusCode: 200,
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    }));
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge: createInvocationPrincipalBridge(),
+    });
+    return { inject, handler };
+  };
+
+  it("routes every Profile section operation the OpenAPI contract declares", async () => {
+    const contract = JSON.parse(
+      readFileSync(
+        fileURLToPath(
+          new URL("../../../packages/api-contracts/openapi/platform.v1.json", import.meta.url),
+        ),
+        "utf8",
+      ),
+    ) as { paths: Record<string, Record<string, unknown>> };
+    const declared: Array<[string, string]> = [];
+    for (const [template, operations] of Object.entries(contract.paths)) {
+      if (
+        !/^\/profile\/(personal|education-entries|work-experience-entries|skill-entries|application-answers|import-drafts)/.test(
+          template,
+        )
+      ) {
+        continue;
+      }
+      for (const method of Object.keys(operations)) declared.push([method.toUpperCase(), template]);
+    }
+    expect(declared.length).toBe(24);
+    for (const [method, template] of declared) {
+      const path = `/v1${template}`
+        .replace("{entryId}", id)
+        .replace("{answerId}", id)
+        .replace("{draftId}", id);
+      const { inject, handler } = dispatcher();
+      const hasBody = method === "POST" || method === "PUT" || method === "PATCH";
+      const response = await invoke(
+        handler,
+        invocation(method, path, {
+          ...(hasBody ? { body: "{}" } : {}),
+          ...(method === "DELETE" && !path.includes("import-drafts")
+            ? { rawQueryString: "expectedVersion=1" }
+            : {}),
+        }),
+      );
+      expect(response.statusCode, `${method} ${template}`).toBe(200);
+      expect(inject, `${method} ${template}`).toHaveBeenCalledOnce();
+    }
+  });
+
+  it.each([
+    ["DELETE", `/v1/profile/skill-entries/${id}`, undefined, ""],
+    ["DELETE", `/v1/profile/skill-entries/${id}`, undefined, "expectedVersion=0"],
+    ["DELETE", `/v1/profile/skill-entries/${id}`, undefined, "expectedVersion=1&x=1"],
+    ["DELETE", `/v1/profile/skill-entries/${id}`, "{}", "expectedVersion=1"],
+    ["GET", "/v1/profile/education-entries", undefined, "limit=1"],
+    ["PATCH", "/v1/profile/education-entries/not-a-uuid", "{}", ""],
+    ["DELETE", "/v1/profile/personal", undefined, ""],
+    ["PATCH", "/v1/profile/personal", "{}", ""],
+    ["GET", "/v1/profile/education-entries/reorder", undefined, ""],
+    ["POST", "/v1/profile/education-entries/extra/segment", "{}", ""],
+  ])("refuses %s %s with body %s and query %s", async (method, path, body, query) => {
+    const { inject, handler } = dispatcher();
+    const response = await invoke(
+      handler,
+      invocation(method as string, path as string, {
+        ...(body === undefined ? {} : { body }),
+        ...(query ? { rawQueryString: query as string } : {}),
+      }),
+    );
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
+    expect(inject).not.toHaveBeenCalled();
+  });
+});

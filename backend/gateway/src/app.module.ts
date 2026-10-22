@@ -55,8 +55,11 @@ import type {
   PrepareApplicationPacketRequest,
   PrivateSavedPageCapture as PrivateSavedPageCaptureResponse,
   ProblemDetails,
+  ProfileEntryReference,
   ProfileFact,
   ProfileFactCollection,
+  ProfileImportDraft,
+  ProfilePersonal,
   PutJobPreferencesRequest,
   PutJobPreferencesResponse,
   ReconcileApplicationAttemptRequest,
@@ -163,6 +166,17 @@ import {
   IdempotencyConflictError,
   ProfileFactTransitionConflictError,
   ProfileFactVersionConflictError,
+  type ProfileEntryRecord,
+  type ProfileEntrySection,
+  ProfileSectionDuplicateError,
+  ProfileSectionIdempotencyConflictError,
+  ProfileSectionInputError,
+  ProfileSectionLimitError,
+  ProfileSectionNotFoundError,
+  ProfileSectionOrderError,
+  ProfileSectionRestrictedQuestionError,
+  type ProfileSectionStore,
+  ProfileSectionVersionConflictError,
   type ProfileStore,
   RestrictedAnswerVaultConfigurationError,
   RestrictedAnswerVaultConflictError,
@@ -223,6 +237,7 @@ import {
 
 const PROFILE_STORE = Symbol("PROFILE_STORE");
 const RESTRICTED_ANSWER_VAULT = Symbol("RESTRICTED_ANSWER_VAULT");
+const PROFILE_SECTIONS = Symbol("PROFILE_SECTIONS");
 const JOB_CATALOG = Symbol("JOB_CATALOG");
 const JOB_REPORTS = Symbol("JOB_REPORTS");
 const JOB_CONTRIBUTIONS = Symbol("JOB_CONTRIBUTIONS");
@@ -328,6 +343,21 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/me/account-deletion-requests/:deletionRequestId/confirm",
   "/v1/profile/facts",
   "/v1/profile/facts/:factId",
+  "/v1/profile/personal",
+  "/v1/profile/import-drafts",
+  "/v1/profile/import-drafts/:draftId",
+  "/v1/profile/import-drafts/:draftId/save",
+  "/v1/profile/education-entries",
+  "/v1/profile/education-entries/reorder",
+  "/v1/profile/education-entries/:entryId",
+  "/v1/profile/work-experience-entries",
+  "/v1/profile/work-experience-entries/reorder",
+  "/v1/profile/work-experience-entries/:entryId",
+  "/v1/profile/skill-entries",
+  "/v1/profile/skill-entries/reorder",
+  "/v1/profile/skill-entries/:entryId",
+  "/v1/profile/application-answers",
+  "/v1/profile/application-answers/:answerId",
   "/v1/resumes",
   "/v1/resumes/uploads",
   "/v1/jobs/search",
@@ -594,6 +624,46 @@ class ProblemDetailsFilter implements ExceptionFilter {
       status = HttpStatus.CONFLICT;
       code = "profile_fact_transition_conflict";
       title = "Profile fact transition conflict";
+      detail = exception.message;
+    } else if (exception instanceof ProfileSectionVersionConflictError) {
+      status = HttpStatus.CONFLICT;
+      code = "version_conflict";
+      title = "Profile record version conflict";
+      detail = exception.message;
+    } else if (exception instanceof ProfileSectionIdempotencyConflictError) {
+      status = HttpStatus.CONFLICT;
+      code = "idempotency_conflict";
+      title = "Idempotency key conflict";
+      detail = exception.message;
+    } else if (exception instanceof ProfileSectionNotFoundError) {
+      status = HttpStatus.NOT_FOUND;
+      code = "profile_record_not_found";
+      title = "Profile record was not found";
+      detail = exception.message;
+    } else if (exception instanceof ProfileSectionLimitError) {
+      status = HttpStatus.CONFLICT;
+      code = "profile_section_limit";
+      title = "Profile section is full";
+      detail = exception.message;
+    } else if (exception instanceof ProfileSectionDuplicateError) {
+      status = HttpStatus.CONFLICT;
+      code = "profile_record_duplicate";
+      title = "Profile record already exists";
+      detail = exception.message;
+    } else if (exception instanceof ProfileSectionOrderError) {
+      status = HttpStatus.CONFLICT;
+      code = "profile_order_conflict";
+      title = "Profile order changed";
+      detail = exception.message;
+    } else if (exception instanceof ProfileSectionRestrictedQuestionError) {
+      status = HttpStatus.BAD_REQUEST;
+      code = "restricted_question";
+      title = "Restricted question";
+      detail = exception.message;
+    } else if (exception instanceof ProfileSectionInputError) {
+      status = HttpStatus.BAD_REQUEST;
+      code = "invalid_profile_record";
+      title = "Profile record is invalid";
       detail = exception.message;
     } else if (exception instanceof DocumentIdempotencyConflictError) {
       status = HttpStatus.CONFLICT;
@@ -992,6 +1062,92 @@ const validateConfirmAccountDeletionRequest = compileComponentValidator(
 const validateCreateProfileFact = compileComponentValidator("CreateProfileFactRequest");
 const validateUpdateProfileFact = compileComponentValidator("UpdateProfileFactRequest");
 const validateSaveRestrictedAnswer = compileComponentValidator("SaveRestrictedAnswerRequest");
+const validatePutProfilePersonal = compileComponentValidator("PutProfilePersonalRequest");
+const validateReorderProfileEntries = compileComponentValidator("ReorderProfileEntriesRequest");
+const validateSaveProfileImportDraft = compileComponentValidator("SaveProfileImportDraftRequest");
+const validateCreateProfileEducationEntry = compileComponentValidator(
+  "CreateProfileEducationEntryRequest",
+);
+const validateUpdateProfileEducationEntry = compileComponentValidator(
+  "UpdateProfileEducationEntryRequest",
+);
+const validateCreateProfileWorkExperienceEntry = compileComponentValidator(
+  "CreateProfileWorkExperienceEntryRequest",
+);
+const validateUpdateProfileWorkExperienceEntry = compileComponentValidator(
+  "UpdateProfileWorkExperienceEntryRequest",
+);
+const validateCreateProfileSkillEntry = compileComponentValidator("CreateProfileSkillEntryRequest");
+const validateUpdateProfileSkillEntry = compileComponentValidator("UpdateProfileSkillEntryRequest");
+const validateCreateProfileApplicationAnswer = compileComponentValidator(
+  "CreateProfileApplicationAnswerRequest",
+);
+const validateUpdateProfileApplicationAnswer = compileComponentValidator(
+  "UpdateProfileApplicationAnswerRequest",
+);
+const PROFILE_SECTION_VALIDATORS: Readonly<
+  Record<
+    ProfileEntrySection,
+    {
+      create: ReturnType<typeof compileComponentValidator>;
+      update: ReturnType<typeof compileComponentValidator>;
+    }
+  >
+> = {
+  education: {
+    create: validateCreateProfileEducationEntry,
+    update: validateUpdateProfileEducationEntry,
+  },
+  workExperience: {
+    create: validateCreateProfileWorkExperienceEntry,
+    update: validateUpdateProfileWorkExperienceEntry,
+  },
+  skill: { create: validateCreateProfileSkillEntry, update: validateUpdateProfileSkillEntry },
+  applicationAnswer: {
+    create: validateCreateProfileApplicationAnswer,
+    update: validateUpdateProfileApplicationAnswer,
+  },
+};
+
+function validProfileBody<T>(
+  validate: ReturnType<typeof compileComponentValidator>,
+  body: unknown,
+): T {
+  if (!validate(body)) {
+    throw new HttpException(formatValidationErrors(validate.errors), HttpStatus.BAD_REQUEST);
+  }
+  return body as T;
+}
+
+function requireProfileRecordId(value: string): string {
+  if (!UUID_PATTERN.test(value)) {
+    throw new HttpException("Profile record identifier is invalid", HttpStatus.BAD_REQUEST);
+  }
+  return value;
+}
+
+/** Exactly one `expectedVersion` positive integer and nothing else. */
+function parseExpectedVersionQuery(query: unknown): number {
+  const entries =
+    query !== null && typeof query === "object" && !Array.isArray(query)
+      ? Object.entries(query as Record<string, unknown>)
+      : [];
+  const [name, value] = entries[0] ?? [];
+  if (entries.length !== 1 || name !== "expectedVersion" || typeof value !== "string") {
+    throw new HttpException("expectedVersion is required", HttpStatus.BAD_REQUEST);
+  }
+  if (!/^[1-9][0-9]{0,8}$/.test(value)) {
+    throw new HttpException("expectedVersion must be a positive integer", HttpStatus.BAD_REQUEST);
+  }
+  return Number(value);
+}
+
+function profileCollection(
+  section: ProfileEntrySection,
+  records: ProfileEntryRecord[],
+): { entries: ProfileEntryRecord[] } | { answers: ProfileEntryRecord[] } {
+  return section === "applicationAnswer" ? { answers: records } : { entries: records };
+}
 const RESTRICTED_ANSWER_FIELD_KEY_PATTERN = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/;
 const RESTRICTED_ANSWER_QUERY_INVALID = Symbol("RESTRICTED_ANSWER_QUERY_INVALID");
 
@@ -1734,6 +1890,7 @@ class CandidateController {
     @Inject(PROFILE_STORE) private readonly store: ProfileStore,
     @Inject(RESTRICTED_ANSWER_VAULT)
     private readonly restrictedAnswers: RestrictedAnswerVaultStore | null,
+    @Inject(PROFILE_SECTIONS) private readonly profileSections: ProfileSectionStore | null,
     @Inject(JOB_CATALOG) private readonly catalog: JobCatalogReader,
     @Inject(JOB_REPORTS) private readonly jobReports: JobReports,
     @Inject(JOB_CONTRIBUTIONS) private readonly jobContributions: JobContributions,
@@ -2073,6 +2230,372 @@ class CandidateController {
       throw new HttpException("Profile fact was not found", HttpStatus.NOT_FOUND);
     }
     return fact;
+  }
+
+  private profileSectionStore(): ProfileSectionStore {
+    if (!this.profileSections) {
+      throw new HttpException("Profile sections are unavailable", HttpStatus.SERVICE_UNAVAILABLE);
+    }
+    return this.profileSections;
+  }
+
+  private async listProfileSection(request: AuthenticatedRequest, section: ProfileEntrySection) {
+    const user = await this.identity.resolve(request, "profile:read");
+    return profileCollection(
+      section,
+      await this.profileSectionStore().listEntries(user.id, section),
+    );
+  }
+
+  private async createProfileSection(
+    request: AuthenticatedRequest,
+    idempotencyKey: string | undefined,
+    section: ProfileEntrySection,
+  ): Promise<ProfileEntryRecord> {
+    const user = await this.identity.resolve(request, "profile:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    const input = validProfileBody<Parameters<ProfileSectionStore["createEntry"]>[2]>(
+      PROFILE_SECTION_VALIDATORS[section].create,
+      request.body,
+    );
+    return this.profileSectionStore().createEntry(
+      user.id,
+      section,
+      input,
+      commandKey,
+      request.traceId ?? correlationId(undefined),
+    );
+  }
+
+  private async updateProfileSection(
+    request: AuthenticatedRequest,
+    recordId: string,
+    idempotencyKey: string | undefined,
+    section: ProfileEntrySection,
+  ): Promise<ProfileEntryRecord> {
+    const user = await this.identity.resolve(request, "profile:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    const id = requireProfileRecordId(recordId);
+    const input = validProfileBody<Parameters<ProfileSectionStore["updateEntry"]>[3]>(
+      PROFILE_SECTION_VALIDATORS[section].update,
+      request.body,
+    );
+    return this.profileSectionStore().updateEntry(
+      user.id,
+      section,
+      id,
+      input,
+      commandKey,
+      request.traceId ?? correlationId(undefined),
+    );
+  }
+
+  private async deleteProfileSection(
+    request: AuthenticatedRequest,
+    recordId: string,
+    idempotencyKey: string | undefined,
+    section: ProfileEntrySection,
+  ): Promise<void> {
+    const user = await this.identity.resolve(request, "profile:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    const id = requireProfileRecordId(recordId);
+    const expectedVersion = parseExpectedVersionQuery(request.query);
+    if (request.body !== undefined) {
+      throw new HttpException("Profile delete input is invalid", HttpStatus.BAD_REQUEST);
+    }
+    await this.profileSectionStore().deleteEntry(
+      user.id,
+      section,
+      id,
+      expectedVersion,
+      commandKey,
+      request.traceId ?? correlationId(undefined),
+    );
+  }
+
+  private async reorderProfileSection(
+    request: AuthenticatedRequest,
+    idempotencyKey: string | undefined,
+    section: Exclude<ProfileEntrySection, "applicationAnswer">,
+  ) {
+    const user = await this.identity.resolve(request, "profile:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    const input = validProfileBody<{ orderedEntryIds: string[] }>(
+      validateReorderProfileEntries,
+      request.body,
+    );
+    return profileCollection(
+      section,
+      await this.profileSectionStore().reorderEntries(
+        user.id,
+        section,
+        input.orderedEntryIds,
+        commandKey,
+        request.traceId ?? correlationId(undefined),
+      ),
+    );
+  }
+
+  @Get("/profile/personal")
+  @Header("cache-control", "no-store")
+  async getProfilePersonal(@Req() request: AuthenticatedRequest): Promise<ProfilePersonal> {
+    const user = await this.identity.resolve(request, "profile:read");
+    const personal = await this.profileSectionStore().getPersonal(user.id);
+    if (!personal) throw new HttpException("Profile record was not found", HttpStatus.NOT_FOUND);
+    return personal;
+  }
+
+  @Put("/profile/personal")
+  @Header("cache-control", "no-store")
+  async putProfilePersonal(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<ProfilePersonal> {
+    const user = await this.identity.resolve(request, "profile:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    const input = validProfileBody<Parameters<ProfileSectionStore["putPersonal"]>[1]>(
+      validatePutProfilePersonal,
+      request.body,
+    );
+    return this.profileSectionStore().putPersonal(
+      user.id,
+      input,
+      commandKey,
+      request.traceId ?? correlationId(undefined),
+    );
+  }
+
+  @Get("/profile/education-entries")
+  @Header("cache-control", "no-store")
+  async listProfileEducationEntries(@Req() request: AuthenticatedRequest) {
+    return this.listProfileSection(request, "education");
+  }
+
+  @Post("/profile/education-entries")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async createProfileEducationEntry(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<ProfileEntryRecord> {
+    return this.createProfileSection(request, idempotencyKey, "education");
+  }
+
+  @Post("/profile/education-entries/reorder")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async reorderProfileEducationEntrys(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ) {
+    return this.reorderProfileSection(request, idempotencyKey, "education");
+  }
+
+  @Patch("/profile/education-entries/:entryId")
+  @Header("cache-control", "no-store")
+  async updateProfileEducationEntry(
+    @Req() request: AuthenticatedRequest,
+    @Param("entryId") recordId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<ProfileEntryRecord> {
+    return this.updateProfileSection(request, recordId, idempotencyKey, "education");
+  }
+
+  @Delete("/profile/education-entries/:entryId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header("cache-control", "no-store")
+  async deleteProfileEducationEntry(
+    @Req() request: AuthenticatedRequest,
+    @Param("entryId") recordId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<void> {
+    await this.deleteProfileSection(request, recordId, idempotencyKey, "education");
+  }
+
+  @Get("/profile/work-experience-entries")
+  @Header("cache-control", "no-store")
+  async listProfileWorkExperienceEntries(@Req() request: AuthenticatedRequest) {
+    return this.listProfileSection(request, "workExperience");
+  }
+
+  @Post("/profile/work-experience-entries")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async createProfileWorkExperienceEntry(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<ProfileEntryRecord> {
+    return this.createProfileSection(request, idempotencyKey, "workExperience");
+  }
+
+  @Post("/profile/work-experience-entries/reorder")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async reorderProfileWorkExperienceEntrys(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ) {
+    return this.reorderProfileSection(request, idempotencyKey, "workExperience");
+  }
+
+  @Patch("/profile/work-experience-entries/:entryId")
+  @Header("cache-control", "no-store")
+  async updateProfileWorkExperienceEntry(
+    @Req() request: AuthenticatedRequest,
+    @Param("entryId") recordId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<ProfileEntryRecord> {
+    return this.updateProfileSection(request, recordId, idempotencyKey, "workExperience");
+  }
+
+  @Delete("/profile/work-experience-entries/:entryId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header("cache-control", "no-store")
+  async deleteProfileWorkExperienceEntry(
+    @Req() request: AuthenticatedRequest,
+    @Param("entryId") recordId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<void> {
+    await this.deleteProfileSection(request, recordId, idempotencyKey, "workExperience");
+  }
+
+  @Get("/profile/skill-entries")
+  @Header("cache-control", "no-store")
+  async listProfileSkillEntries(@Req() request: AuthenticatedRequest) {
+    return this.listProfileSection(request, "skill");
+  }
+
+  @Post("/profile/skill-entries")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async createProfileSkillEntry(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<ProfileEntryRecord> {
+    return this.createProfileSection(request, idempotencyKey, "skill");
+  }
+
+  @Post("/profile/skill-entries/reorder")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async reorderProfileSkillEntrys(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ) {
+    return this.reorderProfileSection(request, idempotencyKey, "skill");
+  }
+
+  @Patch("/profile/skill-entries/:entryId")
+  @Header("cache-control", "no-store")
+  async updateProfileSkillEntry(
+    @Req() request: AuthenticatedRequest,
+    @Param("entryId") recordId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<ProfileEntryRecord> {
+    return this.updateProfileSection(request, recordId, idempotencyKey, "skill");
+  }
+
+  @Delete("/profile/skill-entries/:entryId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header("cache-control", "no-store")
+  async deleteProfileSkillEntry(
+    @Req() request: AuthenticatedRequest,
+    @Param("entryId") recordId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<void> {
+    await this.deleteProfileSection(request, recordId, idempotencyKey, "skill");
+  }
+
+  @Get("/profile/application-answers")
+  @Header("cache-control", "no-store")
+  async listProfileApplicationAnswers(@Req() request: AuthenticatedRequest) {
+    return this.listProfileSection(request, "applicationAnswer");
+  }
+
+  @Post("/profile/application-answers")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async createProfileApplicationAnswer(
+    @Req() request: AuthenticatedRequest,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<ProfileEntryRecord> {
+    return this.createProfileSection(request, idempotencyKey, "applicationAnswer");
+  }
+
+  @Patch("/profile/application-answers/:answerId")
+  @Header("cache-control", "no-store")
+  async updateProfileApplicationAnswer(
+    @Req() request: AuthenticatedRequest,
+    @Param("answerId") recordId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<ProfileEntryRecord> {
+    return this.updateProfileSection(request, recordId, idempotencyKey, "applicationAnswer");
+  }
+
+  @Delete("/profile/application-answers/:answerId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header("cache-control", "no-store")
+  async deleteProfileApplicationAnswer(
+    @Req() request: AuthenticatedRequest,
+    @Param("answerId") recordId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<void> {
+    await this.deleteProfileSection(request, recordId, idempotencyKey, "applicationAnswer");
+  }
+
+  @Get("/profile/import-drafts")
+  @Header("cache-control", "no-store")
+  async listProfileImportDrafts(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<{ drafts: ProfileImportDraft[] }> {
+    const user = await this.identity.resolve(request, "profile:read");
+    return { drafts: await this.profileSectionStore().listDrafts(user.id) };
+  }
+
+  @Delete("/profile/import-drafts/:draftId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header("cache-control", "no-store")
+  async discardProfileImportDraft(
+    @Req() request: AuthenticatedRequest,
+    @Param("draftId") draftId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<void> {
+    const user = await this.identity.resolve(request, "profile:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    const id = requireProfileRecordId(draftId);
+    if (request.body !== undefined) {
+      throw new HttpException("Profile delete input is invalid", HttpStatus.BAD_REQUEST);
+    }
+    await this.profileSectionStore().discardDraft(
+      user.id,
+      id,
+      commandKey,
+      request.traceId ?? correlationId(undefined),
+    );
+  }
+
+  @Post("/profile/import-drafts/:draftId/save")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async saveProfileImportDraft(
+    @Req() request: AuthenticatedRequest,
+    @Param("draftId") draftId: string,
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+  ): Promise<ProfileEntryReference> {
+    const user = await this.identity.resolve(request, "profile:write");
+    const commandKey = requireIdempotencyKey(idempotencyKey);
+    const id = requireProfileRecordId(draftId);
+    const input = validProfileBody<Parameters<ProfileSectionStore["saveDraft"]>[2]>(
+      validateSaveProfileImportDraft,
+      request.body,
+    );
+    return this.profileSectionStore().saveDraft(
+      user.id,
+      id,
+      input,
+      commandKey,
+      request.traceId ?? correlationId(undefined),
+    );
   }
 
   @Get("/profile/restricted-answers")
@@ -3199,6 +3722,7 @@ class NativeMaterialWithdrawalsController {
 export interface AppModuleOptions {
   store: ProfileStore;
   restrictedAnswerVault?: RestrictedAnswerVaultStore;
+  profileSections?: ProfileSectionStore;
   catalog: JobCatalogReader;
   jobReports: JobReports;
   jobContributions: JobContributions;
@@ -3278,6 +3802,7 @@ export class AppModule {
           useValue: options.candidateDataExportDownloads ?? null,
         },
         { provide: RESTRICTED_ANSWER_VAULT, useValue: options.restrictedAnswerVault ?? null },
+        { provide: PROFILE_SECTIONS, useValue: options.profileSections ?? null },
         { provide: TOKEN_VERIFIER, useValue: options.verifier },
         { provide: ID_TOKEN_VERIFIER, useValue: options.idTokenVerifier ?? null },
         { provide: RELEASE_SHA, useValue: options.releaseSha },
