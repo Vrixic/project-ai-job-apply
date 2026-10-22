@@ -129,6 +129,17 @@ describe("safeApplyUrl", () => {
     ])
       expect(safeApplyUrl(unsafe)).toBeUndefined();
   });
+  it("opens a hosted Ashby posting on its application tab", () => {
+    const posting = "https://jobs.ashbyhq.com/acme/00000000-0000-4000-8000-000000000001";
+    expect(safeApplyUrl(posting)).toBe(`${posting}/application`);
+    expect(safeApplyUrl(`${posting}/`)).toBe(`${posting}/application`);
+    expect(safeApplyUrl(`${posting}/application`)).toBe(`${posting}/application`);
+    // Anything else on that host, or another host with the same shape, is left alone.
+    expect(safeApplyUrl("https://jobs.ashbyhq.com/acme")).toBe("https://jobs.ashbyhq.com/acme");
+    expect(safeApplyUrl("https://jobs.lever.co/acme/00000000-0000-4000-8000-000000000001")).toBe(
+      "https://jobs.lever.co/acme/00000000-0000-4000-8000-000000000001",
+    );
+  });
 });
 
 function dialog(): HTMLElement | null {

@@ -6,12 +6,20 @@ import { materialsExpired } from "../lib/application-material-lifetime";
 import { packetResumeSource } from "../lib/apply-flow";
 import { ManualFormConfirmation, type ManualFormObservation } from "./manual-form-confirmation";
 
-/** Only a plain https link with no credentials is ever offered as the place to apply. */
+const ASHBY_POSTING =
+  /^\/[^/]+\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/?$/iu;
+
+/**
+ * Only a plain https link with no credentials is ever offered as the place to apply. A hosted Ashby
+ * posting opens on its application tab, where the form the extension fills actually is.
+ */
 export function safeApplyUrl(value: string | undefined): string | undefined {
   if (!value) return undefined;
   try {
     const url = new URL(value);
     if (url.protocol !== "https:" || url.username || url.password) return undefined;
+    if (url.hostname === "jobs.ashbyhq.com" && ASHBY_POSTING.test(url.pathname))
+      url.pathname = `${url.pathname.replace(/\/$/u, "")}/application`;
     return url.href;
   } catch {
     return undefined;
