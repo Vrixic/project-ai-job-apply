@@ -112,6 +112,8 @@ export async function transferApprovedNativeMaterials(options: {
     approvalExpiresAtMs: number;
     materials: readonly ApplicationTemporaryMaterial[];
   };
+  /** The name the attached resume carries on the employer's page, instead of the generator's. */
+  resumeFileName?: string;
   /** The mounted workspace's current account/packet/approval must still match. */
   isCurrent(): boolean;
   signal: AbortSignal;
@@ -204,6 +206,9 @@ export async function transferApprovedNativeMaterials(options: {
           format: "pdf",
           mediaType: "application/pdf",
           temporaryMaterial: value.temporaryMaterial,
+          ...(material.kind === "tailored_resume" && options.resumeFileName
+            ? { fileName: options.resumeFileName }
+            : {}),
         };
         value.contentBase64 = "";
         files.push(file);

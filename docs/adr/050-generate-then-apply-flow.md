@@ -88,6 +88,12 @@ use.
    transfer contracts, the native process's completion verification and the Documents tailoring
    runtime. Cover letters are out of scope and keep their own formats. The candidate's uploaded
    resume keeps its original format.
+   The web preview is that same PDF drawn page by page in the browser (PDF.js on the page's own
+   thread, no blob URL, plugin or CSP change), read once and held in memory only while shown, so the
+   candidate reviews exactly the file that Download and the extension use. The download and
+   attachment name is always built by the web app as `User_Job_Name_ID.pdf` (candidate name from
+   the session, job title, application id), never taken from the generating process. The earlier
+   bullet-by-bullet text preview is no longer shown.
 5. **The uploaded resume fallback is an owner-scoped original read.** `PrepareApplicationPacketRequest`
    gains `resume: generate | uploaded`. `uploaded` creates no generation request, binds the original
    file's SHA-256 as the packet's resume hash with a reviewable `documents.resume` field, and the

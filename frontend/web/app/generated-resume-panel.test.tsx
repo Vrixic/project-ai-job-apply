@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { createHash } from "node:crypto";
 import type { Application, ApplicationTemporaryMaterial } from "@ai-job-apply/api-contracts";
 import axe from "axe-core";
 import React, { act } from "react";
@@ -12,6 +13,35 @@ import {
   GeneratedResumePanel,
 } from "./generated-resume-panel";
 
+// The viewer needs a canvas that jsdom does not have; it is proven in a real browser separately.
+const viewer = vi.hoisted(() => ({ fails: false }));
+vi.mock("./resume-pdf-viewer", async () => {
+  const react = await import("react");
+  return {
+    ResumePdfViewer: ({
+      bytes,
+      label,
+      onRendered,
+      onFailed,
+    }: {
+      bytes: Uint8Array;
+      label: string;
+      onRendered(): void;
+      onFailed(): void;
+    }) => {
+      react.useEffect(() => {
+        if (viewer.fails) onFailed();
+        else onRendered();
+      }, [onRendered, onFailed]);
+      return react.createElement("div", {
+        role: "img",
+        "aria-label": label,
+        "data-bytes": bytes.byteLength,
+      });
+    },
+  };
+});
+
 const APP = "00000000-0000-7000-8000-000000000001";
 const JOB = "00000000-0000-7000-8000-000000000002";
 const PACKET = "00000000-0000-7000-8000-000000000003";
@@ -20,6 +50,7 @@ const PACKET_HASH = "b".repeat(64);
 const CONTENT_HASH = "a".repeat(64);
 const AT = "2026-10-20T12:00:00.000Z";
 const NOW = Date.now();
+const FILE_NAME = `Vrij_Patel_Software_Engineer_${APP}.pdf`;
 
 function material(): ApplicationTemporaryMaterial {
   return {
@@ -62,19 +93,17 @@ const json = (value: unknown, status = 200) =>
     headers: { "content-type": "application/json", "cache-control": "no-store" },
   });
 
-const previewBody = (bound: ApplicationTemporaryMaterial | undefined) => ({
-  status: "ready",
-  matchesPacket: true,
-  tailoringVersion: "1",
+const PDF_BYTES = Buffer.from("%PDF-1.4\n%synthetic resume\n%%EOF\n", "latin1");
+const PDF_SHA = createHash("sha256").update(PDF_BYTES).digest("hex");
+const pdfBody = (bound: ApplicationTemporaryMaterial | undefined, sha256 = PDF_SHA) => ({
+  format: "pdf",
+  mediaType: "application/pdf",
+  fileName: "tailored-resume.pdf",
+  sha256,
+  sizeBytes: PDF_BYTES.byteLength,
   contentSha256: CONTENT_HASH,
+  contentBase64: PDF_BYTES.toString("base64"),
   ...(bound ? { temporaryMaterial: bound } : {}),
-  sections: [
-    {
-      kind: "experience",
-      heading: "Experience",
-      entries: [{ lines: ["Engineer"], bullets: [{ text: "Built things", change: "kept" }] }],
-    },
-  ],
 });
 
 let container: HTMLDivElement;
@@ -122,6 +151,7 @@ async function render(
         nativeMaterials={options.nativeMaterials ?? true}
         nowMs={NOW}
         busy={options.busy ?? false}
+        fileName={FILE_NAME}
         onGenerate={handlers.onGenerate}
         onApplyWithUploaded={handlers.onApplyWithUploaded}
         onPreviewShown={handlers.onPreviewShown}
@@ -129,6 +159,8 @@ async function render(
       />,
     ),
   );
+  // The read, its digest check and the first drawing take several ticks.
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
   return handlers;
 }
 
@@ -198,46 +230,37 @@ describe("GeneratedResumePanel", () => {
   });
 
   describe("ready", () => {
-    function native() {
+    function native(body: (bound: ApplicationTemporaryMaterial) => unknown = pdfBody) {
       const bound = material();
       const calls: string[] = [];
       const send = vi.fn<typeof fetch>(async (input) => {
-        const url = String(input);
-        calls.push(url);
-        if (url.endsWith("format=preview")) return json(previewBody(bound));
-        return json({
-          format: "pdf",
-          mediaType: "application/pdf",
-          fileName: "tailored-resume.pdf",
-          sha256: "c".repeat(64),
-          sizeBytes: 4,
-          contentSha256: CONTENT_HASH,
-          contentBase64: "JVBERg==",
-          temporaryMaterial: bound,
-        });
+        calls.push(String(input));
+        return json(body(bound));
       });
-      return {
-        bound,
-        calls,
-        send,
-        app: application({ temporaryMaterials: [bound] }),
-      };
+      return { bound, calls, send, app: application({ temporaryMaterials: [bound] }) };
     }
 
-    it("loads the exact preview through the BFF, shows expiry, and reports the shown hash", async () => {
+    beforeEach(() => {
+      viewer.fails = false;
+    });
+
+    it("shows the exact PDF read through the BFF, with its expiry, and reports the shown hash", async () => {
       const { bound, send, app, calls } = native();
       const handlers = await render({ kind: "ready", material: bound }, { application: app, send });
       expect(calls).toHaveLength(1);
       expect(calls[0]).toContain(`/api/platform/applications/${APP}/resume/content?`);
-      expect(container.textContent).toContain("Built things");
+      expect(calls[0]).toContain("format=pdf");
+      const preview = container.querySelector('[role="img"]');
+      expect(preview?.getAttribute("aria-label")).toBe("Preview of your tailored resume");
+      expect(preview?.getAttribute("data-bytes")).toBe(String(PDF_BYTES.byteLength));
       expect(container.textContent).toContain("deleted 30 minutes after it was made");
       expect(container.textContent).toContain("in about 25 min");
+      expect(container.textContent).not.toMatch(/Kept|Moved up|Left out|Sign in|DOCX|Word/u);
       expect(handlers.onPreviewShown).toHaveBeenCalledWith(CONTENT_HASH);
-      expect(container.textContent).not.toMatch(/Sign in|Disconnect|DOCX|Word/u);
       expect((await axe.run(container)).violations).toEqual([]);
     });
 
-    it("downloads only a verified PDF", async () => {
+    it("downloads the shown PDF under the User_Job_Name_ID name", async () => {
       const { bound, send, app } = native();
       const created: Blob[] = [];
       vi.stubGlobal("URL", {
@@ -248,27 +271,54 @@ describe("GeneratedResumePanel", () => {
         },
         revokeObjectURL: vi.fn(),
       });
-      const click = vi
-        .spyOn(HTMLAnchorElement.prototype, "click")
-        .mockImplementation(() => undefined);
+      const names: string[] = [];
+      const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+        this: HTMLAnchorElement,
+      ) {
+        names.push(this.download);
+      });
       await render({ kind: "ready", material: bound }, { application: app, send });
       expect(button(/Word|DOCX/u)).toBeUndefined();
       await act(async () => button("Download PDF")?.click());
-      await act(async () => undefined);
-      // "JVBERg==" decodes to %PDF; its real digest differs from the stub's, so it is refused.
-      expect(container.textContent).toContain("could not be downloaded");
-      expect(created).toHaveLength(0);
-      expect(click).not.toHaveBeenCalled();
+      // The file is the one already read and shown: no second read, and the generator's own name
+      // ("tailored-resume.pdf") is never used.
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(names).toEqual([FILE_NAME]);
+      expect(created).toHaveLength(1);
+      expect(created[0]?.type).toBe("application/pdf");
+      expect(container.textContent).toContain(`${FILE_NAME} downloaded.`);
       click.mockRestore();
     });
 
+    it("refuses a file whose digest does not match and shows no resume", async () => {
+      const { bound, send, app } = native((value) => pdfBody(value, "c".repeat(64)));
+      await render({ kind: "ready", material: bound }, { application: app, send });
+      expect(container.querySelector('[role="img"]')).toBeNull();
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "could not verify your resume",
+      );
+      expect(button("Download PDF")?.disabled).toBe(true);
+    });
+
+    it("keeps Download available when the PDF cannot be drawn", async () => {
+      viewer.fails = true;
+      const { bound, send, app } = native();
+      await render({ kind: "ready", material: bound }, { application: app, send });
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "could not be shown here",
+      );
+      expect(button("Download PDF")?.disabled).toBe(false);
+    });
+
     it("offers a retry when the resume cannot be loaded", async () => {
-      const { bound, app } = native();
+      const bound = material();
+      const app = application({ temporaryMaterials: [bound] });
       const send = vi.fn<typeof fetch>(async () => json({ code: "x" }, 503));
       await render({ kind: "ready", material: bound }, { application: app, send });
       expect(container.querySelector('[role="alert"]')?.textContent).toContain(
         "could not be loaded right now",
       );
+      expect(button("Download PDF")?.disabled).toBe(true);
       await act(async () => button("Try loading again")?.click());
       expect(send).toHaveBeenCalledTimes(2);
     });
@@ -280,23 +330,32 @@ describe("GeneratedResumePanel", () => {
       expect(handlers.onGenerate).toHaveBeenCalledTimes(1);
     });
 
-    it("uses the synchronous tailored resume when native materials are off", async () => {
+    it("reads the synchronous tailored resume file when native materials are off", async () => {
       const send = vi.fn<typeof fetch>(async (input) => {
-        const url = String(input);
-        if (url === `/api/platform/applications/${APP}/resume`) return json(previewBody(undefined));
+        if (String(input) === `/api/platform/applications/${APP}/resume/file?format=pdf`)
+          return json(pdfBody(undefined));
         return json({ code: "x" }, 404);
       });
       const handlers = await render(
         { kind: "ready" },
         { application: application(), nativeMaterials: false, send },
       );
-      expect(send).toHaveBeenCalledWith(
-        `/api/platform/applications/${APP}/resume`,
-        expect.objectContaining({ method: "GET" }),
-      );
-      expect(container.textContent).toContain("Built things");
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(container.querySelector('[role="img"]')).not.toBeNull();
       expect(container.textContent).toContain("Tailored resume ready");
       expect(handlers.onPreviewShown).toHaveBeenCalledWith(CONTENT_HASH);
+    });
+
+    it("refuses the synchronous file when it is not the packet's resume", async () => {
+      const send = vi.fn<typeof fetch>(async () =>
+        json({ ...pdfBody(undefined), contentSha256: "d".repeat(64) }),
+      );
+      const handlers = await render(
+        { kind: "ready" },
+        { application: application(), nativeMaterials: false, send },
+      );
+      expect(container.querySelector('[role="img"]')).toBeNull();
+      expect(handlers.onPreviewShown).not.toHaveBeenCalled();
     });
   });
 });

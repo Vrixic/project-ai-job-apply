@@ -3,12 +3,11 @@
 import type {
   Application,
   ApplicationCoverLetterPreview,
-  ApplicationResumePreview,
   ApplicationTemporaryMaterial,
 } from "@ai-job-apply/api-contracts";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { materialDeadline } from "../lib/application-material-lifetime";
-import { fetchResumeFile, fetchResumePreview, sha256OfBytes } from "../lib/applications-client";
+import { fetchResumeFile, sha256OfBytes } from "../lib/applications-client";
 import {
   elapsedSeconds,
   expiresInMinutes,
@@ -18,25 +17,17 @@ import {
   type GenerationView,
   generationFailureCopy,
 } from "../lib/apply-flow";
-import {
-  type NativeMaterialValue,
-  nativeMaterialReadFailureCopy,
-  readNativeMaterial,
-} from "../lib/native-material-client";
-import { keyed, ResumePreviewView } from "./resume-preview-section";
+import { keyed } from "../lib/keyed";
+import { nativeMaterialReadFailureCopy, readNativeMaterial } from "../lib/native-material-client";
+import { ResumePdfViewer } from "./resume-pdf-viewer";
 import { useMaterialExpiry } from "./use-material-expiry";
 
 type Packet = NonNullable<Application["currentPacket"]>;
 
-type Loaded =
-  | { phase: "loading" }
-  | { phase: "error"; message: string }
-  | { phase: "ready"; resume?: ApplicationResumePreview };
-
 /**
  * The generated-resume step: Generate, then a loading indicator that is honest about the cold start,
- * then the resume with its fixed expiry, a failure with a retry, or an expiry with one-click
- * regeneration. It never shows generated wording: only the candidate's own bullets, labelled.
+ * then the resume itself as a rendered PDF with its fixed expiry, a failure with a retry, or an
+ * expiry with one-click regeneration. Only the candidate's own bullets are reordered or trimmed.
  */
 export function GeneratedResumePanel({
   application,
@@ -44,6 +35,7 @@ export function GeneratedResumePanel({
   nativeMaterials,
   nowMs,
   busy,
+  fileName,
   onGenerate,
   onApplyWithUploaded,
   onPreviewShown,
@@ -54,6 +46,8 @@ export function GeneratedResumePanel({
   nativeMaterials: boolean;
   nowMs: number;
   busy: boolean;
+  /** The name a downloaded or attached resume carries: `User_Job_Name_ID.pdf`. */
+  fileName: string;
   onGenerate(): void;
   onApplyWithUploaded(): void;
   /** Called once the exact preview of this packet's resume has been displayed to the candidate. */
@@ -152,6 +146,7 @@ export function GeneratedResumePanel({
           nativeMaterials={nativeMaterials}
           nowMs={nowMs}
           busy={busy}
+          fileName={fileName}
           onGenerate={onGenerate}
           onPreviewShown={onPreviewShown}
           {...(fetchImplementation ? { fetchImplementation } : {})}
@@ -161,6 +156,11 @@ export function GeneratedResumePanel({
   );
 }
 
+type Loaded =
+  | { phase: "loading" }
+  | { phase: "error"; message: string }
+  | { phase: "ready"; bytes: Uint8Array; contentSha256: string };
+
 function ReadyResume({
   application,
   packet,
@@ -168,6 +168,7 @@ function ReadyResume({
   nativeMaterials,
   nowMs,
   busy,
+  fileName,
   onGenerate,
   onPreviewShown,
   fetchImplementation,
@@ -178,34 +179,36 @@ function ReadyResume({
   nativeMaterials: boolean;
   nowMs: number;
   busy: boolean;
+  fileName: string;
   onGenerate(): void;
   onPreviewShown(contentSha256: string): void;
   fetchImplementation?: typeof globalThis.fetch;
 }) {
   const [attempt, setAttempt] = useState(0);
   const [loaded, setLoaded] = useState<Loaded>({ phase: "loading" });
+  const [displayFailed, setDisplayFailed] = useState(false);
   const [message, setMessage] = useState<string>();
-  const [downloading, setDownloading] = useState(false);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
   const resumeHash = packet.artifactHashes.resume;
 
+  // One verified read of the PDF per packet and retry. The same bytes are shown and downloaded, so
+  // what the candidate reviews is exactly the file they get.
   // biome-ignore lint/correctness/useExhaustiveDependencies: one verified read per packet and retry.
   useEffect(() => {
     const controller = new AbortController();
     setLoaded({ phase: "loading" });
+    setDisplayFailed(false);
+    setMessage(undefined);
     const options = {
       signal: controller.signal,
       ...(fetchImplementation ? { fetch: fetchImplementation } : {}),
     };
+    let held: Uint8Array | undefined;
     void (async () => {
       try {
-        let resume: ApplicationResumePreview | undefined;
+        let expectedSha: string;
+        let contentSha256: string;
+        let size: number;
+        let base64: string;
         if (nativeMaterials && material) {
           const value = await readNativeMaterial(
             {
@@ -214,98 +217,77 @@ function ReadyResume({
               packetHash: packet.packetHash,
               material,
             },
-            "preview",
+            "pdf",
             options,
           );
-          resume = value as ApplicationResumePreview;
-        } else {
-          resume = await fetchResumePreview(application.id, options);
-          if (
-            resume?.status !== "ready" ||
-            !resume.matchesPacket ||
-            (resumeHash && resume.contentSha256 !== resumeHash)
-          )
+          if (!("contentBase64" in value) || typeof value.contentBase64 !== "string")
             throw Error("ResumeUnavailable");
+          ({ sha256: expectedSha, sizeBytes: size, contentSha256 } = value);
+          base64 = value.contentBase64;
+          value.contentBase64 = "";
+        } else {
+          const result = await fetchResumeFile(application.id, "pdf", options);
+          if (!result.ok || (resumeHash && result.file.contentSha256 !== resumeHash))
+            throw Error("ResumeUnavailable");
+          expectedSha = result.file.sha256;
+          size = result.file.sizeBytes;
+          contentSha256 = result.file.contentSha256;
+          base64 = result.file.contentBase64;
         }
+        held = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+        if (
+          held.byteLength !== size ||
+          new TextDecoder().decode(held.subarray(0, 5)) !== "%PDF-" ||
+          (await sha256OfBytes(held)) !== expectedSha
+        )
+          throw Error("ResumeUnavailable");
         if (controller.signal.aborted) return;
-        setLoaded({ phase: "ready", ...(resume ? { resume } : {}) });
-        if (resume?.status === "ready" && resume.contentSha256)
-          onPreviewShown(resume.contentSha256);
+        setLoaded({ phase: "ready", bytes: held, contentSha256 });
       } catch (error) {
+        held?.fill(0);
+        held = undefined;
         if (!controller.signal.aborted)
           setLoaded({ phase: "error", message: nativeMaterialReadFailureCopy(error) });
       }
     })();
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      held?.fill(0);
+    };
   }, [application.id, packet.id, packet.packetHash, attempt]);
 
-  async function download() {
-    if (downloading || busy) return;
-    setDownloading(true);
+  const shown = useCallback(() => {
+    if (loaded.phase === "ready") onPreviewShown(loaded.contentSha256);
+  }, [loaded, onPreviewShown]);
+
+  function download() {
+    if (loaded.phase !== "ready" || busy) return;
     setMessage(undefined);
-    let bytes: Uint8Array | undefined;
+    if (material && Date.now() >= material.expiresAtMs) {
+      setMessage("The resume could not be downloaded. Try again.");
+      return;
+    }
+    const url = URL.createObjectURL(
+      new Blob([loaded.bytes.buffer as ArrayBuffer], { type: "application/pdf" }),
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.rel = "noopener";
     try {
-      let name = "tailored-resume.pdf";
-      let expectedSha: string;
-      let base64: string;
-      let size: number;
-      if (nativeMaterials && material) {
-        const value = (await readNativeMaterial(
-          {
-            applicationId: application.id,
-            packetId: packet.id,
-            packetHash: packet.packetHash,
-            material,
-          },
-          "pdf",
-          fetchImplementation ? { fetch: fetchImplementation } : {},
-        )) as NativeMaterialValue & { contentBase64?: string };
-        if (!("contentBase64" in value) || typeof value.contentBase64 !== "string")
-          throw Error("ResumeUnavailable");
-        ({ sha256: expectedSha, sizeBytes: size } = value as { sha256: string; sizeBytes: number });
-        base64 = value.contentBase64;
-        value.contentBase64 = "";
-        name = (value as { fileName: string }).fileName;
-      } else {
-        const result = await fetchResumeFile(application.id, "pdf", {
-          ...(fetchImplementation ? { fetch: fetchImplementation } : {}),
-        });
-        if (!result.ok || result.file.contentSha256 !== resumeHash)
-          throw Error("ResumeUnavailable");
-        expectedSha = result.file.sha256;
-        size = result.file.sizeBytes;
-        base64 = result.file.contentBase64;
-        name = result.file.fileName;
-      }
-      bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
-      if (bytes.byteLength !== size || (await sha256OfBytes(bytes)) !== expectedSha)
-        throw Error("ResumeUnavailable");
-      if (material && Date.now() >= material.expiresAtMs) throw Error("ResumeUnavailable");
-      const url = URL.createObjectURL(
-        new Blob([bytes.buffer as ArrayBuffer], { type: "application/pdf" }),
-      );
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = name;
-      anchor.rel = "noopener";
-      try {
-        document.body.append(anchor);
-        anchor.click();
-      } finally {
-        anchor.remove();
-        URL.revokeObjectURL(url);
-      }
-      if (mounted.current) setMessage(`${name} downloaded.`);
+      document.body.append(anchor);
+      anchor.click();
+      setMessage(`${fileName} downloaded.`);
     } catch {
-      if (mounted.current) setMessage("The resume could not be downloaded. Try again.");
+      setMessage("The resume could not be downloaded. Try again.");
     } finally {
-      bytes?.fill(0);
-      if (mounted.current) setDownloading(false);
+      anchor.remove();
+      URL.revokeObjectURL(url);
     }
   }
 
   return (
-    <div>
+    <div className="resume-ready">
       {material ? (
         <p className="resume-expiry">
           Generated resume ready. It is deleted {GENERATED_RESUME_LIFETIME_MINUTES} minutes after it
@@ -323,16 +305,23 @@ function ReadyResume({
           </button>
         </>
       ) : null}
-      {loaded.phase === "ready" && loaded.resume ? (
-        <ResumePreviewView preview={loaded.resume} />
+      {loaded.phase === "ready" ? (
+        displayFailed ? (
+          <p role="alert">
+            Your resume is ready but could not be shown here. You can still download it.
+          </p>
+        ) : (
+          <ResumePdfViewer
+            bytes={loaded.bytes}
+            label="Preview of your tailored resume"
+            onRendered={shown}
+            onFailed={() => setDisplayFailed(true)}
+          />
+        )
       ) : null}
       <p>
-        <button
-          type="button"
-          disabled={busy || downloading || loaded.phase !== "ready"}
-          onClick={() => void download()}
-        >
-          {downloading ? "Preparing..." : "Download PDF"}
+        <button type="button" disabled={busy || loaded.phase !== "ready"} onClick={download}>
+          Download PDF
         </button>{" "}
         <button type="button" className="link-button" disabled={busy} onClick={onGenerate}>
           Generate again

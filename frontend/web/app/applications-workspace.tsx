@@ -41,6 +41,7 @@ import {
   announceNativeMaterialSignOut,
   NATIVE_MATERIAL_SIGN_OUT_CHANNEL,
 } from "../lib/native-material-sign-out-signal";
+import { resumeFileName } from "../lib/resume-file-name";
 import { ApplicationPreparationProgress } from "./application-preparation-progress";
 import { type ApplicationReviewActions, ApplicationReviewPanel } from "./application-review-panel";
 import {
@@ -50,6 +51,7 @@ import {
   reviewGroups,
 } from "./application-review-state";
 import { ApplyPanel, type ExtensionHandoffState, safeApplyUrl } from "./apply-panel";
+import { useCandidateName } from "./candidate-name-context";
 import { CoverLetterSection, GeneratedResumePanel, useTicker } from "./generated-resume-panel";
 import type { ManualFormObservation } from "./manual-form-confirmation";
 import {
@@ -76,6 +78,7 @@ const GENERATION_UNAVAILABLE_COPY =
  */
 export function ApplicationsWorkspace({
   jobId,
+  jobTitle,
   applicationId,
   applyUrl,
   fetchImplementation,
@@ -84,6 +87,8 @@ export function ApplicationsWorkspace({
   onApplied,
 }: {
   jobId: string;
+  /** Names the generated resume file; omitted when only the application is known. */
+  jobTitle?: string | undefined;
   applicationId?: string;
   /** The employer's application page, from the job's own source link. */
   applyUrl?: string | undefined;
@@ -97,6 +102,7 @@ export function ApplicationsWorkspace({
     <JobApplicationWorkspace
       key={`${jobId}:${applicationId ?? ""}`}
       jobId={jobId}
+      jobTitle={jobTitle}
       {...(applicationId ? { applicationId } : {})}
       applyUrl={applyUrl}
       coverLetterPreparationEnabled={coverLetterPreparationEnabled}
@@ -109,6 +115,7 @@ export function ApplicationsWorkspace({
 
 function JobApplicationWorkspace({
   jobId,
+  jobTitle,
   applicationId,
   applyUrl,
   fetchImplementation,
@@ -117,6 +124,9 @@ function JobApplicationWorkspace({
   onApplied,
 }: Parameters<typeof ApplicationsWorkspace>[0]) {
   const headingId = useId();
+  const candidateName = useCandidateName();
+  const resumeFileNameFor = (current: Application) =>
+    resumeFileName({ candidateName, jobTitle, applicationId: current.id });
   const [nativeMaterials] = useState(nativeMaterialsUiEnabled);
   const [createKey] = useState(() => `web-create-${crypto.randomUUID()}`);
   const [application, setApplication] = useState<Application>();
@@ -723,6 +733,7 @@ function JobApplicationWorkspace({
         approvalExpiresAtMs: Date.parse(approved.expiresAt),
         materials,
       },
+      resumeFileName: resumeFileNameFor(current),
       isCurrent: () => !controller.signal.aborted && !lifetime.current.signal.aborted,
       signal: controller.signal,
       giveUpAtMs,
@@ -877,6 +888,7 @@ function JobApplicationWorkspace({
                   nativeMaterials={nativeMaterials}
                   nowMs={clock}
                   busy={busy}
+                  fileName={application ? resumeFileNameFor(application) : ""}
                   onGenerate={() => generate()}
                   onApplyWithUploaded={() => apply(true)}
                   onPreviewShown={setShownResumeHash}

@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import "../../../../frontend/web/app/styles.css";
 import { ApplicationsWorkspace } from "../../../../frontend/web/app/applications-workspace";
 import { AppliedJobsPanel } from "../../../../frontend/web/app/applied-jobs-panel";
+import { CandidateNameProvider } from "../../../../frontend/web/app/candidate-name-context";
 import { JobSearchForm } from "../../../../frontend/web/app/job-search-form";
 import { MaterialSignOutSignal } from "../../../../frontend/web/app/signed-out/material-sign-out-signal";
 
@@ -404,6 +405,40 @@ const syntheticFetch = (async (input: RequestInfo | URL, init: RequestInit = {})
   return respond({ code: "application_not_found" }, 404);
 }) as typeof globalThis.fetch;
 
+/**
+ * A real one-page PDF (standard Helvetica, a heading and two bullets) so Chrome and PDF.js draw an
+ * actual document in the preview. Offsets are computed, so the cross-reference table is valid.
+ */
+function syntheticResumePdf(): Uint8Array {
+  const text = (size: number, y: number, value: string, font = "F1") =>
+    `BT /${font} ${size} Tf 54 ${y} Td (${value}) Tj ET`;
+  const stream = [
+    text(20, 730, "Synthetic Candidate", "F2"),
+    text(11, 706, "Senior Engineer, Example Co"),
+    text(11, 686, "- Built the billing service"),
+    text(11, 670, "- Mentored two engineers"),
+  ].join("\n");
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>",
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
+  ];
+  let source = "%PDF-1.4\n";
+  const offsets = objects.map((object, index) => {
+    const offset = source.length;
+    source += `${index + 1} 0 obj\n${object}\nendobj\n`;
+    return offset;
+  });
+  const xref = source.length;
+  const entries = offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`);
+  source += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${entries.join("")}`;
+  source += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return new TextEncoder().encode(source);
+}
+
 type GenerationMode = "ready" | "failed" | "no_resume" | "never";
 
 /**
@@ -417,9 +452,7 @@ function createApplyBff(options: { mode: GenerationMode; pollsUntilResolved: num
   let packetCounter = 0;
   let polls = 0;
   let material: ApplicationTemporaryMaterial | undefined;
-  const pdf = new TextEncoder().encode(
-    "%PDF-1.4 synthetic tailored resume for the browser journey",
-  );
+  const pdf = syntheticResumePdf();
   let pdfSha256 = "";
   void crypto.subtle.digest("SHA-256", pdf).then((digest) => {
     pdfSha256 = [...new Uint8Array(digest)]
@@ -617,34 +650,7 @@ function createApplyBff(options: { mode: GenerationMode; pollsUntilResolved: num
           contentBase64: base64(pdf),
           temporaryMaterial: material,
         });
-      return respond({
-        status: "ready",
-        matchesPacket: true,
-        tailoringVersion: "synthetic.v1",
-        contentSha256: HASH,
-        temporaryMaterial: material,
-        matchedTerms: ["typescript"],
-        sections: [
-          {
-            kind: "experience",
-            heading: "Experience",
-            entries: [
-              {
-                lines: ["Senior Engineer, Example Co"],
-                bullets: [
-                  {
-                    text: "Built the billing service",
-                    change: "moved_up",
-                    matchedTerms: ["billing"],
-                  },
-                  { text: "Mentored two engineers", change: "kept" },
-                  { text: "Organised the office party", change: "omitted" },
-                ],
-              },
-            ],
-          },
-        ],
-      });
+      return respond({ code: "not_found" }, 404);
     }
     return respond({ code: "application_not_found" }, 404);
   }) as typeof globalThis.fetch;
@@ -774,12 +780,14 @@ window.showD3ApplyJourney = (mode = "ready", pollsUntilResolved = 2) => {
   window.fetch = createApplyBff({ mode, pollsUntilResolved });
   journeys += 1;
   root.render(
-    <JobSearchForm
-      key={`journey-${journeys}`}
-      authenticated
-      savedPanel={<p>No saved jobs.</p>}
-      appliedPanel={<AppliedJobsPanel authenticated />}
-    />,
+    <CandidateNameProvider value="Vrij Patel">
+      <JobSearchForm
+        key={`journey-${journeys}`}
+        authenticated
+        savedPanel={<p>No saved jobs.</p>}
+        appliedPanel={<AppliedJobsPanel authenticated />}
+      />
+    </CandidateNameProvider>,
   );
 };
 root.render(

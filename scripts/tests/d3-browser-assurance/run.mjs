@@ -97,6 +97,20 @@ try {
     await page.getByRole("button", { name: "Generate resume", exact: true }).waitFor();
   };
   const callsOf = () => page.evaluate(() => window.readD3AssuranceCalls());
+  // The preview is the actual PDF drawn by PDF.js: a canvas with ink on it, not a list of text.
+  const showsRenderedResume = async () => {
+    const canvas = page.locator(".resume-pdf-page").first();
+    await canvas.waitFor();
+    const ink = await canvas.evaluate((element) => {
+      const context = element.getContext("2d");
+      const { data } = context.getImageData(0, 0, element.width, element.height);
+      let dark = 0;
+      for (let index = 0; index < data.length; index += 4)
+        if (data[index] < 90 && data[index + 1] < 90 && data[index + 2] < 90) dark += 1;
+      return dark;
+    });
+    assert.ok(ink > 200, `the PDF page is drawn (${ink} dark pixels)`);
+  };
   const messagesOf = () => page.evaluate(() => window.readD3ExtensionMessages());
 
   // ---- 1. Generate, loading, ready, Apply with the generated PDF, extension hand-off.
@@ -124,10 +138,8 @@ try {
   await page.clock.runFor(3100);
   await page.getByText("Generating your resume", { exact: false }).first().waitFor();
   await page.clock.runFor(3100);
-  await page.getByText("Built the billing service", { exact: true }).waitFor();
+  await showsRenderedResume();
   assert.equal(await page.getByText("Generating your resume").count(), 0);
-  assert.equal(await page.getByText("(Moved up)", { exact: true }).count(), 1);
-  assert.equal(await page.getByText("(Left out for this job)", { exact: true }).count(), 1);
   assert.match(
     await page.locator("body").innerText(),
     /deleted 30 minutes after it was made, in about 30 min/u,
@@ -139,7 +151,11 @@ try {
   const waitingDownload = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download PDF", exact: true }).press("Enter");
   const download = await waitingDownload;
-  assert.equal(download.suggestedFilename(), "tailored-resume.pdf");
+  // User_Job_Name_ID: never the generator's own file name.
+  assert.equal(
+    download.suggestedFilename(),
+    `Vrij_Patel_Synthetic_Engineer_00000000-0000-7000-8000-000000000001.pdf`,
+  );
   assert.equal(await download.failure(), null);
   await download.delete();
   assert.equal(await page.getByRole("button", { name: /Word|DOCX/u }).count(), 0);
@@ -207,10 +223,10 @@ try {
   await page.getByRole("button", { name: "Generate resume", exact: true }).press("Enter");
   await page.clock.runFor(3100);
   await page.clock.runFor(3100);
-  await page.getByText("Built the billing service", { exact: true }).waitFor();
+  await showsRenderedResume();
   await page.clock.runFor(1_800_001);
   await page.getByText("expired and was deleted", { exact: false }).waitFor();
-  assert.equal(await page.getByText("Built the billing service", { exact: true }).count(), 0);
+  assert.equal(await page.locator(".resume-pdf-page").count(), 0);
   assert.equal(await page.getByRole("button", { name: "Generate again", exact: true }).count(), 1);
   assert.match(await page.locator("body").innerText(), /Apply will use your own uploaded resume/u);
   await shot(page, "06-expired");
@@ -308,7 +324,7 @@ try {
   await page.getByRole("button", { name: "Generate resume", exact: true }).press("Enter");
   await page.clock.runFor(3100);
   await page.clock.runFor(3100);
-  await page.getByText("Built the billing service", { exact: true }).waitFor();
+  await showsRenderedResume();
   const waitingTab = context.waitForEvent("page");
   await page.getByRole("button", { name: "Apply", exact: true }).press("Enter");
   await (await waitingTab).close();

@@ -311,6 +311,7 @@ export function JobDetailPanel({
                 {authenticated && applicationsUiEnabled && result.detail.status === "active" ? (
                   <ApplicationsWorkspace
                     jobId={result.detail.id}
+                    jobTitle={result.detail.title}
                     applyUrl={result.detail.sources[0]?.canonicalUrl}
                     {...(onSubmitted ? { onApplied: onSubmitted } : {})}
                   />
