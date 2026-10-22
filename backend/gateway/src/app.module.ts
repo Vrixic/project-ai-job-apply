@@ -3660,6 +3660,20 @@ class StripeBillingController {
     return this.billing.openPortal(user.id);
   }
 
+  /** Repairs a lost or delayed webhook by pulling the candidate's own subscription from Stripe. */
+  @Post("/subscription-syncs")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async syncSubscription(@Req() request: AuthenticatedRequest): Promise<{ changed: boolean }> {
+    assertNoRequestInput(request);
+    const user = await this.identity.resolve(request, "profile:write");
+    try {
+      return await this.billing.syncSubscription(user.id);
+    } catch {
+      throw new StripeApiError(0, undefined);
+    }
+  }
+
   /** Public: authenticated only by the Stripe signature over the raw body. */
   @Post("/webhooks/stripe")
   @HttpCode(HttpStatus.OK)

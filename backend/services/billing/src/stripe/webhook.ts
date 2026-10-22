@@ -93,10 +93,17 @@ function sameGrant(schedule: EntitlementSchedule, grant: EntitlementGrant): bool
   );
 }
 
+type ProjectionDependencies = Pick<StripeWebhookDependencies, "billing" | "clock" | "graceSeconds">;
+
+/** A webhook event is attributed to the provider adapter; a pull from Stripe is a reconciliation. */
+type ProjectionSource =
+  | { kind: "webhook"; idempotencyKey: string }
+  | { kind: "reconciliation"; idempotencyKey: string };
+
 async function applyProjection(
-  deps: StripeWebhookDependencies,
+  deps: ProjectionDependencies,
   userId: string,
-  eventId: string,
+  source: ProjectionSource,
   subscription: StripeSubscription,
 ): Promise<StripeWebhookOutcome> {
   const clock = deps.clock ?? (() => new Date());
@@ -113,11 +120,21 @@ async function applyProjection(
       const result = await deps.billing.applyEntitlementChange({
         userId,
         expectedVersion: schedule.version,
-        idempotencyKey: `stripe:${eventId}`,
+        idempotencyKey: source.idempotencyKey,
         occurredAt: now,
         traceId: uuidv7(),
-        reasonCode: "provider_projection",
-        actor: { kind: "provider_adapter", reference: stripeAdapterActorReference },
+        ...(source.kind === "webhook"
+          ? {
+              reasonCode: "provider_projection" as const,
+              actor: {
+                kind: "provider_adapter" as const,
+                reference: stripeAdapterActorReference,
+              },
+            }
+          : {
+              reasonCode: "reconciliation" as const,
+              actor: { kind: "system" as const, reference: stripeAdapterActorReference },
+            }),
         grant,
       });
       return result.replayed ? "replayed" : "applied";
@@ -173,5 +190,35 @@ export async function handleStripeWebhook(
   const userId = subscription?.metadata?.userId;
   // A subscription this application did not create (no tagged user) is not ours to project.
   if (!subscription || userId === undefined || !UUID.test(userId)) return report("ignored");
-  return report(await applyProjection(deps, userId, event.id, subscription));
+  return report(
+    await applyProjection(
+      deps,
+      userId,
+      { kind: "webhook", idempotencyKey: `stripe:${event.id}` },
+      subscription,
+    ),
+  );
+}
+
+/**
+ * Pulls the candidate's own subscription from Stripe and projects it (D6-007). This repairs a lost
+ * or delayed webhook, for example right after checkout. It never downgrades a candidate for whom
+ * Stripe holds no subscription, because the lookup is eventually consistent and a Pro entitlement
+ * may come from another source.
+ */
+export async function reconcileStripeSubscription(
+  deps: Pick<StripeWebhookDependencies, "api" | "billing" | "clock" | "graceSeconds">,
+  userId: string,
+): Promise<StripeWebhookOutcome> {
+  const found = await deps.api.findSubscriptionByUser(userId);
+  if (!found || found.metadata?.userId !== userId) return "unchanged";
+  // The search result can lag; the subscription itself is the strongly consistent record.
+  const subscription = (await deps.api.retrieveSubscription(found.id)) ?? found;
+  if (subscription.metadata?.userId !== userId) return "unchanged";
+  return applyProjection(
+    deps,
+    userId,
+    { kind: "reconciliation", idempotencyKey: `stripe-sync:${uuidv7()}` },
+    subscription,
+  );
 }

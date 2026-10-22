@@ -14,7 +14,11 @@ import {
   StripeNoBillingAccountError,
 } from "./service.js";
 import { StripeSignatureError, signStripePayload, verifyStripeSignature } from "./signature.js";
-import { handleStripeWebhook, stripeAdapterActorReference } from "./webhook.js";
+import {
+  handleStripeWebhook,
+  reconcileStripeSubscription,
+  stripeAdapterActorReference,
+} from "./webhook.js";
 
 const userId = "019d04cf-1f80-7000-8000-000000000001";
 const now = new Date("2026-10-22T12:00:00Z");
@@ -476,5 +480,61 @@ describe("Stripe client", () => {
       },
     });
     await expect(stripe.findSubscriptionByUser(userId)).resolves.toMatchObject({ id: "sub_new" });
+  });
+});
+
+describe("Stripe reconciliation (D6-007)", () => {
+  function pull(found: unknown, retrieved: unknown = found, schedules?: EntitlementSchedule[]) {
+    const h = harness({ subscription: retrieved, ...(schedules ? { schedules } : {}) });
+    const api = {
+      findSubscriptionByUser: vi.fn(async () =>
+        found === undefined ? undefined : parseStripeSubscription(found),
+      ),
+      retrieveSubscription: h.api.retrieveSubscription,
+    } as unknown as StripeApi;
+    const run = () =>
+      reconcileStripeSubscription({ api, billing: h.billing as never, clock: () => now }, userId);
+    return { ...h, run };
+  }
+
+  it("projects the candidate's own subscription as a system reconciliation", async () => {
+    const h = pull(subscription());
+    await expect(h.run()).resolves.toBe("applied");
+    expect(h.applied[0]).toMatchObject({
+      userId,
+      reasonCode: "reconciliation",
+      actor: { kind: "system", reference: stripeAdapterActorReference },
+      grant: { plan: "pro" },
+    });
+    expect(h.applied[0]?.idempotencyKey).toMatch(/^stripe-sync:/u);
+  });
+
+  it("does nothing when Stripe holds no subscription for the candidate", async () => {
+    const h = pull(undefined);
+    await expect(h.run()).resolves.toBe("unchanged");
+    expect(h.applied).toHaveLength(0);
+  });
+
+  it("never projects a subscription tagged for a different user", async () => {
+    const other = subscription({ metadata: { userId: "019d04cf-1f80-7000-8000-0000000000aa" } });
+    const h = pull(other);
+    await expect(h.run()).resolves.toBe("unchanged");
+    expect(h.applied).toHaveLength(0);
+  });
+
+  it("uses the retrieved subscription, which is strongly consistent, over the search result", async () => {
+    const h = pull(subscription({ status: "incomplete" }), subscription({ status: "active" }));
+    await expect(h.run()).resolves.toBe("applied");
+    expect(h.applied[0]?.grant.plan).toBe("pro");
+  });
+
+  it("is idempotent when the entitlement already matches", async () => {
+    const parsed = parseStripeSubscription(subscription());
+    const grant = projectSubscription(parsed as never, now);
+    const h = pull(subscription(), subscription(), [
+      schedule({ version: 4, plan: "pro", ...(grant as object) } as never),
+    ]);
+    await expect(h.run()).resolves.toBe("unchanged");
+    expect(h.applied).toHaveLength(0);
   });
 });

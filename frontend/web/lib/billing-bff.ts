@@ -9,6 +9,7 @@ import { forwardPlatformRequest } from "./platform-api";
  */
 
 export type BillingSessionPath = "checkout-sessions" | "portal-sessions";
+type BillingPath = BillingSessionPath | "subscription-syncs";
 
 const STRIPE_HOSTS = new Set(["checkout.stripe.com", "billing.stripe.com"]);
 
@@ -43,25 +44,22 @@ export function isStripeHostedUrl(value: unknown): value is string {
   }
 }
 
-export async function forwardBillingSession(
-  request: Request,
-  path: BillingSessionPath,
-): Promise<Response> {
+function refuseUnlessBodylessSameOrigin(request: Request): Response | undefined {
   const declaredLength = request.headers.get("content-length");
   const origin = request.headers.get("origin");
-  if (
+  const invalid =
     request.method !== "POST" ||
     new URL(request.url).search !== "" ||
     (declaredLength !== null && declaredLength !== "0") ||
     request.headers.get("transfer-encoding") !== null ||
     request.headers.get("content-type") !== null ||
-    (origin !== null && origin !== new URL(request.url).origin)
-  ) {
-    cancelBody(request.body);
-    return problem(400, "invalid_request", "Invalid request");
-  }
+    (origin !== null && origin !== new URL(request.url).origin);
   cancelBody(request.body);
-  const response = await forwardPlatformRequest(
+  return invalid ? problem(400, "invalid_request", "Invalid request") : undefined;
+}
+
+function forwardBilling(request: Request, path: BillingPath): Promise<Response> {
+  return forwardPlatformRequest(
     `/v1/billing/${path}`,
     { method: "POST", signal: request.signal },
     {
@@ -70,6 +68,23 @@ export async function forwardBillingSession(
       fetch,
     },
   );
+}
+
+/** Pulls the candidate's subscription from Stripe through the Gateway (D6-007). */
+export async function forwardBillingSync(request: Request): Promise<Response> {
+  const refused = refuseUnlessBodylessSameOrigin(request);
+  if (refused) return refused;
+  const response = await forwardBilling(request, "subscription-syncs");
+  return validateFoundationResponse(response, 200, "BillingSubscriptionSync", request.signal);
+}
+
+export async function forwardBillingSession(
+  request: Request,
+  path: BillingSessionPath,
+): Promise<Response> {
+  const refused = refuseUnlessBodylessSameOrigin(request);
+  if (refused) return refused;
+  const response = await forwardBilling(request, path);
   const checked = await validateFoundationResponse(
     response,
     201,

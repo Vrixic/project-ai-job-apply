@@ -6291,6 +6291,10 @@ describe("Stripe billing routes (D6-005)", () => {
         calls.push(`portal:${userId}`);
         return { url: "https://billing.stripe.com/p/test" };
       },
+      async syncSubscription(userId) {
+        calls.push(`sync:${userId}`);
+        return { changed: true };
+      },
       async handleWebhook(rawBody, signature) {
         calls.push(`webhook:${rawBody.toString("utf8")}:${signature}`);
       },
@@ -6332,9 +6336,22 @@ describe("Stripe billing routes (D6-005)", () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(portal.statusCode).toBe(201);
-    expect(calls).toHaveLength(2);
+    const sync = await app.inject({
+      method: "POST",
+      url: "/v1/billing/subscription-syncs",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(sync.statusCode).toBe(200);
+    expect(sync.json()).toEqual({ changed: true });
+    const anonymousSync = await app.inject({
+      method: "POST",
+      url: "/v1/billing/subscription-syncs",
+    });
+    expect(anonymousSync.statusCode).toBe(401);
+    expect(calls).toHaveLength(3);
     expect(calls[0]).toMatch(/^checkout:/u);
     expect(calls[1]).toMatch(/^portal:/u);
+    expect(calls[2]).toMatch(/^sync:/u);
     await app.close();
   });
 
@@ -6428,7 +6445,7 @@ describe("Stripe billing routes (D6-005)", () => {
 
   it("composes from the environment only when it is complete", () => {
     const base = {
-      reader: { readEntitlement: async () => ({ userId: "u", version: 0, plan: "free" as const }) },
+      reader: { readEntitlement: async () => ({ userId: "u", version: 0, plan: "free" }) as never },
       writer: { applyEntitlementChange: async () => ({}) as never },
     };
     expect(createStripeBillingGateway({ env: {}, ...base })).toBeUndefined();

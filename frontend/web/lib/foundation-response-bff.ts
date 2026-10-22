@@ -8,6 +8,7 @@ export type FoundationResponseSchemaName =
   | "CanonicalJobDetail"
   | "EntitlementSummary"
   | "BillingSessionLink"
+  | "BillingSubscriptionSync"
   | "Operation"
   | "JobPreferenceSet"
   | "PutJobPreferencesResponse"
@@ -39,6 +40,7 @@ const validators = new Map<
   ["CanonicalJobDetail", compileComponentValidator("CanonicalJobDetail")],
   ["EntitlementSummary", compileComponentValidator("EntitlementSummary")],
   ["BillingSessionLink", compileComponentValidator("BillingSessionLink")],
+  ["BillingSubscriptionSync", compileComponentValidator("BillingSubscriptionSync")],
   ["Operation", compileComponentValidator("Operation")],
   ["JobPreferenceSet", compileComponentValidator("JobPreferenceSet")],
   ["PutJobPreferencesResponse", compileComponentValidator("PutJobPreferencesResponse")],

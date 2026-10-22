@@ -4,7 +4,7 @@ const forward = vi.hoisted(() => vi.fn());
 vi.mock("./platform-api", () => ({ forwardPlatformRequest: forward }));
 vi.mock("./auth0", () => ({ getLazyAuth0Session: () => ({}) }));
 
-import { forwardBillingSession, isStripeHostedUrl } from "./billing-bff";
+import { forwardBillingSession, forwardBillingSync, isStripeHostedUrl } from "./billing-bff";
 
 const request = (
   init: RequestInit = {},
@@ -73,5 +73,29 @@ describe("billing BFF", () => {
     );
     const response = await forwardBillingSession(request(), "checkout-sessions");
     expect(response.status).toBe(409);
+  });
+
+  it("forwards a bodyless sync and validates its response", async () => {
+    forward.mockResolvedValue(
+      Response.json(
+        { changed: true },
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const response = await forwardBillingSync(
+      request({}, "https://app.example.test/api/platform/billing/subscription-syncs"),
+    );
+    expect(response.status).toBe(200);
+    expect(forward).toHaveBeenCalledWith(
+      "/v1/billing/subscription-syncs",
+      expect.objectContaining({ method: "POST" }),
+      expect.anything(),
+    );
+    forward.mockClear();
+    const refused = await forwardBillingSync(
+      request({ headers: { origin: "https://evil.example.test" } }),
+    );
+    expect(refused.status).toBe(400);
+    expect(forward).not.toHaveBeenCalled();
   });
 });
