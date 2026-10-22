@@ -14,7 +14,7 @@ Last updated: 2026-10-22. Program status: In progress. Started: 2026-07-27. Comp
 | D4 | Workday and remote preparation | Not started | Not started | Not completed | [Phase 4 tasks](phase-4-workday-and-remote.md) |
 | D5 | Personalized outreach and application notifications | In progress | 2026-10-22 | Not completed | [Phase 5 tasks](phase-5-outreach-and-notifications.md) |
 | D6 | Mobile and paid launch | In progress | 2026-09-28 | Not completed | [Phase 6 tasks](phase-6-mobile-and-paid.md) |
-| D7 | Quality optimization, expansion, and optional employer product | Not started | Not started | Not completed | [Phase 7 tasks](phase-7-quality-and-expansion.md) |
+| D7 | Quality optimization, expansion, and optional employer product | In progress | 2026-10-22 | Not completed | [Phase 7 tasks](phase-7-quality-and-expansion.md) |
 
 ## D1 — Useful web product and canonical job catalog
 
@@ -35,6 +35,10 @@ The owner answered the open questions in chat. Recorded decisions:
 Still needing the owner: an AWS sign-in for the deployment, the Stripe account values (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRETS`, `STRIPE_PRO_PRICE_ID`, `BILLING_APP_BASE_URL`), counsel, the independent assessor, and staging and production accounts and Auth0 tenants (D6-013, D6-014, D6-021).
 
 ## D3 — High-quality application preparation
+
+2026-10-22 owner direction (ADR-053, PRs #727 to #736): Greenhouse and Ashby fill, attach and submit once after the candidate's approval, in the candidate's own Chrome. Built and tested against synthetic pages (extension 781 tests and real-Chromium fixtures for both providers) and modeled on read-only inspection of public pages; nothing was run against a live employer, and the post-submit confirmation text of both providers was not observed, so the owner's first real application is the first live evidence. Sensitive questions stay with the candidate, a visible challenge stops the run, and the build enables providers only through `EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON`.
+
+2026-10-22 also: D5-001 Notifications inbox built (ADR-055; not deployed, rights wiring open), D7-012 automated source vetting built (ADR-054; not deployed, kill switch off), Pro plan set to $25 a month and two stored resumes, release tooling pins updated for the D3.1 migrations.
 
 2026-10-21 owner decision: all non-security testing, acceptance, evidence and friction work is
 removed from every incomplete phase (D1, D3, D3.1, D4, D5, D6, D7). Hosted admin, accessibility,

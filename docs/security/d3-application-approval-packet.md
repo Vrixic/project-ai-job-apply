@@ -227,6 +227,8 @@ privacy/security approval or live evidence.
   `UPLOADED_RESUME_ATTACHMENT_ENABLED`), 2 MiB cap, never cached, SHA-256 bound to the packet.
 - **Extension.** An identifiers-only apply intent arms the popup; the candidate confirms on the
   employer tab. An expired or mismatched generated file is never attached.
-- **Submission.** The stated rule is that the extension never clicks the final submit. The dark
-  Greenhouse path of ADR-049 still clicks it when no challenge is present; this is an open owner
-  decision.
+- **Submission.** Superseded by [ADR-053](../adr/053-candidate-approved-submission-greenhouse-and-ashby.md)
+  (owner decision 2026-10-22): for Greenhouse and Ashby the extension clicks the employer's submit
+  control once, after the candidate's approval on the website and explicit confirmation in the
+  extension, with positive confirmation evidence or an ambiguous result for the candidate to settle.
+  Production distribution still needs the legal and security reviews.
