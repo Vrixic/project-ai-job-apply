@@ -1,7 +1,7 @@
 # D7 — Quality Optimization, Expansion, and Optional Employer Product
 
-- Status: Not started
-- Start: Not started
+- Status: In progress
+- Start: 2026-10-22
 - Completion: Not completed
 - Owners: Unassigned
 - Last updated: 2026-07-31

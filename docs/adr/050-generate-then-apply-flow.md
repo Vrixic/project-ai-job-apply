@@ -114,6 +114,9 @@ use.
 
 ## Not changed, and a discrepancy for the owner
 
+Resolved 2026-10-22 by [ADR-053](053-candidate-approved-submission-greenhouse-and-ashby.md): the owner
+chose the click, so the stated rule changed and not the code.
+
 The Greenhouse execution path (ADR-049) clicks the employer's submit control once when no challenge
 is present, then waits for provider confirmation. That contradicts the stated rule that the
 extension never clicks the final submit. It is dark in every build (the production application
