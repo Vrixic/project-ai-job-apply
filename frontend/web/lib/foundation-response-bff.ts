@@ -7,6 +7,7 @@ const JSON_CONTENT_TYPE_PATTERN = /^application\/json(?:\s*;\s*charset=utf-8)?$/
 export type FoundationResponseSchemaName =
   | "CanonicalJobDetail"
   | "EntitlementSummary"
+  | "BillingSessionLink"
   | "Operation"
   | "JobPreferenceSet"
   | "PutJobPreferencesResponse"
@@ -37,6 +38,7 @@ const validators = new Map<
 >([
   ["CanonicalJobDetail", compileComponentValidator("CanonicalJobDetail")],
   ["EntitlementSummary", compileComponentValidator("EntitlementSummary")],
+  ["BillingSessionLink", compileComponentValidator("BillingSessionLink")],
   ["Operation", compileComponentValidator("Operation")],
   ["JobPreferenceSet", compileComponentValidator("JobPreferenceSet")],
   ["PutJobPreferencesResponse", compileComponentValidator("PutJobPreferencesResponse")],

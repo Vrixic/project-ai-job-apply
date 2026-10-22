@@ -19,11 +19,11 @@ export interface PlanLimits {
   readonly maxStoredResumes: number;
 }
 
-export const planLimitsVersion = 1;
+export const planLimitsVersion = 2;
 export const planLimits: Readonly<Record<EntitlementPlan, PlanLimits>> = Object.freeze({
   free: Object.freeze({ maxStoredResumes: 1 }),
-  // Pro's limits are a pending product decision; they equal Free's until Pro is defined.
-  pro: Object.freeze({ maxStoredResumes: 1 }),
+  // Pro is the one paid product (D6-008): the same capabilities with room for tailored resume variants.
+  pro: Object.freeze({ maxStoredResumes: 5 }),
 });
 
 export type EntitlementCapability = (typeof coreCapabilities)[number];

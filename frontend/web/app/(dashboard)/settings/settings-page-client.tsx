@@ -4,6 +4,7 @@ import { useState } from "react";
 import { isIsolationOperationEligible } from "../../../lib/isolation-operation";
 import { CandidateRightsPanel } from "../../candidate-rights-panel";
 import { EntitlementStatus } from "../../entitlement-status";
+import { PlanBilling } from "../../plan-billing";
 
 /** Set by the Profile page after a preference save; read here to arm the isolation check for that operation. */
 const devConformanceOperationStorageKey = "dev-conformance-operation-id";
@@ -218,6 +219,7 @@ export function SettingsPageClient({
       )}
 
       <EntitlementStatus authenticated={authenticated} />
+      <PlanBilling authenticated={authenticated} />
       <CandidateRightsPanel authenticated={authenticated} />
 
       {authConformanceEnabled && (

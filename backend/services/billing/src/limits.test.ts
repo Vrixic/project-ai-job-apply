@@ -29,7 +29,7 @@ const authorizerFor = (schedule: EntitlementSchedule) => ({
 describe("plan limits (ADR-032)", () => {
   it("gives Free one stored resume and keeps the table immutable and versioned", () => {
     expect(planLimits.free).toEqual({ maxStoredResumes: 1 });
-    expect(planLimitsVersion).toBe(1);
+    expect(planLimitsVersion).toBe(2);
     expect(Object.isFrozen(planLimits)).toBe(true);
     expect(Object.isFrozen(planLimits.free)).toBe(true);
     expect(Object.isFrozen(planLimits.pro)).toBe(true);

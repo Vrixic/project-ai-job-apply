@@ -211,6 +211,7 @@ aside,
 .job-search,
 .saved-jobs,
 .entitlement-status,
+.plan-billing,
 .profile-personal,
 .profile-skills {
   margin-top: 32px;
@@ -418,7 +419,8 @@ aside {
 
 .job-search,
 .saved-jobs,
-.entitlement-status {
+.entitlement-status,
+.plan-billing {
   background: #f8fbf9;
 }
 
