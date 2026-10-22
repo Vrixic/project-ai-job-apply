@@ -23,7 +23,7 @@ isolation, failure, or demand evidence. Do not keep idle browser fleets running.
 |---|---|---|---|---|---|
 | D4-001 | Catalog and prioritize representative Workday tenant, account, widget, and application variants. | Ready | Unassigned | D3 telemetry; D4-012 | Open |
 | D4-002 | Implement Workday detection, session/account state, multi-step form, and custom-widget behavior pack. | Ready | Unassigned | D3 ATS SDK | Open |
-| D4-003 | Detect and correct resume-parser overwrites without replacing user-confirmed facts. | Ready | Unassigned | D3 fact/document model | Open |
+| D4-003 | Detect and correct resume-parser overwrites without replacing saved Profile entries (imports only create drafts, ADR-052). | Ready | Unassigned | D3 fact/document model | Open |
 | D4-004 | Implement ephemeral isolated browser runtime, lifecycle, resource limits, and domain/egress controls. | Ready | Unassigned | D0 infrastructure/security | Open |
 | D4-005 | Implement encrypted session handoff and destruction without storing plaintext credentials. | Ready | Unassigned | D0 identity/threat model | Open |
 | D4-006 | Implement secure web/mobile takeover for login, MFA, CAPTCHA, and ambiguous questions. | Ready | Unassigned | D3 workflow; D6 may enhance mobile | Open |

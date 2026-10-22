@@ -218,12 +218,12 @@ $replayAggregate.action='replay';$replayAggregate.outcome='replayed'
 foreach ($pair in @(@('restoredUsersReconciled',1),@('restoredUsersAbsent',1),@('restoredUsersAlreadyReconciled',1),@('s3Writes',0),@('recoveryLedgerWrites',0),@('identityProviderCalls',0))) { $replayAggregate | Add-Member -NotePropertyName $pair[0] -NotePropertyValue $pair[1] }
 Assert-DeletionReplayAggregate $replayAggregate $fixture.replay $fixture.configuration
 Assert $true 'aggregate replay distinguishes retained tombstones from absent users'
-$preservation = Clone @{schemaVersion=1;unchanged=@{sha256=('a'*64);relationCount=100;rowCount=12;byteCount=240};reconciled=@{sha256=('b'*64);relationCount=100;rowCount=15;byteCount=300}}
+$preservation = Clone @{schemaVersion=1;unchanged=@{sha256=('a'*64);relationCount=97;rowCount=12;byteCount=240};reconciled=@{sha256=('b'*64);relationCount=97;rowCount=15;byteCount=300}}
 $withPreservation = Clone $replayAggregate
 $withPreservation | Add-Member -NotePropertyName preservation -NotePropertyValue $preservation
 Assert-DeletionReplayAggregate $withPreservation $fixture.replay $fixture.configuration
 Assert $true 'new replay whole-row evidence accepted alongside historical receipts'
-foreach ($pair in @(@('relationCount',95),@('relationCount','100'),@('rowCount',100001),@('rowCount',-1),@('byteCount',67108865),@('sha256','invalid'))) {
+foreach ($pair in @(@('relationCount',95),@('relationCount','97'),@('rowCount',100001),@('rowCount',-1),@('byteCount',67108865),@('sha256','invalid'))) {
   $changed=Clone $withPreservation; $changed.preservation.unchanged.($pair[0])=$pair[1]
   Reject { Assert-DeletionReplayAggregate $changed $fixture.replay $fixture.configuration } 'malformed or unbounded preservation digest refuses'
 }

@@ -59,7 +59,7 @@ const declaredProblems = new Map<string, Readonly<DeclaredProblem>>([
     "409:candidate_rights_state_conflict",
     { code: "candidate_rights_state_conflict", title: "Candidate rights state changed" },
   ],
-  ["409:version_conflict", { code: "version_conflict", title: "Profile fact changed" }],
+  ["409:version_conflict", { code: "version_conflict", title: "Profile record changed" }],
   [
     "404:profile_record_not_found",
     { code: "profile_record_not_found", title: "Profile record was not found" },
@@ -80,10 +80,6 @@ const declaredProblems = new Map<string, Readonly<DeclaredProblem>>([
   [
     "400:invalid_profile_record",
     { code: "invalid_profile_record", title: "Profile record is invalid" },
-  ],
-  [
-    "409:profile_fact_transition_conflict",
-    { code: "profile_fact_transition_conflict", title: "Profile fact transition conflict" },
   ],
   ["409:resume_document_limit", { code: "resume_document_limit", title: "Resume limit reached" }],
   [

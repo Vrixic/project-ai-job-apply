@@ -251,14 +251,18 @@ An employer portal can be added later as a separate bounded context. Do not let 
 
 ### 5.1 Onboarding: build the reusable “truth profile”
 
-The best way to reduce future clicks is to capture facts once and distinguish facts from preferences.
+The best way to reduce future clicks is to capture the candidate's details once, as plain saved records
+they can read and correct, and to keep them apart from preferences ([ADR-052](adr/052-structured-candidate-profile.md)).
+The Profile has Personal, Education, Work experience, Skills, Application answers and Resume sections.
+Each entry is a saved record with one meaning; there is no confirmed, proposed or rejected state.
 
 Onboarding should:
 
 1. Create an account with email/passkey or OIDC.
 2. Upload one or more resumes or import a structured profile with permission.
-3. Parse experience, education, projects, skills, certifications, links, and contact information.
-4. Show extracted facts for confirmation; never silently accept low-confidence parsing.
+3. Parse experience, education, skills, links, and contact information into draft entries.
+4. Show the drafts for review. A draft joins the Profile only when the candidate saves it, and nothing is
+   silently accepted or invented.
 5. Ask only critical missing questions:
    - Target titles and acceptable adjacent titles
    - Locations, remote/hybrid/onsite, commute radius, and relocation

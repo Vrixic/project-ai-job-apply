@@ -5,11 +5,11 @@ import {
   PUT as putJobPreferences,
 } from "../app/api/platform/job-preferences/route";
 import { GET as getOperation } from "../app/api/platform/operations/[operationId]/route";
-import { PATCH as patchProfileFact } from "../app/api/platform/profile-facts/[factId]/route";
+import { PATCH as patchProfileEntry } from "../app/api/platform/profile/[section]/[recordId]/route";
 import {
-  GET as getProfileFacts,
-  POST as postProfileFact,
-} from "../app/api/platform/profile-facts/route";
+  GET as getProfileSection,
+  POST as postProfileSection,
+} from "../app/api/platform/profile/[section]/route";
 import { GET as getResumes, POST as postResume } from "../app/api/platform/resumes/route";
 import { POST as createSavedJob } from "../app/api/platform/saved-jobs/route";
 import { POST as searchSavedJobs } from "../app/api/platform/saved-jobs/search/route";
@@ -97,17 +97,14 @@ const resumeUploadResponse = {
 };
 const profileFact = {
   id: factId,
-  kind: "skill",
-  key: "programming_language",
-  value: "TypeScript",
-  verification: "confirmed",
-  sensitivity: "confidential",
-  source: { type: "user", reference: "direct-entry" },
+  name: "TypeScript",
   version: 1,
+  origin: "entered",
+  displayOrder: 0,
   createdAt: "2026-08-17T12:00:00.000Z",
   updatedAt: "2026-08-17T12:00:00.000Z",
 };
-const factCollection = { facts: [profileFact], confirmedCount: 1, proposedCount: 0 };
+const factCollection = { entries: [profileFact] };
 const freeEntitlement = {
   plan: "free",
   accessState: "active",
@@ -251,8 +248,6 @@ const validValues: Record<FoundationResponseSchemaName, unknown> = {
   SavedJobPage: savedJobPage,
   ResumeDocumentCollection: resumeCollection,
   CreateResumeUploadResponse: resumeUploadResponse,
-  ProfileFactCollection: factCollection,
-  ProfileFact: profileFact,
   ProfilePersonal: {
     fullName: "Synthetic Person",
     version: 1,
@@ -645,13 +640,13 @@ describe("foundation response boundary", () => {
   it("reserializes a valid parsed value without retaining duplicate raw values", async () => {
     const privateCanary = "candidate-private-duplicate-value";
     const raw = JSON.stringify(profileFact).replace(
-      '"key":"programming_language"',
-      `"key":"${privateCanary}","key":"programming_language"`,
+      '"name":"TypeScript"',
+      `"name":"${privateCanary}","name":"TypeScript"`,
     );
     const response = await validateFoundationResponse(
       new Response(raw, { status: 200, headers: { "content-type": "application/json" } }),
       200,
-      "ProfileFact",
+      "ProfileSkillEntry",
     );
     const projected = await response.text();
 
@@ -700,30 +695,28 @@ describe("foundation route response composition", () => {
       resumeUploadResponse,
     ],
     [
-      "profile-fact GET",
-      () => getProfileFacts(new Request("http://localhost/api/platform/profile-facts")),
+      "profile-section GET",
+      () =>
+        getProfileSection(new Request("http://localhost/api/platform/profile/skill-entries"), {
+          params: Promise.resolve({ section: "skill-entries" }),
+        }),
       200,
       factCollection,
     ],
     [
-      "profile-fact POST",
+      "profile-section POST",
       () =>
-        postProfileFact(
-          mutationRequest("POST", {
-            kind: "skill",
-            key: "programming_language",
-            value: "TypeScript",
-            sensitivity: "confidential",
-          }),
-        ),
+        postProfileSection(mutationRequest("POST", { name: "TypeScript" }), {
+          params: Promise.resolve({ section: "skill-entries" }),
+        }),
       201,
       profileFact,
     ],
     [
-      "profile-fact PATCH",
+      "profile-section PATCH",
       () =>
-        patchProfileFact(mutationRequest("PATCH", { expectedVersion: 1, value: "TypeScript" }), {
-          params: Promise.resolve({ factId }),
+        patchProfileEntry(mutationRequest("PATCH", { expectedVersion: 1, category: "Languages" }), {
+          params: Promise.resolve({ section: "skill-entries", recordId: factId }),
         }),
       200,
       profileFact,

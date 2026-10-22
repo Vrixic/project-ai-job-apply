@@ -42,7 +42,7 @@ describe("portable export safe validation diagnostics", () => {
     "returns only a trusted static schema location for %s failure",
     (keyword) => {
       const value: Record<string, unknown> = structuredClone(base);
-      if (keyword === "required") value.profile = { preferences: null };
+      if (keyword === "required") value.profile = { facts: [] };
       else if (keyword === "enum")
         value.billing = { entitlement: { plan: canary, version: 0, effectiveAt: at } };
       else value[canary] = { value: canary };
@@ -146,70 +146,6 @@ describe("portable export safe validation diagnostics", () => {
 
 describe("portable Profile SQL projection", () => {
   const at = "2026-10-13T18:00:00.000Z";
-  it("accepts every SQL fact projection field with bounded candidate-readable provenance", async () => {
-    const sql = await readFile(
-      new URL(
-        "../../../backend/services/profile/migrations/0010_restricted_answer_vault.sql",
-        import.meta.url,
-      ),
-      "utf8",
-    );
-    const projection =
-      /'facts', COALESCE\(\([\s\S]*?jsonb_build_object\(([\s\S]*?)\)\) ORDER BY fact.created_at/u.exec(
-        sql,
-      )?.[1];
-    expect(projection).toBeDefined();
-    const producerKeys = [...(projection ?? "").matchAll(/^\s*'([A-Za-z]+)',/gmu)].map(
-      (match) => match[1] as string,
-    );
-    expect(producerKeys).toContain("sourceReference");
-    const values: Record<string, unknown> = {
-      id: "019d04cf-1f80-7000-8000-000000000001",
-      version: 1,
-      kind: "skill",
-      key: "skill.synthetic",
-      value: "Synthetic TypeScript",
-      verification: "confirmed",
-      availability: "available",
-      sensitivity: "standard",
-      sourceType: "resume",
-      sourceReference: "synthetic.resume-provenance",
-      effectiveFrom: "2020-01-01",
-      effectiveTo: "2021-01-01",
-      createdAt: at,
-      updatedAt: at,
-    };
-    const fact = Object.fromEntries(
-      producerKeys.map((key) => {
-        expect(Object.hasOwn(values, key), "Synthetic SQL projection fixture is complete").toBe(
-          true,
-        );
-        return [key, values[key]];
-      }),
-    );
-    const validate = await exportDefinition("profileFact");
-    expect(validate(fact)).toBe(true);
-    const sourceSql = await readFile(
-      new URL(
-        "../../../backend/services/profile/migrations/0004_profile_fact_versions.sql",
-        import.meta.url,
-      ),
-      "utf8",
-    );
-    const bounds = /char_length\(source_reference\) BETWEEN (\d+) AND (\d+)/u.exec(sourceSql);
-    expect(bounds).not.toBeNull();
-    const minimum = Number(bounds?.[1]);
-    const maximum = Number(bounds?.[2]);
-    for (const sourceReference of ["x".repeat(minimum), "x".repeat(maximum)])
-      expect(validate({ ...fact, sourceReference })).toBe(true);
-    for (const sourceReference of ["", " ", "x".repeat(maximum + 1), null, 1, {}])
-      expect(validate({ ...fact, sourceReference })).toBe(false);
-    delete fact.sourceReference;
-    expect(validate(fact)).toBe(true);
-    for (const field of ["unknownField", "userId", "objectKey", "ciphertext"])
-      expect(validate({ ...fact, [field]: "synthetic" })).toBe(false);
-  });
-
   const preferences = {
     version: 1,
     targetRoles: ["Synthetic engineer"],

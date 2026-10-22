@@ -20,9 +20,8 @@ direct(
     "profile.entries",
     "profile.personal_versions",
     "profile.import_drafts",
-    "profile.profile_facts",
     "profile.restricted_answers",
-    "profile.resume_fact_imports",
+    "profile.resume_imports",
     "documents.audit_events",
     "documents.cover_letter_provider_responses",
     "documents.cover_letter_work_authorizations",
@@ -102,12 +101,6 @@ function child(
       `EXISTS (SELECT 1 FROM ${parent} p WHERE p.id = t.${foreignKey} AND p.${ownerColumn} = ANY($1::uuid[]))`,
     );
 }
-child(
-  ["profile.profile_fact_versions", "profile.profile_fact_evidence"],
-  "profile.profile_facts",
-  "fact_id",
-  "user_id",
-);
 child(["profile.restricted_answer_versions"], "profile.restricted_answers", "answer_id", "user_id");
 child(["profile.entry_versions"], "profile.entries", "entry_id", "user_id");
 child(
@@ -236,12 +229,9 @@ export const PRESERVATION_RELATIONS: readonly string[] = Object.freeze([
   "profile.import_drafts",
   "profile.job_preferences",
   "profile.personal_versions",
-  "profile.profile_fact_evidence",
-  "profile.profile_fact_versions",
-  "profile.profile_facts",
   "profile.restricted_answer_versions",
   "profile.restricted_answers",
-  "profile.resume_fact_imports",
+  "profile.resume_imports",
   "profile.ugc_contribution_consents",
   "trust.case_events",
   "trust.contribution_cases",
@@ -253,7 +243,7 @@ export const PRESERVATION_RELATIONS: readonly string[] = Object.freeze([
 
 export interface RestoreDataDigest {
   sha256: string;
-  relationCount: 100;
+  relationCount: 97;
   rowCount: number;
   byteCount: number;
 }
@@ -431,6 +421,6 @@ export async function digestRestoredData(
     if (budget.rowCount > MAX_ROWS || budget.byteCount > MAX_BYTES) refuse();
     hash.update(JSON.stringify([relation, row.schema, count, bytes, row.sha])).update("\0");
   }
-  if (PRESERVATION_RELATIONS.length !== 100 || signal?.aborted || Date.now() >= deadline) refuse();
-  return { sha256: hash.digest("hex"), relationCount: 100, rowCount, byteCount };
+  if (PRESERVATION_RELATIONS.length !== 97 || signal?.aborted || Date.now() >= deadline) refuse();
+  return { sha256: hash.digest("hex"), relationCount: 97, rowCount, byteCount };
 }

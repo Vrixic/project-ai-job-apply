@@ -23,12 +23,12 @@ describe("candidateSafeProblemMessage", () => {
   it.each([
     [401, "authentication_required", "preferences", "Sign in again to continue."],
     [503, "session_expired", "resume", "Sign in again to continue."],
-    [403, "forbidden", "profile_facts", "Your session is not allowed"],
+    [403, "forbidden", "profile_sections", "Your session is not allowed"],
     [400, "invalid_request", "preferences", "Check your job preferences"],
     [413, "payload_too_large", "resume", "Check the resume request"],
-    [409, "version_conflict", "profile_facts", "This profile fact changed"],
+    [409, "version_conflict", "profile_sections", "This profile entry changed"],
     [404, "not_found", "operation", "saved check is no longer available"],
-    [503, "private_database_failure", "profile_facts", "temporarily unavailable"],
+    [503, "private_database_failure", "profile_sections", "temporarily unavailable"],
   ] as const)(
     "maps %i %s on %s to fixed candidate-safe copy",
     async (status, code, surface, expected) => {
@@ -46,7 +46,7 @@ describe("candidateSafeProblemMessage", () => {
   it.each([
     ["preferences", "Job preferences are temporarily unavailable."],
     ["operation", "The saved check is temporarily unavailable."],
-    ["profile_facts", "Profile facts are temporarily unavailable."],
+    ["profile_sections", "Your profile is temporarily unavailable."],
     ["resume", "Resume processing is temporarily unavailable."],
   ] as const)(
     "uses a fixed %s fallback for unknown, malformed, or empty bodies",
@@ -98,8 +98,8 @@ describe("resume refusals (ADR-032)", () => {
 
   it("uses that copy only for the resume surface, never echoes upstream text, and keeps other conflicts generic", async () => {
     await expect(
-      candidateSafeProblemMessage(problem(409, "resume_document_limit"), "profile_facts"),
-    ).resolves.toBe("This profile fact changed. Refresh and review it again.");
+      candidateSafeProblemMessage(problem(409, "resume_document_limit"), "profile_sections"),
+    ).resolves.toBe("This profile entry changed. Refresh and review it again.");
     await expect(
       candidateSafeProblemMessage(problem(409, "idempotency_conflict"), "resume"),
     ).resolves.toBe("The resume request changed. Refresh and try again.");

@@ -87,33 +87,13 @@ describeWithDatabase("resume purge sweep against PostgreSQL", () => {
 
   async function proposal(userId: string, documentId: string, value: string) {
     await client.begin((transaction) =>
-      writer.import(transaction, {
+      writer.importDrafts(transaction, {
         userId,
         documentId,
         documentVersion: 1,
         parserVersion: "resume-parser-v1",
         traceId: "purge-e2e",
-        proposals: [
-          {
-            kind: "skill",
-            key: "skill",
-            value,
-            sensitivity: "standard",
-            evidence: {
-              supportingSpans: [
-                {
-                  documentId,
-                  documentVersion: 1,
-                  parserVersion: "resume-parser-v1",
-                  blockIndex: 0,
-                  startOffset: 0,
-                  endOffset: 5,
-                  page: 1,
-                },
-              ],
-            },
-          },
-        ],
+        drafts: [{ section: "skill", values: { name: value } }],
       }),
     );
   }
@@ -151,13 +131,14 @@ describeWithDatabase("resume purge sweep against PostgreSQL", () => {
     expect(
       await client`SELECT 1 FROM documents.idempotency_keys WHERE user_id = ${owner} AND response::text LIKE ${`%${fileName}%`}`,
     ).toHaveLength(0);
-    expect(await exists("profile.resume_fact_imports", deleted)).toBe(false);
-    expect(await exists("profile.resume_fact_imports", live)).toBe(true);
-    expect(
-      await client`SELECT 1 FROM profile.profile_facts AS fact
-        JOIN profile.profile_fact_versions AS version ON version.fact_id = fact.id
-        WHERE fact.user_id = ${owner}`,
-    ).toHaveLength(0);
+    expect(await exists("profile.resume_imports", deleted)).toBe(false);
+    expect(await exists("profile.resume_imports", live)).toBe(true);
+    expect(await client`SELECT 1 FROM profile.import_drafts WHERE user_id = ${owner}`).toHaveLength(
+      0,
+    );
+    expect(await client`SELECT 1 FROM profile.import_drafts WHERE user_id = ${other}`).toHaveLength(
+      1,
+    );
     expect(
       await client`SELECT 1 FROM documents.audit_events WHERE document_id = ${deleted} AND action = 'resume.purged'`,
     ).toHaveLength(1);

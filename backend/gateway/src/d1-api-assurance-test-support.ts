@@ -1,18 +1,14 @@
 import type {
-  CreateProfileFactRequest,
   CreateResumeUploadRequest,
   CreateResumeUploadResponse,
   CurrentUser,
   JobPreferenceSet,
   Operation,
-  ProfileFact,
-  ProfileFactCollection,
   ProfileReadiness,
   PutJobPreferencesRequest,
   PutJobPreferencesResponse,
   SavedJob,
   SavedJobPage,
-  UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
 import type { AuthPrincipal } from "@ai-job-apply/auth";
 import { createTestTokenIssuer } from "@ai-job-apply/auth/testing";
@@ -73,22 +69,6 @@ export class SyntheticAssuranceProfileStore implements ProfileStore {
     _idempotencyKey: string,
   ): Promise<PutJobPreferencesResponse> {
     return unused("ProfileStore.putPreferences");
-  }
-
-  async listProfileFacts(): Promise<ProfileFactCollection> {
-    return unused("ProfileStore.listProfileFacts");
-  }
-
-  async createProfileFact(_userId: string, _input: CreateProfileFactRequest): Promise<ProfileFact> {
-    return unused("ProfileStore.createProfileFact");
-  }
-
-  async updateProfileFact(
-    _userId: string,
-    _factId: string,
-    _input: UpdateProfileFactRequest,
-  ): Promise<ProfileFact | null> {
-    return unused("ProfileStore.updateProfileFact");
   }
 
   async getOperation(): Promise<Operation | null> {

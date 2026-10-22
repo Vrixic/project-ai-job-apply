@@ -2,16 +2,12 @@ import { createHash } from "node:crypto";
 import type {
   AccountDeletionRequest,
   CandidateDataExport,
-  CreateProfileFactRequest,
   CurrentUser,
   JobPreferenceSet,
   Operation,
-  ProfileFact,
-  ProfileFactCollection,
   ProfileReadiness,
   PutJobPreferencesRequest,
   PutJobPreferencesResponse,
-  UpdateProfileFactRequest,
 } from "@ai-job-apply/api-contracts";
 import type { AuthPrincipal } from "@ai-job-apply/auth";
 import {
@@ -56,7 +52,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 
 export * from "./candidate-rights.js";
 export { resolveLambdaDatabaseUrl } from "./lambda-database-url.js";
-export { profileFactToGraphFact } from "./profile-fact-graph.js";
 export * from "./restricted-answer-export.js";
 export * from "./restricted-answer-vault.js";
 export * from "./ugc-contribution-consent.js";
@@ -131,20 +126,6 @@ export interface ProfileStore {
     traceId: string,
     traceparent?: string,
   ): Promise<PutJobPreferencesResponse>;
-  listProfileFacts(userId: string): Promise<ProfileFactCollection>;
-  createProfileFact(
-    userId: string,
-    input: CreateProfileFactRequest,
-    idempotencyKey: string,
-    traceId: string,
-  ): Promise<ProfileFact>;
-  updateProfileFact(
-    userId: string,
-    factId: string,
-    input: UpdateProfileFactRequest,
-    idempotencyKey: string,
-    traceId: string,
-  ): Promise<ProfileFact | null>;
   createCandidateDataExport?(
     principal: AuthPrincipal,
     userId: string,
@@ -345,76 +326,6 @@ function requestHash(input: unknown): string {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
 
-interface ProfileFactRow {
-  id: string;
-  kind: ProfileFact["kind"];
-  key: string;
-  value: ProfileFact["value"];
-  verification: ProfileFact["verification"];
-  availabilityState: "available" | "invalidated";
-  availabilityReason: "source_security_hold" | null;
-  sensitivity: ProfileFact["sensitivity"];
-  sourceType: ProfileFact["source"]["type"];
-  sourceReference: string;
-  effectiveFrom: string | null;
-  effectiveTo: string | null;
-  version: number;
-  createdAt: Date | string;
-  updatedAt: Date | string;
-  evidence: ProfileFact["evidence"] | null;
-}
-
-function timestampIso(value: Date | string): string {
-  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
-}
-
-function mapProfileFact(row: ProfileFactRow): ProfileFact {
-  if (
-    row.availabilityState === "invalidated" &&
-    row.availabilityReason !== "source_security_hold"
-  ) {
-    throw new Error("ProfileFactAvailabilityInvariantInvalid");
-  }
-  return {
-    id: row.id,
-    kind: row.kind,
-    key: row.key,
-    value: row.value,
-    verification: row.verification,
-    ...(row.availabilityState === "invalidated"
-      ? {
-          availability: {
-            state: "invalidated" as const,
-            reasonCode: "source_security_hold" as const,
-          },
-        }
-      : {}),
-    sensitivity: row.sensitivity,
-    source: { type: row.sourceType, reference: row.sourceReference },
-    version: row.version,
-    createdAt: timestampIso(row.createdAt),
-    updatedAt: timestampIso(row.updatedAt),
-    ...(row.effectiveFrom ? { effectiveFrom: row.effectiveFrom } : {}),
-    ...(row.effectiveTo ? { effectiveTo: row.effectiveTo } : {}),
-    ...(row.evidence ? { evidence: row.evidence } : {}),
-  };
-}
-
-export interface ResumeProposalImport {
-  userId: string;
-  documentId: string;
-  documentVersion: number;
-  parserVersion: string;
-  traceId: string;
-  proposals: ReadonlyArray<{
-    kind: ProfileFact["kind"];
-    key: string;
-    value: ProfileFact["value"];
-    sensitivity: ProfileFact["sensitivity"];
-    evidence: NonNullable<ProfileFact["evidence"]>;
-  }>;
-}
-
 export interface ResumeDraftImport {
   userId: string;
   documentId: string;
@@ -434,116 +345,8 @@ export class ResumeProposalConflictError extends Error {
   }
 }
 
-export function assertProfileFactTransition(
-  currentVerification: ProfileFact["verification"],
-  requestedVerification: UpdateProfileFactRequest["verification"],
-  valueChanged: boolean,
-  available = true,
-): void {
-  const resultingVerification = requestedVerification ?? currentVerification;
-  if (
-    !available ||
-    (currentVerification === "proposed" &&
-      requestedVerification !== "confirmed" &&
-      requestedVerification !== "rejected") ||
-    (valueChanged && resultingVerification !== "confirmed")
-  ) {
-    throw new ProfileFactTransitionConflictError();
-  }
-}
-
 /** Profile-owned writer invoked inside the document coordinator transaction. */
 export class PostgresResumeProposalWriter {
-  async import(transaction: postgres.TransactionSql, input: ResumeProposalImport): Promise<number> {
-    for (const proposal of input.proposals) {
-      if (
-        proposal.evidence.supportingSpans.length < 1 ||
-        proposal.evidence.supportingSpans.some(
-          (span) =>
-            span.documentId !== input.documentId ||
-            span.documentVersion !== input.documentVersion ||
-            span.parserVersion !== input.parserVersion ||
-            span.endOffset <= span.startOffset,
-        )
-      ) {
-        throw new Error("InvalidResumeProposalEvidence");
-      }
-    }
-    const canonical = JSON.stringify(input.proposals);
-    const digest = createHash("sha256").update(canonical).digest("hex");
-    await transaction`
-      SELECT pg_advisory_xact_lock(
-        hashtext(${`resume-proposals:${input.userId}:${input.documentId}:${input.documentVersion}:${input.parserVersion}`})
-      )
-    `;
-    const prior = await transaction<Array<{ proposalDigest: string; proposalCount: number }>>`
-      SELECT proposal_digest AS "proposalDigest", proposal_count AS "proposalCount"
-      FROM profile.resume_fact_imports
-      WHERE user_id = ${input.userId}
-        AND document_id = ${input.documentId}
-        AND document_version = ${input.documentVersion}
-        AND parser_version = ${input.parserVersion}
-    `;
-    if (prior[0]) {
-      if (prior[0].proposalDigest !== digest) throw new ResumeProposalConflictError();
-      return prior[0].proposalCount;
-    }
-
-    const importId = uuidv7();
-    await transaction`
-      INSERT INTO profile.resume_fact_imports (
-        id, user_id, document_id, document_version, parser_version, proposal_digest, proposal_count
-      ) VALUES (
-        ${importId}, ${input.userId}, ${input.documentId}, ${input.documentVersion},
-        ${input.parserVersion}, ${digest}, ${input.proposals.length}
-      )
-    `;
-    for (const proposal of input.proposals) {
-      const factId = uuidv7();
-      await transaction`
-        INSERT INTO profile.profile_facts (id, user_id)
-        VALUES (${factId}, ${input.userId})
-      `;
-      await transaction`
-        INSERT INTO profile.profile_fact_versions (
-          fact_id, version, kind, fact_key, fact_value, verification, sensitivity,
-          source_type, source_reference
-        ) VALUES (
-          ${factId}, 1, ${proposal.kind}, ${proposal.key}, ${JSON.stringify(proposal.value)}::jsonb,
-          'proposed', ${proposal.sensitivity}, 'resume',
-          ${`resume:${input.documentId}:v${input.documentVersion}:${input.parserVersion}`}
-        )
-      `;
-      for (const [ordinal, span] of proposal.evidence.supportingSpans.entries()) {
-        if (span.endOffset <= span.startOffset) throw new Error("InvalidResumeProposalEvidence");
-        await transaction`
-          INSERT INTO profile.profile_fact_evidence (
-            fact_id, fact_version, ordinal, document_id, document_version, parser_version,
-            block_index, start_offset, end_offset, page
-          ) VALUES (
-            ${factId}, 1, ${ordinal}, ${span.documentId}, ${span.documentVersion},
-            ${span.parserVersion}, ${span.blockIndex}, ${span.startOffset}, ${span.endOffset},
-            ${span.page ?? null}
-          )
-        `;
-      }
-    }
-    await transaction`
-      INSERT INTO platform.audit_events (
-        id, user_id, action, resource_type, resource_id, trace_id, metadata
-      ) VALUES (
-        ${uuidv7()}, ${input.userId}, 'profile.resume.proposals.imported',
-        'resume_document', ${input.documentId}, ${input.traceId},
-        ${JSON.stringify({
-          documentVersion: input.documentVersion,
-          parserVersion: input.parserVersion,
-          proposalCount: input.proposals.length,
-        })}::jsonb
-      )
-    `;
-    return input.proposals.length;
-  }
-
   /**
    * Stores parsed resume content as import drafts (ADR-052). Drafts are not profile records: no
    * consumer reads them and they join the profile only when the candidate saves them. The import
@@ -566,7 +369,7 @@ export class PostgresResumeProposalWriter {
     `;
     const prior = await transaction<Array<{ proposalDigest: string; proposalCount: number }>>`
       SELECT proposal_digest AS "proposalDigest", proposal_count AS "proposalCount"
-      FROM profile.resume_fact_imports
+      FROM profile.resume_imports
       WHERE user_id = ${input.userId}
         AND document_id = ${input.documentId}
         AND document_version = ${input.documentVersion}
@@ -584,7 +387,7 @@ export class PostgresResumeProposalWriter {
     const accepted = input.drafts.slice(0, room);
     const importId = uuidv7();
     await transaction`
-      INSERT INTO profile.resume_fact_imports (
+      INSERT INTO profile.resume_imports (
         id, user_id, document_id, document_version, parser_version, proposal_digest, proposal_count
       ) VALUES (
         ${importId}, ${input.userId}, ${input.documentId}, ${input.documentVersion},
@@ -625,7 +428,7 @@ export class PostgresResumeProposalWriter {
       DELETE FROM profile.import_drafts AS draft
       WHERE draft.user_id = ${input.userId}
         AND draft.import_id IN (
-          SELECT id FROM profile.resume_fact_imports
+          SELECT id FROM profile.resume_imports
           WHERE user_id = ${input.userId} AND document_id = ${input.documentId}
         )
       RETURNING draft.id
@@ -633,139 +436,53 @@ export class PostgresResumeProposalWriter {
     return erased.length;
   }
 
+  /** A security hold on a document removes its still-unsaved drafts; saved records are the candidate's own. */
   async holdDocumentProposals(
     transaction: postgres.TransactionSql,
     input: { userId: string; documentId: string; traceId: string },
   ): Promise<number> {
-    const rows = await transaction<
-      Array<{
-        factId: string;
-        version: number;
-        kind: ProfileFact["kind"];
-        key: string;
-        value: ProfileFact["value"];
-        verification: ProfileFact["verification"];
-        sensitivity: ProfileFact["sensitivity"];
-        sourceType: ProfileFact["source"]["type"];
-        sourceReference: string;
-        effectiveFrom: string | null;
-        effectiveTo: string | null;
-      }>
-    >`
-      SELECT fact.id AS "factId", version.version, version.kind,
-        version.fact_key AS key, version.fact_value AS value, version.verification,
-        version.sensitivity,
-        version.source_type AS "sourceType", version.source_reference AS "sourceReference",
-        version.availability_state AS "availabilityState",
-        version.availability_reason AS "availabilityReason",
-        version.effective_from AS "effectiveFrom", version.effective_to AS "effectiveTo"
-      FROM profile.profile_facts AS fact
-      JOIN LATERAL (
-        SELECT * FROM profile.profile_fact_versions
-        WHERE fact_id = fact.id ORDER BY version DESC LIMIT 1
-      ) AS version ON true
-      WHERE fact.user_id = ${input.userId}
-        AND version.availability_state = 'available'
-        AND EXISTS (
-          SELECT 1 FROM profile.profile_fact_evidence AS evidence
-          WHERE evidence.fact_id = fact.id AND evidence.fact_version = version.version
-            AND evidence.document_id = ${input.documentId}
-        )
-      FOR UPDATE OF fact
-    `;
-    for (const fact of rows) {
-      const nextVersion = fact.version + 1;
-      await transaction`
-        INSERT INTO profile.profile_fact_versions (
-          fact_id, version, kind, fact_key, fact_value, verification, sensitivity,
-          source_type, source_reference, effective_from, effective_to,
-          availability_state, availability_reason
-        ) VALUES (
-          ${fact.factId}, ${nextVersion}, ${fact.kind}, ${fact.key},
-          ${JSON.stringify(fact.value)}::jsonb, ${fact.verification}, ${fact.sensitivity},
-          ${fact.sourceType}, ${fact.sourceReference}, ${fact.effectiveFrom}::date,
-          ${fact.effectiveTo}::date, 'invalidated', 'source_security_hold'
-        )
-      `;
-      await transaction`
-        INSERT INTO profile.profile_fact_evidence (
-          fact_id, fact_version, ordinal, document_id, document_version, parser_version,
-          block_index, start_offset, end_offset, page
-        )
-        SELECT fact_id, ${nextVersion}, ordinal, document_id, document_version, parser_version,
-          block_index, start_offset, end_offset, page
-        FROM profile.profile_fact_evidence
-        WHERE fact_id = ${fact.factId} AND fact_version = ${fact.version}
-      `;
-    }
-    if (rows.length > 0) {
+    const erased = await this.eraseDocumentDrafts(transaction, input);
+    if (erased > 0) {
       await transaction`
         INSERT INTO platform.audit_events (
           id, user_id, action, resource_type, resource_id, trace_id, metadata
         ) VALUES (
           ${uuidv7()}, ${input.userId}, 'profile.resume.proposals.security-held',
           'resume_document', ${input.documentId}, ${input.traceId},
-          ${JSON.stringify({ rejectedProposalCount: rows.length })}::jsonb
+          ${JSON.stringify({ rejectedProposalCount: erased })}::text::jsonb
         )
       `;
     }
-    return rows.length + (await this.eraseDocumentDrafts(transaction, input));
+    return erased;
   }
 
   /**
-   * Erases the unreviewed proposals of a resume that was deleted and purged (ADR-034). A fact goes only if every version of
-   * it is still `proposed` (the candidate never confirmed, edited, or rejected it) and its only source is this document,
-   * by source reference and by evidence. Reviewed facts are the candidate's own data and stay. Fact versions and evidence go
-   * with the fact through ON DELETE CASCADE, and the import record for the document is removed. Idempotent: a second call
-   * finds nothing to erase.
+   * Erases the unsaved drafts of a resume that was deleted and purged (ADR-034) and the import record
+   * for the document. Saved Profile records are the candidate's own and stay. Idempotent: a second
+   * call finds nothing to erase.
    */
   async retireDocumentProposals(
     transaction: postgres.TransactionSql,
     input: { userId: string; documentId: string; traceId: string },
   ): Promise<{ proposalsErased: number; importsErased: number }> {
-    const reference = `resume:${input.documentId}:%`;
-    const erased = await transaction<Array<{ id: string }>>`
-      DELETE FROM profile.profile_facts AS fact
-      WHERE fact.user_id = ${input.userId}
-        AND EXISTS (
-          SELECT 1 FROM profile.profile_fact_versions AS version
-          WHERE version.fact_id = fact.id
-            AND version.source_type = 'resume'
-            AND version.source_reference LIKE ${reference}
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM profile.profile_fact_versions AS version
-          WHERE version.fact_id = fact.id AND version.verification <> 'proposed'
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM profile.profile_fact_versions AS version
-          WHERE version.fact_id = fact.id
-            AND (version.source_type <> 'resume' OR version.source_reference NOT LIKE ${reference})
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM profile.profile_fact_evidence AS evidence
-          WHERE evidence.fact_id = fact.id AND evidence.document_id <> ${input.documentId}
-        )
-      RETURNING fact.id
-    `;
     const draftsErased = await this.eraseDocumentDrafts(transaction, input);
     const imports = await transaction<Array<{ id: string }>>`
-      DELETE FROM profile.resume_fact_imports
+      DELETE FROM profile.resume_imports
       WHERE user_id = ${input.userId} AND document_id = ${input.documentId}
       RETURNING id
     `;
-    if (erased.length > 0) {
-      const metadata = JSON.stringify({ erasedProposalCount: erased.length });
+    if (draftsErased > 0) {
       await transaction`
         INSERT INTO platform.audit_events (
           id, user_id, action, resource_type, resource_id, trace_id, metadata
         ) VALUES (
           ${uuidv7()}, ${input.userId}, 'profile.resume.proposals.retired',
-          'resume_document', ${input.documentId}, ${input.traceId}, ${metadata}::text::jsonb
+          'resume_document', ${input.documentId}, ${input.traceId},
+          ${JSON.stringify({ erasedProposalCount: draftsErased })}::text::jsonb
         )
       `;
     }
-    return { proposalsErased: erased.length + draftsErased, importsErased: imports.length };
+    return { proposalsErased: draftsErased, importsErased: imports.length };
   }
 }
 
@@ -1035,362 +752,6 @@ export class PostgresProfileStore implements ProfileStore {
       await this.attemptOutboxNudge(outcome.nudge);
     }
     return outcome.response;
-  }
-
-  async listProfileFacts(userId: string): Promise<ProfileFactCollection> {
-    const rows = await this.handle.client<ProfileFactRow[]>`
-      SELECT
-        fact.id,
-        version.kind,
-        version.fact_key AS key,
-        version.fact_value AS value,
-        version.verification,
-        version.availability_state AS "availabilityState",
-        version.availability_reason AS "availabilityReason",
-        version.sensitivity,
-        version.source_type AS "sourceType",
-        version.source_reference AS "sourceReference",
-        version.effective_from AS "effectiveFrom",
-        version.effective_to AS "effectiveTo",
-        version.version,
-        fact.created_at AS "createdAt",
-        version.created_at AS "updatedAt"
-        , CASE WHEN count(evidence.ordinal) = 0 THEN NULL ELSE jsonb_build_object(
-            'supportingSpans', jsonb_agg(
-              jsonb_strip_nulls(jsonb_build_object(
-                'documentId', evidence.document_id,
-                'documentVersion', evidence.document_version,
-                'parserVersion', evidence.parser_version,
-                'blockIndex', evidence.block_index,
-                'startOffset', evidence.start_offset,
-                'endOffset', evidence.end_offset,
-                'page', evidence.page
-              )) ORDER BY evidence.ordinal
-            )
-          ) END AS evidence
-      FROM profile.profile_facts AS fact
-      JOIN LATERAL (
-        SELECT *
-        FROM profile.profile_fact_versions
-        WHERE fact_id = fact.id
-        ORDER BY version DESC
-        LIMIT 1
-      ) AS version ON true
-      LEFT JOIN profile.profile_fact_evidence AS evidence
-        ON evidence.fact_id = version.fact_id AND evidence.fact_version = version.version
-      WHERE fact.user_id = ${userId}
-      GROUP BY fact.id, version.fact_id, version.version, version.kind, version.fact_key,
-        version.fact_value, version.verification, version.availability_state,
-        version.availability_reason, version.sensitivity, version.source_type,
-        version.source_reference, version.effective_from, version.effective_to, version.created_at
-      ORDER BY fact.created_at, fact.id
-    `;
-    const facts = rows.map(mapProfileFact);
-    return {
-      facts,
-      confirmedCount: facts.filter(
-        (fact) => fact.verification === "confirmed" && fact.availability?.state !== "invalidated",
-      ).length,
-      proposedCount: facts.filter(
-        (fact) => fact.verification === "proposed" && fact.availability?.state !== "invalidated",
-      ).length,
-    };
-  }
-
-  async createProfileFact(
-    userId: string,
-    input: CreateProfileFactRequest,
-    idempotencyKey: string,
-    traceId: string,
-  ): Promise<ProfileFact> {
-    const hash = requestHash(input);
-    const scope = "profile.fact.create.v1";
-    return this.handle.client.begin(async (transaction) => {
-      await transaction`
-        SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${scope}:${idempotencyKey}`}))
-      `;
-      const prior = await transaction<Array<{ requestHash: string; response: ProfileFact }>>`
-        SELECT request_hash AS "requestHash", response
-        FROM platform.idempotency_keys
-        WHERE user_id = ${userId} AND scope = ${scope} AND key = ${idempotencyKey}
-      `;
-      if (prior[0]) {
-        if (prior[0].requestHash !== hash) {
-          throw new IdempotencyConflictError();
-        }
-        return prior[0].response;
-      }
-
-      const factId = uuidv7();
-      const createdAt = new Date();
-      await transaction`
-        INSERT INTO profile.profile_facts (id, user_id, created_at)
-        VALUES (${factId}, ${userId}, ${createdAt.toISOString()}::timestamptz)
-      `;
-      await transaction`
-        INSERT INTO profile.profile_fact_versions (
-          fact_id,
-          version,
-          kind,
-          fact_key,
-          fact_value,
-          verification,
-          sensitivity,
-          source_type,
-          source_reference,
-          effective_from,
-          effective_to,
-          created_at
-        ) VALUES (
-          ${factId},
-          1,
-          ${input.kind},
-          ${input.key},
-          ${JSON.stringify(input.value)}::jsonb,
-          'confirmed',
-          ${input.sensitivity},
-          'user',
-          'direct-entry',
-          ${input.effectiveFrom ?? null}::date,
-          ${input.effectiveTo ?? null}::date,
-          ${createdAt.toISOString()}::timestamptz
-        )
-      `;
-      const response: ProfileFact = {
-        id: factId,
-        kind: input.kind,
-        key: input.key,
-        value: input.value,
-        verification: "confirmed",
-        sensitivity: input.sensitivity,
-        source: { type: "user", reference: "direct-entry" },
-        version: 1,
-        createdAt: createdAt.toISOString(),
-        updatedAt: createdAt.toISOString(),
-        ...(input.effectiveFrom ? { effectiveFrom: input.effectiveFrom } : {}),
-        ...(input.effectiveTo ? { effectiveTo: input.effectiveTo } : {}),
-      };
-      await transaction`
-        INSERT INTO platform.idempotency_keys (
-          user_id, scope, key, request_hash, response
-        ) VALUES (
-          ${userId}, ${scope}, ${idempotencyKey}, ${hash}, ${JSON.stringify(response)}::jsonb
-        )
-      `;
-      await transaction`
-        INSERT INTO platform.audit_events (
-          id, user_id, action, resource_type, resource_id, trace_id, metadata
-        ) VALUES (
-          ${uuidv7()},
-          ${userId},
-          'profile.fact.created',
-          'profile_fact',
-          ${factId},
-          ${traceId},
-          ${JSON.stringify({ version: 1 })}::jsonb
-        )
-      `;
-      return response;
-    });
-  }
-
-  async updateProfileFact(
-    userId: string,
-    factId: string,
-    input: UpdateProfileFactRequest,
-    idempotencyKey: string,
-    traceId: string,
-  ): Promise<ProfileFact | null> {
-    const hash = requestHash(input);
-    const scope = `profile.fact.update.v1:${factId}`;
-    return this.handle.client.begin(async (transaction) => {
-      await transaction`
-        SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${scope}:${idempotencyKey}`}))
-      `;
-      const prior = await transaction<Array<{ requestHash: string; response: ProfileFact }>>`
-        SELECT request_hash AS "requestHash", response
-        FROM platform.idempotency_keys
-        WHERE user_id = ${userId} AND scope = ${scope} AND key = ${idempotencyKey}
-      `;
-      if (prior[0]) {
-        if (prior[0].requestHash !== hash) {
-          throw new IdempotencyConflictError();
-        }
-        return prior[0].response;
-      }
-
-      // Acquire the stable parent lock before taking the latest-version snapshot.
-      // A lock-taking SELECT can retain a pre-wait READ COMMITTED snapshot.
-      const owned = await transaction<Array<{ id: string }>>`
-        SELECT id FROM profile.profile_facts
-        WHERE id = ${factId} AND user_id = ${userId}
-        FOR UPDATE
-      `;
-      if (!owned[0]) {
-        return null;
-      }
-
-      const rows = await transaction<ProfileFactRow[]>`
-        SELECT
-          fact.id,
-          version.kind,
-          version.fact_key AS key,
-          version.fact_value AS value,
-          version.verification,
-          version.availability_state AS "availabilityState",
-          version.availability_reason AS "availabilityReason",
-          version.sensitivity,
-          version.source_type AS "sourceType",
-          version.source_reference AS "sourceReference",
-          version.effective_from AS "effectiveFrom",
-          version.effective_to AS "effectiveTo",
-          version.version,
-          fact.created_at AS "createdAt",
-          version.created_at AS "updatedAt",
-          NULL::jsonb AS evidence
-        FROM profile.profile_facts AS fact
-        JOIN LATERAL (
-          SELECT *
-          FROM profile.profile_fact_versions
-          WHERE fact_id = fact.id
-          ORDER BY version DESC
-          LIMIT 1
-        ) AS version ON true
-        WHERE fact.id = ${factId} AND fact.user_id = ${userId}
-      `;
-      const current = rows[0];
-      if (!current) {
-        return null;
-      }
-      if (current.version !== input.expectedVersion) {
-        throw new ProfileFactVersionConflictError();
-      }
-      type SupportingSpan = NonNullable<ProfileFact["evidence"]>["supportingSpans"][number];
-      const evidenceRows = await transaction<
-        Array<Omit<SupportingSpan, "page"> & { page: number | null }>
-      >`
-        SELECT document_id AS "documentId", document_version AS "documentVersion",
-          parser_version AS "parserVersion", block_index AS "blockIndex",
-          start_offset AS "startOffset", end_offset AS "endOffset", page
-        FROM profile.profile_fact_evidence
-        WHERE fact_id = ${factId} AND fact_version = ${current.version}
-        ORDER BY ordinal
-      `;
-      const currentEvidence: ProfileFact["evidence"] =
-        evidenceRows.length > 0
-          ? {
-              supportingSpans: evidenceRows.map(({ page, ...span }) => ({
-                ...span,
-                ...(page === null ? {} : { page }),
-              })),
-            }
-          : undefined;
-
-      const version = current.version + 1;
-      const updatedAt = new Date();
-      const value = input.value ?? current.value;
-      const verification = input.verification ?? current.verification;
-      const sensitivity = input.sensitivity ?? current.sensitivity;
-      const effectiveFrom = input.effectiveFrom ?? current.effectiveFrom;
-      const effectiveTo = input.effectiveTo ?? current.effectiveTo;
-      const valueChanged =
-        input.value !== undefined && JSON.stringify(input.value) !== JSON.stringify(current.value);
-      const effectiveDatesChanged =
-        (input.effectiveFrom !== undefined && input.effectiveFrom !== current.effectiveFrom) ||
-        (input.effectiveTo !== undefined && input.effectiveTo !== current.effectiveTo);
-      const contentChanged = valueChanged || effectiveDatesChanged;
-      assertProfileFactTransition(
-        current.verification,
-        input.verification,
-        contentChanged,
-        current.availabilityState === "available",
-      );
-      const sourceType =
-        contentChanged && current.sourceType === "resume" ? "user" : current.sourceType;
-      const sourceReference =
-        contentChanged && current.sourceType === "resume"
-          ? `resume-correction:${factId}`
-          : current.sourceReference;
-      await transaction`
-        INSERT INTO profile.profile_fact_versions (
-          fact_id,
-          version,
-          kind,
-          fact_key,
-          fact_value,
-          verification,
-          sensitivity,
-          source_type,
-          source_reference,
-          effective_from,
-          effective_to,
-          availability_state,
-          availability_reason,
-          created_at
-        ) VALUES (
-          ${factId},
-          ${version},
-          ${current.kind},
-          ${current.key},
-          ${JSON.stringify(value)}::jsonb,
-          ${verification},
-          ${sensitivity},
-          ${sourceType},
-          ${sourceReference},
-          ${effectiveFrom}::date,
-          ${effectiveTo}::date,
-          ${current.availabilityState},
-          ${current.availabilityReason},
-          ${updatedAt.toISOString()}::timestamptz
-        )
-      `;
-      if (!contentChanged && currentEvidence) {
-        await transaction`
-          INSERT INTO profile.profile_fact_evidence (
-            fact_id, fact_version, ordinal, document_id, document_version, parser_version,
-            block_index, start_offset, end_offset, page
-          )
-          SELECT fact_id, ${version}, ordinal, document_id, document_version, parser_version,
-            block_index, start_offset, end_offset, page
-          FROM profile.profile_fact_evidence
-          WHERE fact_id = ${factId} AND fact_version = ${current.version}
-        `;
-      }
-      const response = mapProfileFact({
-        ...current,
-        value,
-        verification,
-        sensitivity,
-        effectiveFrom,
-        effectiveTo,
-        version,
-        updatedAt,
-        sourceType,
-        sourceReference,
-        evidence: contentChanged ? null : (currentEvidence ?? null),
-      });
-      await transaction`
-        INSERT INTO platform.idempotency_keys (
-          user_id, scope, key, request_hash, response
-        ) VALUES (
-          ${userId}, ${scope}, ${idempotencyKey}, ${hash}, ${JSON.stringify(response)}::jsonb
-        )
-      `;
-      await transaction`
-        INSERT INTO platform.audit_events (
-          id, user_id, action, resource_type, resource_id, trace_id, metadata
-        ) VALUES (
-          ${uuidv7()},
-          ${userId},
-          'profile.fact.version.created',
-          'profile_fact',
-          ${factId},
-          ${traceId},
-          ${JSON.stringify({ version })}::jsonb
-        )
-      `;
-      return response;
-    });
   }
 
   async createCandidateDataExport(
@@ -2399,20 +1760,6 @@ export class IdempotencyConflictError extends Error {
   constructor() {
     super("The idempotency key was already used with a different request");
     this.name = "IdempotencyConflictError";
-  }
-}
-
-export class ProfileFactVersionConflictError extends Error {
-  constructor() {
-    super("The profile fact changed after it was loaded");
-    this.name = "ProfileFactVersionConflictError";
-  }
-}
-
-export class ProfileFactTransitionConflictError extends Error {
-  constructor() {
-    super("The requested profile fact transition is not allowed");
-    this.name = "ProfileFactTransitionConflictError";
   }
 }
 

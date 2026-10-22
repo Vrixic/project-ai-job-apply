@@ -67,63 +67,9 @@ export const jobPreferences = profile.table(
   (table) => [uniqueIndex("job_preferences_user_id_uq").on(table.userId)],
 );
 
-export type StoredProfileFactKind =
-  | "identity"
-  | "employment"
-  | "education"
-  | "project"
-  | "skill"
-  | "certification"
-  | "preference";
-export type StoredProfileFactValue = string | number | boolean | string[];
-export type StoredProfileFactVerification = "proposed" | "confirmed" | "rejected";
-export type StoredProfileFactAvailability = "available" | "invalidated";
-export type StoredProfileFactSensitivity = "standard" | "confidential" | "restricted";
-export type StoredProfileFactSourceType = "user" | "resume" | "import" | "derived";
-
-export const profileFacts = profile.table(
-  "profile_facts",
-  {
-    id: uuid("id").primaryKey(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [index("profile_facts_user_created_idx").on(table.userId, table.createdAt, table.id)],
-);
-
-export const profileFactVersions = profile.table(
-  "profile_fact_versions",
-  {
-    factId: uuid("fact_id")
-      .notNull()
-      .references(() => profileFacts.id, { onDelete: "cascade" }),
-    version: integer("version").notNull(),
-    kind: text("kind").$type<StoredProfileFactKind>().notNull(),
-    key: text("fact_key").notNull(),
-    value: jsonb("fact_value").$type<StoredProfileFactValue>().notNull(),
-    verification: text("verification").$type<StoredProfileFactVerification>().notNull(),
-    availabilityState: text("availability_state")
-      .$type<StoredProfileFactAvailability>()
-      .notNull()
-      .default("available"),
-    availabilityReason: text("availability_reason").$type<"source_security_hold">(),
-    sensitivity: text("sensitivity").$type<StoredProfileFactSensitivity>().notNull(),
-    sourceType: text("source_type").$type<StoredProfileFactSourceType>().notNull(),
-    sourceReference: text("source_reference").notNull(),
-    effectiveFrom: date("effective_from"),
-    effectiveTo: date("effective_to"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.factId, table.version] }),
-    index("profile_fact_versions_latest_idx").on(table.factId, table.version),
-  ],
-);
-
-export const resumeFactImports = profile.table(
-  "resume_fact_imports",
+/** Bookkeeping for resume imports: one row per document, version and parser (ADR-052). */
+export const resumeImports = profile.table(
+  "resume_imports",
   {
     id: uuid("id").primaryKey(),
     userId: uuid("user_id")
@@ -270,23 +216,6 @@ export const ugcContributionConsents = profile.table(
       .on(table.supersedesRecordId)
       .where(sql`${table.supersedesRecordId} IS NOT NULL`),
   ],
-);
-
-export const profileFactEvidence = profile.table(
-  "profile_fact_evidence",
-  {
-    factId: uuid("fact_id").notNull(),
-    factVersion: integer("fact_version").notNull(),
-    ordinal: integer("ordinal").notNull(),
-    documentId: uuid("document_id").notNull(),
-    documentVersion: integer("document_version").notNull(),
-    parserVersion: text("parser_version").notNull(),
-    blockIndex: integer("block_index").notNull(),
-    startOffset: integer("start_offset").notNull(),
-    endOffset: integer("end_offset").notNull(),
-    page: integer("page"),
-  },
-  (table) => [primaryKey({ columns: [table.factId, table.factVersion, table.ordinal] })],
 );
 
 export type OperationState = "queued" | "running" | "succeeded" | "retryable_failure" | "failed";

@@ -99,7 +99,14 @@ and Skills cards (PR #499). The fact tables (`profile_facts`, `profile_fact_vers
 `profile_fact_evidence`, `resume_fact_imports`) are removed by a forward-only migration in
 D3.1-010, only after every consumer has moved.
 
-### 8. Rights, export and restore
+### 8. The fact graph stays as an internal structure
+
+The generic `FactGraph` and `GraphFact` types remain as the evidence structure that generation, grounding
+and packet mapping already use. They are no longer a stored model: saved Profile records are adapted to
+them at read time (`profileEntriesToGraphFacts`), so every saved record is usable and nothing else is.
+`resume_fact_imports` becomes `resume_imports` and only records one import per document, version and parser.
+
+### 9. Rights, export and restore
 
 The new tables are candidate-owned PII. They are added to candidate export (the
 `candidate-data-export` domain schema), to account deletion across all owners, and to the restore

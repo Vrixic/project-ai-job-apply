@@ -175,8 +175,6 @@ const PROTECTED_EXACT_ROUTES = new Set([
   "PUT /v1/me/job-preferences",
   "POST /v1/me/data-exports",
   "POST /v1/me/account-deletion-requests",
-  "GET /v1/profile/facts",
-  "POST /v1/profile/facts",
   "GET /v1/profile/personal",
   "PUT /v1/profile/personal",
   "GET /v1/profile/import-drafts",
@@ -213,8 +211,6 @@ const MODERATION_RESOLUTION_PATH_PATTERN =
   /^\/v1\/admin\/moderation\/cases\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/resolve$/;
 const MODERATION_REPORT_SUMMARY_PATH_PATTERN =
   /^\/v1\/admin\/moderation\/jobs\/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/report-summary$/;
-const PROFILE_FACT_PATH_PATTERN =
-  /^\/v1\/profile\/facts\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PROFILE_RECORD_PATH_PATTERN =
   /^\/v1\/profile\/(?:education-entries|work-experience-entries|skill-entries|application-answers)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PROFILE_DRAFT_PATH_PATTERN =
@@ -402,9 +398,6 @@ function allowedRoute(
       APPLICATION_COVER_LETTER_FILE_PATH_PATTERN.test(path))
   ) {
     return { acceptsBody: false, protected: true, acceptsApplicationResumeFormatQuery: true };
-  }
-  if (method === "PATCH" && PROFILE_FACT_PATH_PATTERN.test(path)) {
-    return { acceptsBody: true, protected: true };
   }
   if (method === "PATCH" && PROFILE_RECORD_PATH_PATTERN.test(path)) {
     return { acceptsBody: true, protected: true };

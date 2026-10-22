@@ -134,9 +134,7 @@ async function ownedCounts(
         WHERE user_id = ANY(${transaction.array(userIds)}::uuid[])) AS "preferenceCount",
       (SELECT count(*)::int FROM identity.users
         WHERE id = ANY(${transaction.array(userIds)}::uuid[])) AS "userCount",
-      ((SELECT count(*)::int FROM profile.profile_facts
-          WHERE user_id = ANY(${transaction.array(userIds)}::uuid[])) +
-       (SELECT count(*)::int FROM platform.operations
+      ((SELECT count(*)::int FROM platform.operations
           WHERE user_id = ANY(${transaction.array(userIds)}::uuid[])) +
        (SELECT count(*)::int FROM platform.idempotency_keys
           WHERE user_id = ANY(${transaction.array(userIds)}::uuid[])) +

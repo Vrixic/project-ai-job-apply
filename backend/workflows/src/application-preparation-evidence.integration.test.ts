@@ -162,7 +162,7 @@ describe.skipIf(!requested)(
     it("refuses a foreign application before Profile access", async () => {
       const first = await seed();
       const second = await seed();
-      const read = vi.spyOn(profile, "listProfileFacts");
+      const read = vi.spyOn(profileSections, "listGroundingFacts");
       try {
         await expect(source.load(first.owner, second.applicationId)).rejects.toThrow(
           "CoverLetterEvidenceUnavailable",
@@ -175,7 +175,7 @@ describe.skipIf(!requested)(
     it("refuses a quarantined candidate before any owner read", async () => {
       const first = await seed();
       await database.client`UPDATE identity.users SET account_state = 'quarantined', quarantined_at = now() WHERE id = ${first.owner}`;
-      const read = vi.spyOn(profile, "listProfileFacts");
+      const read = vi.spyOn(profileSections, "listGroundingFacts");
       const app = vi.spyOn(applications, "getApplication");
       try {
         await expect(source.load(first.owner, first.applicationId)).rejects.toThrow(

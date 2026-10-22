@@ -207,7 +207,6 @@ h1 {
 form,
 .result,
 aside,
-.profile-facts,
 .restricted-answers,
 .job-search,
 .saved-jobs,
@@ -392,10 +391,6 @@ button:disabled {
 aside {
   background: #fff8df;
   border-color: #e2cc70;
-}
-
-.profile-facts {
-  background: #f8fbf9;
 }
 
 .restricted-answers {

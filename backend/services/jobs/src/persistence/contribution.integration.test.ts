@@ -104,7 +104,7 @@ describeClient("Jobs queued contribution intake persistence (%s client)", (mode)
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(profile.stdout.trim()).toBe(
-      "Database migrations through 0013_profile_sections_candidate_rights applied and verified.",
+      "Database migrations through 0014_retire_profile_facts applied and verified.",
     );
     const result = await execFileAsync(process.execPath, [migrationExecutable], {
       env: { ...process.env, DATABASE_URL: databaseUrl },

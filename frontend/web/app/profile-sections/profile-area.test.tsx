@@ -108,7 +108,7 @@ const render = async () => {
   await flush();
 };
 const buttonNamed = (name: string) => {
-  const found = [...container.querySelectorAll("button")].find(
+  const found = Array.from(container.querySelectorAll("button")).find(
     (b) => b.textContent?.trim() === name || b.getAttribute("aria-label") === name,
   );
   if (!found) throw new Error(`No button ${name}`);
@@ -122,7 +122,9 @@ const click = async (name: string) => {
 describe("ProfileArea", () => {
   it("shows one tab per section, a resume-import banner and only the selected panel", async () => {
     await render();
-    const tabs = [...container.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent);
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]')).map(
+      (tab) => tab.textContent,
+    );
     expect(tabs.map((text) => text?.replace(/ \(.*\)/u, ""))).toEqual([
       "Personal",
       "Education",
