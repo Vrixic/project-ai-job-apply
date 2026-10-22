@@ -22,17 +22,17 @@ Authentication, canonical jobs, onboarding, search/saved jobs, moderation, entit
 Completed 2026-10-22 by owner direction, in development only. D1-011 was removed (sources are user-contributed and vetted by an automated AI system, D7-012). Items needing AWS or production resources are carried to D6: maintenance-Lambda deployment and the ADR-023 DNS residual (D6-021), production and moderator identity (D6-014), public publication (D6-012).
 [Implemented and remaining capabilities](phase-1-web-and-job-catalog.md).
 
-## Owner input needed (2026-10-22)
+## Owner decisions (2026-10-22)
 
-Autonomous work stopped here because everything left needs a decision or resource only the owner can give. Nothing below was guessed.
+The owner answered the open questions in chat. Recorded decisions:
 
-- **AWS and production (no AWS change was made):** deploy D3.1 (migrations 0012 to 0014, Gateway, web; D3.1-011), the Stripe webhook route without the JWT authorizer plus the Stripe keys as secrets (D6-005), staging and production accounts and Auth0 tenants (D6-013, D6-014), the maintenance Lambda and DNS residual (D6-021). The migration image publisher, runtime-release guard and staging verifier still list the earlier migrations and relation count, and two acceptance operators still exercise the removed fact model; they need an update with that deployment.
-- **Stripe account:** create the Pro product and price (the amount is a product decision), then set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRETS`, `STRIPE_PRO_PRICE_ID` and `BILLING_APP_BASE_URL`. Without all four the billing routes do not exist.
-- **D3.1-013 (saved answers for free-text questions):** needs an ADR. The packet has a fixed field set and no per-question fields, so reuse means a new observed-question field in the packet schema and hash (submission safety), a web review step, and extension capture and fill. Proposed: exact-key match only, shown to the candidate for review, bound into the packet hash, restricted questions refused.
-- **D7-012 (AI vetting of contributed sources):** needs an ADR. The trust state machine requires a human reviewer and independent provider evidence for acceptance, and the model gateway only allows candidate-disclosure purposes. Proposed: the AI may only accept a contribution when it can bind independent provider evidence; every other outcome stays in the human queue (no AI adverse decision); a new `source_vetting` purpose, kill switch default off, audit record per decision. It also needs the live-AI retention policy decision and a worker host.
-- **New owner schemas or services:** the Notifications inbox, preferences and delivery state (D5-001, D5-002) and the outreach and contact-source data (D5-003 to D5-007) add tables that touch the restore manifest and deletion, which is an architectural approval.
-- **Remote browser (D4-004 to D4-006):** the isolated browser runtime is an AWS Fargate addition.
-- **External inputs:** authorized sanitized Workday fixtures (D4-012), mobile screens that can be tested only on real devices (D6-001 to D6-004), counsel, the independent assessor, the Greenhouse submit-click decision, product name and domain (D6-012).
+- **Approved:** deploy D3.1 through the guarded operators (migrations 0012 to 0014, Gateway, web) and update the release tooling with it; the Stripe webhook route without the JWT authorizer plus the Stripe keys as secrets; the Notifications inbox, preferences and delivery state as a new schema (D5-001, D5-002); AI vetting of contributed sources (D7-012) with the model allowed to read contributed content and zero provider retention.
+- **Product:** Pro costs $25 a month and allows 2 stored resumes (Free 1). The price is created in the owner's Stripe account.
+- **Declined or removed:** saved answers for free-text questions (D3.1-013), the remote browser (D4-004 to D4-006; all filling runs in the candidate's own Chrome through the extension), and the mobile client (D6-001 to D6-004, D6-006, D6-009).
+- **Greenhouse and Ashby:** both are to work fully, including the application submit step after the candidate's explicit approval.
+- **Deferred:** Workday waits for authorized sanitized fixtures. ApplyDash stays the provisional product name.
+
+Still needing the owner: an AWS sign-in for the deployment, the Stripe account values (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRETS`, `STRIPE_PRO_PRICE_ID`, `BILLING_APP_BASE_URL`), counsel, the independent assessor, and staging and production accounts and Auth0 tenants (D6-013, D6-014, D6-021).
 
 ## D3 — High-quality application preparation
 
