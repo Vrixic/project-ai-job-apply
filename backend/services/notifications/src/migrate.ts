@@ -6,7 +6,7 @@ import postgres from "postgres";
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
 
-const migrationVersions = ["0001_inbox_and_preferences"] as const;
+const migrationVersions = ["0001_inbox_and_preferences", "0002_candidate_rights"] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
     const migrationPath = fileURLToPath(
@@ -45,7 +45,13 @@ try {
       }
     }
     const [verification] = await transaction<
-      { relationCount: number; indexCount: number; migrationCount: number }[]
+      {
+        relationCount: number;
+        indexCount: number;
+        migrationCount: number;
+        rightsFunctionCount: number;
+        rightsPublicExecuteViolationCount: number;
+      }[]
     >`
       SELECT
         ((to_regclass('notifications.source_receipts') IS NOT NULL)::int +
@@ -57,12 +63,29 @@ try {
           AND indexname IN ('source_receipts_owner_idx', 'inbox_items_owner_state_idx',
             'inbox_items_aggregate_idx', 'inbox_items_expiry_idx')) AS "indexCount",
         (SELECT count(*)::int FROM notifications.schema_migrations
-          WHERE version = ANY(${migrationVersions as unknown as string[]})) AS "migrationCount"
+          WHERE version = ANY(${migrationVersions as unknown as string[]})) AS "migrationCount",
+        (SELECT count(*)::int FROM pg_proc procedure
+          WHERE procedure.oid = ANY(ARRAY[
+            to_regprocedure('notifications.export_candidate_data(uuid)'),
+            to_regprocedure('notifications.delete_candidate_data(uuid,uuid)')
+          ]) AND procedure.prosecdef) AS "rightsFunctionCount",
+        (SELECT count(*)::int
+          FROM pg_proc procedure
+          CROSS JOIN LATERAL aclexplode(
+            COALESCE(procedure.proacl, acldefault('f', procedure.proowner))
+          ) AS privilege
+          WHERE procedure.oid = ANY(ARRAY[
+            to_regprocedure('notifications.export_candidate_data(uuid)'),
+            to_regprocedure('notifications.delete_candidate_data(uuid,uuid)')
+          ]) AND privilege.grantee = 0 AND privilege.privilege_type = 'EXECUTE'
+        ) AS "rightsPublicExecuteViolationCount"
     `;
     if (
       verification?.relationCount !== 5 ||
       verification.indexCount !== 4 ||
-      verification.migrationCount !== migrationVersions.length
+      verification.migrationCount !== migrationVersions.length ||
+      verification.rightsFunctionCount !== 2 ||
+      verification.rightsPublicExecuteViolationCount !== 0
     ) {
       throw new Error(
         `Notifications migration verification failed: ${JSON.stringify(verification)}`,
