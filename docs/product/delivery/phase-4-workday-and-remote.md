@@ -1,7 +1,7 @@
 # D4 — Workday and Remote Preparation
 
 - Status: In progress
-- Start: Not started
+- Start: 2026-10-22
 - Completion: Not completed
 - Owners: Unassigned
 - Last updated: 2026-08-12
