@@ -5,6 +5,7 @@ export * from "./database.js";
 export * from "./field-definitions.js";
 export * from "./field-policy.js";
 export * from "./metrics.js";
+export * from "./outbox-feed.js";
 export {
   lockNativeMaterialApplicationAdmission,
   lockNativePreparationLaunchAdmission,
