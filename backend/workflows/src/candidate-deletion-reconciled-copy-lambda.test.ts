@@ -1,8 +1,6 @@
 import { fileURLToPath } from "node:url";
-import manifest from "@ai-job-apply/database-migrations/restore-manifest.json" with {
-  type: "json",
-};
 import { verifyRestoreDatabase } from "@ai-job-apply/database-migrations/restore-verifier";
+import { loadApplicationTransitionTargetManifest } from "@ai-job-apply/database-migrations/retained-restore-manifest";
 import type { DatabaseHandle } from "@ai-job-apply/profile-service";
 import { build } from "esbuild";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +11,8 @@ import {
 } from "./candidate-deletion-reconciled-copy-lambda.js";
 import { reconciledRuntimeFixture } from "./candidate-deletion-reconciled-copy-runtime.fixture.js";
 import { CURRENT_RESTORE_MANIFEST_SHA256 } from "./candidate-deletion-restore-contract.js";
+
+const { manifest } = loadApplicationTransitionTargetManifest();
 
 vi.mock("@ai-job-apply/database-migrations/restore-verifier", async (original) => ({
   ...(await original<object>()),
