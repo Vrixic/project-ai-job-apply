@@ -55,6 +55,7 @@ export function withApplicationEventFeed(options: {
     addPushSubscription: (owner, endpoint) =>
       options.notifications.addPushSubscription(owner, endpoint),
     removePushSubscription: (owner, id) => options.notifications.removePushSubscription(owner, id),
+    sendTestNotification: (owner) => options.notifications.sendTestNotification(owner),
     async listInbox(owner, listOptions) {
       if (!listOptions?.cursor) await pump(owner);
       return options.notifications.listInbox(owner, listOptions);

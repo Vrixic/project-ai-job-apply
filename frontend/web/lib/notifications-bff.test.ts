@@ -11,6 +11,7 @@ import {
   forwardNotificationDeliveryPushSubscription,
   forwardNotificationDeliveryPushSubscriptions,
   forwardNotificationDeliveryStatus,
+  forwardNotificationDeliveryTest,
   forwardNotificationList,
   forwardNotificationPreferences,
 } from "./notifications-bff";
@@ -308,6 +309,32 @@ describe("notification delivery BFF (ADR-056)", () => {
     expect(
       (await forwardNotificationDeliveryEmailConfirmation(post(url, { code: "123456" }))).status,
     ).toBe(503);
+  });
+
+  it("sends a test notification with no body and refuses anything else", async () => {
+    forward.mockResolvedValue(json({ id: ID }, 201));
+    const url = "/api/platform/notifications/delivery/test";
+    const sent = await forwardNotificationDeliveryTest(req(url, { method: "POST" }));
+    expect(sent.status).toBe(201);
+    expect(await sent.json()).toEqual({ id: ID });
+    expect(forward).toHaveBeenCalledWith(
+      "/v1/notifications/delivery/test",
+      expect.objectContaining({ method: "POST" }),
+      expect.anything(),
+    );
+    forward.mockClear();
+    for (const refused of [
+      req(url, { method: "GET" }),
+      req(`${url}?x=1`, { method: "POST" }),
+      req(url, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }),
+      req(url, { method: "POST", headers: { origin: "https://evil.example" } }),
+    ])
+      expect((await forwardNotificationDeliveryTest(refused)).status).toBe(400);
+    expect(forward).not.toHaveBeenCalled();
+    forward.mockResolvedValue(json({ id: "not-a-uuid" }, 201));
+    expect((await forwardNotificationDeliveryTest(req(url, { method: "POST" }))).status).toBe(503);
+    forward.mockResolvedValue(json({ title: "Too many" }, 429));
+    expect((await forwardNotificationDeliveryTest(req(url, { method: "POST" }))).status).toBe(429);
   });
 
   it("registers and removes a browser push subscription", async () => {

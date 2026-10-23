@@ -149,6 +149,38 @@ describe("NotificationSettings", () => {
     );
   });
 
+  it("sends a test notification and reports a rate limit plainly", async () => {
+    stubFetch((method, path) =>
+      method === "POST" && path === "/delivery/test"
+        ? Response.json({ id: SUB }, { status: 201 })
+        : undefined,
+    );
+    await render();
+    await click(/send a test notification/i);
+    expect(calls).toContainEqual({ method: "POST", path: "/delivery/test" });
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("Test sent");
+
+    stubFetch((method, path) =>
+      method === "POST" && path === "/delivery/test"
+        ? Response.json({}, { status: 429 })
+        : undefined,
+    );
+    await click(/send a test notification/i);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      "Try again in an hour",
+    );
+
+    stubFetch((method, path) =>
+      method === "POST" && path === "/delivery/test"
+        ? Response.json({}, { status: 503 })
+        : undefined,
+    );
+    await click(/send a test notification/i);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      "Could not send a test notification",
+    );
+  });
+
   it("confirms the emailed code and explains a wrong one", async () => {
     state.delivery = delivery({
       email: { address: "person@example.com", state: "pending", codePending: true },

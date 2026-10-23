@@ -223,6 +223,14 @@ export function NotificationSettings({ authenticated }: { authenticated: boolean
       return "Browser notifications are off for that browser.";
     });
 
+  const sendTest = () =>
+    run(async () => {
+      const response = await call("POST", "/delivery/test");
+      if (response.status === 429) return "Too many test notifications. Try again in an hour.";
+      if (response.status !== 201) return "Could not send a test notification.";
+      return "Test sent. It is in your inbox now. Email and browser notifications you turned on arrive within about a minute.";
+    });
+
   const save = () =>
     run(async () => {
       const response = await call("PUT", "/preferences", {
@@ -415,6 +423,9 @@ export function NotificationSettings({ authenticated }: { authenticated: boolean
           onClick={() => void save()}
         >
           Save notification settings
+        </button>
+        <button type="button" disabled={busy} onClick={() => void sendTest()}>
+          Send a test notification
         </button>
       </div>
       <div aria-live="polite">{message && <p role="status">{message}</p>}</div>

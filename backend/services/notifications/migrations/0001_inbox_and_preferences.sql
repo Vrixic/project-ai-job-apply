@@ -28,11 +28,15 @@ CREATE TABLE notifications.inbox_items (
   id uuid PRIMARY KEY,
   owner_user_id uuid NOT NULL,
   kind text NOT NULL CHECK (
-    kind IN ('application_review_needed', 'application_outcome_needed', 'application_confirmed')
+    kind IN (
+      'application_review_needed', 'application_outcome_needed', 'application_confirmed',
+      'test_notification'
+    )
   ),
   urgency text NOT NULL CHECK (urgency IN ('low', 'normal', 'high')),
   state text NOT NULL CHECK (state IN ('unread', 'acknowledged', 'dismissed', 'expired')),
-  source_service text NOT NULL CHECK (source_service IN ('applications')),
+  -- 'notifications' marks a candidate-requested test item (ADR-056); it never reflects a source fact.
+  source_service text NOT NULL CHECK (source_service IN ('applications', 'notifications')),
   aggregate_id uuid NOT NULL,
   source_revision bigint NOT NULL CHECK (source_revision BETWEEN 1 AND 9007199254740991),
   dedupe_key text NOT NULL CHECK (char_length(dedupe_key) BETWEEN 8 AND 200),

@@ -109,6 +109,7 @@ const subjects: Readonly<Record<NotificationKind, string>> = Object.freeze({
   application_review_needed: "An application is waiting for your review",
   application_outcome_needed: "Check whether your application was submitted",
   application_confirmed: "Your application was confirmed",
+  test_notification: "A test notification from your settings",
 });
 
 /** Transactional wording only: no application detail leaves the platform by email. */

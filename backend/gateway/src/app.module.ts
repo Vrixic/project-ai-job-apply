@@ -55,6 +55,7 @@ import type {
   NotificationItem as NotificationItemResponse,
   NotificationPreferences as NotificationPreferencesResponse,
   NotificationPushSubscriptionCreated,
+  NotificationTestSent,
   OpenModerationCaseRequest,
   OpenTrustCaseRequest,
   Operation,
@@ -975,7 +976,7 @@ class ProblemDetailsFilter implements ExceptionFilter {
         exception.code === "version_conflict"
           ? "The preferences changed; reload and try again"
           : exception.code === "rate_limited"
-            ? "Too many confirmation emails were requested; try again later"
+            ? "Too many requests were made; try again later"
             : exception.code === "limit_reached"
               ? "This account already has the maximum number of subscribed browsers"
               : "The notification request is invalid";
@@ -3763,6 +3764,7 @@ export type NotificationsApi = Pick<
   | "removeEmail"
   | "addPushSubscription"
   | "removePushSubscription"
+  | "sendTestNotification"
 >;
 
 class NotificationsUnavailableError extends Error {
@@ -4000,6 +4002,16 @@ class NotificationsController {
     return notificationsOperation(() =>
       this.notifications.addPushSubscription(user.id, input.endpoint),
     );
+  }
+
+  /** Creates one test item so the candidate can see their channels work. At most five an hour. */
+  @Post("/delivery/test")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async sendTest(@Req() request: AuthenticatedRequest): Promise<NotificationTestSent> {
+    assertNoRequestInput(request);
+    const user = await this.identity.resolve(request, "profile:write");
+    return notificationsOperation(() => this.notifications.sendTestNotification(user.id));
   }
 
   @Delete("/delivery/push-subscriptions/:subscriptionId")

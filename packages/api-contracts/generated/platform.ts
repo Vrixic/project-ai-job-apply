@@ -1605,6 +1605,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications/delivery/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create one test item in the inbox. It is delivered to the channels the candidate turned on, so it proves them end to end. At most five an hour. */
+        post: operations["sendNotificationTest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/notifications/{notificationId}/acknowledgement": {
         parameters: {
             query?: never;
@@ -3491,7 +3508,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            kind: "application_review_needed" | "application_outcome_needed" | "application_confirmed";
+            kind: "application_review_needed" | "application_outcome_needed" | "application_confirmed" | "test_notification";
             /** @enum {string} */
             urgency: "low" | "normal" | "high";
             /** @enum {string} */
@@ -3551,6 +3568,10 @@ export interface components {
             endpoint: string;
         };
         NotificationPushSubscriptionCreated: {
+            /** Format: uuid */
+            id: string;
+        };
+        NotificationTestSent: {
             /** Format: uuid */
             id: string;
         };
@@ -7328,6 +7349,32 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    sendNotificationTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The test item was created */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTestSent"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };

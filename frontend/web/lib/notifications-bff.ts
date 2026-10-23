@@ -300,6 +300,18 @@ export async function forwardNotificationDeliveryPushSubscriptions(
   );
 }
 
+/** One test item in the candidate's own inbox, so they can see email and browser alerts work. */
+export async function forwardNotificationDeliveryTest(request: Request): Promise<Response> {
+  const refused = bodylessRefused(request, "POST");
+  cancelBody(request.body);
+  if (refused) return invalid();
+  const response = await forward("/v1/notifications/delivery/test", {
+    method: "POST",
+    signal: request.signal,
+  });
+  return validateFoundationResponse(response, 201, "NotificationTestSent", request.signal);
+}
+
 export async function forwardNotificationDeliveryPushSubscription(
   request: Request,
   subscriptionId: string,

@@ -2493,7 +2493,8 @@
           "enum": [
             "application_review_needed",
             "application_outcome_needed",
-            "application_confirmed"
+            "application_confirmed",
+            "test_notification"
           ]
         },
         "urgency": {
