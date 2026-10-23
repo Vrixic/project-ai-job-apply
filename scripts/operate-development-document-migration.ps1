@@ -2211,7 +2211,7 @@ function Read-MigrationReleaseSource {
     [Parameter(Mandatory)][string]$Path
   )
 
-  if ($Path -cnotmatch '^backend/services/(?:database-migrations/src/(?:index|main)\.ts|(?:profile|jobs|documents|matching|billing|trust|applications)/src/migrate\.ts)$') {
+  if ($Path -cnotmatch '^backend/services/(?:database-migrations/src/(?:index|main)\.ts|(?:profile|jobs|documents|matching|billing|trust|applications|notifications)/src/migrate\.ts)$') {
     throw "The migration success contract requested an unknown source path."
   }
   $lines = @(& git -C $repositoryRoot show "$ReleaseSourceSha`:$Path" 2>$null)
@@ -2236,12 +2236,12 @@ function Get-MigrationAggregateSuccessMessages {
       -not $runnerSource.Contains("for (const runner of migrationRunners) {`n    await execute(runner);`n  }")) {
     throw "The migration release has an unknown ordered-runner contract."
   }
-  $runnerPattern = '\{ owner: "(profile|jobs|documents|matching|billing|trust|applications)", executable: "\1/dist/src/migrate\.js" \},'
+  $runnerPattern = '\{ owner: "(profile|jobs|documents|matching|billing|trust|applications|notifications)", executable: "\1/dist/src/migrate\.js" \},'
   $runnerText = $runnerDeclarations[0].Groups[1].Value
   $runners = [regex]::Matches($runnerText, $runnerPattern)
   $owners = @($runners | ForEach-Object { $_.Groups[1].Value })
   if (-not [string]::IsNullOrWhiteSpace([regex]::Replace($runnerText, $runnerPattern, "")) -or
-      ($owners -join ',') -cnotin @("profile,jobs,documents,matching,billing", "profile,jobs,documents,matching,billing,trust", "profile,jobs,documents,matching,billing,trust,applications")) {
+      ($owners -join ',') -cnotin @("profile,jobs,documents,matching,billing", "profile,jobs,documents,matching,billing,trust", "profile,jobs,documents,matching,billing,trust,applications", "profile,jobs,documents,matching,billing,trust,applications,notifications")) {
     throw "The migration release does not declare one known exact owner order."
   }
   $mainSource = Read-MigrationReleaseSource -ReleaseSourceSha $ReleaseSourceSha `
@@ -2252,7 +2252,7 @@ function Get-MigrationAggregateSuccessMessages {
   if ($mainSource.TrimEnd() -cne $expectedMain) {
     throw "The migration release has an unknown orchestrator success contract."
   }
-  $labels = @{ profile = "Database"; jobs = "Jobs"; documents = "Documents"; matching = "Matching"; billing = "Billing"; trust = "Trust"; applications = "Applications" }
+  $labels = @{ profile = "Database"; jobs = "Jobs"; documents = "Documents"; matching = "Matching"; billing = "Billing"; trust = "Trust"; applications = "Applications"; notifications = "Notifications" }
   $messages = [Collections.Generic.List[string]]::new()
   foreach ($owner in $owners) {
     $migrationSource = Read-MigrationReleaseSource -ReleaseSourceSha $ReleaseSourceSha `

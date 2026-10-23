@@ -318,15 +318,16 @@ importers:
 
   backend/services/notifications:
     dependencies:
-      '@aws-sdk/client-sesv2':
-        specifier: 3.1133.0
-        version: 3.1133.0
       postgres:
         specifier: 3.4.9
         version: 3.4.9
       uuid:
         specifier: 14.0.2
         version: 14.0.2
+    devDependencies:
+      '@aws-sdk/client-sesv2':
+        specifier: 3.1133.0
+        version: 3.1133.0
 
   backend/services/profile:
     dependencies:

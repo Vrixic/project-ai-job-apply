@@ -12,21 +12,30 @@ export const candidateRightsOwnerInventory = [
 ] as const;
 
 /**
- * The exact eight-owner inventory of `d3-development-synthetic-v1`, which adds Applications. A
- * deployment activates exactly one of the two lists through its accountable policy; any other
- * ordering, subset, or extra owner disables candidate rights.
+ * The exact eight-owner inventory of `d3-development-synthetic-v1`, which adds Applications.
  */
 export const candidateRightsOwnerInventoryWithApplications = [
   ...candidateRightsOwnerInventory,
   "applications",
 ] as const;
 
+/**
+ * The exact nine-owner inventory of `d4-development-synthetic-v1`, which adds Notifications
+ * (ADR-055, ADR-056). A deployment activates exactly one of the three lists through its
+ * accountable policy; any other ordering, subset, or extra owner disables candidate rights.
+ */
+export const candidateRightsOwnerInventoryWithNotifications = [
+  ...candidateRightsOwnerInventoryWithApplications,
+  "notifications",
+] as const;
+
 const activeOwnerInventories: readonly (readonly CandidateRightsOwner[])[] = [
   candidateRightsOwnerInventory,
   candidateRightsOwnerInventoryWithApplications,
+  candidateRightsOwnerInventoryWithNotifications,
 ];
 
-export type CandidateRightsOwner = (typeof candidateRightsOwnerInventoryWithApplications)[number];
+export type CandidateRightsOwner = (typeof candidateRightsOwnerInventoryWithNotifications)[number];
 export type CandidateDataExportState = "queued" | "building" | "ready" | "expired" | "failed";
 export type CandidateDataExportFailureCode =
   | "owner_unavailable"

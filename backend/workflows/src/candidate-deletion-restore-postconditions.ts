@@ -59,7 +59,14 @@ export const restoredOwnerCountsQuery = `SELECT jsonb_build_object(
     (SELECT count(*) FROM applications.native_material_cleanup_queue WHERE owner_user_id = $1::uuid) +
     (SELECT count(*) FROM applications_restricted.legacy_receipts WHERE owner_user_id = $1::uuid) +
     (SELECT count(*) FROM applications_restricted.packet_values WHERE owner_user_id = $1::uuid) +
-    (SELECT count(*) FROM applications_restricted.packet_read_audit WHERE owner_user_id = $1::uuid)
+    (SELECT count(*) FROM applications_restricted.packet_read_audit WHERE owner_user_id = $1::uuid),
+  'notifications', (SELECT count(*) FROM notifications.inbox_items WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM notifications.preferences WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM notifications.source_receipts WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM notifications.source_cursors WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM notifications.email_destinations WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM notifications.push_subscriptions WHERE owner_user_id = $1::uuid) +
+    (SELECT count(*) FROM notifications.delivery_attempts WHERE owner_user_id = $1::uuid)
 ) AS "ownerCounts"`;
 
 function rejected(): never {

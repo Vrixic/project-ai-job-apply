@@ -110,11 +110,11 @@ $boundary = Get-D1RestoreManifestBoundary $repositoryRoot
 if (
   [string]$boundary.ManifestId -cne `
     "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1" -or
-  [int]$boundary.OwnerCount -ne 7 -or
-  (@($boundary.OwnerNames) -join ",") -cne "applications,billing,documents,jobs,matching,profile,trust" -or
-  [int]$boundary.SchemaCount -ne 12 -or
-  [int]$boundary.RelationCount -ne 97 -or
-  [int]$boundary.MigrationCount -ne 84 -or
+  [int]$boundary.OwnerCount -ne 8 -or
+  (@($boundary.OwnerNames) -join ",") -cne "applications,billing,documents,jobs,matching,notifications,profile,trust" -or
+  [int]$boundary.SchemaCount -ne 13 -or
+  [int]$boundary.RelationCount -ne 105 -or
+  [int]$boundary.MigrationCount -ne 87 -or
   [string]$boundary.ManifestSha256 -cnotmatch "^[a-f0-9]{64}$"
 ) {
   throw "The current restore manifest boundary is unexpected."
@@ -180,9 +180,9 @@ foreach ($priorMigrationCount in @(41, 42, 52, 57, 58, 59, 60, 61, 62, 74, 79)) 
   $null = ConvertFrom-D1RestoreVerifierEvents @($priorD2Event) $priorD2Boundary "historical"
   Assert-D1RestoreContextBoundary (New-TestContext $priorD2Boundary) $priorD2Boundary
   Assert-Throws { ConvertFrom-D1RestoreVerifierEvents @($priorD2Event) $boundary "current" } `
-    "Prior $priorMigrationCount-migration aggregate used as current 84-migration evidence"
+    "Prior $priorMigrationCount-migration aggregate used as current 87-migration evidence"
   Assert-Throws { Assert-D1RestoreContextBoundary (New-TestContext $priorD2Boundary) $boundary } `
-    "Prior $priorMigrationCount-migration restore context used as current 84-migration evidence"
+    "Prior $priorMigrationCount-migration restore context used as current 87-migration evidence"
 }
 
 foreach ($mutation in @(

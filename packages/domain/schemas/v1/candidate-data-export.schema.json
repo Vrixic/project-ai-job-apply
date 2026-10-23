@@ -331,6 +331,55 @@
       },
       "additionalProperties": false
     },
+    "notifications": {
+      "type": "object",
+      "description": "Notifications owner data (ADR-055, ADR-056). The inbox is a derived projection. A push endpoint is a capability URL, so only its host is exported.",
+      "required": ["preferences", "inbox", "emailDestination", "pushSubscriptions", "deliveries"],
+      "properties": {
+        "preferences": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/notificationPreferences"
+            }
+          ]
+        },
+        "inbox": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "$ref": "#/$defs/notificationInboxItem"
+          }
+        },
+        "emailDestination": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/notificationEmailDestination"
+            }
+          ]
+        },
+        "pushSubscriptions": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/notificationPushSubscription"
+          }
+        },
+        "deliveries": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "$ref": "#/$defs/notificationDelivery"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "audit": {
       "type": "object",
       "required": ["events"],
@@ -2373,6 +2422,168 @@
         },
         "occurredAt": {
           "$ref": "#/$defs/dateTime"
+        }
+      },
+      "additionalProperties": false
+    },
+    "notificationPreferences": {
+      "type": "object",
+      "required": [
+        "version",
+        "inAppEnabled",
+        "emailEnabled",
+        "pushEnabled",
+        "quietHours",
+        "updatedAt"
+      ],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "inAppEnabled": {
+          "const": true
+        },
+        "emailEnabled": {
+          "type": "boolean"
+        },
+        "pushEnabled": {
+          "type": "boolean"
+        },
+        "quietHours": {
+          "type": "object",
+          "required": ["enabled", "startMinute", "endMinute", "timeZone"],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "startMinute": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1439
+            },
+            "endMinute": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1439
+            },
+            "timeZone": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "additionalProperties": false
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/dateTime"
+        }
+      },
+      "additionalProperties": false
+    },
+    "notificationInboxItem": {
+      "type": "object",
+      "required": ["id", "kind", "urgency", "state", "applicationId", "createdAt", "expiresAt"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "kind": {
+          "enum": [
+            "application_review_needed",
+            "application_outcome_needed",
+            "application_confirmed"
+          ]
+        },
+        "urgency": {
+          "enum": ["low", "normal", "high"]
+        },
+        "state": {
+          "enum": ["unread", "acknowledged", "dismissed", "expired"]
+        },
+        "applicationId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/dateTime"
+        }
+      },
+      "additionalProperties": false
+    },
+    "notificationEmailDestination": {
+      "type": "object",
+      "required": ["address", "state", "verifiedAt", "createdAt"],
+      "properties": {
+        "address": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 254
+        },
+        "state": {
+          "enum": ["pending", "verified", "suppressed"]
+        },
+        "verifiedAt": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        }
+      },
+      "additionalProperties": false
+    },
+    "notificationPushSubscription": {
+      "type": "object",
+      "required": ["id", "endpointHost", "state", "createdAt", "lastSuccessAt"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "endpointHost": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "state": {
+          "enum": ["active", "expired"]
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "lastSuccessAt": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "notificationDelivery": {
+      "type": "object",
+      "required": ["inboxItemId", "channel", "state", "outcomeCode", "createdAt", "sentAt"],
+      "properties": {
+        "inboxItemId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "channel": {
+          "enum": ["email", "push"]
+        },
+        "state": {
+          "enum": ["scheduled", "sending", "sent", "failed", "skipped"]
+        },
+        "outcomeCode": {
+          "type": ["string", "null"],
+          "maxLength": 64
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "sentAt": {
+          "type": ["string", "null"],
+          "format": "date-time"
         }
       },
       "additionalProperties": false

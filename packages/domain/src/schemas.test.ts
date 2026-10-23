@@ -1447,3 +1447,129 @@ describe("resume document layout", () => {
     );
   });
 });
+
+describe("portable export Notifications section (ADR-056)", () => {
+  const at = "2026-10-23T12:00:00.000Z";
+  const id = (suffix: string) => `019d04cf-1f80-7000-8000-0000000000${suffix}`;
+  const base = {
+    schemaVersion: 1,
+    format: "candidate-data-export-v1",
+    exportId: id("01"),
+    policyVersion: "d4-development-synthetic-v1",
+    generatedAt: at,
+    candidate: { createdAt: at, connectedAccounts: [] },
+    profile: { preferences: null, facts: [] },
+    documents: { resumes: [] },
+    jobs: { reports: [] },
+    matching: { savedJobs: [] },
+    billing: { entitlement: { plan: "free", version: 0, effectiveAt: at } },
+    audit: { events: [] },
+  };
+  const notifications = {
+    preferences: {
+      version: 2,
+      inAppEnabled: true,
+      emailEnabled: true,
+      pushEnabled: false,
+      quietHours: { enabled: true, startMinute: 1320, endMinute: 420, timeZone: "UTC" },
+      updatedAt: at,
+    },
+    inbox: [
+      {
+        id: id("10"),
+        kind: "application_review_needed",
+        urgency: "normal",
+        state: "unread",
+        applicationId: id("11"),
+        createdAt: at,
+        expiresAt: "2026-11-22T12:00:00.000+00:00",
+      },
+    ],
+    emailDestination: {
+      address: "person@example.com",
+      state: "verified",
+      verifiedAt: at,
+      createdAt: at,
+    },
+    pushSubscriptions: [
+      {
+        id: id("12"),
+        endpointHost: "fcm.googleapis.com",
+        state: "active",
+        createdAt: at,
+        lastSuccessAt: null,
+      },
+    ],
+    deliveries: [
+      {
+        inboxItemId: id("10"),
+        channel: "email",
+        state: "sent",
+        outcomeCode: "delivered",
+        createdAt: at,
+        sentAt: at,
+      },
+    ],
+  };
+
+  it("accepts the exact export of the Notifications owner and its empty form", () => {
+    expect(validateCandidateDataExportV1({ ...base, notifications })).toBe(true);
+    expect(
+      validateCandidateDataExportV1({
+        ...base,
+        notifications: {
+          preferences: null,
+          inbox: [],
+          emailDestination: null,
+          pushSubscriptions: [],
+          deliveries: [],
+        },
+      }),
+    ).toBe(true);
+    // Exports from before the section existed stay valid.
+    expect(validateCandidateDataExportV1(base)).toBe(true);
+  });
+
+  it.each([
+    ["owner id", { inbox: [{ ...notifications.inbox[0], ownerUserId: id("20") }] }],
+    [
+      "push endpoint",
+      {
+        pushSubscriptions: [
+          {
+            ...notifications.pushSubscriptions[0],
+            endpoint: "https://fcm.googleapis.com/fcm/send/x",
+          },
+        ],
+      },
+    ],
+    [
+      "dedupe key",
+      { inbox: [{ ...notifications.inbox[0], dedupeKey: "application_review_needed:x:2" }] },
+    ],
+    [
+      "verification code hash",
+      {
+        emailDestination: { ...notifications.emailDestination, codeHash: "a".repeat(64) },
+      },
+    ],
+    [
+      "provider reference",
+      { deliveries: [{ ...notifications.deliveries[0], providerReference: "m" }] },
+    ],
+    ["unknown kind", { inbox: [{ ...notifications.inbox[0], kind: "interview_scheduled" }] }],
+    ["unknown channel", { deliveries: [{ ...notifications.deliveries[0], channel: "sms" }] }],
+    ["in-app switched off", { preferences: { ...notifications.preferences, inAppEnabled: false } }],
+    ["missing part", { deliveries: undefined }],
+  ])("rejects %s", (_label, override) => {
+    expect(
+      validateCandidateDataExportV1({ ...base, notifications: { ...notifications, ...override } }),
+    ).toBe(false);
+    expect(
+      validateCandidateDataExportV1({
+        ...base,
+        notifications: { ...notifications, extra: true },
+      }),
+    ).toBe(false);
+  });
+});

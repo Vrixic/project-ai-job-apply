@@ -179,10 +179,10 @@ function Get-D1RestoreManifestBoundary {
 
   $root = [IO.Path]::GetFullPath($RepositoryRoot)
   $expectedManifestId = "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1"
-  $expectedOwners = @("applications", "billing", "documents", "jobs", "matching", "profile", "trust")
+  $expectedOwners = @("applications", "billing", "documents", "jobs", "matching", "notifications", "profile", "trust")
   $expectedSchemas = @(
     "applications", "applications_restricted", "billing", "documents", "identity", "jobs", "jobs_public",
-    "matching", "platform", "privacy", "profile", "trust"
+    "matching", "notifications", "platform", "privacy", "profile", "trust"
   )
   $path = [IO.Path]::GetFullPath((Join-Path $root `
     "backend/services/database-migrations/restore-manifest.v1.json"))
@@ -291,10 +291,10 @@ function Get-D1RestoreManifestBoundary {
     ($sortedSchemas -join "`n") -cne ($expectedSchemas -join "`n") -or
     (@($relationNames | Select-Object -Unique)).Count -ne $relationNames.Count -or
     (@($migrationIdentities | Select-Object -Unique)).Count -ne $migrationIdentities.Count -or
-    $contributors.Count -ne 7 -or
-    $schemaNames.Count -ne 12 -or
-    $relationCount -ne 97 -or
-    $migrationCount -ne 84
+    $contributors.Count -ne 8 -or
+    $schemaNames.Count -ne 13 -or
+    $relationCount -ne 105 -or
+    $migrationCount -ne 87
   ) {
     throw "The restore manifest does not match the exact Phase 3 contributor boundary."
   }

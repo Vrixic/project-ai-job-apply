@@ -115,6 +115,7 @@ interface OwnerExport {
   billing?: unknown;
   trust?: unknown;
   applications?: unknown;
+  notifications?: unknown;
   restrictedPacketReferences?: unknown;
   audit?: { events?: unknown[] };
 }
@@ -299,8 +300,10 @@ function assemblePortableExport(
   generatedAt: Date,
   ownerExports: readonly OwnerExport[],
   includeApplications: boolean,
+  includeNotifications: boolean,
 ): Record<string, unknown> {
-  const [profile, documents, jobs, matching, billing, trust, applications] = ownerExports;
+  const [profile, documents, jobs, matching, billing, trust, applications, notifications] =
+    ownerExports;
   if (
     !profile ||
     !isRecord(profile.candidate) ||
@@ -315,7 +318,8 @@ function assemblePortableExport(
     !isRecord(billing.billing) ||
     !trust ||
     !isRecord(trust.trust) ||
-    (includeApplications && (!applications || !isRecord(applications.applications)))
+    (includeApplications && (!applications || !isRecord(applications.applications))) ||
+    (includeNotifications && (!notifications || !isRecord(notifications.notifications)))
   ) {
     throw new CandidateRightsActivityRejected("CandidateExportInventoryIncomplete");
   }
@@ -333,25 +337,36 @@ function assemblePortableExport(
     billing: billing.billing,
     trust: trust.trust,
     ...(includeApplications && applications ? { applications: applications.applications } : {}),
+    ...(includeNotifications && notifications
+      ? { notifications: notifications.notifications }
+      : {}),
     audit: { events: normalizeAudit(ownerExports) },
   };
 }
 
 const BASE_OWNER_INVENTORY = "identity,profile,documents,jobs,matching,billing,trust";
 const OWNER_INVENTORY_WITH_APPLICATIONS = `${BASE_OWNER_INVENTORY},applications`;
+const OWNER_INVENTORY_WITH_NOTIFICATIONS = `${OWNER_INVENTORY_WITH_APPLICATIONS},notifications`;
 
 export class PostgresCandidateRightsActivityStore {
   private readonly clock: () => Date;
   /** True only when the active accountable policy lists Applications as an owner. */
   private readonly includesApplications: boolean;
+  /** True only when the active accountable policy lists Notifications as an owner. */
+  private readonly includesNotifications: boolean;
 
   constructor(private readonly dependencies: CandidateRightsActivityDependencies) {
     this.clock = dependencies.clock ?? (() => new Date());
     const inventory = dependencies.policy.ownerInventory.join(",");
-    if (inventory !== BASE_OWNER_INVENTORY && inventory !== OWNER_INVENTORY_WITH_APPLICATIONS) {
+    if (
+      inventory !== BASE_OWNER_INVENTORY &&
+      inventory !== OWNER_INVENTORY_WITH_APPLICATIONS &&
+      inventory !== OWNER_INVENTORY_WITH_NOTIFICATIONS
+    ) {
       throw new CandidateRightsActivityRejected("CandidateRightsOwnerInventoryMismatch");
     }
-    this.includesApplications = inventory === OWNER_INVENTORY_WITH_APPLICATIONS;
+    this.includesNotifications = inventory === OWNER_INVENTORY_WITH_NOTIFICATIONS;
+    this.includesApplications = inventory !== BASE_OWNER_INVENTORY;
     const adapterIds = dependencies.subprocessors.map((adapter) => adapter.id);
     if (
       adapterIds.join(",") !== dependencies.policy.subprocessorInventory.join(",") ||
@@ -459,6 +474,7 @@ export class PostgresCandidateRightsActivityStore {
       billingRows,
       trustRows,
       applicationsRows,
+      notificationsRows,
     ] = await Promise.all([
       this.dependencies.database.client<Array<{ data: OwnerExport }>>`
         SELECT profile.export_candidate_data(${context.userId}::uuid) AS data
@@ -483,6 +499,11 @@ export class PostgresCandidateRightsActivityStore {
         SELECT applications.export_candidate_data(${context.userId}::uuid) AS data
       `
         : Promise.resolve([] as Array<{ data: OwnerExport }>),
+      this.includesNotifications
+        ? this.dependencies.database.client<Array<{ data: OwnerExport }>>`
+        SELECT notifications.export_candidate_data(${context.userId}::uuid) AS data
+      `
+        : Promise.resolve([] as Array<{ data: OwnerExport }>),
     ]);
     const envelope = assemblePortableExport(
       input,
@@ -495,8 +516,10 @@ export class PostgresCandidateRightsActivityStore {
         billingRows[0]?.data ?? {},
         trustRows[0]?.data ?? {},
         applicationsRows[0]?.data ?? {},
+        notificationsRows[0]?.data ?? {},
       ],
       this.includesApplications,
+      this.includesNotifications,
     );
     assertExportSchema(envelope, "metadata");
     if (this.includesApplications) {
@@ -774,6 +797,9 @@ export class PostgresCandidateRightsActivityStore {
           WHERE user_id = ${context.userId}::uuid AND state = 'failed'
         ) AND state IN ('queued', 'running', 'retryable_failure')
       `;
+      if (this.includesNotifications) {
+        await transaction`SELECT notifications.delete_candidate_data(${context.userId}::uuid, ${input.resourceId}::uuid)`;
+      }
       if (this.includesApplications) {
         await transaction`SELECT applications.delete_candidate_data(${context.userId}::uuid, ${input.resourceId}::uuid)`;
       }

@@ -102,6 +102,7 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
       "billing",
       "trust",
       "applications",
+      "notifications",
     ]) {
       await execute(
         process.execPath,
@@ -461,7 +462,7 @@ describe.skipIf(!requested)("isolated restored PostgreSQL eight-owner deletion r
         assertUnchanged: async () => undefined,
       };
       const verified = await verifyReconciledCandidateDeletionCopy(database, ledger, receipt);
-      expect(verified.reconciled.relationCount).toBe(96);
+      expect(verified.reconciled.relationCount).toBe(105);
       await expect(
         database.client.begin("read only isolation level repeatable read", async (sql) => {
           await inspectReconciledCandidateDeletionRows(

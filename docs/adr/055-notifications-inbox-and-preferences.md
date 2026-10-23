@@ -40,7 +40,7 @@ Applications events yet, and there is no event transport in the deployed runtime
 ## Consequences
 
 - A ninth owner schema touches the restore manifest, candidate export and deletion, and the release
-  tooling; each lands as its own change (candidate rights next).
+  tooling. That wiring is built (policy `d4-development-synthetic-v1`, [retention and deletion](../security/retention-and-deletion.md)) and not yet deployed.
 - The in-process feed means an item can be missed if the process dies between the Applications commit
   and the notification call; the inbox is a convenience projection and the Applications state stays
   authoritative, so a later outbox-driven consumer can backfill.

@@ -15,6 +15,7 @@ describe("database migration orchestrator", () => {
       "billing",
       "trust",
       "applications",
+      "notifications",
     ]);
     expect(migrationRunners.map((runner) => runner.executable)).toEqual([
       "profile/dist/src/migrate.js",
@@ -24,6 +25,7 @@ describe("database migration orchestrator", () => {
       "billing/dist/src/migrate.js",
       "trust/dist/src/migrate.js",
       "applications/dist/src/migrate.js",
+      "notifications/dist/src/migrate.js",
     ]);
   });
 

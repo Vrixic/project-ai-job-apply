@@ -1100,6 +1100,7 @@ variable "candidate_rights_enabled" {
       contains([
         "identity,profile,documents,jobs,matching,billing,trust",
         "identity,profile,documents,jobs,matching,billing,trust,applications",
+        "identity,profile,documents,jobs,matching,billing,trust,applications,notifications",
       ], var.candidate_rights_owner_inventory) &&
       var.candidate_rights_subprocessor_inventory != "" &&
       var.candidate_rights_export_lifetime_seconds != null &&

@@ -22,49 +22,52 @@ function expectedRelations(source: RestoreManifestSource): string[] {
 function preReportRetentionManifest(source: RestoreManifestSource) {
   return {
     ...source.manifest,
-    contributors: source.manifest.contributors.map((contributor) => ({
-      ...contributor,
-      migrations: contributor.migrations.filter(
-        (migration) =>
-          ![
-            "0025_job_report_retention",
-            "0026_moderation_case_retention",
-            "0027_candidate_report_export_status",
-            "0013_native_material_ready",
-            "0014_native_resume_generations",
-            "0015_native_resume_observation",
-            "0016_native_application_disposal",
-            "0017_native_resume_launch_rejection",
-            "0018_native_resume_legacy_launch_rejection",
-            "0010_native_resume_requests",
-            "0011_native_resume_execution_receipts",
-            "0012_native_resume_execution_observation",
-            "0013_native_material_withdrawals",
-            "0014_native_material_cleanup_queue",
-            "0015_legacy_receipt_archive",
-            "0012_profile_sections",
-            "0013_profile_sections_candidate_rights",
-            "0014_retire_profile_facts",
-          ].includes(migration.version),
-      ),
-      relations: contributor.relations.filter(
-        (relation) =>
-          ![
-            "documents.native_resume_generations",
-            "applications.native_material_withdrawals",
-            "applications.native_material_cleanup_queue",
-            "applications_restricted.legacy_receipts",
-            "jobs.job_report_case_links",
-            "jobs.job_report_retention_totals",
-            "jobs.job_moderation_blocks",
-            "jobs.source_moderation_pauses",
-            "profile.entries",
-            "profile.entry_versions",
-            "profile.import_drafts",
-            "profile.personal_versions",
-          ].includes(relation),
-      ),
-    })),
+    // Notifications joined the restore boundary after every historical release below.
+    contributors: source.manifest.contributors
+      .filter((contributor) => contributor.owner !== "notifications")
+      .map((contributor) => ({
+        ...contributor,
+        migrations: contributor.migrations.filter(
+          (migration) =>
+            ![
+              "0025_job_report_retention",
+              "0026_moderation_case_retention",
+              "0027_candidate_report_export_status",
+              "0013_native_material_ready",
+              "0014_native_resume_generations",
+              "0015_native_resume_observation",
+              "0016_native_application_disposal",
+              "0017_native_resume_launch_rejection",
+              "0018_native_resume_legacy_launch_rejection",
+              "0010_native_resume_requests",
+              "0011_native_resume_execution_receipts",
+              "0012_native_resume_execution_observation",
+              "0013_native_material_withdrawals",
+              "0014_native_material_cleanup_queue",
+              "0015_legacy_receipt_archive",
+              "0012_profile_sections",
+              "0013_profile_sections_candidate_rights",
+              "0014_retire_profile_facts",
+            ].includes(migration.version),
+        ),
+        relations: contributor.relations.filter(
+          (relation) =>
+            ![
+              "documents.native_resume_generations",
+              "applications.native_material_withdrawals",
+              "applications.native_material_cleanup_queue",
+              "applications_restricted.legacy_receipts",
+              "jobs.job_report_case_links",
+              "jobs.job_report_retention_totals",
+              "jobs.job_moderation_blocks",
+              "jobs.source_moderation_pauses",
+              "profile.entries",
+              "profile.entry_versions",
+              "profile.import_drafts",
+              "profile.personal_versions",
+            ].includes(relation),
+        ),
+      })),
   };
 }
 
@@ -125,7 +128,7 @@ function successfulExecutor(source: RestoreManifestSource, count = "0"): Restore
 }
 
 describe("current restore manifest", () => {
-  it("binds the exact Phase 3 Profile, Jobs, Documents, Matching, Billing, Trust, and Applications bytes", async () => {
+  it("binds the exact Phase 3 Profile, Jobs, Documents, Matching, Billing, Trust, Applications, and Notifications bytes", async () => {
     const source = loadCurrentRestoreManifest();
 
     expect(source.manifest.manifestId).toBe(
@@ -137,19 +140,20 @@ describe("current restore manifest", () => {
       "documents",
       "jobs",
       "matching",
+      "notifications",
       "profile",
       "trust",
     ]);
     expect([...migrationRunners].map((runner) => runner.owner).sort()).toEqual(
       source.manifest.contributors.map((contributor) => contributor.owner),
     );
-    expect(expectedRelations(source)).toHaveLength(97);
+    expect(expectedRelations(source)).toHaveLength(105);
     expect(
       source.manifest.contributors.reduce(
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(84);
+    ).toBe(87);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // The exact seven-owner assertion above bounds I/O concurrency. Each owner still enumerates
@@ -198,18 +202,19 @@ describe("current restore manifest", () => {
       "documents",
       "jobs",
       "matching",
+      "notifications",
       "profile",
       "recommendations",
       "trust",
     ]);
-    expect(source.manifest.contributors).toHaveLength(7);
+    expect(source.manifest.contributors).toHaveLength(8);
     expect(JSON.stringify(source.manifest.contributors)).toBe(existingContributors);
     expect(
       extended.contributors.filter((contributor) => contributor.owner !== "recommendations"),
     ).toEqual(source.manifest.contributors);
     expect(Object.isFrozen(extended)).toBe(true);
     expect(Object.isFrozen(extended.contributors)).toBe(true);
-    expect(Object.isFrozen(extended.contributors[5]?.migrations)).toBe(true);
+    expect(Object.isFrozen(extended.contributors[6]?.migrations)).toBe(true);
   });
 
   it.each([
@@ -300,9 +305,9 @@ describe("read-only aggregate restore verification", () => {
       manifestId:
         "d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1",
       manifestSha256: source.sha256,
-      ownerCount: 7,
-      relationCount: 97,
-      migrationCount: 84,
+      ownerCount: 8,
+      relationCount: 105,
+      migrationCount: 87,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([

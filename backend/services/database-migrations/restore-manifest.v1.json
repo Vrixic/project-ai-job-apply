@@ -380,6 +380,35 @@
       ]
     },
     {
+      "owner": "notifications",
+      "schemas": ["notifications"],
+      "migrationLedger": "notifications.schema_migrations",
+      "migrations": [
+        {
+          "version": "0001_inbox_and_preferences",
+          "checksum": "66952ab544fac6ddfb69dfff7a44b864650cfd9083cb0d25278b59609d0cdd2b"
+        },
+        {
+          "version": "0002_candidate_rights",
+          "checksum": "28b968d4f7ecd76117d58b919b2f59c1f8e6817abaffa4fa93c369d9fe7694da"
+        },
+        {
+          "version": "0003_delivery",
+          "checksum": "df56e3bd106f153cbe99a8bf75679ec666f341d8fe02d462734316c3fa9f387c"
+        }
+      ],
+      "relations": [
+        "notifications.delivery_attempts",
+        "notifications.email_destinations",
+        "notifications.inbox_items",
+        "notifications.preferences",
+        "notifications.push_subscriptions",
+        "notifications.schema_migrations",
+        "notifications.source_cursors",
+        "notifications.source_receipts"
+      ]
+    },
+    {
       "owner": "profile",
       "schemas": ["identity", "platform", "privacy", "profile"],
       "migrationLedger": "platform.schema_migrations",
