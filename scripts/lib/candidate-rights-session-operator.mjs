@@ -33,6 +33,19 @@ const applicationsCoverageNames = [
   "attemptCount",
   "historyCount",
 ];
+// Notifications joined the inventory with the d4 policy (ADR-056). The fixed fixture seeds the
+// preferences and the push subscription, so only those two must be nonempty.
+const notificationsCoverageNames = [
+  "notificationsPreferencesCount",
+  "notificationsEmailDestinationCount",
+  "notificationsPushSubscriptionCount",
+  "notificationsInboxCount",
+  "notificationsDeliveryCount",
+];
+const notificationsRequiredNames = [
+  "notificationsPreferencesCount",
+  "notificationsPushSubscriptionCount",
+];
 
 export function sanitizeMissingCoverage(value, applicationsInventory = false) {
   const allowed = applicationsInventory ? applicationsCoverageNames : coverageNames;
@@ -144,16 +157,20 @@ export function validatePlanOptions(value) {
   const restricted = Object.hasOwn(value ?? {}, "RestrictedAnswerFixture");
   const resume = Object.hasOwn(value ?? {}, "ResumeFixture");
   const applications = Object.hasOwn(value ?? {}, "ApplicationsInventory");
+  const notifications = Object.hasOwn(value ?? {}, "NotificationsInventory");
   if (
     !exactKeys(value, [
       ...planKeys,
       ...(restricted ? ["RestrictedAnswerFixture"] : []),
       ...(resume ? ["ResumeFixture"] : []),
       ...(applications ? ["ApplicationsInventory"] : []),
+      ...(notifications ? ["NotificationsInventory"] : []),
     ]) ||
     (restricted && value.RestrictedAnswerFixture !== true) ||
     (resume && value.ResumeFixture !== true) ||
     (applications && value.ApplicationsInventory !== true) ||
+    // The d4 inventory is the d3 inventory plus Notifications, never Notifications alone.
+    (notifications && (!applications || value.NotificationsInventory !== true)) ||
     planKeys.some((key) => typeof value[key] !== "string") ||
     !/^[0-9]{12}$/u.test(value.ExpectedAccountId) ||
     !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/u.test(value.StateBucket) ||
@@ -189,6 +206,7 @@ export function sanitizeOperatorResult(
   restrictedAnswerFixture = false,
   resumeFixture = false,
   applicationsInventory = false,
+  notificationsInventory = false,
 ) {
   if (
     action === "plan" &&
@@ -216,6 +234,7 @@ export function sanitizeOperatorResult(
     "trustCaseEventCount",
   ];
   if (applicationsInventory) counts.push(...applicationsCoverageNames);
+  if (notificationsInventory) counts.push(...notificationsCoverageNames);
   if (
     action === "execute" &&
     exactKeys(value, [
@@ -241,7 +260,12 @@ export function sanitizeOperatorResult(
       (key) =>
         Number.isSafeInteger(value.ExportCoverage[key]) &&
         value.ExportCoverage[key] >=
-          (applicationsInventory && !applicationsCoverageNames.includes(key) ? 0 : 1) &&
+          (notificationsRequiredNames.includes(key)
+            ? 1
+            : notificationsCoverageNames.includes(key) ||
+                (applicationsInventory && !applicationsCoverageNames.includes(key))
+              ? 0
+              : 1) &&
         value.ExportCoverage[key] <= 1048576,
     ) &&
     value.ExportCoverage.contributionCount === value.ExportCoverage.contributionApprovalCount &&
@@ -374,6 +398,7 @@ export async function runSessionOperator({
       checked.RestrictedAnswerFixture === true,
       checked.ResumeFixture === true,
       checked.ApplicationsInventory === true,
+      checked.NotificationsInventory === true,
     );
     request.reviewedPlan = { path: plan.PlanPath, sha256: plan.PlanSha256 };
   }
@@ -449,5 +474,6 @@ export async function runSessionOperator({
     checked.RestrictedAnswerFixture === true,
     checked.ResumeFixture === true,
     checked.ApplicationsInventory === true,
+    checked.NotificationsInventory === true,
   );
 }

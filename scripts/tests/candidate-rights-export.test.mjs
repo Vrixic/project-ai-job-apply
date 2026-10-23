@@ -1032,3 +1032,83 @@ test("D3 restricted-answer validation preserves exact independent value checks",
   artifact.profile.restrictedAnswers[0].value = sentinel;
   assert.deepEqual(validateRestrictedAnswerExport(bytes(artifact), binding), rejected);
 });
+
+function d4Fixture() {
+  const artifact = d3Fixture();
+  artifact.policyVersion = "d4-development-synthetic-v1";
+  artifact.notifications = {
+    preferences: null,
+    inbox: [],
+    emailDestination: null,
+    pushSubscriptions: [],
+    deliveries: [],
+  };
+  return artifact;
+}
+
+test("D4 export requires Notifications and returns bounded technical counts", () => {
+  const artifact = d4Fixture();
+  artifact.notifications.preferences = {
+    version: 1,
+    inAppEnabled: true,
+    emailEnabled: false,
+    pushEnabled: false,
+    quietHours: { enabled: false, startMinute: 1320, endMinute: 420, timeZone: "UTC" },
+    updatedAt: at,
+  };
+  artifact.notifications.pushSubscriptions.push({
+    id: exportId,
+    endpointHost: "fcm.googleapis.com",
+    state: "active",
+    createdAt: at,
+    lastSuccessAt: null,
+  });
+  const binding = { expectedExportId: exportId, expectedPolicyVersion: artifact.policyVersion };
+  assert.deepEqual(validateCandidateRightsExport(bytes(artifact), binding), {
+    ...emptyCounts,
+    applicationCount: 0,
+    packetCount: 0,
+    approvalCount: 0,
+    attemptCount: 0,
+    historyCount: 0,
+    notificationsPreferencesCount: 1,
+    notificationsEmailDestinationCount: 0,
+    notificationsPushSubscriptionCount: 1,
+    notificationsInboxCount: 0,
+    notificationsDeliveryCount: 0,
+  });
+  delete artifact.notifications;
+  assert.deepEqual(validateCandidateRightsExport(bytes(artifact), binding), rejected);
+});
+
+test("D4 export keeps the D3 Applications requirement and the closed Notifications schema", () => {
+  const binding = {
+    expectedExportId: exportId,
+    expectedPolicyVersion: "d4-development-synthetic-v1",
+  };
+  const withoutApplications = d4Fixture();
+  delete withoutApplications.applications;
+  assert.deepEqual(validateCandidateRightsExport(bytes(withoutApplications), binding), rejected);
+  const leaking = d4Fixture();
+  leaking.notifications.pushSubscriptions.push({
+    id: exportId,
+    endpointHost: "fcm.googleapis.com",
+    endpoint: `https://fcm.googleapis.com/fcm/send/${sentinel}`,
+    state: "active",
+    createdAt: at,
+    lastSuccessAt: null,
+  });
+  assert.deepEqual(validateCandidateRightsExport(bytes(leaking), binding), rejected);
+  const extra = d4Fixture();
+  extra.notifications.ownerUserId = sentinel;
+  assert.deepEqual(validateCandidateRightsExport(bytes(extra), binding), rejected);
+});
+
+test("a D3 export does not grow Notifications counts", () => {
+  const artifact = d3Fixture();
+  const result = validateCandidateRightsExport(bytes(artifact), {
+    expectedExportId: exportId,
+    expectedPolicyVersion: artifact.policyVersion,
+  });
+  assert.equal(Object.hasOwn(result, "notificationsPreferencesCount"), false);
+});
