@@ -2074,6 +2074,10 @@ resource "aws_lambda_function" "gateway" {
         CANDIDATE_RIGHTS_OWNER_INVENTORY             = var.candidate_rights_owner_inventory
         CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY      = var.candidate_rights_subprocessor_inventory
       } : {},
+      var.notifications_enabled ? merge(
+        { NOTIFICATIONS_ENABLED = "true" },
+        var.notifications_push_public_key != "" ? { NOTIFICATIONS_PUSH_PUBLIC_KEY = var.notifications_push_public_key } : {}
+      ) : {},
       local.d2_policy_endpoint_enabled ? {
         D2_CONTRIBUTION_POLICY_ROUTE_ENABLED = "true"
       } : {},

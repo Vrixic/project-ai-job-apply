@@ -1811,3 +1811,163 @@ run "staging_endpoint_override_is_refused" {
   }
   expect_failures = [var.private_service_endpoints_enabled]
 }
+
+run "notification_delivery_creates_the_exact_schedule_identity_and_environment" {
+  command = plan
+
+  variables {
+    private_application_networking               = true
+    deploy_document_intake                       = true
+    serverless_runtime_enabled                   = true
+    candidate_rights_enabled                     = true
+    candidate_rights_policy_version              = "d4-development-synthetic-v1"
+    candidate_rights_policy_sha256               = "91d1b73e05191be5247a4708274a879c16593ddb5c6933db174fdd83f2385001"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust,applications,notifications"
+    candidate_rights_subprocessor_inventory      = "none"
+    candidate_rights_export_lifetime_seconds     = 3600
+    candidate_rights_download_grant_seconds      = 300
+    candidate_rights_backup_retention_days       = 7
+    candidate_rights_recent_auth_max_age_seconds = 900
+    candidate_rights_export_lifecycle_days       = 1
+    notifications_enabled                        = true
+    notifications_delivery_enabled               = true
+    notifications_web_base_url                   = "https://app.example.test"
+    notifications_email_identity                 = "example.test"
+    notifications_email_from                     = "App <no-reply@example.test>"
+    notifications_vapid_secret_provisioned       = true
+    notifications_push_public_key                = "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_event_rule.notifications_dispatch[0].schedule_expression == "rate(1 minute)" &&
+      aws_cloudwatch_event_rule.notifications_dispatch[0].state == "ENABLED" &&
+      aws_lambda_function.profile_readiness_activity[0].environment[0].variables.NOTIFICATIONS_DISPATCH_RULE_ARN == "arn:aws:events:us-east-2:111122223333:rule/ai-job-apply-staging-notifications-dispatch" &&
+      aws_lambda_function.profile_readiness_activity[0].environment[0].variables.NOTIFICATIONS_WEB_BASE_URL == "https://app.example.test" &&
+      aws_lambda_function.profile_readiness_activity[0].environment[0].variables.NOTIFICATIONS_EMAIL_FROM == "App <no-reply@example.test>"
+    )
+    error_message = "The dispatcher must run on its exact one-minute rule and receive only its reviewed environment."
+  }
+
+  assert {
+    condition = (
+      aws_sesv2_email_identity.notifications[0].email_identity == "example.test" &&
+      aws_sesv2_configuration_set.notifications[0].configuration_set_name == "ai-job-apply-staging-notifications" &&
+      aws_secretsmanager_secret.notifications_vapid[0].name == "ai-job-apply/staging/notifications/vapid"
+    )
+    error_message = "The sender identity, configuration set and VAPID secret container must be created exactly."
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.gateway[0].environment[0].variables.NOTIFICATIONS_ENABLED == "true" &&
+      aws_lambda_function.gateway[0].environment[0].variables.NOTIFICATIONS_PUSH_PUBLIC_KEY == var.notifications_push_public_key
+    )
+    error_message = "The Gateway must serve Notifications and hand browsers the public VAPID key."
+  }
+}
+
+run "notification_dispatch_rule_stays_disabled_while_the_runtime_is_off" {
+  command = plan
+
+  variables {
+    private_application_networking               = true
+    deploy_document_intake                       = true
+    serverless_runtime_enabled                   = false
+    candidate_rights_enabled                     = true
+    candidate_rights_policy_version              = "d4-development-synthetic-v1"
+    candidate_rights_policy_sha256               = "91d1b73e05191be5247a4708274a879c16593ddb5c6933db174fdd83f2385001"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust,applications,notifications"
+    candidate_rights_subprocessor_inventory      = "none"
+    candidate_rights_export_lifetime_seconds     = 3600
+    candidate_rights_download_grant_seconds      = 300
+    candidate_rights_backup_retention_days       = 7
+    candidate_rights_recent_auth_max_age_seconds = 900
+    candidate_rights_export_lifecycle_days       = 1
+    notifications_enabled                        = true
+    notifications_delivery_enabled               = true
+    notifications_web_base_url                   = "https://app.example.test"
+    notifications_email_identity                 = "no-reply@example.test"
+    notifications_email_from                     = "no-reply@example.test"
+  }
+
+  assert {
+    condition     = aws_cloudwatch_event_rule.notifications_dispatch[0].state == "DISABLED"
+    error_message = "The dispatch schedule must follow the serverless runtime switch."
+  }
+}
+
+run "notifications_require_the_nine_owner_rights_inventory" {
+  command = plan
+
+  variables {
+    private_application_networking               = true
+    deploy_document_intake                       = true
+    serverless_runtime_enabled                   = true
+    candidate_rights_enabled                     = true
+    candidate_rights_policy_version              = "d3-development-synthetic-v1"
+    candidate_rights_policy_sha256               = "c47a4637cfd1f008f29147ec610d95d1f7ca9126a5242b8ff38706157a38ab6c"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust,applications"
+    candidate_rights_subprocessor_inventory      = "none"
+    candidate_rights_export_lifetime_seconds     = 3600
+    candidate_rights_download_grant_seconds      = 300
+    candidate_rights_backup_retention_days       = 7
+    candidate_rights_recent_auth_max_age_seconds = 900
+    candidate_rights_export_lifecycle_days       = 1
+    notifications_enabled                        = true
+  }
+
+  expect_failures = [var.notifications_enabled]
+}
+
+run "notification_delivery_requires_a_channel" {
+  command = plan
+
+  variables {
+    private_application_networking               = true
+    deploy_document_intake                       = true
+    serverless_runtime_enabled                   = true
+    candidate_rights_enabled                     = true
+    candidate_rights_policy_version              = "d4-development-synthetic-v1"
+    candidate_rights_policy_sha256               = "91d1b73e05191be5247a4708274a879c16593ddb5c6933db174fdd83f2385001"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust,applications,notifications"
+    candidate_rights_subprocessor_inventory      = "none"
+    candidate_rights_export_lifetime_seconds     = 3600
+    candidate_rights_download_grant_seconds      = 300
+    candidate_rights_backup_retention_days       = 7
+    candidate_rights_recent_auth_max_age_seconds = 900
+    candidate_rights_export_lifecycle_days       = 1
+    notifications_enabled                        = true
+    notifications_delivery_enabled               = true
+    notifications_web_base_url                   = "https://app.example.test"
+  }
+
+  expect_failures = [var.notifications_delivery_enabled]
+}
+
+run "notification_from_address_must_belong_to_the_identity" {
+  command = plan
+
+  variables {
+    private_application_networking               = true
+    deploy_document_intake                       = true
+    serverless_runtime_enabled                   = true
+    candidate_rights_enabled                     = true
+    candidate_rights_policy_version              = "d4-development-synthetic-v1"
+    candidate_rights_policy_sha256               = "91d1b73e05191be5247a4708274a879c16593ddb5c6933db174fdd83f2385001"
+    candidate_rights_owner_inventory             = "identity,profile,documents,jobs,matching,billing,trust,applications,notifications"
+    candidate_rights_subprocessor_inventory      = "none"
+    candidate_rights_export_lifetime_seconds     = 3600
+    candidate_rights_download_grant_seconds      = 300
+    candidate_rights_backup_retention_days       = 7
+    candidate_rights_recent_auth_max_age_seconds = 900
+    candidate_rights_export_lifecycle_days       = 1
+    notifications_enabled                        = true
+    notifications_delivery_enabled               = true
+    notifications_web_base_url                   = "https://app.example.test"
+    notifications_email_identity                 = "example.test"
+    notifications_email_from                     = "App <no-reply@other.test>"
+  }
+
+  expect_failures = [var.notifications_email_from]
+}
