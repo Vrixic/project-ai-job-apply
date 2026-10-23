@@ -2211,7 +2211,7 @@ function Read-MigrationReleaseSource {
     [Parameter(Mandatory)][string]$Path
   )
 
-  if ($Path -cnotmatch '^backend/services/(?:database-migrations/src/(?:index|main)\.ts|(?:profile|jobs|documents|matching|billing|trust|applications)/src/migrate\.ts)$') {
+  if ($Path -cnotmatch '^backend/services/(?:database-migrations/src/(?:index|main)\.ts|(?:profile|jobs|documents|matching|billing|trust|applications|notifications)/src/migrate\.ts)$') {
     throw "The migration success contract requested an unknown source path."
   }
   $lines = @(& git -C $repositoryRoot show "$ReleaseSourceSha`:$Path" 2>$null)
@@ -2252,7 +2252,7 @@ function Get-MigrationAggregateSuccessMessages {
   if ($mainSource.TrimEnd() -cne $expectedMain) {
     throw "The migration release has an unknown orchestrator success contract."
   }
-  $labels = @{ profile = "Database"; jobs = "Jobs"; documents = "Documents"; matching = "Matching"; billing = "Billing"; trust = "Trust"; applications = "Applications" }
+  $labels = @{ profile = "Database"; jobs = "Jobs"; documents = "Documents"; matching = "Matching"; billing = "Billing"; trust = "Trust"; applications = "Applications"; notifications = "Notifications" }
   $messages = [Collections.Generic.List[string]]::new()
   foreach ($owner in $owners) {
     $migrationSource = Read-MigrationReleaseSource -ReleaseSourceSha $ReleaseSourceSha `
