@@ -525,7 +525,7 @@ function Get-RuntimeBoundary {
 
 function Assert-ApplicationsRightsRuntime {
   param([Parameter(Mandatory)][object]$Runtime)
-  if ($ExpectedPolicyVersion -cnotin $applicationsPolicies) { return }
+  if ($ExpectedPolicyVersion -cnotin @('d3-development-synthetic-v1', 'd4-development-synthetic-v1')) { return }
   if ([string](Get-OptionalProperty $Runtime.Aliases.activity.Environment 'RESTRICTED_PACKET_EXPORT_ENABLED') -cne 'true') {
     throw 'D3 rights acceptance requires the private protected-packet export reader.'
   }
@@ -777,10 +777,10 @@ function Read-CandidateRightsExportHelperResult {
   }
   else {
     $countNames = if ($RestrictedAnswers) { @('activeValueCount','expiredValueCount','deletedTombstoneCount','revisedValueCount') } else { @('consentCount','contributionApprovalCount','contributionCount','privateCaptureCount','trustCaseCount','trustCaseEventCount') }
-    if (-not $RestrictedAnswers -and $ExpectedPolicyVersion -cin $applicationsPolicies) {
+    if (-not $RestrictedAnswers -and $ExpectedPolicyVersion -cin @('d3-development-synthetic-v1', 'd4-development-synthetic-v1')) {
       $countNames += @('applicationCount','packetCount','approvalCount','attemptCount','historyCount')
     }
-    if (-not $RestrictedAnswers -and $ExpectedPolicyVersion -ceq $notificationsPolicy) {
+    if (-not $RestrictedAnswers -and $ExpectedPolicyVersion -ceq 'd4-development-synthetic-v1') {
       $countNames += @('notificationsPreferencesCount','notificationsEmailDestinationCount','notificationsPushSubscriptionCount','notificationsInboxCount','notificationsDeliveryCount')
     }
     $null = Assert-ExactPropertySet $result (@('valid') + $countNames) 'Candidate export verification'
@@ -816,7 +816,7 @@ function New-NotificationsFixture {
 
 function Assert-CandidateRightsAcceptanceCoverage {
   param([Parameter(Mandatory)][object]$Coverage)
-  if ($ExpectedPolicyVersion -ceq $notificationsPolicy) {
+  if ($ExpectedPolicyVersion -ceq 'd4-development-synthetic-v1') {
     # The fixed fixture creates these two records through the real API before the export is requested.
     $missingNotifications = @(
       foreach ($name in @('notificationsPreferencesCount','notificationsPushSubscriptionCount')) {
@@ -827,7 +827,7 @@ function Assert-CandidateRightsAcceptanceCoverage {
       throw "D4 acceptance stopped before account deletion: the Notifications export section lacks $($missingNotifications -join ', ')."
     }
   }
-  if ($ExpectedPolicyVersion -cin $applicationsPolicies) {
+  if ($ExpectedPolicyVersion -cin @('d3-development-synthetic-v1', 'd4-development-synthetic-v1')) {
     $missing = @(
       foreach ($name in @('applicationCount','packetCount','approvalCount','attemptCount','historyCount')) {
         if ($Coverage.$name -lt 1) { $name }
@@ -1129,7 +1129,7 @@ function Invoke-FixedLifecycle {
   $script:RightsStep = 'resume-fixture'
   $resumeFixture = if ($ResumeFixture) { New-RightsResumeFixture $token $Boundary.Resume } else { $null }
   $restrictedSnapshot = if ($RestrictedAnswerFixture) { @(New-RestrictedAnswerFixture $token) } else { $null }
-  if ($ExpectedPolicyVersion -ceq $notificationsPolicy) { New-NotificationsFixture $token }
+  if ($ExpectedPolicyVersion -ceq 'd4-development-synthetic-v1') { New-NotificationsFixture $token }
   $exportKey = "rights-export-$([guid]::NewGuid().ToString('N'))"
   $exportBody = [ordered]@{ format = 'candidate-data-export-v1' }
   $script:RightsStep = 'export-request'
@@ -1206,7 +1206,7 @@ function Invoke-FixedLifecycle {
     $receipt.schemaVersion = 3
     $receipt.resumeCoverage = $script:VerifiedResumeCoverage
   }
-  if ($ExpectedPolicyVersion -cin $applicationsPolicies) {
+  if ($ExpectedPolicyVersion -cin @('d3-development-synthetic-v1', 'd4-development-synthetic-v1')) {
     $null = Assert-CandidateRightsAcceptanceCoverage $script:VerifiedExportCoverage
     $receipt.applicationsExportCoverage = $script:VerifiedExportCoverage
   }
@@ -1228,7 +1228,7 @@ function Read-AggregateReceipt {
     if ([int]$receipt.schemaVersion -ne 3) { throw 'The reviewed receipt does not include the resume fixture.' }
     Assert-RightsResumeCoverage (Get-OptionalProperty $receipt 'resumeCoverage')
   }
-  if ($ExpectedPolicyVersion -cin $applicationsPolicies) {
+  if ($ExpectedPolicyVersion -cin @('d3-development-synthetic-v1', 'd4-development-synthetic-v1')) {
     $coverage = Get-OptionalProperty $receipt 'applicationsExportCoverage'
     if ($null -eq $coverage) { throw 'The reviewed receipt omits Applications export coverage.' }
     $validated = Read-CandidateRightsExportHelperResult ($coverage | ConvertTo-Json -Compress)
