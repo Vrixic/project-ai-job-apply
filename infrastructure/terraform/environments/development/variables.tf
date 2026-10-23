@@ -532,3 +532,38 @@ variable "applications_attempt_recovery_artifact_base64sha256" {
   type    = string
   default = ""
 }
+
+variable "notifications_enabled" {
+  type    = bool
+  default = false
+}
+
+variable "notifications_delivery_enabled" {
+  type    = bool
+  default = false
+}
+
+variable "notifications_web_base_url" {
+  type    = string
+  default = ""
+}
+
+variable "notifications_email_identity" {
+  type    = string
+  default = ""
+}
+
+variable "notifications_email_from" {
+  type    = string
+  default = ""
+}
+
+variable "notifications_vapid_secret_provisioned" {
+  type    = bool
+  default = false
+}
+
+variable "notifications_push_public_key" {
+  type    = string
+  default = ""
+}

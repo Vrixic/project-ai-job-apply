@@ -1346,3 +1346,93 @@ variable "applications_attempt_recovery_artifact_base64sha256" {
     error_message = "Applications attempt-recovery artifact base64 SHA-256 must be empty or one canonical 44-character digest."
   }
 }
+
+variable "notifications_enabled" {
+  description = "Serve the Notifications inbox, preferences and delivery routes from the Gateway (ADR-055, ADR-056). Requires the Notifications migrations and an active candidate-rights policy that lists notifications as an owner."
+  type        = bool
+  default     = false
+
+  validation {
+    condition = !var.notifications_enabled || (
+      var.deploy_gateway_lambda &&
+      var.candidate_rights_enabled &&
+      contains(split(",", var.candidate_rights_owner_inventory), "notifications")
+    )
+    error_message = "Notifications requires the Gateway and an active candidate-rights policy whose owner inventory includes notifications."
+  }
+}
+
+variable "notifications_web_base_url" {
+  description = "Public https origin of the candidate web app, used for links in notification email."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.notifications_web_base_url == "" || can(regex("^https://[a-z0-9.-]+(:[0-9]+)?/?$", var.notifications_web_base_url))
+    error_message = "The notifications web base URL must be empty or a bare https origin."
+  }
+}
+
+variable "notifications_email_identity" {
+  description = "SES domain (example.com) or address (name@example.com) the platform sends notification email from. Empty disables email."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.notifications_email_identity == "" || can(regex("^([A-Za-z0-9._%+-]+@)?[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$", var.notifications_email_identity))
+    error_message = "The notifications email identity must be empty, a domain or an email address."
+  }
+}
+
+variable "notifications_email_from" {
+  description = "From address for notification email, for example \"Name <no-reply@example.com>\". Must belong to the SES identity."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = var.notifications_email_from == "" || (
+      var.notifications_email_identity != "" &&
+      can(regex("^[^<>\"\r\n]{0,100}<?[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}>?$", var.notifications_email_from)) &&
+      (
+        endswith(try(regex("<([^>]+)>", var.notifications_email_from)[0], var.notifications_email_from), "@${var.notifications_email_identity}") ||
+        try(regex("<([^>]+)>", var.notifications_email_from)[0], var.notifications_email_from) == var.notifications_email_identity ||
+        endswith(try(regex("<([^>]+)>", var.notifications_email_from)[0], var.notifications_email_from), ".${var.notifications_email_identity}")
+      )
+    )
+    error_message = "The notifications from address must be a plain mailbox on the configured SES identity."
+  }
+}
+
+variable "notifications_vapid_secret_provisioned" {
+  description = "Create the empty Secrets Manager container for the Web Push VAPID identity. An operator populates it."
+  type        = bool
+  default     = false
+}
+
+variable "notifications_push_public_key" {
+  description = "Public VAPID key (uncompressed P-256 point, base64url) the Gateway hands to browsers. Not a secret."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.notifications_push_public_key == "" || can(regex("^[A-Za-z0-9_-]{86,88}$", var.notifications_push_public_key))
+    error_message = "The public VAPID key must be empty or an 86 to 88 character base64url value."
+  }
+}
+
+variable "notifications_delivery_enabled" {
+  description = "Create the scheduled email and push dispatcher on the profile readiness activity Lambda (ADR-056)."
+  type        = bool
+  default     = false
+
+  validation {
+    condition = !var.notifications_delivery_enabled || (
+      var.notifications_enabled &&
+      var.deploy_profile_readiness_durable &&
+      (!var.serverless_runtime_enabled || var.private_application_networking) &&
+      var.notifications_web_base_url != "" &&
+      (var.notifications_email_identity != "" || var.notifications_vapid_secret_provisioned)
+    )
+    error_message = "Notification delivery requires Notifications, the profile readiness activity, private egress while the runtime is enabled, a web base URL, and at least one channel (an SES identity or a VAPID secret)."
+  }
+}

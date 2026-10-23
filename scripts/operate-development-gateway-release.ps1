@@ -606,7 +606,10 @@ function Assert-GatewayCapturedSeedInputs {
       "privileged_moderation_audit_enabled",
       "restricted_packet_export_enabled",
       "restricted_answer_reuse_enabled",
-      "restricted_packet_keys_provisioned"
+      "restricted_packet_keys_provisioned",
+      "notifications_enabled",
+      "notifications_delivery_enabled",
+      "notifications_vapid_secret_provisioned"
     )
   foreach ($name in $DeclaredVariableNames) {
     if ($inputs.DefaultVariables.ContainsKey($name)) { $expected = $inputs.DefaultVariables[$name] }

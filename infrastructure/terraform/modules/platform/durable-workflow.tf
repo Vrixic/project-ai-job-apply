@@ -253,6 +253,7 @@ resource "aws_lambda_function" "profile_readiness_activity" {
         CANDIDATE_RIGHTS_MAINTENANCE_RULE_ARN        = local.candidate_rights_maintenance_rule_arn
       } : {},
       local.packet_export_environment,
+      local.notifications_activity_environment,
       var.restricted_answer_export_enabled ? {
         RESTRICTED_ANSWER_EXPORT_ENABLED    = "enabled"
         RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN = aws_kms_key.restricted_answer_vault[0].arn
