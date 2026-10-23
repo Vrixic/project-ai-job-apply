@@ -1,14 +1,15 @@
 import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
+import { scheduleDeliveries } from "./delivery-store.js";
 import type { SourceProjection } from "./source-events.js";
 import {
+  defaultQuietHours,
   type InboxItem,
   type InboxState,
   type NotificationKind,
   type NotificationPreferences,
   type NotificationUrgency,
   type QuietHours,
-  defaultQuietHours,
 } from "./types.js";
 
 interface ItemRow {
@@ -152,9 +153,14 @@ export class PostgresNotificationsStore {
         ON CONFLICT (owner_user_id, dedupe_key) DO NOTHING
         RETURNING id
       `;
-      return created[0]
-        ? { outcome: "recorded" as const, itemId: created[0].id }
-        : { outcome: "duplicate" as const };
+      if (!created[0]) return { outcome: "duplicate" as const };
+      await scheduleDeliveries(transaction, {
+        ownerUserId: projection.ownerUserId,
+        itemId: created[0].id,
+        urgency: projection.open.urgency,
+        now,
+      });
+      return { outcome: "recorded" as const, itemId: created[0].id };
     });
   }
 

@@ -1,3 +1,5 @@
+import { normalizeEmailAddress, validatePushEndpoint } from "./delivery.js";
+import type { ConfirmCodeOutcome, PostgresDeliveryStore } from "./delivery-store.js";
 import { isValidTimeZone, type RoutingDecision, routeChannels } from "./routing.js";
 import { projectApplicationEvent } from "./source-events.js";
 import type { InboxPage, PostgresNotificationsStore, RecordOutcome } from "./store.js";
@@ -7,8 +9,13 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3
 
 export class NotificationsError extends Error {
   constructor(
-    readonly code: "invalid_request" | "not_found" | "version_conflict",
-    message = code,
+    readonly code:
+      | "invalid_request"
+      | "not_found"
+      | "version_conflict"
+      | "rate_limited"
+      | "limit_reached",
+    message: string = code,
   ) {
     super(message);
     this.name = "NotificationsError";
@@ -99,14 +106,109 @@ function decodeCursor(value: string): { createdAt: Date; id: string } {
   }
 }
 
+type DeliveryStore = Pick<
+  PostgresDeliveryStore,
+  | "readEmailDestination"
+  | "requestEmailCode"
+  | "confirmEmailCode"
+  | "removeEmailDestination"
+  | "listPushSubscriptions"
+  | "addPushSubscription"
+  | "removePushSubscription"
+>;
+
+export interface DeliveryStatus {
+  email?: {
+    address: string;
+    state: "pending" | "verified" | "suppressed";
+    /** A code was asked for or sent and has not been used yet. */
+    codePending: boolean;
+  };
+  pushSubscriptions: { id: string; state: "active" | "expired"; createdAt: Date }[];
+  /** The public VAPID key a browser needs to subscribe, when push is configured. */
+  pushPublicKey?: string;
+}
+
 export class NotificationsService {
   private readonly now: () => Date;
+  private readonly delivery: DeliveryStore | undefined;
+  private readonly pushPublicKey: string | undefined;
 
   constructor(
     private readonly store: Store,
-    options: { now?: () => Date } = {},
+    options: { now?: () => Date; delivery?: DeliveryStore; pushPublicKey?: string } = {},
   ) {
     this.now = options.now ?? (() => new Date());
+    this.delivery = options.delivery;
+    this.pushPublicKey = options.pushPublicKey;
+  }
+
+  private requireDelivery(): DeliveryStore {
+    if (!this.delivery) throw new NotificationsError("not_found");
+    return this.delivery;
+  }
+
+  async getDeliveryStatus(ownerUserId: string): Promise<DeliveryStatus> {
+    const delivery = this.requireDelivery();
+    const owner = uuid(ownerUserId);
+    const [email, subscriptions] = await Promise.all([
+      delivery.readEmailDestination(owner),
+      delivery.listPushSubscriptions(owner),
+    ]);
+    return {
+      ...(email
+        ? { email: { address: email.address, state: email.state, codePending: email.codePending } }
+        : {}),
+      pushSubscriptions: subscriptions.map(({ id, state, createdAt }) => ({
+        id,
+        state,
+        createdAt,
+      })),
+      ...(this.pushPublicKey ? { pushPublicKey: this.pushPublicKey } : {}),
+    };
+  }
+
+  /** Starts confirming an address. The dispatcher emails the code within about a minute. */
+  async requestEmailConfirmation(ownerUserId: string, address: unknown): Promise<void> {
+    const delivery = this.requireDelivery();
+    const normalized = normalizeEmailAddress(address);
+    if (!normalized) throw new NotificationsError("invalid_request");
+    const outcome = await delivery.requestEmailCode(uuid(ownerUserId), normalized, this.now());
+    if (outcome === "rate_limited") throw new NotificationsError("rate_limited");
+    if (outcome === "suppressed") throw new NotificationsError("invalid_request", "suppressed");
+  }
+
+  async confirmEmail(ownerUserId: string, code: unknown): Promise<ConfirmCodeOutcome> {
+    const delivery = this.requireDelivery();
+    if (typeof code !== "string" || !/^[0-9]{6}$/.test(code))
+      throw new NotificationsError("invalid_request");
+    return delivery.confirmEmailCode(uuid(ownerUserId), code, this.now());
+  }
+
+  async removeEmail(ownerUserId: string): Promise<void> {
+    const removed = await this.requireDelivery().removeEmailDestination(
+      uuid(ownerUserId),
+      this.now(),
+    );
+    if (!removed) throw new NotificationsError("not_found");
+  }
+
+  async addPushSubscription(ownerUserId: string, endpoint: unknown): Promise<{ id: string }> {
+    const delivery = this.requireDelivery();
+    const checked = validatePushEndpoint(endpoint);
+    if (!checked) throw new NotificationsError("invalid_request");
+    const outcome = await delivery.addPushSubscription(uuid(ownerUserId), checked, this.now());
+    if (outcome.outcome === "limit_reached") throw new NotificationsError("limit_reached");
+    return { id: outcome.id };
+  }
+
+  async removePushSubscription(ownerUserId: string, id: string): Promise<void> {
+    const removed = await this.requireDelivery().removePushSubscription(
+      uuid(ownerUserId),
+      uuid(id),
+      this.now(),
+    );
+    if (!removed) throw new NotificationsError("not_found");
   }
 
   /**

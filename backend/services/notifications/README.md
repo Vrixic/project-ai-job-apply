@@ -11,4 +11,6 @@ Owns notification preferences, quiet hours, templates, channel selection, dedupl
 - `delivery/` — Provider-neutral delivery commands and status.
 - `tests/` — Preference, idempotency, localization, and fallback tests.
 
+Built so far: preferences, quiet hours, routing, the inbox projection, and email and push delivery ([ADR-055](../../../docs/adr/055-notifications-inbox-and-preferences.md), [ADR-056](../../../docs/adr/056-notification-email-and-push-delivery.md)). Delivery lives in `src/delivery*.ts`, `src/dispatcher.ts` and `src/providers/` (subpath `@ai-job-apply/notifications-service/providers`).
+
 The service routes an already-authorized notification; it does not decide application or billing truth.

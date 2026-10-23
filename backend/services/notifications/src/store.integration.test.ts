@@ -53,11 +53,10 @@ describeWithDatabase("Notifications store over PostgreSQL", () => {
     const user = owner();
     const first = uuidv7();
     const second = uuidv7();
-    const a = await send(user, first, "review_required", 2, "evt-replay-0001");
+    const replayId = `evt-replay-${uuidv7()}`;
+    const a = await send(user, first, "review_required", 2, replayId);
     expect(a.outcome).toBe("recorded");
-    expect((await send(user, first, "review_required", 2, "evt-replay-0001")).outcome).toBe(
-      "duplicate",
-    );
+    expect((await send(user, first, "review_required", 2, replayId)).outcome).toBe("duplicate");
     tick();
     expect((await send(user, second, "reconciliation_required", 5)).outcome).toBe("recorded");
     const inbox = await service.listInbox(user);
