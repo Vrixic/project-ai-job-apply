@@ -1,6 +1,7 @@
 import {
   type CandidateRightsPolicy,
   candidateRightsOwnerInventoryWithApplications,
+  candidateRightsOwnerInventoryWithNotifications,
 } from "./candidate-rights.js";
 
 export interface CandidateExportAdmissionScope {
@@ -32,7 +33,9 @@ export function createBuildingCandidateExportAuthorizer(options: {
     try {
       if (
         !enabled() ||
-        inventory !== candidateRightsOwnerInventoryWithApplications.join(",") ||
+        // Restricted packet export needs Applications in the inventory, with or without Notifications.
+        (inventory !== candidateRightsOwnerInventoryWithApplications.join(",") &&
+          inventory !== candidateRightsOwnerInventoryWithNotifications.join(",")) ||
         !/^[a-f0-9]{64}$/u.test(accountableHash)
       )
         throw rejected();

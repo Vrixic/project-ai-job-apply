@@ -176,6 +176,30 @@ later restore replay fails closed on such orphaned rows until they are purged.
 Approval and tested evidence are recorded in the
 [Phase 0 security/privacy approval plan](security-privacy-approval-plan.md).
 
+## D4 generated-synthetic development policy (Notifications)
+
+The owner's direction of 2026-10-23 (email and push notifications, [ADR-056](../adr/056-notification-email-and-push-delivery.md))
+selects the immutable
+[`d4-development-synthetic-v1`](policies/candidate-rights.d4-development-synthetic-v1.json)
+engineering policy. It keeps every D3 value and adds Notifications as the ninth owner after
+Applications. Its SHA-256,
+`91d1b73e05191be5247a4708274a879c16593ddb5c6933db174fdd83f2385001`, uses the same canonical
+serialization rule as D3.
+
+The Notifications owner exports preferences, inbox items (kind, urgency, state, an opaque application
+reference), the confirmed or pending email address, push subscriptions (identifier, state and the
+endpoint host only, because the full endpoint is a capability URL) and delivery attempts (channel,
+state, outcome code). It never exports owner identifiers, dedupe keys, source event identifiers, the
+confirmation code hash or provider message references. Deletion removes every Notifications row for
+the candidate inside the same privacy-authorized transaction, before Applications. Restore replay always
+purges Notifications data for every deletion marker, whichever policy version recorded it.
+
+Profile and the workflows accept exactly the seven-, eight- or nine-owner inventory, so the deployed
+D3 configuration keeps working until the D4 policy is activated. Activation is a separate, guarded rollout
+(the Notifications migrations, Terraform variables and the candidate-rights operators with their
+acceptance evidence) and has not been performed. The policy authorizes generated-synthetic development
+evidence only.
+
 ## Source-only cover-letter cleanup checkpoint (2026-10-03)
 
 The approved private cleanup handler fences unclaimed and not-yet-issued generation authority

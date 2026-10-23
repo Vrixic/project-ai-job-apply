@@ -63,6 +63,13 @@ direct(
     "matching.private_saved_page_captures",
     "matching.saved_job_list_state",
     "matching.saved_jobs",
+    "notifications.delivery_attempts",
+    "notifications.email_destinations",
+    "notifications.inbox_items",
+    "notifications.preferences",
+    "notifications.push_subscriptions",
+    "notifications.source_cursors",
+    "notifications.source_receipts",
     "profile.ugc_contribution_consents",
     "jobs.job_contributions",
   ],
@@ -214,6 +221,14 @@ export const PRESERVATION_RELATIONS: readonly string[] = Object.freeze([
   "matching.saved_job_list_state",
   "matching.saved_jobs",
   "matching.schema_migrations",
+  "notifications.delivery_attempts",
+  "notifications.email_destinations",
+  "notifications.inbox_items",
+  "notifications.preferences",
+  "notifications.push_subscriptions",
+  "notifications.schema_migrations",
+  "notifications.source_cursors",
+  "notifications.source_receipts",
   "identity.external_identities",
   "identity.users",
   "platform.audit_events",
@@ -243,7 +258,7 @@ export const PRESERVATION_RELATIONS: readonly string[] = Object.freeze([
 
 export interface RestoreDataDigest {
   sha256: string;
-  relationCount: 97;
+  relationCount: 105;
   rowCount: number;
   byteCount: number;
 }
@@ -421,6 +436,6 @@ export async function digestRestoredData(
     if (budget.rowCount > MAX_ROWS || budget.byteCount > MAX_BYTES) refuse();
     hash.update(JSON.stringify([relation, row.schema, count, bytes, row.sha])).update("\0");
   }
-  if (PRESERVATION_RELATIONS.length !== 97 || signal?.aborted || Date.now() >= deadline) refuse();
-  return { sha256: hash.digest("hex"), relationCount: 97, rowCount, byteCount };
+  if (PRESERVATION_RELATIONS.length !== 105 || signal?.aborted || Date.now() >= deadline) refuse();
+  return { sha256: hash.digest("hex"), relationCount: 105, rowCount, byteCount };
 }

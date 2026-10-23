@@ -6,6 +6,7 @@ import {
 import {
   type CandidateRightsPolicy,
   candidateRightsOwnerInventoryWithApplications,
+  candidateRightsOwnerInventoryWithNotifications,
 } from "./candidate-rights.js";
 
 const owner = "0192f7c2-0000-7000-8000-000000000001";
@@ -33,6 +34,27 @@ function query() {
   ]);
 }
 describe("Profile building export admission", () => {
+  it("admits the nine-owner inventory that still includes Applications", async () => {
+    const sql = query();
+    await createBuildingCandidateExportAuthorizer({
+      policy: { ...policy, ownerInventory: candidateRightsOwnerInventoryWithNotifications },
+      enabled: () => true,
+    })(scope, sql as unknown as CandidateExportAdmissionQuery);
+    expect(sql).toHaveBeenCalled();
+  });
+  it("refuses an inventory without Applications", async () => {
+    const sql = query();
+    await expect(
+      createBuildingCandidateExportAuthorizer({
+        policy: {
+          ...policy,
+          ownerInventory: candidateRightsOwnerInventoryWithApplications.slice(0, 7),
+        },
+        enabled: () => true,
+      })(scope, sql as unknown as CandidateExportAdmissionQuery),
+    ).rejects.toThrow("CandidateExportAdmissionUnavailable");
+    expect(sql).not.toHaveBeenCalled();
+  });
   it("defaults off before database access", async () => {
     const sql = query();
     await expect(

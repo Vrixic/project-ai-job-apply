@@ -10,6 +10,7 @@ const owners = [
   "billing",
   "trust",
   "applications",
+  "notifications",
 ] as const;
 
 /** Historical marker provenance, not an activation policy or a new authorization window. */
@@ -36,6 +37,16 @@ export const ACCEPTED_CANDIDATE_DELETION_POLICIES = Object.freeze([
     // docs/security/policies/candidate-rights.d3-development-synthetic-v1.json, which is stable
     // under formatting and line endings. Adds Applications as the eighth owner.
     sha256: "c47a4637cfd1f008f29147ec610d95d1f7ca9126a5242b8ff38706157a38ab6c",
+    backupRetentionDays: 35,
+    ownerInventory: Object.freeze(owners.slice(0, 8)),
+    subprocessorInventory: Object.freeze([] as string[]),
+  }),
+  Object.freeze({
+    version: "d4-development-synthetic-v1",
+    // Same canonical serialization rule, for
+    // docs/security/policies/candidate-rights.d4-development-synthetic-v1.json.
+    // Adds Notifications as the ninth owner (ADR-055, ADR-056).
+    sha256: "91d1b73e05191be5247a4708274a879c16593ddb5c6933db174fdd83f2385001",
     backupRetentionDays: 35,
     ownerInventory: Object.freeze([...owners]),
     subprocessorInventory: Object.freeze([] as string[]),

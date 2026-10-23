@@ -342,6 +342,23 @@ describe("candidate rights policy", () => {
       "trust",
       "applications",
     ]);
+    expect(
+      loadCandidateRightsPolicy({
+        ...policyEnvironment,
+        CANDIDATE_RIGHTS_OWNER_INVENTORY:
+          "identity,profile,documents,jobs,matching,billing,trust,applications,notifications",
+      }).ownerInventory,
+    ).toEqual([
+      "identity",
+      "profile",
+      "documents",
+      "jobs",
+      "matching",
+      "billing",
+      "trust",
+      "applications",
+      "notifications",
+    ]);
     for (const inventory of [
       // Reordered, without Trust, duplicated, unknown, or with a trailing owner.
       "identity,profile,documents,jobs,matching,billing,applications,trust",
@@ -349,6 +366,9 @@ describe("candidate rights policy", () => {
       "identity,profile,documents,jobs,matching,billing,trust,applications,applications",
       "identity,profile,documents,jobs,matching,billing,trust,applications,outcomes",
       "applications",
+      "identity,profile,documents,jobs,matching,billing,trust,notifications",
+      "identity,profile,documents,jobs,matching,billing,trust,notifications,applications",
+      "identity,profile,documents,jobs,matching,billing,trust,applications,notifications,notifications",
     ]) {
       expect(() =>
         loadCandidateRightsPolicy({

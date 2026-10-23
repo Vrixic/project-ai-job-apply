@@ -12,7 +12,7 @@ export function resolveRestoreDataManifest(environment: NodeJS.ProcessEnv): Rest
   const expected = environment.RESTORE_DATA_MANIFEST_SHA256;
   if (compressed === undefined && expected === undefined) return loadCurrentRestoreManifest();
   try {
-    if (!compressed || compressed.length > 7_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(compressed))
+    if (!compressed || compressed.length > 7_400 || !/^[A-Za-z0-9+/]+={0,2}$/.test(compressed))
       throw new Error();
     const bytes = Buffer.from(compressed, "base64");
     if (bytes.toString("base64") !== compressed) throw new Error();

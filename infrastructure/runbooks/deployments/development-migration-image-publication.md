@@ -36,9 +36,9 @@ two deterministic OCI exports, byte-identity comparison, and hardened runtime sm
 vulnerability scan, publish an image, or satisfy the publication/scan/recovery gate.
 
 The current package boundary is the Phase 3 manifest
-`d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1`: seven ordered owners
-(Profile, Jobs, Documents, Matching, Billing, Trust, and Applications), twelve schemas, 97 regular relations, and
-84 exact checksum-bound migrations. The smoke gate also requires the Trust and Applications runners and every
+`d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1`: eight ordered owners
+(Profile, Jobs, Documents, Matching, Billing, Trust, Applications, and Notifications), thirteen schemas, 105 regular relations, and
+87 exact checksum-bound migrations. The smoke gate also requires the Trust, Applications, and Notifications runners and every
 Phase 2/3 migration file, including Jobs `0027`, Documents
 `0018`, Trust `0005_development_test_removal`, Profile `0011_active_candidate_lease`,
 and Applications through `0015`,
@@ -138,7 +138,7 @@ scans, version-1 and unsafe recovery states, receipt path traversal, and the abs
 ECS execution, and ECR deletion operations. It also rejects an older D1 manifest/package boundary
 instead of treating a previously valid receipt or image as current Phase 2 evidence.
 The same suite executes the publisher's exact embedded smoke in disposable local fixtures with
-the real runner/restore modules: the current 84 migrations pass, while every missing or
+the real runner/restore modules: the current 87 migrations pass, while every missing or
 byte-modified SQL file, extra file, unchanged-count filename/version substitution and mismatched
 manifest checksum fails. It makes no SQL connection or migration call. These fixture tests do
 not replace the hardened final-image smoke, deterministic build identity, audit or registry scan.

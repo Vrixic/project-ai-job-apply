@@ -13,6 +13,15 @@ const OPERATION = "019c2b89-79b2-7000-8000-000000000003";
 const AT = "2026-09-18T12:00:00.000Z";
 const BASE = ["identity", "profile", "documents", "jobs", "matching", "billing", "trust"];
 const WITH_APPLICATIONS = [...BASE, "applications"];
+const WITH_NOTIFICATIONS = [...WITH_APPLICATIONS, "notifications"];
+
+const notificationsSection = {
+  preferences: null,
+  inbox: [],
+  emailDestination: null,
+  pushSubscriptions: [],
+  deliveries: [],
+};
 
 const applicationsSection = {
   schemaVersion: 1,
@@ -48,6 +57,8 @@ function ownerExport(text: string) {
         trust: { schemaVersion: 1, cases: [], caseEvents: [], contributorReputationEvidence: [] },
         audit: { events: [] },
       };
+    case "notifications":
+      return { notifications: notificationsSection, audit: { events: [] } };
     case "applications":
       return {
         applications: applicationsSection,
@@ -79,6 +90,7 @@ function harness(
   publication?: { active?: boolean; beforeLease?: () => void; put?: () => Promise<void> },
   nativeDocuments?: Record<string, unknown>,
   profileProjection?: { preferences?: unknown; facts?: unknown },
+  notificationsData?: unknown,
 ) {
   const queries: string[] = [];
   const stored: { body?: Buffer } = {};
@@ -102,6 +114,9 @@ function harness(
     queries.push(text);
     if (text.includes("applications.export_candidate_data") && applicationsData !== undefined) {
       return [{ data: applicationsData }];
+    }
+    if (text.includes("notifications.export_candidate_data") && notificationsData !== undefined) {
+      return [{ data: notificationsData }];
     }
     if (text.includes("export_candidate_data")) {
       const data = ownerExport(text);
@@ -1056,5 +1071,127 @@ describe("Applications as an optional eighth candidate-rights owner", () => {
       .filter((text) => text.includes(".delete_candidate_data"))
       .map((text) => /SELECT (\w+)\.delete_candidate_data/u.exec(text)?.[1]);
     expect(legacyOwners).toEqual(["jobs", "matching", "billing", "trust", "documents", "profile"]);
+  });
+});
+
+describe("Notifications owner in candidate rights (ADR-056)", () => {
+  it("assembles all nine owners and publishes the validated Notifications section", async () => {
+    const nine = harness(WITH_NOTIFICATIONS);
+    await nine.store.assembleExport(input("export_assemble"));
+    const exported = JSON.parse(nine.stored.body?.toString("utf8") ?? "{}");
+    expect(exported.notifications).toEqual(notificationsSection);
+    expect(exported.applications).toEqual(applicationsSection);
+    expect(validateCandidateDataExportV1(exported)).toBe(true);
+    expect(nine.queries.some((text) => text.includes("notifications.export_candidate_data"))).toBe(
+      true,
+    );
+  });
+
+  it("neither queries nor publishes Notifications under the eight-owner policy", async () => {
+    const eight = harness(WITH_APPLICATIONS);
+    await eight.store.assembleExport(input("export_assemble"));
+    expect(eight.queries.some((text) => text.includes("notifications."))).toBe(false);
+    expect(JSON.parse(eight.stored.body?.toString("utf8") ?? "{}")).not.toHaveProperty(
+      "notifications",
+    );
+  });
+
+  it("refuses an export when the Notifications owner returns no section", async () => {
+    for (const data of [{}, { notifications: null }, { notifications: [] }]) {
+      const nine = harness(
+        WITH_NOTIFICATIONS,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        data,
+      );
+      await expect(nine.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+        "CandidateExportInventoryIncomplete",
+      );
+      expect(nine.stored.body).toBeUndefined();
+    }
+  });
+
+  it("refuses a Notifications section that leaks a private field", async () => {
+    const leaking = {
+      notifications: {
+        ...notificationsSection,
+        pushSubscriptions: [
+          {
+            id: "019c2b89-79b2-7000-8000-0000000000d1",
+            endpointHost: "fcm.googleapis.com",
+            endpoint: "https://fcm.googleapis.com/fcm/send/secret",
+            state: "active",
+            createdAt: AT,
+            lastSuccessAt: null,
+          },
+        ],
+      },
+    };
+    const nine = harness(
+      WITH_NOTIFICATIONS,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      leaking,
+    );
+    await expect(nine.store.assembleExport(input("export_assemble"))).rejects.toThrow(
+      "CandidateExportSchemaRejected",
+    );
+    expect(nine.stored.body).toBeUndefined();
+  });
+
+  it("deletes Notifications data first, in the same transaction, and records all nine owners", async () => {
+    const nine = harness(WITH_NOTIFICATIONS);
+    await nine.store.deleteActiveSystems(input("deletion_delete_active_systems"));
+    const owners = nine.queries
+      .filter((text) => text.includes(".delete_candidate_data"))
+      .map((text) => /SELECT (\w+)\.delete_candidate_data/u.exec(text)?.[1]);
+    expect(owners).toEqual([
+      "notifications",
+      "applications",
+      "jobs",
+      "matching",
+      "billing",
+      "trust",
+      "documents",
+      "profile",
+    ]);
+  });
+
+  it.each([
+    [
+      "Notifications without Applications",
+      ["identity", "profile", "documents", "jobs", "matching", "billing", "trust", "notifications"],
+    ],
+    [
+      "reordered",
+      [
+        "identity",
+        "profile",
+        "documents",
+        "jobs",
+        "matching",
+        "billing",
+        "trust",
+        "notifications",
+        "applications",
+      ],
+    ],
+    ["duplicated", [...WITH_NOTIFICATIONS, "notifications"]],
+  ])("rejects an owner inventory that is %s", (_label, inventory) => {
+    expect(() => harness(inventory)).toThrow("CandidateRightsOwnerInventoryMismatch");
   });
 });

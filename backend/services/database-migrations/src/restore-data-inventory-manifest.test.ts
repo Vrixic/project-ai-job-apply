@@ -34,7 +34,7 @@ describe("explicit restore data snapshot contract", () => {
         },
       ],
     });
-    expect(compressed.length).toBeLessThanOrEqual(7_000);
+    expect(compressed.length).toBeLessThanOrEqual(7_400);
     expect(override.length).toBeLessThanOrEqual(8_192);
   });
   it("rejects compressed expansion beyond the structural byte budget", () => {

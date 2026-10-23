@@ -1,4 +1,3 @@
-import { restoredOwnerCountsQuery } from "./candidate-deletion-restore-postconditions.js";
 import { createHash } from "node:crypto";
 import type { DatabaseHandle } from "@ai-job-apply/profile-service";
 import {
@@ -6,8 +5,9 @@ import {
   RESTORED_CANDIDATE_RIGHTS_OWNERS,
   validateHistoricalRecoveryEntries,
 } from "./candidate-deletion-restore-policy.js";
+import { restoredOwnerCountsQuery } from "./candidate-deletion-restore-postconditions.js";
+import type { RestoreDataDigest } from "./candidate-deletion-restore-preservation.js";
 import type { CandidateDeletionRecoveryEntry } from "./candidate-rights-recovery-ledger.js";
-import { type RestoreDataDigest } from "./candidate-deletion-restore-preservation.js";
 
 /** Process-private, owner-bound inventory; never a request or aggregate response field. */
 export interface RestoredCandidateDocumentObjectRef {
@@ -708,6 +708,7 @@ export class PostgresCandidateDeletionRestoreStore {
       );
     }
     for (const owner of [
+      "notifications",
       "applications",
       "jobs",
       "matching",

@@ -6,12 +6,12 @@ import {
   ACCEPTED_CANDIDATE_DELETION_POLICIES,
   RESTORED_CANDIDATE_RIGHTS_OWNERS,
 } from "./candidate-deletion-restore-policy.js";
+import { PRESERVATION_RELATIONS } from "./candidate-deletion-restore-preservation.js";
 import {
   PostgresCandidateDeletionRestoreStore,
   readCandidateDeletionRestoreStoreFailure,
 } from "./candidate-deletion-restore-store.js";
 import type { CandidateDeletionRecoveryEntry } from "./candidate-rights-recovery-ledger.js";
-import { PRESERVATION_RELATIONS } from "./candidate-deletion-restore-preservation.js";
 
 type Row = Record<string, unknown>;
 function fixture(offset = 0) {
@@ -127,7 +127,7 @@ function database(
       output = structuredClone(value.coverLetters);
     else if (query.startsWith("SELECT id AS")) output = structuredClone(value.documents);
     else if (
-      /^SELECT (applications|jobs|matching|billing|trust|documents|profile)\.delete_candidate_data/u.test(
+      /^SELECT (notifications|applications|jobs|matching|billing|trust|documents|profile)\.delete_candidate_data/u.test(
         query,
       )
     ) {
@@ -539,7 +539,7 @@ describe("restore-only whole-set database preflight", () => {
     expect(db.queries.filter(({ query }) => query.startsWith("WITH row_hashes"))).toHaveLength(0);
   });
 
-  it("revalidates the whole set before invoking all eight owners and never receives cloud mutation ports", async () => {
+  it("revalidates the whole set before invoking all nine owners and never receives cloud mutation ports", async () => {
     const values = [fixture(), fixture(10)];
     const db = database(values);
     const store = new PostgresCandidateDeletionRestoreStore(db.handle);
@@ -566,6 +566,7 @@ describe("restore-only whole-set database preflight", () => {
       .filter(({ query }) => query.startsWith("SELECT "))
       .map(({ query }) => query.split(".")[0]);
     const owners = [
+      "SELECT notifications",
       "SELECT applications",
       "SELECT jobs",
       "SELECT matching",

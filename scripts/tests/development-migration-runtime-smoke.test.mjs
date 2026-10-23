@@ -20,7 +20,16 @@ const manifest = JSON.parse(
     "utf8",
   ),
 );
-const owners = ["profile", "jobs", "documents", "matching", "billing", "trust", "applications"];
+const owners = [
+  "profile",
+  "jobs",
+  "documents",
+  "matching",
+  "billing",
+  "trust",
+  "applications",
+  "notifications",
+];
 const migrations = manifest.contributors.flatMap((contributor) =>
   contributor.migrations.map((migration) => ({
     owner: contributor.owner,
@@ -28,7 +37,7 @@ const migrations = manifest.contributors.flatMap((contributor) =>
     relative: `${contributor.owner}/migrations/${migration.version}.sql`,
   })),
 );
-assert.equal(migrations.length, 84);
+assert.equal(migrations.length, 87);
 assert.deepEqual(manifest.contributors.map((x) => x.owner).sort(), [...owners].sort());
 
 function fixture(context) {
@@ -73,7 +82,7 @@ function fixture(context) {
     write(relative, "");
   }
   // Only module resolution is exercised, not a mocked or live SQL connection.
-  for (const owner of ["profile", "billing", "trust"]) {
+  for (const owner of ["profile", "billing", "trust", "notifications"]) {
     write(`${owner}/package.json`, '{"type":"module"}');
     write(`${owner}/node_modules/postgres/index.js`, "");
   }
@@ -97,7 +106,7 @@ function fixture(context) {
   return { root, write, run, accept };
 }
 
-test("accepts current 81-migration inventory using the production runtime smoke", (context) => {
+test("accepts current 87-migration inventory using the production runtime smoke", (context) => {
   fixture(context);
 });
 

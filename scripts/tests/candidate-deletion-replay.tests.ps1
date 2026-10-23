@@ -16,7 +16,7 @@ Assert ((Get-DeletionReplayConfigJson $fixture.configuration $now) -ceq $fixture
 Assert ((Get-DeletionReplayEnvironmentSha $fixture.environment) -ceq $fixture.configurationSha256) 'TS/PowerShell exact environment digest'
 $null = Assert-DeletionReplayEnvironment $fixture.environment $now
 Assert $true 'generated-only complete fixture accepted'
-Assert ($fixture.configuration.acceptedPolicyCatalogSha256 -ceq '571ee233eac79d81e988840c0bd2271f27fedebe2c9c0a46d5c623625d131b1a') 'known immutable catalog digest matches shared fixture'
+Assert ($fixture.configuration.acceptedPolicyCatalogSha256 -ceq '73f2705e6227b6ad597e4b57cd21683f2faff311029b31bddd27ad5ac4843d77') 'known immutable catalog digest matches shared fixture'
 $boundaryConfig = Clone $fixture.configuration
 $boundaryConfig.expiresAt = $now.AddSeconds(300).ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")
 $null = Get-DeletionReplayConfigJson $boundaryConfig $now
@@ -218,12 +218,12 @@ $replayAggregate.action='replay';$replayAggregate.outcome='replayed'
 foreach ($pair in @(@('restoredUsersReconciled',1),@('restoredUsersAbsent',1),@('restoredUsersAlreadyReconciled',1),@('s3Writes',0),@('recoveryLedgerWrites',0),@('identityProviderCalls',0))) { $replayAggregate | Add-Member -NotePropertyName $pair[0] -NotePropertyValue $pair[1] }
 Assert-DeletionReplayAggregate $replayAggregate $fixture.replay $fixture.configuration
 Assert $true 'aggregate replay distinguishes retained tombstones from absent users'
-$preservation = Clone @{schemaVersion=1;unchanged=@{sha256=('a'*64);relationCount=97;rowCount=12;byteCount=240};reconciled=@{sha256=('b'*64);relationCount=97;rowCount=15;byteCount=300}}
+$preservation = Clone @{schemaVersion=1;unchanged=@{sha256=('a'*64);relationCount=105;rowCount=12;byteCount=240};reconciled=@{sha256=('b'*64);relationCount=105;rowCount=15;byteCount=300}}
 $withPreservation = Clone $replayAggregate
 $withPreservation | Add-Member -NotePropertyName preservation -NotePropertyValue $preservation
 Assert-DeletionReplayAggregate $withPreservation $fixture.replay $fixture.configuration
 Assert $true 'new replay whole-row evidence accepted alongside historical receipts'
-foreach ($pair in @(@('relationCount',95),@('relationCount','97'),@('rowCount',100001),@('rowCount',-1),@('byteCount',67108865),@('sha256','invalid'))) {
+foreach ($pair in @(@('relationCount',95),@('relationCount','105'),@('rowCount',100001),@('rowCount',-1),@('byteCount',67108865),@('sha256','invalid'))) {
   $changed=Clone $withPreservation; $changed.preservation.unchanged.($pair[0])=$pair[1]
   Reject { Assert-DeletionReplayAggregate $changed $fixture.replay $fixture.configuration } 'malformed or unbounded preservation digest refuses'
 }
