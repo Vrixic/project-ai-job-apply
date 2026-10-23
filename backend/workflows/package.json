@@ -62,7 +62,9 @@
     "@aws/durable-execution-sdk-js": "2.4.0",
     "ajv": "8.20.0",
     "pino": "10.3.1",
-    "uuid": "14.0.2"
+    "uuid": "14.0.2",
+    "@ai-job-apply/notifications-service": "workspace:*",
+    "@aws-sdk/client-sesv2": "3.1133.0"
   },
   "devDependencies": {
     "@aws/durable-execution-sdk-js-testing": "1.1.4",

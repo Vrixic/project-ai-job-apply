@@ -416,6 +416,9 @@ importers:
       '@ai-job-apply/jobs-service':
         specifier: workspace:*
         version: link:../services/jobs
+      '@ai-job-apply/notifications-service':
+        specifier: workspace:*
+        version: link:../services/notifications
       '@ai-job-apply/observability':
         specifier: workspace:*
         version: link:../../packages/observability
@@ -432,6 +435,9 @@ importers:
         specifier: 3.1133.0
         version: 3.1133.0
       '@aws-sdk/client-s3':
+        specifier: 3.1133.0
+        version: 3.1133.0
+      '@aws-sdk/client-sesv2':
         specifier: 3.1133.0
         version: 3.1133.0
       '@aws-sdk/client-sqs':

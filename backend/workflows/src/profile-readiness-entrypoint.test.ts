@@ -2,6 +2,16 @@ import type { Context, Handler } from "aws-lambda";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const runtime = vi.hoisted(() => ({
+  dispatch: vi.fn(async () => ({
+    schemaVersion: 1,
+    expired: 0,
+    codesSent: 0,
+    sent: 1,
+    skipped: 0,
+    failed: 0,
+    retried: 0,
+    deferred: 0,
+  })),
   createDatabase: vi.fn(() => ({})),
   resolveDatabaseUrl: vi.fn(async () => "postgres://synthetic.invalid/unused"),
   loadPolicy: vi.fn(() => ({ subprocessorInventory: [] })),
@@ -46,6 +56,14 @@ vi.mock("./candidate-rights-activities.js", async (importOriginal) => ({
     purgeDeletedResumes = runtime.purgeDeletedResumes;
     beginExport = runtime.beginExport;
   },
+}));
+
+vi.mock("./notifications-dispatch.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./notifications-dispatch.js")>()),
+  createRuntimeNotificationsDispatcher: vi.fn(async () => ({
+    dispatcher: { run: runtime.dispatch },
+    expireDue: async () => 0,
+  })),
 }));
 
 vi.mock("./candidate-rights-secret.js", () => ({
@@ -212,6 +230,27 @@ describe("deployed profile-readiness activity entrypoints", { timeout: 30_000 },
       "CANDIDATE_RIGHTS_MAINTENANCE_RULE_ARN is required",
     );
     expectNoRuntimeEffects();
+  });
+
+  it("runs the notification dispatcher only for its own configured schedule", async () => {
+    const dispatchRule =
+      "arn:aws:events:us-east-2:123456789012:rule/ai-job-apply-development-notifications-dispatch";
+    vi.stubEnv("NOTIFICATIONS_DISPATCH_RULE_ARN", dispatchRule);
+    const { activity } = await import("./profile-readiness-lambda.js");
+    await expect(
+      invoke(activity, { ...scheduledEvent(), resources: [dispatchRule] }),
+    ).resolves.toMatchObject({ schemaVersion: 1, sent: 1 });
+    expect(runtime.dispatch).toHaveBeenCalledOnce();
+    // The candidate-rights schedule is not the dispatch schedule and still reaches maintenance.
+    await invoke(activity, scheduledEvent());
+    expect(runtime.dispatch).toHaveBeenCalledOnce();
+    expect(runtime.expireDueExports).toHaveBeenCalledOnce();
+  });
+
+  it("never dispatches notifications while the dispatch rule is not configured", async () => {
+    const { activity } = await import("./profile-readiness-lambda.js");
+    await invoke(activity, scheduledEvent());
+    expect(runtime.dispatch).not.toHaveBeenCalled();
   });
 
   it("continues to dispatch a strict candidate-rights activity without scheduling maintenance", async () => {

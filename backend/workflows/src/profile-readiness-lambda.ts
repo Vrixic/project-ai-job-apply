@@ -28,6 +28,12 @@ import {
 import { AwsCandidateDeletionRecoveryLedger } from "./candidate-rights-recovery-ledger.js";
 import { resolveCandidateRightsAuth0Secret } from "./candidate-rights-secret.js";
 import {
+  createNotificationsDispatchHandler,
+  createRuntimeNotificationsDispatcher,
+  isNotificationsDispatchEvent,
+  type NotificationsDispatchResult,
+} from "./notifications-dispatch.js";
+import {
   type ProfileReadinessActivityInputV1,
   type ProfileReadinessActivityResultV1,
   validateProfileReadinessActivityInput,
@@ -341,7 +347,21 @@ export const activity: Handler<
   | ProfileReadinessActivityResultV1
   | CandidateRightsActivityResultV1
   | CandidateRightsMaintenanceResult
+  | NotificationsDispatchResult
 > = async (event) => {
+  // Terraform supplies this exact rule only while notification delivery is enabled.
+  const dispatchRuleArn = process.env.NOTIFICATIONS_DISPATCH_RULE_ARN;
+  if (dispatchRuleArn && isNotificationsDispatchEvent(event, dispatchRuleArn)) {
+    const runtime = await createRuntimeNotificationsDispatcher(
+      process.env,
+      await getRuntimeDatabase(),
+    );
+    return createNotificationsDispatchHandler({
+      dispatcher: runtime.dispatcher,
+      expireDue: runtime.expireDue,
+      expectedRuleArn: dispatchRuleArn,
+    })(event);
+  }
   // Terraform supplies this exact rule only while candidate rights are enabled.
   const maintenanceRuleArn = process.env.CANDIDATE_RIGHTS_MAINTENANCE_RULE_ARN;
   if (maintenanceRuleArn && isCandidateRightsMaintenanceEvent(event, maintenanceRuleArn)) {
