@@ -1865,6 +1865,15 @@ run "notification_delivery_creates_the_exact_schedule_identity_and_environment" 
     )
     error_message = "The Gateway must serve Notifications and hand browsers the public VAPID key."
   }
+
+  assert {
+    condition = (
+      length([for s in data.aws_iam_policy_document.secrets_endpoint[0].statement : s if s.sid == "ExactNotificationsVapidSecret"]) == 1 &&
+      one([for s in data.aws_iam_policy_document.secrets_endpoint[0].statement : s if s.sid == "ExactNotificationsVapidSecret"]).actions == toset(["secretsmanager:GetSecretValue"]) &&
+      length(one([for s in data.aws_iam_policy_document.secrets_endpoint[0].statement : s if s.sid == "ExactNotificationsVapidSecret"]).condition) == 1
+    )
+    error_message = "The Secrets Manager endpoint must let only the dispatcher role read the VAPID secret."
+  }
 }
 
 run "notification_dispatch_rule_stays_disabled_while_the_runtime_is_off" {
