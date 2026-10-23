@@ -1519,6 +1519,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications/delivery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Where notifications are delivered: the email address and its state, and the browser push subscriptions. */
+        get: operations["getNotificationDelivery"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/delivery/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Start confirming an email address. A six digit code is emailed within about a minute. */
+        put: operations["requestNotificationEmail"];
+        post?: never;
+        /** Remove the email address. Email notifications stop; the inbox is unchanged. */
+        delete: operations["removeNotificationEmail"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/delivery/email/confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm the email address with the code that was emailed. */
+        post: operations["confirmNotificationEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/delivery/push-subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Register this browser for push notifications. The push carries no content. */
+        post: operations["addNotificationPushSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/delivery/push-subscriptions/{subscriptionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a browser push subscription. */
+        delete: operations["removeNotificationPushSubscription"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/notifications/{notificationId}/acknowledgement": {
         parameters: {
             query?: never;
@@ -3431,6 +3517,43 @@ export interface components {
             endMinute: number;
             timeZone: string;
         };
+        /** @description Where this candidate receives notifications. The in-app inbox is always on. */
+        NotificationDeliveryStatus: {
+            email?: {
+                address: string;
+                /** @enum {string} */
+                state: "pending" | "verified" | "suppressed";
+                /** @description A code was requested or sent and has not been used yet. */
+                codePending: boolean;
+            };
+            pushSubscriptions: {
+                /** Format: uuid */
+                id: string;
+                /** @enum {string} */
+                state: "active" | "expired";
+                /** Format: date-time */
+                createdAt: string;
+            }[];
+            /** @description The public key a browser needs to subscribe. Absent when push is not configured. */
+            pushPublicKey?: string;
+        };
+        RequestNotificationEmailRequest: {
+            address: string;
+        };
+        ConfirmNotificationEmailRequest: {
+            code: string;
+        };
+        ConfirmNotificationEmailResult: {
+            /** @enum {string} */
+            result: "verified" | "invalid" | "expired" | "too_many_attempts" | "no_request";
+        };
+        AddNotificationPushSubscriptionRequest: {
+            endpoint: string;
+        };
+        NotificationPushSubscriptionCreated: {
+            /** Format: uuid */
+            id: string;
+        };
         /** @description Delivery preferences. The in-app inbox cannot be turned off; email and push are off until the candidate turns them on. Version 0 means defaults that were never saved. */
         NotificationPreferences: {
             version: number;
@@ -3450,6 +3573,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description Too many requests; try again later */
+        TooManyRequests: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["ProblemDetails"];
+            };
+        };
         /** @description Request validation failed */
         BadRequest: {
             headers: {
@@ -7028,6 +7160,174 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getNotificationDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The delivery status */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationDeliveryStatus"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    requestNotificationEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestNotificationEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description The confirmation code was requested */
+            202: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    removeNotificationEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The email address was removed */
+            204: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    confirmNotificationEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmNotificationEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description The outcome of the confirmation */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmNotificationEmailResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    addNotificationPushSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddNotificationPushSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description The subscription was saved */
+            201: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPushSubscriptionCreated"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    removeNotificationPushSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscriptionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The subscription was removed */
+            204: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };

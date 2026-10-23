@@ -152,6 +152,17 @@ export type NotificationInboxPage = components["schemas"]["NotificationInboxPage
 export type NotificationPreferences = components["schemas"]["NotificationPreferences"];
 export type UpdateNotificationPreferencesRequest =
   components["schemas"]["UpdateNotificationPreferencesRequest"];
+export type NotificationDeliveryStatus = components["schemas"]["NotificationDeliveryStatus"];
+export type RequestNotificationEmailRequest =
+  components["schemas"]["RequestNotificationEmailRequest"];
+export type ConfirmNotificationEmailRequest =
+  components["schemas"]["ConfirmNotificationEmailRequest"];
+export type ConfirmNotificationEmailResult =
+  components["schemas"]["ConfirmNotificationEmailResult"];
+export type AddNotificationPushSubscriptionRequest =
+  components["schemas"]["AddNotificationPushSubscriptionRequest"];
+export type NotificationPushSubscriptionCreated =
+  components["schemas"]["NotificationPushSubscriptionCreated"];
 export type ApplicationStatus = components["schemas"]["ApplicationStatus"];
 export type ApplicationCurrentAction = components["schemas"]["ApplicationCurrentAction"];
 export type ApplicationPacketField = components["schemas"]["ApplicationPacketField"];

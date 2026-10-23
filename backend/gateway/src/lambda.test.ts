@@ -645,6 +645,57 @@ describe("API Gateway Lambda boundary", () => {
     expect((await invoke(handler, anonymous)).statusCode).toBe(401);
   });
 
+  it("allows the notification delivery routes, with bodies only where they are written (D5-002)", async () => {
+    const inject = vi.fn().mockResolvedValue({
+      statusCode: 200,
+      body: "{}",
+      headers: { "content-type": "application/json" },
+    });
+    const handler = createApiGatewayHandler({
+      app: Promise.resolve({ inject }),
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      principalBridge: createInvocationPrincipalBridge(),
+    });
+    const id = "019d04cf-1f80-7000-8000-00000000a111";
+    const json = {
+      body: "{}",
+      headers: {
+        authorization: "Bearer opaque-api-gateway-token",
+        "content-type": "application/json",
+      },
+    };
+    const status = async (method: string, path: string, extra: Record<string, unknown> = {}) =>
+      (await invoke(handler, routedEvent(method, path, extra as never))).statusCode;
+
+    expect(await status("GET", "/v1/notifications/delivery")).toBe(200);
+    expect(await status("GET", "/v1/notifications/delivery", { rawQueryString: "x=1" })).toBe(400);
+    expect(await status("PUT", "/v1/notifications/delivery/email", json)).toBe(200);
+    expect(await status("PUT", "/v1/notifications/delivery/email")).toBe(400);
+    expect(await status("DELETE", "/v1/notifications/delivery/email")).toBe(200);
+    expect(await status("DELETE", "/v1/notifications/delivery/email", json)).toBe(400);
+    expect(await status("POST", "/v1/notifications/delivery/email/confirmation", json)).toBe(200);
+    expect(await status("POST", "/v1/notifications/delivery/push-subscriptions", json)).toBe(200);
+    expect(await status("DELETE", `/v1/notifications/delivery/push-subscriptions/${id}`)).toBe(200);
+    expect(
+      await status("DELETE", `/v1/notifications/delivery/push-subscriptions/${id}`, json),
+    ).toBe(400);
+    for (const [method, path] of [
+      ["DELETE", "/v1/notifications/delivery/push-subscriptions/not-a-uuid"],
+      ["DELETE", `/v1/notifications/delivery/push-subscriptions/${id}/`],
+      ["DELETE", "/v1/notifications/delivery/push-subscriptions"],
+      ["GET", `/v1/notifications/delivery/push-subscriptions/${id}`],
+      ["PATCH", "/v1/notifications/delivery/email"],
+      ["POST", "/v1/notifications/delivery"],
+      ["GET", "/v1/notifications/delivery/email"],
+      ["GET", "/v1/notifications/delivery/email/confirmation"],
+    ] as const)
+      expect(await status(method, path)).toBe(404);
+    const anonymous = routedEvent("GET", "/v1/notifications/delivery");
+    delete anonymous.requestContext.authorizer;
+    expect((await invoke(handler, anonymous)).statusCode).toBe(401);
+  });
+
   it("allows only an exact lowercase UUIDv7 bodyless match-assessment route", async () => {
     const inject = vi.fn().mockResolvedValue({
       statusCode: 200,

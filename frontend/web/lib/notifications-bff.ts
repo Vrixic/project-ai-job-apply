@@ -1,6 +1,6 @@
 import { compileComponentValidator } from "@ai-job-apply/api-contracts";
-import { RequestBodyTooLargeError, readBoundedRequestBody } from "./bounded-request-body";
 import { getLazyAuth0Session } from "./auth0";
+import { RequestBodyTooLargeError, readBoundedRequestBody } from "./bounded-request-body";
 import { validateFoundationResponse } from "./foundation-response-bff";
 import { forwardPlatformRequest } from "./platform-api";
 
@@ -17,6 +17,11 @@ const ITEM_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const validatePreferencesRequest = compileComponentValidator(
   "UpdateNotificationPreferencesRequest",
+);
+const validateEmailRequest = compileComponentValidator("RequestNotificationEmailRequest");
+const validateEmailConfirmation = compileComponentValidator("ConfirmNotificationEmailRequest");
+const validatePushSubscriptionRequest = compileComponentValidator(
+  "AddNotificationPushSubscriptionRequest",
 );
 
 function problem(status: number, code: string, title: string): Response {
@@ -104,6 +109,54 @@ export async function forwardNotificationCommand(
   return validateFoundationResponse(response, 200, "NotificationItem", request.signal);
 }
 
+type BodyValidator = ((value: unknown) => boolean) & { errors?: unknown };
+
+/** A bounded, same-origin JSON body that matches the contract, or the refusal to send back. */
+async function readValidJsonBody(
+  request: Request,
+  validate: BodyValidator,
+): Promise<{ body: string } | { refusal: Response }> {
+  if (!sameOrigin(request)) {
+    cancelBody(request.body);
+    return { refusal: invalid() };
+  }
+  if (!JSON_CONTENT_TYPE_PATTERN.test(request.headers.get("content-type") ?? "")) {
+    cancelBody(request.body);
+    return { refusal: problem(415, "unsupported_media_type", "Unsupported media type") };
+  }
+  const declaredLength = request.headers.get("content-length");
+  if (
+    request.headers.get("transfer-encoding") !== null ||
+    (declaredLength !== null &&
+      (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > MAXIMUM_BODY_BYTES))
+  ) {
+    cancelBody(request.body);
+    return {
+      refusal:
+        declaredLength !== null && Number(declaredLength) > MAXIMUM_BODY_BYTES
+          ? problem(413, "payload_too_large", "Payload too large")
+          : invalid(),
+    };
+  }
+  try {
+    const bytes = await readBoundedRequestBody(request, {
+      maximumBytes: MAXIMUM_BODY_BYTES,
+      timeoutMilliseconds: BODY_TIMEOUT_MILLISECONDS,
+    });
+    if (bytes.byteLength === 0) return { refusal: invalid() };
+    const body = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    if (!validate(JSON.parse(body))) return { refusal: invalid() };
+    return { body };
+  } catch (error) {
+    return {
+      refusal:
+        error instanceof RequestBodyTooLargeError
+          ? problem(413, "payload_too_large", "Payload too large")
+          : invalid(),
+    };
+  }
+}
+
 export async function forwardNotificationPreferences(request: Request): Promise<Response> {
   if (new URL(request.url).search !== "") {
     cancelBody(request.body);
@@ -117,44 +170,148 @@ export async function forwardNotificationPreferences(request: Request): Promise<
     });
     return validateFoundationResponse(response, 200, "NotificationPreferences", request.signal);
   }
-  if (request.method !== "PUT" || !sameOrigin(request)) {
+  if (request.method !== "PUT") {
     cancelBody(request.body);
     return invalid();
   }
-  if (!JSON_CONTENT_TYPE_PATTERN.test(request.headers.get("content-type") ?? "")) {
-    cancelBody(request.body);
-    return problem(415, "unsupported_media_type", "Unsupported media type");
-  }
-  const declaredLength = request.headers.get("content-length");
-  if (
-    request.headers.get("transfer-encoding") !== null ||
-    (declaredLength !== null &&
-      (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > MAXIMUM_BODY_BYTES))
-  ) {
-    cancelBody(request.body);
-    return declaredLength !== null && Number(declaredLength) > MAXIMUM_BODY_BYTES
-      ? problem(413, "payload_too_large", "Payload too large")
-      : invalid();
-  }
-  let body: string;
-  try {
-    const bytes = await readBoundedRequestBody(request, {
-      maximumBytes: MAXIMUM_BODY_BYTES,
-      timeoutMilliseconds: BODY_TIMEOUT_MILLISECONDS,
-    });
-    if (bytes.byteLength === 0) return invalid();
-    body = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    if (!validatePreferencesRequest(JSON.parse(body))) return invalid();
-  } catch (error) {
-    return error instanceof RequestBodyTooLargeError
-      ? problem(413, "payload_too_large", "Payload too large")
-      : invalid();
-  }
+  const read = await readValidJsonBody(request, validatePreferencesRequest);
+  if ("refusal" in read) return read.refusal;
   const response = await forward("/v1/notifications/preferences", {
     method: "PUT",
-    body,
+    body: read.body,
     signal: request.signal,
     headers: { "content-type": "application/json" },
   });
   return validateFoundationResponse(response, 200, "NotificationPreferences", request.signal);
+}
+
+/** A bodyless request with no query: delivery reads and removals carry their input in the path. */
+function bodylessRefused(request: Request, method: string): boolean {
+  const declaredLength = request.headers.get("content-length");
+  return (
+    request.method !== method ||
+    new URL(request.url).search !== "" ||
+    (declaredLength !== null && declaredLength !== "0") ||
+    request.headers.get("transfer-encoding") !== null ||
+    request.headers.get("content-type") !== null ||
+    (method !== "GET" && !sameOrigin(request))
+  );
+}
+
+function noContent(response: Response, expectedStatus: 202 | 204): Response {
+  if (!response.ok) return response;
+  if (response.status !== expectedStatus) {
+    cancelBody(response.body);
+    return problem(503, "platform_unavailable", "The platform API is unavailable");
+  }
+  cancelBody(response.body);
+  return new Response(null, { status: expectedStatus, headers: { "cache-control": "no-store" } });
+}
+
+/** Email and push delivery settings (ADR-056). */
+export async function forwardNotificationDeliveryStatus(request: Request): Promise<Response> {
+  const refused = bodylessRefused(request, "GET");
+  cancelBody(request.body);
+  if (refused) return invalid();
+  const response = await forward("/v1/notifications/delivery", {
+    method: "GET",
+    signal: request.signal,
+  });
+  return validateFoundationResponse(response, 200, "NotificationDeliveryStatus", request.signal);
+}
+
+export async function forwardNotificationDeliveryEmail(request: Request): Promise<Response> {
+  if (new URL(request.url).search !== "") {
+    cancelBody(request.body);
+    return invalid();
+  }
+  if (request.method === "DELETE") {
+    const refused = bodylessRefused(request, "DELETE");
+    cancelBody(request.body);
+    if (refused) return invalid();
+    return noContent(
+      await forward("/v1/notifications/delivery/email", {
+        method: "DELETE",
+        signal: request.signal,
+      }),
+      204,
+    );
+  }
+  if (request.method !== "PUT") {
+    cancelBody(request.body);
+    return invalid();
+  }
+  const read = await readValidJsonBody(request, validateEmailRequest);
+  if ("refusal" in read) return read.refusal;
+  return noContent(
+    await forward("/v1/notifications/delivery/email", {
+      method: "PUT",
+      body: read.body,
+      signal: request.signal,
+      headers: { "content-type": "application/json" },
+    }),
+    202,
+  );
+}
+
+export async function forwardNotificationDeliveryEmailConfirmation(
+  request: Request,
+): Promise<Response> {
+  if (request.method !== "POST" || new URL(request.url).search !== "") {
+    cancelBody(request.body);
+    return invalid();
+  }
+  const read = await readValidJsonBody(request, validateEmailConfirmation);
+  if ("refusal" in read) return read.refusal;
+  const response = await forward("/v1/notifications/delivery/email/confirmation", {
+    method: "POST",
+    body: read.body,
+    signal: request.signal,
+    headers: { "content-type": "application/json" },
+  });
+  return validateFoundationResponse(
+    response,
+    200,
+    "ConfirmNotificationEmailResult",
+    request.signal,
+  );
+}
+
+export async function forwardNotificationDeliveryPushSubscriptions(
+  request: Request,
+): Promise<Response> {
+  if (request.method !== "POST" || new URL(request.url).search !== "") {
+    cancelBody(request.body);
+    return invalid();
+  }
+  const read = await readValidJsonBody(request, validatePushSubscriptionRequest);
+  if ("refusal" in read) return read.refusal;
+  const response = await forward("/v1/notifications/delivery/push-subscriptions", {
+    method: "POST",
+    body: read.body,
+    signal: request.signal,
+    headers: { "content-type": "application/json" },
+  });
+  return validateFoundationResponse(
+    response,
+    201,
+    "NotificationPushSubscriptionCreated",
+    request.signal,
+  );
+}
+
+export async function forwardNotificationDeliveryPushSubscription(
+  request: Request,
+  subscriptionId: string,
+): Promise<Response> {
+  const refused = bodylessRefused(request, "DELETE") || !ITEM_ID_PATTERN.test(subscriptionId);
+  cancelBody(request.body);
+  if (refused) return invalid();
+  return noContent(
+    await forward(`/v1/notifications/delivery/push-subscriptions/${subscriptionId}`, {
+      method: "DELETE",
+      signal: request.signal,
+    }),
+    204,
+  );
 }

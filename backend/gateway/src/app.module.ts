@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type {
   AccountDeletionRequest,
+  AddNotificationPushSubscriptionRequest,
   Application,
   ApplicationAttempt,
   ApplicationCoverLetterFile,
@@ -23,6 +24,8 @@ import type {
   CandidateDataExportDownloadGrant,
   CanonicalJobDetail,
   ConfirmAccountDeletionRequest,
+  ConfirmNotificationEmailRequest,
+  ConfirmNotificationEmailResult,
   CreateAccountDeletionRequest,
   CreateApplicationRequest,
   CreateCandidateDataExportRequest,
@@ -36,10 +39,6 @@ import type {
   DecideTrustCaseRequest,
   EntitlementSummary,
   FileTrustAppealRequest,
-  NotificationInboxPage as NotificationInboxPageResponse,
-  NotificationItem as NotificationItemResponse,
-  NotificationPreferences as NotificationPreferencesResponse,
-  UpdateNotificationPreferencesRequest,
   GrantUgcContributionConsentRequest,
   JobContribution,
   JobContributionHistory,
@@ -51,6 +50,11 @@ import type {
   ModerationCase,
   ModerationCasePage,
   ModerationCaseSearchRequest,
+  NotificationDeliveryStatus as NotificationDeliveryStatusResponse,
+  NotificationInboxPage as NotificationInboxPageResponse,
+  NotificationItem as NotificationItemResponse,
+  NotificationPreferences as NotificationPreferencesResponse,
+  NotificationPushSubscriptionCreated,
   OpenModerationCaseRequest,
   OpenTrustCaseRequest,
   Operation,
@@ -64,6 +68,7 @@ import type {
   PutJobPreferencesRequest,
   PutJobPreferencesResponse,
   ReconcileApplicationAttemptRequest,
+  RequestNotificationEmailRequest,
   ResolveModerationCaseRequest,
   ResolveTrustAppealRequest,
   RestrictedAnswer,
@@ -82,16 +87,10 @@ import type {
   StartManualApplicationSubmissionRequest,
   TakeDownTrustCaseRequest,
   UgcContributionConsentGrant,
+  UpdateNotificationPreferencesRequest,
   WithdrawTrustContributionRequest,
 } from "@ai-job-apply/api-contracts";
 import { compileComponentValidator, formatValidationErrors } from "@ai-job-apply/api-contracts";
-import {
-  type InboxItem,
-  type InboxState,
-  type NotificationPreferences as NotificationPreferencesValue,
-  NotificationsError,
-  type NotificationsService,
-} from "@ai-job-apply/notifications-service";
 import {
   type ApplicationsApi,
   ApplicationsUnavailableError,
@@ -167,6 +166,13 @@ import {
   type SavedJobs,
   SavedJobTargetUnavailableError,
 } from "@ai-job-apply/matching-service";
+import {
+  type InboxItem,
+  type InboxState,
+  type NotificationPreferences as NotificationPreferencesValue,
+  NotificationsError,
+  type NotificationsService,
+} from "@ai-job-apply/notifications-service";
 import { activeTraceparent, correlationId } from "@ai-job-apply/observability";
 import {
   AccountQuarantinedError,
@@ -238,8 +244,8 @@ import {
   projectApplicationsFailure,
 } from "./applications-http.js";
 import { withNativeMaterialCredential } from "./native-material-availability.js";
-import type { RawBodyRequest, StripeBillingGateway } from "./stripe-billing.js";
 import type { NativeMaterialWithdrawalApi } from "./native-owner-material-cleanup.js";
+import type { RawBodyRequest, StripeBillingGateway } from "./stripe-billing.js";
 import { temporaryMaterialRequestSignal } from "./temporary-material-http.js";
 import {
   type OidcTrustReviewerAuthority,
@@ -948,9 +954,11 @@ class ProblemDetailsFilter implements ExceptionFilter {
       status =
         exception.code === "not_found"
           ? HttpStatus.NOT_FOUND
-          : exception.code === "version_conflict"
+          : exception.code === "version_conflict" || exception.code === "limit_reached"
             ? HttpStatus.CONFLICT
-            : HttpStatus.BAD_REQUEST;
+            : exception.code === "rate_limited"
+              ? HttpStatus.TOO_MANY_REQUESTS
+              : HttpStatus.BAD_REQUEST;
       code =
         exception.code === "version_conflict" ? "notifications_version_conflict" : exception.code;
       title =
@@ -958,11 +966,19 @@ class ProblemDetailsFilter implements ExceptionFilter {
           ? "Notification not found"
           : exception.code === "version_conflict"
             ? "Preferences changed"
-            : "Invalid request";
+            : exception.code === "rate_limited"
+              ? "Too many requests"
+              : exception.code === "limit_reached"
+                ? "Limit reached"
+                : "Invalid request";
       detail =
         exception.code === "version_conflict"
           ? "The preferences changed; reload and try again"
-          : "The notification request is invalid";
+          : exception.code === "rate_limited"
+            ? "Too many confirmation emails were requested; try again later"
+            : exception.code === "limit_reached"
+              ? "This account already has the maximum number of subscribed browsers"
+              : "The notification request is invalid";
     } else if (exception instanceof NotificationsUnavailableError) {
       status = HttpStatus.SERVICE_UNAVAILABLE;
       code = "notifications_unavailable";
@@ -3736,7 +3752,17 @@ class StripeBillingController {
 /** The candidate's in-app action inbox and delivery preferences (ADR-055). */
 export type NotificationsApi = Pick<
   NotificationsService,
-  "listInbox" | "acknowledge" | "dismiss" | "getPreferences" | "updatePreferences"
+  | "listInbox"
+  | "acknowledge"
+  | "dismiss"
+  | "getPreferences"
+  | "updatePreferences"
+  | "getDeliveryStatus"
+  | "requestEmailConfirmation"
+  | "confirmEmail"
+  | "removeEmail"
+  | "addPushSubscription"
+  | "removePushSubscription"
 >;
 
 class NotificationsUnavailableError extends Error {
@@ -3748,6 +3774,15 @@ class NotificationsUnavailableError extends Error {
 
 const validateUpdateNotificationPreferences = compileComponentValidator(
   "UpdateNotificationPreferencesRequest",
+);
+const validateRequestNotificationEmail = compileComponentValidator(
+  "RequestNotificationEmailRequest",
+);
+const validateConfirmNotificationEmail = compileComponentValidator(
+  "ConfirmNotificationEmailRequest",
+);
+const validateAddNotificationPushSubscription = compileComponentValidator(
+  "AddNotificationPushSubscriptionRequest",
 );
 const NOTIFICATION_STATES: Readonly<Record<string, readonly InboxState[]>> = Object.freeze({
   open: ["unread", "acknowledged"],
@@ -3876,6 +3911,108 @@ class NotificationsController {
           quietHours: { ...input.quietHours },
         }),
       ),
+    );
+  }
+
+  @Get("/delivery")
+  @Header("cache-control", "no-store")
+  async getDelivery(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<NotificationDeliveryStatusResponse> {
+    assertNoRequestInput(request);
+    const user = await this.identity.resolve(request, "profile:read");
+    const status = await notificationsOperation(() =>
+      this.notifications.getDeliveryStatus(user.id),
+    );
+    return {
+      ...(status.email ? { email: { ...status.email } } : {}),
+      pushSubscriptions: status.pushSubscriptions.map((subscription) => ({
+        id: subscription.id,
+        state: subscription.state,
+        createdAt: subscription.createdAt.toISOString(),
+      })),
+      ...(status.pushPublicKey ? { pushPublicKey: status.pushPublicKey } : {}),
+    };
+  }
+
+  /** Starts confirming an address. The dispatcher emails the code; this request does not. */
+  @Put("/delivery/email")
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Header("cache-control", "no-store")
+  async requestEmail(@Req() request: AuthenticatedRequest): Promise<void> {
+    const user = await this.identity.resolve(request, "profile:write");
+    if (!validateRequestNotificationEmail(request.body)) {
+      throw new HttpException(
+        formatValidationErrors(validateRequestNotificationEmail.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const input = request.body as RequestNotificationEmailRequest;
+    await notificationsOperation(() =>
+      this.notifications.requestEmailConfirmation(user.id, input.address),
+    );
+  }
+
+  @Delete("/delivery/email")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header("cache-control", "no-store")
+  async removeEmail(@Req() request: AuthenticatedRequest): Promise<void> {
+    assertNoRequestInput(request);
+    const user = await this.identity.resolve(request, "profile:write");
+    await notificationsOperation(() => this.notifications.removeEmail(user.id));
+  }
+
+  @Post("/delivery/email/confirmation")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async confirmEmail(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<ConfirmNotificationEmailResult> {
+    const user = await this.identity.resolve(request, "profile:write");
+    if (!validateConfirmNotificationEmail(request.body)) {
+      throw new HttpException(
+        formatValidationErrors(validateConfirmNotificationEmail.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const input = request.body as ConfirmNotificationEmailRequest;
+    return {
+      result: await notificationsOperation(() =>
+        this.notifications.confirmEmail(user.id, input.code),
+      ),
+    };
+  }
+
+  @Post("/delivery/push-subscriptions")
+  @HttpCode(HttpStatus.CREATED)
+  @Header("cache-control", "no-store")
+  async addPushSubscription(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<NotificationPushSubscriptionCreated> {
+    const user = await this.identity.resolve(request, "profile:write");
+    if (!validateAddNotificationPushSubscription(request.body)) {
+      throw new HttpException(
+        formatValidationErrors(validateAddNotificationPushSubscription.errors),
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const input = request.body as AddNotificationPushSubscriptionRequest;
+    return notificationsOperation(() =>
+      this.notifications.addPushSubscription(user.id, input.endpoint),
+    );
+  }
+
+  @Delete("/delivery/push-subscriptions/:subscriptionId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Header("cache-control", "no-store")
+  async removePushSubscription(
+    @Req() request: AuthenticatedRequest,
+    @Param("subscriptionId") subscriptionId: string,
+  ): Promise<void> {
+    assertNoRequestInput(request);
+    const user = await this.identity.resolve(request, "profile:write");
+    await notificationsOperation(() =>
+      this.notifications.removePushSubscription(user.id, subscriptionId),
     );
   }
 

@@ -220,6 +220,18 @@ function profileAnswer() {
 }
 
 const validValues: Record<FoundationResponseSchemaName, unknown> = {
+  NotificationDeliveryStatus: {
+    email: { address: "person@example.com", state: "verified", codePending: false },
+    pushSubscriptions: [
+      {
+        id: "019b4e12-7ea3-7c36-9357-aea35ab542cc",
+        state: "active",
+        createdAt: "2026-10-22T12:00:00.000Z",
+      },
+    ],
+  },
+  ConfirmNotificationEmailResult: { result: "verified" },
+  NotificationPushSubscriptionCreated: { id: "019b4e12-7ea3-7c36-9357-aea35ab542cc" },
   CanonicalJobDetail: {
     id: "00000000-0000-7000-8000-000000000002",
     company: { id: "00000000-0000-7000-8000-000000000003", name: "Synthetic" },

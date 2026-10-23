@@ -9,6 +9,9 @@ export type FoundationResponseSchemaName =
   | "EntitlementSummary"
   | "BillingSessionLink"
   | "BillingSubscriptionSync"
+  | "NotificationDeliveryStatus"
+  | "ConfirmNotificationEmailResult"
+  | "NotificationPushSubscriptionCreated"
   | "NotificationInboxPage"
   | "NotificationItem"
   | "NotificationPreferences"
@@ -44,6 +47,12 @@ const validators = new Map<
   ["EntitlementSummary", compileComponentValidator("EntitlementSummary")],
   ["BillingSessionLink", compileComponentValidator("BillingSessionLink")],
   ["BillingSubscriptionSync", compileComponentValidator("BillingSubscriptionSync")],
+  ["NotificationDeliveryStatus", compileComponentValidator("NotificationDeliveryStatus")],
+  ["ConfirmNotificationEmailResult", compileComponentValidator("ConfirmNotificationEmailResult")],
+  [
+    "NotificationPushSubscriptionCreated",
+    compileComponentValidator("NotificationPushSubscriptionCreated"),
+  ],
   ["NotificationInboxPage", compileComponentValidator("NotificationInboxPage")],
   ["NotificationItem", compileComponentValidator("NotificationItem")],
   ["NotificationPreferences", compileComponentValidator("NotificationPreferences")],

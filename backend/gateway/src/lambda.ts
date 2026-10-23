@@ -11,6 +11,7 @@ import {
 import { nativeMaterialDisposalFromEnvironment } from "./native-material-disposal-runtime.js";
 import "reflect-metadata";
 import { randomBytes } from "node:crypto";
+import { ApplicationEventOutbox } from "@ai-job-apply/applications-service";
 import {
   type AccessTokenVerifier,
   AuthenticationError,
@@ -55,12 +56,17 @@ import {
   PrivateSavedPageCapturesService,
   SavedJobsService,
 } from "@ai-job-apply/matching-service";
+import {
+  NotificationsService,
+  PostgresDeliveryStore,
+  PostgresNotificationsStore,
+} from "@ai-job-apply/notifications-service";
 import { createLogger, initializeTelemetry } from "@ai-job-apply/observability";
 import {
   createDatabase,
+  createProfileSectionStore,
   loadCandidateRightsPolicyIfConfigured,
   PostgresProfileStore,
-  createProfileSectionStore,
   PostgresRestrictedAnswerVaultStore,
   PostgresUgcContributionConsentStore,
   resolveLambdaDatabaseUrl,
@@ -89,20 +95,15 @@ import {
   nativeMaterialLocationsFromEnvironment,
   nativeResumeLocationsFromEnvironment,
 } from "./native-material-location-runtime.js";
+import { withApplicationEventFeed } from "./notifications-feed.js";
 import { LambdaOriginalResumeClient } from "./original-resume-client.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
 import { KmsRestrictedAnswerCipher } from "./restricted-answer-kms-cipher.js";
 import { resumeLimitsFromEntitlements } from "./resume-limits.js";
-import {
-  NotificationsService,
-  PostgresNotificationsStore,
-} from "@ai-job-apply/notifications-service";
-import { ApplicationEventOutbox } from "@ai-job-apply/applications-service";
-import { withApplicationEventFeed } from "./notifications-feed.js";
-import { createStripeBillingGateway } from "./stripe-billing.js";
 import { LambdaResumeTailoringClient } from "./resume-tailoring-client.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
 import { SqsOutboxNudgePublisher } from "./sqs-outbox-nudge-publisher.js";
+import { createStripeBillingGateway } from "./stripe-billing.js";
 
 type JwtClaimValue = string | number | boolean | string[] | undefined;
 
@@ -207,7 +208,14 @@ const PROTECTED_EXACT_ROUTES = new Set([
   "GET /v1/entitlements",
   "GET /v1/notifications/preferences",
   "PUT /v1/notifications/preferences",
+  "GET /v1/notifications/delivery",
+  "PUT /v1/notifications/delivery/email",
+  "DELETE /v1/notifications/delivery/email",
+  "POST /v1/notifications/delivery/email/confirmation",
+  "POST /v1/notifications/delivery/push-subscriptions",
 ]);
+const NOTIFICATION_PUSH_SUBSCRIPTION_PATH_PATTERN =
+  /^\/v1\/notifications\/delivery\/push-subscriptions\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const NOTIFICATION_COMMAND_PATH_PATTERN =
   /^\/v1\/notifications\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/(?:acknowledgement|dismissal)$/;
 const OPERATION_PATH_PATTERN =
@@ -388,6 +396,9 @@ function allowedRoute(
     return { acceptsBody: false, protected: true, acceptsNotificationsQuery: true };
   }
   if (method === "POST" && NOTIFICATION_COMMAND_PATH_PATTERN.test(path)) {
+    return { acceptsBody: false, protected: true };
+  }
+  if (method === "DELETE" && NOTIFICATION_PUSH_SUBSCRIPTION_PATH_PATTERN.test(path)) {
     return { acceptsBody: false, protected: true };
   }
   if (PROTECTED_EXACT_ROUTES.has(`${method} ${path}`)) {
@@ -1271,7 +1282,12 @@ async function createConfiguredApplication(
   });
   const notificationsService =
     process.env.NOTIFICATIONS_ENABLED === "true"
-      ? new NotificationsService(new PostgresNotificationsStore(database.client))
+      ? new NotificationsService(new PostgresNotificationsStore(database.client), {
+          delivery: new PostgresDeliveryStore(database.client),
+          ...(process.env.NOTIFICATIONS_PUSH_PUBLIC_KEY
+            ? { pushPublicKey: process.env.NOTIFICATIONS_PUSH_PUBLIC_KEY }
+            : {}),
+        })
       : undefined;
   const notifications = notificationsService
     ? withApplicationEventFeed({
