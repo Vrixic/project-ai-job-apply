@@ -1,13 +1,9 @@
-import { createHash } from "node:crypto";
-import manifest from "@ai-job-apply/database-migrations/restore-manifest.json" with {
-  type: "json",
-};
 import {
-  parseRestoreManifest,
   type RestoreSqlClient,
   type RestoreVerificationResult,
   verifyRestoreDatabase,
 } from "@ai-job-apply/database-migrations/restore-verifier";
+import { loadApplicationTransitionTargetManifest } from "@ai-job-apply/database-migrations/retained-restore-manifest";
 import { createDatabase, type DatabaseHandle } from "@ai-job-apply/profile-service";
 import { verifyReconciledCandidateDeletionCopyWithDocumentContinuity } from "./candidate-deletion-reconciled-copy.js";
 import {
@@ -24,18 +20,12 @@ import {
 import { CURRENT_RESTORE_MANIFEST_SHA256 } from "./candidate-deletion-restore-contract.js";
 import { resolveReconciledCopyDatabaseUrl } from "./candidate-deletion-restore-database.js";
 
-// JSON bundling preserves values, not original source whitespace. The artifact
-// builder checks the raw source hash; this separate checksum pins embedded values.
-if (
-  createHash("sha256").update(JSON.stringify(manifest)).digest("hex") !==
-  "7d3af2bd511e065db036efe2465e9218415d75f0970e5931e95ab54fd80794c4"
-) {
+// The retained isolated-recovery runtime stays pinned to its own embedded, hash-checked manifest
+// (CURRENT_RESTORE_MANIFEST_SHA256); it never follows the advancing live manifest.
+const manifestSource = loadApplicationTransitionTargetManifest();
+if (manifestSource.sha256 !== CURRENT_RESTORE_MANIFEST_SHA256) {
   throw new Error("CandidateDeletionReconciledCopyManifestRejected");
 }
-const manifestSource = Object.freeze({
-  manifest: parseRestoreManifest(manifest),
-  sha256: CURRENT_RESTORE_MANIFEST_SHA256,
-});
 type Environment = Readonly<Record<string, string | undefined>>;
 type Opened = { database: DatabaseHandle; close(): Promise<void> };
 export interface ReconciledCopyContext {
