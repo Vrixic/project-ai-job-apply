@@ -94,6 +94,7 @@ import {
   SavedJobLimitError,
   type SavedJobs,
 } from "@ai-job-apply/matching-service";
+import { NotificationsError } from "@ai-job-apply/notifications-service";
 import type {
   ProfileSectionStore,
   ProfileStore,
@@ -124,16 +125,15 @@ import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { NotificationsError } from "@ai-job-apply/notifications-service";
 import { type NotificationsApi, privacySafeRequestFailure } from "./app.module.js";
 import { createGatewayApplication } from "./application.js";
-import { type StripeBillingGateway, createStripeBillingGateway } from "./stripe-billing.js";
 import { createApplicationsRuntime, loadFieldDefinitions } from "./applications-runtime.js";
 import {
   type AuthorizedHttpApiEvent,
   createApiGatewayHandler,
   createInvocationPrincipalBridge,
 } from "./lambda.js";
+import { createStripeBillingGateway, type StripeBillingGateway } from "./stripe-billing.js";
 import type { TrustReviewerAssignment } from "./trust-reviewer-authority.js";
 
 const FRESH_ID_TOKEN_PROOF = "fresh-header-segment.fresh-payload-segment.fresh-signature-segment";
@@ -6517,6 +6517,31 @@ describe("Notifications routes (D5-001)", () => {
         calls.push(["updatePreferences", ...args]);
         return preferences(1);
       },
+      async getDeliveryStatus(...args) {
+        calls.push(["getDeliveryStatus", ...args]);
+        return {
+          email: { address: "person@example.com", state: "verified" as const, codePending: false },
+          pushSubscriptions: [{ id: ITEM, state: "active" as const, createdAt: at }],
+          pushPublicKey: "B".repeat(87),
+        };
+      },
+      async requestEmailConfirmation(...args) {
+        calls.push(["requestEmailConfirmation", ...args]);
+      },
+      async confirmEmail(...args) {
+        calls.push(["confirmEmail", ...args]);
+        return "verified" as const;
+      },
+      async removeEmail(...args) {
+        calls.push(["removeEmail", ...args]);
+      },
+      async addPushSubscription(...args) {
+        calls.push(["addPushSubscription", ...args]);
+        return { id: ITEM };
+      },
+      async removePushSubscription(...args) {
+        calls.push(["removePushSubscription", ...args]);
+      },
       ...overrides,
     };
     return { notifications, calls };
@@ -6733,6 +6758,178 @@ describe("Notifications routes (D5-001)", () => {
       });
       expect(response.statusCode).toBe(400);
     }
+    await app.close();
+  });
+
+  it("serves the delivery status, email confirmation and push subscriptions", async () => {
+    const { notifications, calls } = fake();
+    const { app, issuer } = await createApp({ notifications });
+    const token = await issuer.issue("notif-delivery", { scope: "profile:read profile:write" });
+    const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+
+    const status = await app.inject({ method: "GET", url: "/v1/notifications/delivery", headers });
+    expect(status.statusCode).toBe(200);
+    expect(status.headers["cache-control"]).toBe("no-store");
+    expect(status.json()).toEqual({
+      email: { address: "person@example.com", state: "verified", codePending: false },
+      pushSubscriptions: [{ id: ITEM, state: "active", createdAt: at.toISOString() }],
+      pushPublicKey: "B".repeat(87),
+    });
+
+    const requested = await app.inject({
+      method: "PUT",
+      url: "/v1/notifications/delivery/email",
+      headers,
+      payload: JSON.stringify({ address: "person@example.com" }),
+    });
+    expect(requested.statusCode).toBe(202);
+    expect(requested.body).toBe("");
+
+    const confirmed = await app.inject({
+      method: "POST",
+      url: "/v1/notifications/delivery/email/confirmation",
+      headers,
+      payload: JSON.stringify({ code: "123456" }),
+    });
+    expect(confirmed.statusCode).toBe(200);
+    expect(confirmed.json()).toEqual({ result: "verified" });
+
+    const added = await app.inject({
+      method: "POST",
+      url: "/v1/notifications/delivery/push-subscriptions",
+      headers,
+      payload: JSON.stringify({ endpoint: "https://fcm.googleapis.com/fcm/send/abc" }),
+    });
+    expect(added.statusCode).toBe(201);
+    expect(added.json()).toEqual({ id: ITEM });
+
+    const removedPush = await app.inject({
+      method: "DELETE",
+      url: `/v1/notifications/delivery/push-subscriptions/${ITEM}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(removedPush.statusCode).toBe(204);
+    const removedEmail = await app.inject({
+      method: "DELETE",
+      url: "/v1/notifications/delivery/email",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(removedEmail.statusCode).toBe(204);
+
+    expect(calls.map((call) => call[0])).toEqual([
+      "getDeliveryStatus",
+      "requestEmailConfirmation",
+      "confirmEmail",
+      "addPushSubscription",
+      "removePushSubscription",
+      "removeEmail",
+    ]);
+    expect(calls[1]?.slice(1)).toEqual([expect.any(String), "person@example.com"]);
+    expect(calls[3]?.[2]).toBe("https://fcm.googleapis.com/fcm/send/abc");
+    await app.close();
+  });
+
+  it("requires the right scope for delivery routes and registers none when disabled", async () => {
+    const { notifications } = fake();
+    const { app, issuer } = await createApp({ notifications });
+    const readOnly = await issuer.issue("notif-delivery-ro", { scope: "profile:read" });
+    const headers = { authorization: `Bearer ${readOnly}`, "content-type": "application/json" };
+    expect(
+      (await app.inject({ method: "GET", url: "/v1/notifications/delivery", headers })).statusCode,
+    ).toBe(200);
+    for (const [method, url, payload] of [
+      ["PUT", "/v1/notifications/delivery/email", { address: "person@example.com" }],
+      ["POST", "/v1/notifications/delivery/email/confirmation", { code: "123456" }],
+      [
+        "POST",
+        "/v1/notifications/delivery/push-subscriptions",
+        { endpoint: "https://fcm.googleapis.com/x/y" },
+      ],
+    ] as const) {
+      const response = await app.inject({ method, url, headers, payload: JSON.stringify(payload) });
+      expect(response.statusCode).toBe(403);
+    }
+    expect(
+      (await app.inject({ method: "GET", url: "/v1/notifications/delivery" })).statusCode,
+    ).toBe(401);
+    await app.close();
+
+    const off = await createApp();
+    const token = await off.issuer.issue("notif-delivery-off", { scope: "profile:read" });
+    const missing = await off.app.inject({
+      method: "GET",
+      url: "/v1/notifications/delivery",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(missing.statusCode).toBe(404);
+    await off.app.close();
+  });
+
+  it("rejects malformed delivery input and maps service errors", async () => {
+    const { notifications } = fake({
+      async requestEmailConfirmation(_user, address) {
+        if (address === "limited@example.com") throw new NotificationsError("rate_limited");
+        if (address === "bad@example.com") throw new NotificationsError("invalid_request");
+      },
+      async addPushSubscription() {
+        throw new NotificationsError("limit_reached");
+      },
+      async removePushSubscription() {
+        throw new NotificationsError("not_found");
+      },
+      async removeEmail() {
+        throw new NotificationsError("not_found");
+      },
+    });
+    const { app, issuer } = await createApp({ notifications });
+    const token = await issuer.issue("notif-delivery-err", { scope: "profile:read profile:write" });
+    const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+    const send = (method: "PUT" | "POST", url: string, payload: unknown) =>
+      app.inject({ method, url, headers, payload: JSON.stringify(payload) });
+
+    for (const bad of [{}, { address: 5 }, { address: "short" }, { address: "a@b.co", extra: 1 }])
+      expect((await send("PUT", "/v1/notifications/delivery/email", bad)).statusCode).toBe(400);
+    for (const bad of [{}, { code: "12345" }, { code: "12345a" }, { code: 123456 }])
+      expect(
+        (await send("POST", "/v1/notifications/delivery/email/confirmation", bad)).statusCode,
+      ).toBe(400);
+    for (const bad of [{}, { endpoint: 4 }, { endpoint: "x" }])
+      expect(
+        (await send("POST", "/v1/notifications/delivery/push-subscriptions", bad)).statusCode,
+      ).toBe(400);
+
+    const limited = await send("PUT", "/v1/notifications/delivery/email", {
+      address: "limited@example.com",
+    });
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json()).toMatchObject({ code: "rate_limited" });
+    expect(
+      (await send("PUT", "/v1/notifications/delivery/email", { address: "bad@example.com" }))
+        .statusCode,
+    ).toBe(400);
+    const full = await send("POST", "/v1/notifications/delivery/push-subscriptions", {
+      endpoint: "https://fcm.googleapis.com/fcm/send/abc",
+    });
+    expect(full.statusCode).toBe(409);
+    expect(full.json()).toMatchObject({ code: "limit_reached" });
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/v1/notifications/delivery/push-subscriptions/${ITEM}`,
+          headers: { authorization: `Bearer ${token}` },
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: "/v1/notifications/delivery/email",
+          headers: { authorization: `Bearer ${token}` },
+        })
+      ).statusCode,
+    ).toBe(404);
     await app.close();
   });
 });

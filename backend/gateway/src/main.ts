@@ -3,6 +3,7 @@ import { nativeMaterialAvailabilityFromEnvironment } from "./native-material-ava
 import { nativeMaterialDisposalFromEnvironment } from "./native-material-disposal-runtime.js";
 import "reflect-metadata";
 import {
+  ApplicationEventOutbox,
   createApplicationsDatabase,
   defaultFieldDefinitions,
 } from "@ai-job-apply/applications-service";
@@ -40,15 +41,20 @@ import {
   SavedJobsService,
 } from "@ai-job-apply/matching-service";
 import {
+  NotificationsService,
+  PostgresDeliveryStore,
+  PostgresNotificationsStore,
+} from "@ai-job-apply/notifications-service";
+import {
   createLogger,
   shutdownTelemetry,
   startLogDeliveryHeartbeat,
 } from "@ai-job-apply/observability";
 import {
   createDatabase,
+  createProfileSectionStore,
   loadCandidateRightsPolicyIfConfigured,
   PostgresProfileStore,
-  createProfileSectionStore,
   PostgresRestrictedAnswerVaultStore,
   PostgresUgcContributionConsentStore,
 } from "@ai-job-apply/profile-service";
@@ -68,19 +74,14 @@ import {
   nativeMaterialLocationsFromEnvironment,
   nativeResumeLocationsFromEnvironment,
 } from "./native-material-location-runtime.js";
+import { withApplicationEventFeed } from "./notifications-feed.js";
 import { LambdaOriginalResumeClient } from "./original-resume-client.js";
 import { PostgresProfilePrivateCaptureAccountStatus } from "./private-capture-account-status.js";
 import { KmsRestrictedAnswerCipher } from "./restricted-answer-kms-cipher.js";
 import { resumeLimitsFromEntitlements } from "./resume-limits.js";
-import {
-  NotificationsService,
-  PostgresNotificationsStore,
-} from "@ai-job-apply/notifications-service";
-import { ApplicationEventOutbox } from "@ai-job-apply/applications-service";
-import { withApplicationEventFeed } from "./notifications-feed.js";
-import { createStripeBillingGateway } from "./stripe-billing.js";
 import { LambdaResumeTailoringClient } from "./resume-tailoring-client.js";
 import { JobCatalogSavedJobResolver } from "./saved-job-catalog-resolver.js";
+import { createStripeBillingGateway } from "./stripe-billing.js";
 
 const config = loadBackendConfig();
 const logger = createLogger({
@@ -167,7 +168,12 @@ const stripeBilling = createStripeBillingGateway({
 });
 const notificationsService =
   process.env.NOTIFICATIONS_ENABLED === "true"
-    ? new NotificationsService(new PostgresNotificationsStore(database.client))
+    ? new NotificationsService(new PostgresNotificationsStore(database.client), {
+        delivery: new PostgresDeliveryStore(database.client),
+        ...(process.env.NOTIFICATIONS_PUSH_PUBLIC_KEY
+          ? { pushPublicKey: process.env.NOTIFICATIONS_PUSH_PUBLIC_KEY }
+          : {}),
+      })
     : undefined;
 const notifications = notificationsService
   ? withApplicationEventFeed({
