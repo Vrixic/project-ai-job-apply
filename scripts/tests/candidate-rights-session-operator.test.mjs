@@ -629,6 +629,70 @@ test("D3 receipts require all Applications coverage while permitting empty D2 ca
   );
 });
 
+test("D4 Notifications inventory is an exact opt-in that always rides with Applications", () => {
+  const selected = { ...options(), ApplicationsInventory: true, NotificationsInventory: true };
+  assert.deepEqual(validatePlanOptions(selected), selected);
+  assert.deepEqual(validateSessionCommand({ action: "plan", options: selected }), {
+    action: "plan",
+    options: selected,
+  });
+  // Notifications alone, or any non-true value, is refused: D4 is D3 plus Notifications.
+  assert.throws(
+    () => validatePlanOptions({ ...options(), NotificationsInventory: true }),
+    /invalid_plan_options/u,
+  );
+  for (const invalid of [false, "true", 1, null])
+    assert.throws(
+      () => validatePlanOptions({ ...selected, NotificationsInventory: invalid }),
+      /invalid_plan_options/u,
+    );
+});
+
+test("D4 receipts need the seeded Notifications records and permit empty optional ones", () => {
+  const completed = receipt();
+  for (const key of Object.keys(completed.ExportCoverage))
+    if (key !== "valid") completed.ExportCoverage[key] = 0;
+  for (const name of [
+    "applicationCount",
+    "packetCount",
+    "approvalCount",
+    "attemptCount",
+    "historyCount",
+    "notificationsPreferencesCount",
+    "notificationsPushSubscriptionCount",
+  ])
+    completed.ExportCoverage[name] = 1;
+  for (const name of [
+    "notificationsEmailDestinationCount",
+    "notificationsInboxCount",
+    "notificationsDeliveryCount",
+  ])
+    completed.ExportCoverage[name] = 0;
+  assert.deepEqual(
+    sanitizeOperatorResult("execute", completed, false, false, true, true),
+    completed,
+  );
+  // Without the flag the extra names are unknown keys.
+  assert.throws(
+    () => sanitizeOperatorResult("execute", completed, false, false, true),
+    /operator_result_invalid/u,
+  );
+  for (const name of ["notificationsPreferencesCount", "notificationsPushSubscriptionCount"]) {
+    const partial = structuredClone(completed);
+    partial.ExportCoverage[name] = 0;
+    assert.throws(
+      () => sanitizeOperatorResult("execute", partial, false, false, true, true),
+      /operator_result_invalid/u,
+    );
+  }
+  const leaking = structuredClone(completed);
+  leaking.ExportCoverage.notificationsEndpoint = "https://fcm.googleapis.com/fcm/send/secret";
+  assert.throws(
+    () => sanitizeOperatorResult("execute", leaking, false, false, true, true),
+    /operator_result_invalid/u,
+  );
+});
+
 test("D3 failure reports only fixed Applications count names", () => {
   assert.deepEqual(sanitizeMissingCoverage(["packetCount"], true), ["packetCount"]);
   assert.equal(sanitizeMissingCoverage(["packetCount"]), null);
@@ -659,7 +723,7 @@ test("PowerShell D3 policy selection is fixed to the accepted inventory and cano
     if($errors.Count){throw 'Parse failure'}
     $function=$ast.Find({param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Get-RightsSessionPolicy'},$false)
     . ([scriptblock]::Create($function.Extent.Text))
-    @((Get-RightsSessionPolicy $false),(Get-RightsSessionPolicy $true))|ConvertTo-Json -Compress`;
+    @((Get-RightsSessionPolicy $false),(Get-RightsSessionPolicy $true),(Get-RightsSessionPolicy $true $true))|ConvertTo-Json -Compress`;
   const run = spawnSync(
     process.platform === "win32" ? "pwsh.exe" : "pwsh",
     ["-NoProfile", "-Command", script],
@@ -672,6 +736,7 @@ test("PowerShell D3 policy selection is fixed to the accepted inventory and cano
   for (const [index, version] of [
     "d2-development-synthetic-v1",
     "d3-development-synthetic-v1",
+    "d4-development-synthetic-v1",
   ].entries()) {
     const policy = JSON.parse(
       await readFile(join(root, `docs/security/policies/candidate-rights.${version}.json`), "utf8"),

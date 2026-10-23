@@ -132,7 +132,11 @@ $terraformInspectionDataDirectory = Join-Path $terraformRoot "development-candid
 $stateKey = "platform.tfstate"
 $utf8WithoutBom = New-Object Text.UTF8Encoding($false)
 $requiredOwners = "identity,profile,documents,jobs,matching,billing,trust"
-if ($ExpectedPolicyVersion -ceq 'd3-development-synthetic-v1') { $requiredOwners += ',applications' }
+# D4 is D3 plus Notifications (ADR-056), so every Applications gate applies to both.
+$applicationsPolicies = @('d3-development-synthetic-v1', 'd4-development-synthetic-v1')
+$notificationsPolicy = 'd4-development-synthetic-v1'
+if ($ExpectedPolicyVersion -cin $applicationsPolicies) { $requiredOwners += ',applications' }
+if ($ExpectedPolicyVersion -ceq $notificationsPolicy) { $requiredOwners += ',notifications' }
 $tokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_ACCESS_TOKEN"
 $idTokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_ID_TOKEN"
 $refreshTokenEnvironmentName = "CANDIDATE_RIGHTS_ACCEPTANCE_REFRESH_TOKEN"
@@ -521,7 +525,7 @@ function Get-RuntimeBoundary {
 
 function Assert-ApplicationsRightsRuntime {
   param([Parameter(Mandatory)][object]$Runtime)
-  if ($ExpectedPolicyVersion -cne 'd3-development-synthetic-v1') { return }
+  if ($ExpectedPolicyVersion -cnotin @('d3-development-synthetic-v1', 'd4-development-synthetic-v1')) { return }
   if ([string](Get-OptionalProperty $Runtime.Aliases.activity.Environment 'RESTRICTED_PACKET_EXPORT_ENABLED') -cne 'true') {
     throw 'D3 rights acceptance requires the private protected-packet export reader.'
   }
@@ -773,8 +777,11 @@ function Read-CandidateRightsExportHelperResult {
   }
   else {
     $countNames = if ($RestrictedAnswers) { @('activeValueCount','expiredValueCount','deletedTombstoneCount','revisedValueCount') } else { @('consentCount','contributionApprovalCount','contributionCount','privateCaptureCount','trustCaseCount','trustCaseEventCount') }
-    if (-not $RestrictedAnswers -and $ExpectedPolicyVersion -ceq 'd3-development-synthetic-v1') {
+    if (-not $RestrictedAnswers -and $ExpectedPolicyVersion -cin @('d3-development-synthetic-v1', 'd4-development-synthetic-v1')) {
       $countNames += @('applicationCount','packetCount','approvalCount','attemptCount','historyCount')
+    }
+    if (-not $RestrictedAnswers -and $ExpectedPolicyVersion -ceq 'd4-development-synthetic-v1') {
+      $countNames += @('notificationsPreferencesCount','notificationsEmailDestinationCount','notificationsPushSubscriptionCount','notificationsInboxCount','notificationsDeliveryCount')
     }
     $null = Assert-ExactPropertySet $result (@('valid') + $countNames) 'Candidate export verification'
     if ($result.valid -isnot [bool] -or $result.valid -ne $true) { throw 'Candidate export verification failed.' }
@@ -789,9 +796,38 @@ function Read-CandidateRightsExportHelperResult {
   return $result
 }
 
+# Generated-only Notifications records through the real candidate API: preferences (compare-and-set
+# on the current version) and one browser push subscription on an allow-listed push host. Email is
+# not seeded here, because confirmation sends mail; the PostgreSQL tests cover that table.
+function New-NotificationsFixture {
+  param([Parameter(Mandatory)][string]$Token)
+  $current = Invoke-CandidateApi GET '/notifications/preferences' $Token $null @{} @(200)
+  $version = [int]$current.Body.version
+  $preferences = [ordered]@{
+    expectedVersion = $version
+    emailEnabled = $false
+    pushEnabled = $false
+    quietHours = [ordered]@{ enabled = $false; startMinute = 1320; endMinute = 420; timeZone = 'UTC' }
+  }
+  $null = Invoke-CandidateApi PUT '/notifications/preferences' $Token $preferences @{} @(200)
+  $endpoint = "https://fcm.googleapis.com/fcm/send/generated-rights-acceptance-$([guid]::NewGuid().ToString('N'))"
+  $null = Invoke-CandidateApi POST '/notifications/delivery/push-subscriptions' $Token ([ordered]@{ endpoint = $endpoint }) @{} @(201)
+}
+
 function Assert-CandidateRightsAcceptanceCoverage {
   param([Parameter(Mandatory)][object]$Coverage)
-  if ($ExpectedPolicyVersion -ceq 'd3-development-synthetic-v1') {
+  if ($ExpectedPolicyVersion -ceq 'd4-development-synthetic-v1') {
+    # The fixed fixture creates these two records through the real API before the export is requested.
+    $missingNotifications = @(
+      foreach ($name in @('notificationsPreferencesCount','notificationsPushSubscriptionCount')) {
+        if ($Coverage.$name -lt 1) { $name }
+      }
+    )
+    if ($missingNotifications.Count) {
+      throw "D4 acceptance stopped before account deletion: the Notifications export section lacks $($missingNotifications -join ', ')."
+    }
+  }
+  if ($ExpectedPolicyVersion -cin @('d3-development-synthetic-v1', 'd4-development-synthetic-v1')) {
     $missing = @(
       foreach ($name in @('applicationCount','packetCount','approvalCount','attemptCount','historyCount')) {
         if ($Coverage.$name -lt 1) { $name }
@@ -1070,7 +1106,7 @@ function Invoke-FixedLifecycleReported {
   catch {
     $message = [string]$_.Exception.Message
     # Preserve the reviewed pre-deletion refusals that the session bridge already classifies.
-    if ($message.StartsWith('D2 acceptance stopped before account deletion:') -or $message.StartsWith('D3 acceptance stopped before account deletion:') -or
+    if ($message.StartsWith('D2 acceptance stopped before account deletion:') -or $message.StartsWith('D3 acceptance stopped before account deletion:') -or $message.StartsWith('D4 acceptance stopped before account deletion:') -or
         $message -like 'The disposable identity is not an exact current*' -or $message -ceq 'Acceptance requires clean main exactly matching origin/main and SourceSha.') { throw }
     $step = if ($script:RightsStep -cin $script:RightsLifecycleSteps) { $script:RightsStep } else { 'preflight' }
     # Nothing has been requested yet: keep the original fixed prerequisite message.
@@ -1093,6 +1129,7 @@ function Invoke-FixedLifecycle {
   $script:RightsStep = 'resume-fixture'
   $resumeFixture = if ($ResumeFixture) { New-RightsResumeFixture $token $Boundary.Resume } else { $null }
   $restrictedSnapshot = if ($RestrictedAnswerFixture) { @(New-RestrictedAnswerFixture $token) } else { $null }
+  if ($ExpectedPolicyVersion -ceq 'd4-development-synthetic-v1') { New-NotificationsFixture $token }
   $exportKey = "rights-export-$([guid]::NewGuid().ToString('N'))"
   $exportBody = [ordered]@{ format = 'candidate-data-export-v1' }
   $script:RightsStep = 'export-request'
@@ -1169,7 +1206,7 @@ function Invoke-FixedLifecycle {
     $receipt.schemaVersion = 3
     $receipt.resumeCoverage = $script:VerifiedResumeCoverage
   }
-  if ($ExpectedPolicyVersion -ceq 'd3-development-synthetic-v1') {
+  if ($ExpectedPolicyVersion -cin @('d3-development-synthetic-v1', 'd4-development-synthetic-v1')) {
     $null = Assert-CandidateRightsAcceptanceCoverage $script:VerifiedExportCoverage
     $receipt.applicationsExportCoverage = $script:VerifiedExportCoverage
   }
@@ -1191,7 +1228,7 @@ function Read-AggregateReceipt {
     if ([int]$receipt.schemaVersion -ne 3) { throw 'The reviewed receipt does not include the resume fixture.' }
     Assert-RightsResumeCoverage (Get-OptionalProperty $receipt 'resumeCoverage')
   }
-  if ($ExpectedPolicyVersion -ceq 'd3-development-synthetic-v1') {
+  if ($ExpectedPolicyVersion -cin @('d3-development-synthetic-v1', 'd4-development-synthetic-v1')) {
     $coverage = Get-OptionalProperty $receipt 'applicationsExportCoverage'
     if ($null -eq $coverage) { throw 'The reviewed receipt omits Applications export coverage.' }
     $validated = Read-CandidateRightsExportHelperResult ($coverage | ConvertTo-Json -Compress)

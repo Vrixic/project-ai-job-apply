@@ -5,7 +5,7 @@ function Assert-RestrictedFixtureRuntime {
   $gatewayKey = [string](Get-OptionalProperty $Runtime.Aliases.gateway.Environment 'RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN')
   $activityKey = [string](Get-OptionalProperty $Runtime.Aliases.activity.Environment 'RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN')
   $exportEnabled = [string](Get-OptionalProperty $Runtime.Aliases.activity.Environment 'RESTRICTED_ANSWER_EXPORT_ENABLED')
-  if ($ExpectedPolicyVersion -cnotin @('d2-development-synthetic-v1','d3-development-synthetic-v1') -or
+  if ($ExpectedPolicyVersion -cnotin @('d2-development-synthetic-v1','d3-development-synthetic-v1','d4-development-synthetic-v1') -or
       $gatewayKey -cnotmatch "^arn:aws:kms:us-east-2:${ExpectedAccountId}:key/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" -or
       $activityKey -cne $gatewayKey -or $exportEnabled -cne 'enabled') {
     throw 'The restricted fixture requires the exact deployed vault and export key bindings.'

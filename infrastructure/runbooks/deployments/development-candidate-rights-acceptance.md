@@ -32,6 +32,16 @@ For the in-memory session helper, set `ApplicationsInventory: true` in the exact
 This selects the fixed D3 policy/digest and eight owners; it accepts no caller-selected policy,
 scope or destination. D2 remains the default. OAuth scopes and memory-only token handling are unchanged.
 
+For D4 (Notifications, [ADR-056](../../../docs/adr/056-notification-email-and-push-delivery.md)), select the
+[D4 synthetic policy](../../../docs/security/policies/candidate-rights.d4-development-synthetic-v1.json) with
+its canonical SHA-256 and the owner inventory ending in `trust,applications,notifications`. In the session
+helper set both `ApplicationsInventory: true` and `NotificationsInventory: true` (Notifications alone is
+refused). D4 keeps every D3 gate and the receipt binds nine owners. Before requesting the export, the fixed
+fixture saves the disposable candidate's notification preferences and registers one push subscription on an
+allow-listed push host through the real candidate API, and the acceptance refuses to delete the account unless
+the export lists both. It deliberately does not seed an email address, because confirmation sends mail; the
+PostgreSQL tests cover that table. The Gateway and migrations must already serve the Notifications routes.
+
 ## Read-only restricted-answer artifact acceptance (D3-029/D3-030)
 
 The opt-in `node scripts/lib/candidate-rights-export.mjs --restricted-answer-acceptance`

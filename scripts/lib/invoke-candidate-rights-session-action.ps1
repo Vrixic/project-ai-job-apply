@@ -35,7 +35,14 @@ function ConvertTo-SafeSessionFailure {
   return [pscustomobject]$failure
 }
 function Get-RightsSessionPolicy {
-  param([bool]$ApplicationsInventory)
+  param([bool]$ApplicationsInventory, [bool]$NotificationsInventory = $false)
+  if ($NotificationsInventory) {
+    return @{
+      ExpectedPolicyVersion = 'd4-development-synthetic-v1'
+      ReviewedPolicySha256 = '91d1b73e05191be5247a4708274a879c16593ddb5c6933db174fdd83f2385001'
+      ExpectedOwnerInventory = 'identity,profile,documents,jobs,matching,billing,trust,applications,notifications'
+    }
+  }
   if ($ApplicationsInventory) {
     return @{
       ExpectedPolicyVersion = 'd3-development-synthetic-v1'
@@ -61,14 +68,17 @@ try {
   $restricted = $null -ne $request.options.PSObject.Properties['RestrictedAnswerFixture']
   $resume = $null -ne $request.options.PSObject.Properties['ResumeFixture']
   $applications = $null -ne $request.options.PSObject.Properties['ApplicationsInventory']
+  $notifications = $null -ne $request.options.PSObject.Properties['NotificationsInventory']
   $expectedNames = @('ExpectedAccountId','ReviewedZeroDriftPlanSha256','SourceSha','StateBucket','ZeroDriftPlanPath')
   if ($restricted) { $expectedNames += 'RestrictedAnswerFixture' }
   if ($resume) { $expectedNames += 'ResumeFixture' }
   if ($applications) { $expectedNames += 'ApplicationsInventory' }
+  if ($notifications) { $expectedNames += 'NotificationsInventory' }
   $expectedOptionKeys = @($expectedNames | Sort-Object) -join ','
   if ($optionKeys -cne $expectedOptionKeys -or ($restricted -and ($request.options.RestrictedAnswerFixture -isnot [bool] -or $request.options.RestrictedAnswerFixture -ne $true)) -or
       ($resume -and ($request.options.ResumeFixture -isnot [bool] -or $request.options.ResumeFixture -ne $true)) -or
-      ($applications -and ($request.options.ApplicationsInventory -isnot [bool] -or $request.options.ApplicationsInventory -ne $true))) { throw 'Invalid session options.' }
+      ($applications -and ($request.options.ApplicationsInventory -isnot [bool] -or $request.options.ApplicationsInventory -ne $true)) -or
+      ($notifications -and (-not $applications -or $request.options.NotificationsInventory -isnot [bool] -or $request.options.NotificationsInventory -ne $true))) { throw 'Invalid session options.' }
   $parameters = @{
     Action = $(if ($request.action -ceq 'plan') { 'Plan' } else { 'Execute' })
     ExpectedExportLifetimeSeconds = 3600
@@ -77,7 +87,7 @@ try {
     ExpectedRecentAuthMaxAgeSeconds = 900
     ExpectedSubprocessorInventory = 'none'
   }
-  $policy = Get-RightsSessionPolicy $applications
+  $policy = Get-RightsSessionPolicy $applications $notifications
   foreach ($name in $policy.Keys) { $parameters[$name] = $policy[$name] }
   foreach ($name in @('ExpectedAccountId', 'StateBucket', 'SourceSha', 'ZeroDriftPlanPath', 'ReviewedZeroDriftPlanSha256')) {
     if ($request.options.$name -isnot [string]) { throw 'Invalid session option type.' }

@@ -18,6 +18,9 @@ const REJECTED = Object.freeze({ valid: false, error: "CandidateRightsExportReje
 const READY = Object.freeze({ ready: true });
 const D2_POLICY_VERSION = "d2-development-synthetic-v1";
 const D3_POLICY_VERSION = "d3-development-synthetic-v1";
+// D4 is D3 plus the Notifications owner (ADR-056); everything D3 checks applies to it.
+const D4_POLICY_VERSION = "d4-development-synthetic-v1";
+const APPLICATIONS_POLICIES = [D3_POLICY_VERSION, D4_POLICY_VERSION];
 const MAXIMUM_JSON_DEPTH = 32;
 let validateExport;
 
@@ -158,7 +161,7 @@ export function validateCandidateRightsExport(artifactBytes, expected) {
       reject();
     }
     if (
-      [D2_POLICY_VERSION, D3_POLICY_VERSION].includes(expected.expectedPolicyVersion) &&
+      [D2_POLICY_VERSION, ...APPLICATIONS_POLICIES].includes(expected.expectedPolicyVersion) &&
       (!Object.hasOwn(artifact.profile, "contributionConsents") ||
         !Object.hasOwn(artifact.jobs, "contributions") ||
         !Object.hasOwn(artifact.matching, "privateSavedPageCaptures") ||
@@ -166,7 +169,9 @@ export function validateCandidateRightsExport(artifactBytes, expected) {
     ) {
       reject();
     }
-    if (expected.expectedPolicyVersion === D3_POLICY_VERSION && !artifact.applications) reject();
+    if (APPLICATIONS_POLICIES.includes(expected.expectedPolicyVersion) && !artifact.applications)
+      reject();
+    if (expected.expectedPolicyVersion === D4_POLICY_VERSION && !artifact.notifications) reject();
     const contributions = artifact.jobs.contributions ?? [];
     return Object.freeze({
       valid: true,
@@ -177,13 +182,22 @@ export function validateCandidateRightsExport(artifactBytes, expected) {
       privateCaptureCount: artifact.matching.privateSavedPageCaptures?.length ?? 0,
       trustCaseCount: artifact.trust?.cases.length ?? 0,
       trustCaseEventCount: artifact.trust?.caseEvents.length ?? 0,
-      ...(expected.expectedPolicyVersion === D3_POLICY_VERSION
+      ...(APPLICATIONS_POLICIES.includes(expected.expectedPolicyVersion)
         ? {
             applicationCount: artifact.applications.applications.length,
             packetCount: artifact.applications.packets.length,
             approvalCount: artifact.applications.approvals.length,
             attemptCount: artifact.applications.attempts.length,
             historyCount: artifact.applications.history.length,
+          }
+        : {}),
+      ...(expected.expectedPolicyVersion === D4_POLICY_VERSION
+        ? {
+            notificationsPreferencesCount: artifact.notifications.preferences ? 1 : 0,
+            notificationsEmailDestinationCount: artifact.notifications.emailDestination ? 1 : 0,
+            notificationsPushSubscriptionCount: artifact.notifications.pushSubscriptions.length,
+            notificationsInboxCount: artifact.notifications.inbox.length,
+            notificationsDeliveryCount: artifact.notifications.deliveries.length,
           }
         : {}),
     });
@@ -299,7 +313,7 @@ export function validateRestrictedAnswerExport(artifactBytes, expected) {
         "expectedPolicyVersion",
         "expectedRestrictedAnswers",
       ]) ||
-      ![D2_POLICY_VERSION, D3_POLICY_VERSION].includes(expected.expectedPolicyVersion) ||
+      ![D2_POLICY_VERSION, ...APPLICATIONS_POLICIES].includes(expected.expectedPolicyVersion) ||
       !Array.isArray(expected.expectedRestrictedAnswers) ||
       expected.expectedRestrictedAnswers.length < 3 ||
       expected.expectedRestrictedAnswers.length > 100 ||
