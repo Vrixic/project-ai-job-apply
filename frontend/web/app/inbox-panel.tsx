@@ -17,6 +17,10 @@ const copy: Record<NotificationItem["kind"], { title: string; detail: string }> 
     title: "Application confirmed",
     detail: "The employer confirmed your submission.",
   },
+  test_notification: {
+    title: "Test notification",
+    detail: "You asked for this from your notification settings. Nothing needs doing.",
+  },
 };
 
 type View =

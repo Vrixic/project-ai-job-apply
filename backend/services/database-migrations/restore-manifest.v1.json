@@ -386,7 +386,7 @@
       "migrations": [
         {
           "version": "0001_inbox_and_preferences",
-          "checksum": "66952ab544fac6ddfb69dfff7a44b864650cfd9083cb0d25278b59609d0cdd2b"
+          "checksum": "2c81872cd11c4d25824e39a4b2de3b27dd65d494bbc6f15e1ec7d8155ef49a09"
         },
         {
           "version": "0002_candidate_rights",

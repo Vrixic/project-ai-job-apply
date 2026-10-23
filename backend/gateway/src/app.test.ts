@@ -6542,6 +6542,10 @@ describe("Notifications routes (D5-001)", () => {
       async removePushSubscription(...args) {
         calls.push(["removePushSubscription", ...args]);
       },
+      async sendTestNotification(...args) {
+        calls.push(["sendTestNotification", ...args]);
+        return { id: ITEM };
+      },
       ...overrides,
     };
     return { notifications, calls };
@@ -6809,6 +6813,14 @@ describe("Notifications routes (D5-001)", () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(removedPush.statusCode).toBe(204);
+    const test = await app.inject({
+      method: "POST",
+      url: "/v1/notifications/delivery/test",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(test.statusCode).toBe(201);
+    expect(test.json()).toEqual({ id: ITEM });
+    expect(test.headers["cache-control"]).toBe("no-store");
     const removedEmail = await app.inject({
       method: "DELETE",
       url: "/v1/notifications/delivery/email",
@@ -6822,6 +6834,7 @@ describe("Notifications routes (D5-001)", () => {
       "confirmEmail",
       "addPushSubscription",
       "removePushSubscription",
+      "sendTestNotification",
       "removeEmail",
     ]);
     expect(calls[1]?.slice(1)).toEqual([expect.any(String), "person@example.com"]);
@@ -6849,6 +6862,15 @@ describe("Notifications routes (D5-001)", () => {
       const response = await app.inject({ method, url, headers, payload: JSON.stringify(payload) });
       expect(response.statusCode).toBe(403);
     }
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/v1/notifications/delivery/test",
+          headers: { authorization: `Bearer ${readOnly}` },
+        })
+      ).statusCode,
+    ).toBe(403);
     expect(
       (await app.inject({ method: "GET", url: "/v1/notifications/delivery" })).statusCode,
     ).toBe(401);
@@ -6880,6 +6902,9 @@ describe("Notifications routes (D5-001)", () => {
       async removeEmail() {
         throw new NotificationsError("not_found");
       },
+      async sendTestNotification() {
+        throw new NotificationsError("rate_limited");
+      },
     });
     const { app, issuer } = await createApp({ notifications });
     const token = await issuer.issue("notif-delivery-err", { scope: "profile:read profile:write" });
@@ -6906,6 +6931,16 @@ describe("Notifications routes (D5-001)", () => {
     expect(
       (await send("PUT", "/v1/notifications/delivery/email", { address: "bad@example.com" }))
         .statusCode,
+    ).toBe(400);
+    const testLimited = await app.inject({
+      method: "POST",
+      url: "/v1/notifications/delivery/test",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(testLimited.statusCode).toBe(429);
+    expect(testLimited.json()).toMatchObject({ code: "rate_limited" });
+    expect(
+      (await send("POST", "/v1/notifications/delivery/test", { unexpected: true })).statusCode,
     ).toBe(400);
     const full = await send("POST", "/v1/notifications/delivery/push-subscriptions", {
       endpoint: "https://fcm.googleapis.com/fcm/send/abc",

@@ -7436,6 +7436,53 @@
         }
       }
     },
+    "/notifications/delivery/test": {
+      "post": {
+        "operationId": "sendNotificationTest",
+        "summary": "Create one test item in the inbox. It is delivered to the channels the candidate turned on, so it proves them end to end. At most five an hour.",
+        "security": [
+          {
+            "oidc": ["profile:write"]
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The test item was created",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationTestSent"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/notifications/{notificationId}/acknowledgement": {
       "post": {
         "operationId": "acknowledgeNotification",
@@ -14538,7 +14585,8 @@
             "enum": [
               "application_review_needed",
               "application_outcome_needed",
-              "application_confirmed"
+              "application_confirmed",
+              "test_notification"
             ]
           },
           "urgency": {
@@ -14727,6 +14775,17 @@
         "additionalProperties": false
       },
       "NotificationPushSubscriptionCreated": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NotificationTestSent": {
         "type": "object",
         "required": ["id"],
         "properties": {

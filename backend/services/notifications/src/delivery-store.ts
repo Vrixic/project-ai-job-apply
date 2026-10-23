@@ -146,8 +146,45 @@ export async function scheduleDeliveries(
   }
 }
 
+export const maxTestNotificationsPerHour = 5;
+export const testNotificationLifetimeMilliseconds = 24 * 60 * 60 * 1000;
+
+export type CreateTestItemOutcome =
+  | { outcome: "created"; itemId: string }
+  | { outcome: "rate_limited" };
+
 export class PostgresDeliveryStore {
   constructor(private readonly client: postgres.Sql) {}
+
+  /**
+   * A candidate-requested test item. It travels the same delivery path as a real one, so it proves
+   * the configured channels end to end, and it never touches any source fact. At most five per hour.
+   */
+  async createTestItem(ownerUserId: string, now: Date): Promise<CreateTestItemOutcome> {
+    return this.client.begin(async (transaction) => {
+      await transaction`
+        SELECT pg_advisory_xact_lock(hashtext(${`notifications-test:${ownerUserId}`}))
+      `;
+      const [recent] = await transaction<{ count: string }[]>`
+        SELECT count(*)::text AS count FROM notifications.inbox_items
+        WHERE owner_user_id = ${ownerUserId}::uuid AND kind = 'test_notification'
+          AND created_at > ${new Date(now.getTime() - 3_600_000)}
+      `;
+      if (Number(recent?.count ?? 0) >= maxTestNotificationsPerHour)
+        return { outcome: "rate_limited" as const };
+      const itemId = uuidv7();
+      await transaction`
+        INSERT INTO notifications.inbox_items
+          (id, owner_user_id, kind, urgency, state, source_service, aggregate_id, source_revision,
+           dedupe_key, created_at, updated_at, expires_at)
+        VALUES (${itemId}::uuid, ${ownerUserId}::uuid, 'test_notification', 'normal', 'unread',
+          'notifications', ${itemId}::uuid, 1, ${`test_notification:${itemId}`}, ${now}, ${now},
+          ${new Date(now.getTime() + testNotificationLifetimeMilliseconds)})
+      `;
+      await scheduleDeliveries(transaction, { ownerUserId, itemId, urgency: "normal", now });
+      return { outcome: "created" as const, itemId };
+    });
+  }
 
   // ---- Email destination -------------------------------------------------------------------
 

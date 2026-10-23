@@ -225,6 +225,45 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
     ).toHaveLength(1);
   });
 
+  it("delivers a candidate-requested test item to the channels that are on, and limits them", async () => {
+    const owner = await confirmedEmailOwner();
+    const sent = await service.sendTestNotification(owner);
+    const inbox = await service.listInbox(owner);
+    expect(inbox.items.map((item) => item.id)).toContain(sent.id);
+    expect(inbox.items.find((item) => item.id === sent.id)).toMatchObject({
+      kind: "test_notification",
+      state: "unread",
+    });
+    expect(await attemptOf(sent.id, "email")).toMatchObject({ state: "scheduled" });
+    await dispatcher.run();
+    const mails = email
+      .to(addressOf(owner))
+      .filter((mail) => mail.subject === "A test notification from your settings");
+    expect(mails).toHaveLength(1);
+    expect(mails[0]?.text).not.toContain(owner);
+    expect(await attemptOf(sent.id, "email")).toMatchObject({ state: "sent" });
+
+    for (let index = 1; index < 5; index += 1) await service.sendTestNotification(owner);
+    await expect(service.sendTestNotification(owner)).rejects.toMatchObject({
+      code: "rate_limited",
+    });
+    // The hour passes and another is allowed. Other candidates are never affected.
+    await expect(service.sendTestNotification(uuidv7())).resolves.toMatchObject({
+      id: expect.any(String),
+    });
+    advance(61 * minute);
+    await expect(service.sendTestNotification(owner)).resolves.toMatchObject({
+      id: expect.any(String),
+    });
+  });
+
+  it("does not email a test item to a candidate whose email is off", async () => {
+    const owner = uuidv7();
+    const sent = await service.sendTestNotification(owner);
+    expect(await attemptOf(sent.id, "email")).toBeUndefined();
+    expect((await service.listInbox(owner)).items).toHaveLength(1);
+  });
+
   it("does not schedule a channel that is off or has no verified destination", async () => {
     const off = uuidv7();
     await service.updatePreferences(off, 0, {

@@ -2,6 +2,7 @@ export const notificationKinds = Object.freeze([
   "application_review_needed",
   "application_outcome_needed",
   "application_confirmed",
+  "test_notification",
 ] as const);
 export const notificationUrgencies = Object.freeze(["low", "normal", "high"] as const);
 export const inboxStates = Object.freeze([

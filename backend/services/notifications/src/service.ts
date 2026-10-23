@@ -108,6 +108,7 @@ function decodeCursor(value: string): { createdAt: Date; id: string } {
 
 type DeliveryStore = Pick<
   PostgresDeliveryStore,
+  | "createTestItem"
   | "readEmailDestination"
   | "requestEmailCode"
   | "confirmEmailCode"
@@ -200,6 +201,13 @@ export class NotificationsService {
     const outcome = await delivery.addPushSubscription(uuid(ownerUserId), checked, this.now());
     if (outcome.outcome === "limit_reached") throw new NotificationsError("limit_reached");
     return { id: outcome.id };
+  }
+
+  /** Creates one test item, delivered to the channels the candidate turned on. */
+  async sendTestNotification(ownerUserId: string): Promise<{ id: string }> {
+    const outcome = await this.requireDelivery().createTestItem(uuid(ownerUserId), this.now());
+    if (outcome.outcome === "rate_limited") throw new NotificationsError("rate_limited");
+    return { id: outcome.itemId };
   }
 
   async removePushSubscription(ownerUserId: string, id: string): Promise<void> {

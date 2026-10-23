@@ -12,6 +12,7 @@ export type FoundationResponseSchemaName =
   | "NotificationDeliveryStatus"
   | "ConfirmNotificationEmailResult"
   | "NotificationPushSubscriptionCreated"
+  | "NotificationTestSent"
   | "NotificationInboxPage"
   | "NotificationItem"
   | "NotificationPreferences"
@@ -53,6 +54,7 @@ const validators = new Map<
     "NotificationPushSubscriptionCreated",
     compileComponentValidator("NotificationPushSubscriptionCreated"),
   ],
+  ["NotificationTestSent", compileComponentValidator("NotificationTestSent")],
   ["NotificationInboxPage", compileComponentValidator("NotificationInboxPage")],
   ["NotificationItem", compileComponentValidator("NotificationItem")],
   ["NotificationPreferences", compileComponentValidator("NotificationPreferences")],
