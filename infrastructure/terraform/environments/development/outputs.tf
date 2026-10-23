@@ -188,8 +188,3 @@ output "d2_trust_signal_mapping_uuid" {
 output "d2_community_route_ids" {
   value = module.platform.d2_community_route_ids
 }
-
-output "notifications_ses_dkim_tokens" {
-  description = "DKIM tokens whose CNAME records the owner adds to the notification sender domain."
-  value       = module.platform.notifications_ses_dkim_tokens
-}

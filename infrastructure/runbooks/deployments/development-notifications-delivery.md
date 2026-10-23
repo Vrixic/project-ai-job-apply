@@ -20,8 +20,8 @@ It requires an active candidate-rights policy whose owner inventory lists `notif
 
 ## Owner steps (cannot be done by Terraform)
 
-1. **Pick the sender.** A domain identity (`example.com`) is best. Terraform outputs
-   `notifications_ses_dkim_tokens`; add the three CNAME records
+1. **Pick the sender.** A domain identity (`example.com`) is best. Read the tokens with
+   `aws sesv2 get-email-identity --email-identity <domain> --query DkimAttributes.Tokens` and add the three CNAME records
    `<token>._domainkey.<domain>` pointing to `<token>.dkim.amazonses.com` in the DNS zone. An address
    identity (`name@example.com`) is the quick test path: SES emails a confirmation link to it.
 2. **Sandbox.** New SES accounts can only send to verified addresses. For development, verify the

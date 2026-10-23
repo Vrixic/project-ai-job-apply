@@ -632,7 +632,10 @@ if ($developmentWrapper.Contains('exit $LASTEXITCODE') -or
     "privileged_moderation_audit_enabled",
     "restricted_packet_export_enabled",
     "restricted_answer_reuse_enabled",
-    "restricted_packet_keys_provisioned"
+    "restricted_packet_keys_provisioned",
+    "notifications_enabled",
+    "notifications_delivery_enabled",
+    "notifications_vapid_secret_provisioned"
   )
   $declaredBooleanNames = @(Get-ChildItem -LiteralPath (Join-Path $repositoryRoot "infrastructure/terraform/environments/development") -File -Filter "*.tf" | ForEach-Object {
       $declarations = [regex]::Matches((Get-Content -LiteralPath $_.FullName -Raw), '(?ms)^variable\s+"([^"]+)"\s*\{(.*?)^\}')
