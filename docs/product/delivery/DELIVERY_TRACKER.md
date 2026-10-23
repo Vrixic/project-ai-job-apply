@@ -32,6 +32,8 @@ The owner answered the open questions in chat. Recorded decisions:
 - **Greenhouse and Ashby:** both are to work fully, including the application submit step after the candidate's explicit approval.
 - **Deferred:** Workday waits for authorized sanitized fixtures. ApplyDash stays the provisional product name.
 
+2026-10-23 owner answers: D3.1 works in the hosted app; the development runtime was shut down again (final snapshot `shutdown-20261023032139`); Stripe waits until it is needed for testing; email and push notifications (D5-002) are to be built now, ahead of search and matching work ([ADR-056](../../adr/056-notification-email-and-push-delivery.md)).
+
 Still needing the owner: an AWS sign-in for the deployment, the Stripe account values (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRETS`, `STRIPE_PRO_PRICE_ID`, `BILLING_APP_BASE_URL`), counsel, the independent assessor, and staging and production accounts and Auth0 tenants (D6-013, D6-014, D6-021).
 
 ## D3 — High-quality application preparation

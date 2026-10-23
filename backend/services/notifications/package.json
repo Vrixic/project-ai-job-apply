@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
+    },
+    "./providers": {
+      "types": "./dist/src/providers/index.d.ts",
+      "default": "./dist/src/providers/index.js"
     }
   },
   "scripts": {
@@ -18,6 +22,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-sesv2": "3.1133.0",
     "postgres": "3.4.9",
     "uuid": "14.0.2"
   }

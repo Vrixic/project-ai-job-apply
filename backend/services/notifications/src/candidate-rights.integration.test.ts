@@ -38,7 +38,7 @@ describeWithDatabase("Notifications candidate rights", () => {
       env: { ...process.env, DATABASE_URL: databaseUrl },
     });
     expect(first.stdout.trim()).toBe(
-      "Notifications migrations through 0002_candidate_rights applied and verified.",
+      "Notifications migrations through 0003_delivery applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
   });
@@ -95,6 +95,32 @@ describeWithDatabase("Notifications candidate rights", () => {
       pushEnabled: false,
       quietHours: { enabled: true, startMinute: 1320, endMinute: 420, timeZone: "UTC" },
     });
+    const now = new Date();
+    // The store test sweeps expiry across the shared database; keep these items alive.
+    await client`
+      UPDATE notifications.inbox_items
+      SET expires_at = ${new Date(now.getTime() + 5 * 365 * 24 * 60 * 60 * 1000)}
+      WHERE owner_user_id = ${owner}::uuid
+    `;
+    const mailbox = `person-${uuidv7().slice(-12)}`;
+    await client`
+      INSERT INTO notifications.email_destinations
+        (owner_user_id, address, state, verified_at, request_window_started_at, created_at, updated_at)
+      VALUES (${owner}::uuid, ${`${mailbox}@example.test`}, 'verified', ${now}, ${now}, ${now}, ${now})
+    `;
+    await client`
+      INSERT INTO notifications.push_subscriptions
+        (id, owner_user_id, endpoint, endpoint_hash, state, created_at)
+      VALUES (${uuidv7()}::uuid, ${owner}::uuid, ${`https://fcm.googleapis.com/fcm/send/${owner}`},
+        ${owner.replaceAll("-", "").repeat(2)}, 'active', ${now})
+    `;
+    await client`
+      INSERT INTO notifications.delivery_attempts
+        (id, owner_user_id, inbox_item_id, channel, state, not_before, created_at, updated_at)
+      SELECT ${uuidv7()}::uuid, owner_user_id, id, 'email', 'scheduled',
+        ${new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000)}, ${now}, ${now}
+      FROM notifications.inbox_items WHERE owner_user_id = ${owner}::uuid
+    `;
     return application;
   }
 
@@ -106,7 +132,8 @@ describeWithDatabase("Notifications candidate rights", () => {
     const [exported] = await client<{ data: Record<string, unknown> }[]>`
       SELECT notifications.export_candidate_data(${owner}::uuid) AS data
     `;
-    const section = (exported?.data as { notifications: Record<string, unknown> }).notifications;
+    const section = (exported as { data: { notifications: Record<string, unknown> } }).data
+      .notifications;
     expect(section.preferences).toMatchObject({
       version: 1,
       inAppEnabled: true,
@@ -134,7 +161,28 @@ describeWithDatabase("Notifications candidate rights", () => {
     const [empty] = await client<{ data: Record<string, unknown> }[]>`
       SELECT notifications.export_candidate_data(${uuidv7()}::uuid) AS data
     `;
-    expect(empty?.data).toEqual({ notifications: { preferences: null, inbox: [] } });
+    expect(empty?.data).toEqual({
+      notifications: {
+        preferences: null,
+        inbox: [],
+        emailDestination: null,
+        pushSubscriptions: [],
+        deliveries: [],
+      },
+    });
+    expect(section.emailDestination).toMatchObject({
+      address: expect.stringMatching(/^person-[0-9a-f]{12}@example.test$/),
+      state: "verified",
+    });
+    // A push endpoint is a capability URL: only its host and identifier are exported.
+    const subscriptions = section.pushSubscriptions as Record<string, unknown>[];
+    expect(subscriptions).toHaveLength(1);
+    expect(subscriptions[0]).toMatchObject({ endpointHost: "fcm.googleapis.com", state: "active" });
+    expect(JSON.stringify(subscriptions)).not.toContain("/fcm/send/");
+    expect(section.deliveries).toHaveLength(1);
+    expect(section.deliveries).toEqual([
+      expect.objectContaining({ channel: "email", state: "scheduled" }),
+    ]);
   });
 
   it("deletes only the authorized candidate's data and refuses an unauthorized request", async () => {
@@ -162,6 +210,9 @@ describeWithDatabase("Notifications candidate rights", () => {
         preferencesDeleted: 1,
         receiptsDeleted: 1,
         cursorsDeleted: 1,
+        deliveriesDeleted: 1,
+        emailDestinationsDeleted: 1,
+        pushSubscriptionsDeleted: 1,
       });
       const [replay] = await client<{ result: Record<string, unknown> }[]>`
         SELECT notifications.delete_candidate_data(${owner}, ${ownerAuthorization.requestId}) AS result
@@ -172,14 +223,25 @@ describeWithDatabase("Notifications candidate rights", () => {
         preferencesDeleted: 0,
         receiptsDeleted: 0,
         cursorsDeleted: 0,
+        deliveriesDeleted: 0,
+        emailDestinationsDeleted: 0,
+        pushSubscriptionsDeleted: 0,
       });
-      const [remaining] = await client<{ items: number; preferences: number }[]>`
+      const [remaining] = await client<
+        { items: number; preferences: number; email: number; push: number; deliveries: number }[]
+      >`
         SELECT (SELECT count(*)::int FROM notifications.inbox_items
                 WHERE owner_user_id = ${other}::uuid) AS items,
                (SELECT count(*)::int FROM notifications.preferences
-                WHERE owner_user_id = ${other}::uuid) AS preferences
+                WHERE owner_user_id = ${other}::uuid) AS preferences,
+               (SELECT count(*)::int FROM notifications.email_destinations
+                WHERE owner_user_id = ${other}::uuid) AS email,
+               (SELECT count(*)::int FROM notifications.push_subscriptions
+                WHERE owner_user_id = ${other}::uuid) AS push,
+               (SELECT count(*)::int FROM notifications.delivery_attempts
+                WHERE owner_user_id = ${other}::uuid) AS deliveries
       `;
-      expect(remaining).toEqual({ items: 1, preferences: 1 });
+      expect(remaining).toEqual({ items: 1, preferences: 1, email: 1, push: 1, deliveries: 1 });
     } finally {
       await removeAuthorization(owner, ownerAuthorization);
       await removeAuthorization(other, otherAuthorization);

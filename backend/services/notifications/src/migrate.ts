@@ -6,7 +6,11 @@ import postgres from "postgres";
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
 
-const migrationVersions = ["0001_inbox_and_preferences", "0002_candidate_rights"] as const;
+const migrationVersions = [
+  "0001_inbox_and_preferences",
+  "0002_candidate_rights",
+  "0003_delivery",
+] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
     const migrationPath = fileURLToPath(
@@ -20,6 +24,8 @@ const migrations = await Promise.all(
 const client = postgres(databaseUrl, { max: 1, onnotice: () => undefined });
 try {
   await client.begin(async (transaction) => {
+    // Serialize before creating anything: concurrent runners must not race on CREATE SCHEMA.
+    await transaction`SELECT pg_advisory_xact_lock(hashtext('ai-job-apply:notifications-migrations'))`;
     await transaction.unsafe(`
       CREATE SCHEMA IF NOT EXISTS notifications;
       CREATE TABLE IF NOT EXISTS notifications.schema_migrations (
@@ -28,7 +34,6 @@ try {
         applied_at timestamptz NOT NULL DEFAULT now()
       );
     `);
-    await transaction`SELECT pg_advisory_xact_lock(hashtext('ai-job-apply:notifications-migrations'))`;
     for (const migration of migrations) {
       const [existing] = await transaction<{ checksum: string }[]>`
         SELECT checksum FROM notifications.schema_migrations WHERE version = ${migration.version}
@@ -58,10 +63,15 @@ try {
          (to_regclass('notifications.source_cursors') IS NOT NULL)::int +
          (to_regclass('notifications.inbox_items') IS NOT NULL)::int +
          (to_regclass('notifications.preferences') IS NOT NULL)::int +
+         (to_regclass('notifications.email_destinations') IS NOT NULL)::int +
+         (to_regclass('notifications.push_subscriptions') IS NOT NULL)::int +
+         (to_regclass('notifications.delivery_attempts') IS NOT NULL)::int +
          (to_regclass('notifications.schema_migrations') IS NOT NULL)::int)::int AS "relationCount",
         (SELECT count(*)::int FROM pg_indexes WHERE schemaname = 'notifications'
           AND indexname IN ('source_receipts_owner_idx', 'inbox_items_owner_state_idx',
-            'inbox_items_aggregate_idx', 'inbox_items_expiry_idx')) AS "indexCount",
+            'inbox_items_aggregate_idx', 'inbox_items_expiry_idx',
+            'email_destinations_code_due_idx', 'push_subscriptions_owner_idx',
+            'delivery_attempts_due_idx', 'delivery_attempts_owner_idx')) AS "indexCount",
         (SELECT count(*)::int FROM notifications.schema_migrations
           WHERE version = ANY(${migrationVersions as unknown as string[]})) AS "migrationCount",
         (SELECT count(*)::int FROM pg_proc procedure
@@ -81,8 +91,8 @@ try {
         ) AS "rightsPublicExecuteViolationCount"
     `;
     if (
-      verification?.relationCount !== 5 ||
-      verification.indexCount !== 4 ||
+      verification?.relationCount !== 8 ||
+      verification.indexCount !== 8 ||
       verification.migrationCount !== migrationVersions.length ||
       verification.rightsFunctionCount !== 2 ||
       verification.rightsPublicExecuteViolationCount !== 0
