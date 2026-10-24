@@ -6,6 +6,8 @@ export interface AuthPrincipal {
   audience: string[];
   scopes: string[];
   email?: string;
+  /** The account address from a verified ID token proof; never taken from an access token. */
+  verifiedEmail?: string;
   sessionId?: string;
   authenticatedAt?: number;
   authenticationMethods?: string[];
@@ -21,6 +23,8 @@ export interface IdTokenProof {
   audience: string[];
   authenticatedAt: number;
   authenticationMethods: string[];
+  /** The account address, present only when the identity provider states it is verified. */
+  verifiedEmail?: string;
 }
 
 export interface IdTokenVerifier {
@@ -132,6 +136,11 @@ export function createOidcIdTokenVerifier(options: {
           audience,
           authenticatedAt: payload.auth_time,
           authenticationMethods: payload.amr,
+          ...(payload.email_verified === true &&
+          typeof payload.email === "string" &&
+          payload.email.length <= 254
+            ? { verifiedEmail: payload.email }
+            : {}),
         };
       } catch (error) {
         if (error instanceof AuthenticationError) {

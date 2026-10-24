@@ -25,7 +25,7 @@ function scheduledEvent(overrides: Record<string, unknown> = {}) {
   };
 }
 
-const summary = { codesSent: 1, sent: 2, skipped: 3, failed: 0, retried: 1, deferred: 0 };
+const summary = { sent: 2, skipped: 3, failed: 0, retried: 1, deferred: 0 };
 
 describe("isNotificationsDispatchEvent", () => {
   it("accepts only the exact scheduled event of the configured rule", () => {

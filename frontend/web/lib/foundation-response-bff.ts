@@ -10,7 +10,6 @@ export type FoundationResponseSchemaName =
   | "BillingSessionLink"
   | "BillingSubscriptionSync"
   | "NotificationDeliveryStatus"
-  | "ConfirmNotificationEmailResult"
   | "NotificationPushSubscriptionCreated"
   | "NotificationTestSent"
   | "NotificationInboxPage"
@@ -49,7 +48,6 @@ const validators = new Map<
   ["BillingSessionLink", compileComponentValidator("BillingSessionLink")],
   ["BillingSubscriptionSync", compileComponentValidator("BillingSubscriptionSync")],
   ["NotificationDeliveryStatus", compileComponentValidator("NotificationDeliveryStatus")],
-  ["ConfirmNotificationEmailResult", compileComponentValidator("ConfirmNotificationEmailResult")],
   [
     "NotificationPushSubscriptionCreated",
     compileComponentValidator("NotificationPushSubscriptionCreated"),

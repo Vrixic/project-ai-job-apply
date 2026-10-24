@@ -76,7 +76,7 @@ describe("NotificationSettings", () => {
         if (method === "GET" && path === "/delivery") return Response.json(state.delivery);
         if (method === "GET" && path === "/preferences") return Response.json(state.preferences);
         if (method === "PUT" && path === "/delivery/email")
-          return new Response(null, { status: 202 });
+          return new Response(null, { status: 204 });
         return new Response(null, { status: 204 });
       }),
     );
@@ -123,30 +123,28 @@ describe("NotificationSettings", () => {
     expect(button(/try again/i)).toBeTruthy();
   });
 
-  it("starts email confirmation and reports a rate limit plainly", async () => {
+  it("records the account email before reading the status and asks for no address", async () => {
     stubFetch();
     await render();
     expect(container.textContent).toContain("only tell you to open the inbox");
-    await type(container.querySelector('input[type="email"]'), "person@example.com");
-    await click(/send confirmation code/i);
-    expect(calls).toContainEqual({
-      method: "PUT",
-      path: "/delivery/email",
-      body: { address: "person@example.com" },
-    });
-    expect(container.querySelector('[role="status"]')?.textContent).toContain(
-      "emailing you a code",
-    );
+    expect(calls[0]).toEqual({ method: "PUT", path: "/delivery/email" });
+    expect(
+      calls.findIndex((call) => call.path === "/delivery" && call.method === "GET"),
+    ).toBeGreaterThan(0);
+    expect(container.querySelector('input[type="email"]')).toBeNull();
+    expect(button(/send confirmation code/i)).toBeUndefined();
+    expect(container.textContent).toContain("not verified yet");
+  });
 
+  it("still shows the settings when the account email cannot be recorded", async () => {
     stubFetch((method, path) =>
       method === "PUT" && path === "/delivery/email"
-        ? Response.json({}, { status: 429 })
+        ? Response.json({}, { status: 401 })
         : undefined,
     );
-    await click(/send confirmation code/i);
-    expect(container.querySelector('[role="status"]')?.textContent).toContain(
-      "Try again in an hour",
-    );
+    await render();
+    expect(container.textContent).toContain("How you hear about updates");
+    expect(container.textContent).toContain("not verified yet");
   });
 
   it("sends a test notification and reports a rate limit plainly", async () => {
@@ -181,42 +179,33 @@ describe("NotificationSettings", () => {
     );
   });
 
-  it("confirms the emailed code and explains a wrong one", async () => {
-    state.delivery = delivery({
-      email: { address: "person@example.com", state: "pending", codePending: true },
-    });
-    stubFetch((method, path) =>
-      method === "POST" && path === "/delivery/email/confirmation"
-        ? Response.json({ result: "invalid" })
-        : undefined,
-    );
+  it("names the account address and explains an address that could not be delivered to", async () => {
+    state.delivery = delivery({ email: { address: "person@example.com", state: "verified" } });
+    stubFetch();
     await render();
     expect(container.textContent).toContain("person@example.com");
-    expect(button(/^confirm$/i)?.disabled).toBe(true);
-    await type(container.querySelector('input[inputmode="numeric"]'), "12ab34");
-    expect((container.querySelector('input[inputmode="numeric"]') as HTMLInputElement).value).toBe(
-      "1234",
+    expect(checkbox(/email me at/i)).toBeTruthy();
+
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    state.delivery = delivery({ email: { address: "person@example.com", state: "suppressed" } });
+    await render();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "could not deliver to person@example.com",
     );
-    await type(container.querySelector('input[inputmode="numeric"]'), "123456");
-    await click(/^confirm$/i);
-    expect(calls).toContainEqual({
-      method: "POST",
-      path: "/delivery/email/confirmation",
-      body: { code: "123456" },
-    });
-    expect(container.querySelector('[role="status"]')?.textContent).toContain("not right");
+    expect(checkbox(/email me at/i)).toBeFalsy();
   });
 
   it("saves the email and quiet hours choices with the current version", async () => {
     state.delivery = delivery({
-      email: { address: "person@example.com", state: "verified", codePending: false },
+      email: { address: "person@example.com", state: "verified" },
     });
     stubFetch((method, path) =>
       method === "PUT" && path === "/preferences" ? Response.json(preferences()) : undefined,
     );
     await render();
     expect(button(/save notification settings/i)?.disabled).toBe(true);
-    await act(async () => checkbox(/email me/i)?.click());
+    await act(async () => checkbox(/email me at/i)?.click());
     await act(async () => checkbox(/hold email/i)?.click());
     const times = container.querySelectorAll('input[type="time"]');
     await type(times[0] as HTMLInputElement, "21:30");

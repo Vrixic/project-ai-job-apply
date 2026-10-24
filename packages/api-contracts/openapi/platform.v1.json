@@ -7127,7 +7127,7 @@
     "/notifications/delivery": {
       "get": {
         "operationId": "getNotificationDelivery",
-        "summary": "Where notifications are delivered: the email address and its state, and the browser push subscriptions.",
+        "summary": "Where notifications are delivered: the account email address and its state, and the browser push subscriptions.",
         "security": [
           {
             "oidc": ["profile:read"]
@@ -7170,62 +7170,8 @@
     },
     "/notifications/delivery/email": {
       "put": {
-        "operationId": "requestNotificationEmail",
-        "summary": "Start confirming an email address. A six digit code is emailed within about a minute.",
-        "security": [
-          {
-            "oidc": ["profile:write"]
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RequestNotificationEmailRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "202": {
-            "description": "The confirmation code was requested",
-            "headers": {
-              "Cache-Control": {
-                "required": true,
-                "schema": {
-                  "type": "string",
-                  "enum": ["no-store"]
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "413": {
-            "$ref": "#/components/responses/PayloadTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      },
-      "delete": {
-        "operationId": "removeNotificationEmail",
-        "summary": "Remove the email address. Email notifications stop; the inbox is unchanged.",
+        "operationId": "useAccountNotificationEmail",
+        "summary": "Use the address the identity provider verified at sign-in as the email destination. The request carries no body; the address comes from the session's identity proof.",
         "security": [
           {
             "oidc": ["profile:write"]
@@ -7233,7 +7179,7 @@
         ],
         "responses": {
           "204": {
-            "description": "The email address was removed",
+            "description": "The account address is the email destination",
             "headers": {
               "Cache-Control": {
                 "required": true,
@@ -7252,69 +7198,6 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      }
-    },
-    "/notifications/delivery/email/confirmation": {
-      "post": {
-        "operationId": "confirmNotificationEmail",
-        "summary": "Confirm the email address with the code that was emailed.",
-        "security": [
-          {
-            "oidc": ["profile:write"]
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConfirmNotificationEmailRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "The outcome of the confirmation",
-            "headers": {
-              "Cache-Control": {
-                "required": true,
-                "schema": {
-                  "type": "string",
-                  "enum": ["no-store"]
-                }
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConfirmNotificationEmailResult"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "413": {
-            "$ref": "#/components/responses/PayloadTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -14678,7 +14561,7 @@
         "properties": {
           "email": {
             "type": "object",
-            "required": ["address", "state", "codePending"],
+            "required": ["address", "state"],
             "properties": {
               "address": {
                 "type": "string",
@@ -14687,11 +14570,7 @@
               },
               "state": {
                 "type": "string",
-                "enum": ["pending", "verified", "suppressed"]
-              },
-              "codePending": {
-                "type": "boolean",
-                "description": "A code was requested or sent and has not been used yet."
+                "enum": ["verified", "suppressed"]
               }
             },
             "additionalProperties": false
@@ -14724,40 +14603,6 @@
             "description": "The public key a browser needs to subscribe. Absent when push is not configured.",
             "minLength": 80,
             "maxLength": 100
-          }
-        },
-        "additionalProperties": false
-      },
-      "RequestNotificationEmailRequest": {
-        "type": "object",
-        "required": ["address"],
-        "properties": {
-          "address": {
-            "type": "string",
-            "minLength": 6,
-            "maxLength": 254
-          }
-        },
-        "additionalProperties": false
-      },
-      "ConfirmNotificationEmailRequest": {
-        "type": "object",
-        "required": ["code"],
-        "properties": {
-          "code": {
-            "type": "string",
-            "pattern": "^[0-9]{6}$"
-          }
-        },
-        "additionalProperties": false
-      },
-      "ConfirmNotificationEmailResult": {
-        "type": "object",
-        "required": ["result"],
-        "properties": {
-          "result": {
-            "type": "string",
-            "enum": ["verified", "invalid", "expired", "too_many_attempts", "no_request"]
           }
         },
         "additionalProperties": false

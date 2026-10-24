@@ -5,7 +5,6 @@ const runtime = vi.hoisted(() => ({
   dispatch: vi.fn(async () => ({
     schemaVersion: 1,
     expired: 0,
-    codesSent: 0,
     sent: 1,
     skipped: 0,
     failed: 0,

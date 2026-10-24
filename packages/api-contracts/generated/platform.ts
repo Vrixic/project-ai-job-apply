@@ -1526,7 +1526,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Where notifications are delivered: the email address and its state, and the browser push subscriptions. */
+        /** Where notifications are delivered: the account email address and its state, and the browser push subscriptions. */
         get: operations["getNotificationDelivery"];
         put?: never;
         post?: never;
@@ -1544,27 +1544,9 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Start confirming an email address. A six digit code is emailed within about a minute. */
-        put: operations["requestNotificationEmail"];
+        /** Use the address the identity provider verified at sign-in as the email destination. The request carries no body; the address comes from the session's identity proof. */
+        put: operations["useAccountNotificationEmail"];
         post?: never;
-        /** Remove the email address. Email notifications stop; the inbox is unchanged. */
-        delete: operations["removeNotificationEmail"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/notifications/delivery/email/confirmation": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Confirm the email address with the code that was emailed. */
-        post: operations["confirmNotificationEmail"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3539,9 +3521,7 @@ export interface components {
             email?: {
                 address: string;
                 /** @enum {string} */
-                state: "pending" | "verified" | "suppressed";
-                /** @description A code was requested or sent and has not been used yet. */
-                codePending: boolean;
+                state: "verified" | "suppressed";
             };
             pushSubscriptions: {
                 /** Format: uuid */
@@ -3553,16 +3533,6 @@ export interface components {
             }[];
             /** @description The public key a browser needs to subscribe. Absent when push is not configured. */
             pushPublicKey?: string;
-        };
-        RequestNotificationEmailRequest: {
-            address: string;
-        };
-        ConfirmNotificationEmailRequest: {
-            code: string;
-        };
-        ConfirmNotificationEmailResult: {
-            /** @enum {string} */
-            result: "verified" | "invalid" | "expired" | "too_many_attempts" | "no_request";
         };
         AddNotificationPushSubscriptionRequest: {
             endpoint: string;
@@ -7209,37 +7179,7 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
-    requestNotificationEmail: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RequestNotificationEmailRequest"];
-            };
-        };
-        responses: {
-            /** @description The confirmation code was requested */
-            202: {
-                headers: {
-                    "Cache-Control": "no-store";
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            413: components["responses"]["PayloadTooLarge"];
-            415: components["responses"]["UnsupportedMediaType"];
-            429: components["responses"]["TooManyRequests"];
-            503: components["responses"]["ServiceUnavailable"];
-        };
-    };
-    removeNotificationEmail: {
+    useAccountNotificationEmail: {
         parameters: {
             query?: never;
             header?: never;
@@ -7248,7 +7188,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The email address was removed */
+            /** @description The account address is the email destination */
             204: {
                 headers: {
                     "Cache-Control": "no-store";
@@ -7259,38 +7199,6 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            503: components["responses"]["ServiceUnavailable"];
-        };
-    };
-    confirmNotificationEmail: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConfirmNotificationEmailRequest"];
-            };
-        };
-        responses: {
-            /** @description The outcome of the confirmation */
-            200: {
-                headers: {
-                    "Cache-Control": "no-store";
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConfirmNotificationEmailResult"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            413: components["responses"]["PayloadTooLarge"];
-            415: components["responses"]["UnsupportedMediaType"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };

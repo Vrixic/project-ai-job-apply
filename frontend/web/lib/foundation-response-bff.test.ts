@@ -221,7 +221,7 @@ function profileAnswer() {
 
 const validValues: Record<FoundationResponseSchemaName, unknown> = {
   NotificationDeliveryStatus: {
-    email: { address: "person@example.com", state: "verified", codePending: false },
+    email: { address: "person@example.com", state: "verified" },
     pushSubscriptions: [
       {
         id: "019b4e12-7ea3-7c36-9357-aea35ab542cc",
@@ -230,7 +230,6 @@ const validValues: Record<FoundationResponseSchemaName, unknown> = {
       },
     ],
   },
-  ConfirmNotificationEmailResult: { result: "verified" },
   NotificationPushSubscriptionCreated: { id: "019b4e12-7ea3-7c36-9357-aea35ab542cc" },
   NotificationTestSent: { id: "019b4e12-7ea3-7c36-9357-aea35ab542cc" },
   CanonicalJobDetail: {

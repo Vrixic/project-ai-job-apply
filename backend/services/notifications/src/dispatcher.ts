@@ -1,25 +1,16 @@
 import {
-  codeLifetimeMilliseconds,
   type DeliveryOutcomeCode,
   DeliveryProviderError,
   type EmailProvider,
-  generateVerificationCode,
-  hashVerificationCode,
   maxDeliveryAttempts,
   notificationEmail,
   type PushProvider,
   retryDelayMilliseconds,
-  verificationEmail,
 } from "./delivery.js";
-import type {
-  ClaimedAttempt,
-  ClaimedCodeRequest,
-  PostgresDeliveryStore,
-} from "./delivery-store.js";
+import type { ClaimedAttempt, PostgresDeliveryStore } from "./delivery-store.js";
 import { quietHoursEnd } from "./routing.js";
 
 export interface DispatchSummary {
-  codesSent: number;
   sent: number;
   skipped: number;
   failed: number;
@@ -29,9 +20,6 @@ export interface DispatchSummary {
 
 type Store = Pick<
   PostgresDeliveryStore,
-  | "claimCodeRequests"
-  | "storeCode"
-  | "restoreCodeRequest"
   | "suppressEmail"
   | "claimDue"
   | "loadContext"
@@ -59,7 +47,7 @@ type Settled =
   | { kind: "deferred"; until: Date };
 
 /**
- * Sends due notifications and confirmation codes. Every decision is re-read at send time, so a
+ * Sends due notifications. Every decision is re-read at send time, so a
  * resolved item, a channel the candidate turned off or a removed destination ends the attempt
  * without a send. Nothing here changes an inbox item or a source fact.
  */
@@ -74,16 +62,12 @@ export class NotificationDispatcher {
 
   async run(): Promise<DispatchSummary> {
     const summary: DispatchSummary = {
-      codesSent: 0,
       sent: 0,
       skipped: 0,
       failed: 0,
       retried: 0,
       deferred: 0,
     };
-    for (const request of await this.options.store.claimCodeRequests(this.now(), this.batchSize)) {
-      if (await this.serveCodeRequest(request)) summary.codesSent += 1;
-    }
     for (const attempt of await this.options.store.claimDue(this.now(), this.batchSize)) {
       const settled = await this.deliver(attempt);
       await this.record(attempt, settled);
@@ -94,40 +78,6 @@ export class NotificationDispatcher {
       else summary.deferred += 1;
     }
     return summary;
-  }
-
-  private async serveCodeRequest(request: ClaimedCodeRequest): Promise<boolean> {
-    const now = this.now();
-    const code = generateVerificationCode();
-    const stored = await this.options.store.storeCode(
-      request,
-      hashVerificationCode(request.ownerUserId, code),
-      new Date(now.getTime() + codeLifetimeMilliseconds),
-      now,
-    );
-    if (!stored) return false;
-    try {
-      await this.options.email.send(
-        verificationEmail({
-          to: request.address,
-          code,
-          webBaseUrl: this.options.webBaseUrl,
-        }),
-      );
-      return true;
-    } catch (error) {
-      if (error instanceof DeliveryProviderError && error.permanent) {
-        await this.options.store.suppressEmail(
-          request.ownerUserId,
-          request.address,
-          "permanent_failure",
-          this.now(),
-        );
-      } else {
-        await this.options.store.restoreCodeRequest(request, this.now());
-      }
-      return false;
-    }
   }
 
   private async deliver(attempt: ClaimedAttempt): Promise<Settled> {

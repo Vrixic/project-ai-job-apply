@@ -48,10 +48,7 @@ export function withApplicationEventFeed(options: {
     updatePreferences: (owner, version, update) =>
       options.notifications.updatePreferences(owner, version, update),
     getDeliveryStatus: (owner) => options.notifications.getDeliveryStatus(owner),
-    requestEmailConfirmation: (owner, address) =>
-      options.notifications.requestEmailConfirmation(owner, address),
-    confirmEmail: (owner, code) => options.notifications.confirmEmail(owner, code),
-    removeEmail: (owner) => options.notifications.removeEmail(owner),
+    setAccountEmail: (owner, address) => options.notifications.setAccountEmail(owner, address),
     addPushSubscription: (owner, endpoint) =>
       options.notifications.addPushSubscription(owner, endpoint),
     removePushSubscription: (owner, id) => options.notifications.removePushSubscription(owner, id),

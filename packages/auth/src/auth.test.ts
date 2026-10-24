@@ -83,6 +83,8 @@ describe("managed OIDC verifier", () => {
     audience?: string | string[];
     authenticatedAt?: number;
     authenticationMethods?: unknown;
+    email?: unknown;
+    emailVerified?: unknown;
     expiresAt?: string;
     keyId?: string;
     omitExpiration?: boolean;
@@ -95,6 +97,8 @@ describe("managed OIDC verifier", () => {
       scope: "profile:read profile:write",
       ...(options.authenticatedAt ? { auth_time: options.authenticatedAt } : {}),
       ...(options.authenticationMethods ? { amr: options.authenticationMethods } : {}),
+      ...(options.email !== undefined ? { email: options.email } : {}),
+      ...(options.emailVerified !== undefined ? { email_verified: options.emailVerified } : {}),
     })
       .setProtectedHeader({
         alg: options.algorithm ?? "RS256",
@@ -157,6 +161,30 @@ describe("managed OIDC verifier", () => {
       authenticatedAt,
       authenticationMethods: ["pwd", "mfa"],
     });
+  });
+
+  it("reports the account email only when the provider says it is verified", async () => {
+    const verifier = createOidcIdTokenVerifier({ issuer, audience: "auth0-client-id-1234" });
+    const claims = {
+      audience: "auth0-client-id-1234",
+      authenticatedAt: Math.floor(Date.now() / 1000) - 30,
+      authenticationMethods: ["pwd"],
+    };
+    await expect(
+      verifier.verify(
+        await issue({ ...claims, email: "candidate@example.test", emailVerified: true }),
+      ),
+    ).resolves.toMatchObject({ verifiedEmail: "candidate@example.test" });
+    for (const emailVerified of [false, "true", undefined]) {
+      const proof = await verifier.verify(
+        await issue({ ...claims, email: "candidate@example.test", emailVerified }),
+      );
+      expect(proof.verifiedEmail).toBeUndefined();
+    }
+    for (const email of [42, `${"a".repeat(250)}@example.test`]) {
+      const proof = await verifier.verify(await issue({ ...claims, email, emailVerified: true }));
+      expect(proof.verifiedEmail).toBeUndefined();
+    }
   });
 
   it("rejects ID-token proofs with ambiguous audience or missing recent-authentication claims", async () => {

@@ -18,8 +18,6 @@ const ITEM_ID_PATTERN =
 const validatePreferencesRequest = compileComponentValidator(
   "UpdateNotificationPreferencesRequest",
 );
-const validateEmailRequest = compileComponentValidator("RequestNotificationEmailRequest");
-const validateEmailConfirmation = compileComponentValidator("ConfirmNotificationEmailRequest");
 const validatePushSubscriptionRequest = compileComponentValidator(
   "AddNotificationPushSubscriptionRequest",
 );
@@ -50,11 +48,16 @@ function sameOrigin(request: Request): boolean {
   return origin === null || origin === new URL(request.url).origin;
 }
 
-function forward(path: string, init: RequestInit): Promise<Response> {
+function forward(
+  path: string,
+  init: RequestInit,
+  options: { includeReauthenticationProof?: boolean } = {},
+): Promise<Response> {
   return forwardPlatformRequest(path, init, {
     auth0: getLazyAuth0Session(),
     baseUrl: process.env.PLATFORM_API_BASE_URL ?? "http://localhost:4000",
     fetch,
+    ...(options.includeReauthenticationProof ? { includeReauthenticationProof: true } : {}),
   });
 }
 
@@ -220,60 +223,21 @@ export async function forwardNotificationDeliveryStatus(request: Request): Promi
   return validateFoundationResponse(response, 200, "NotificationDeliveryStatus", request.signal);
 }
 
+/**
+ * Makes the address verified at sign-in the email destination. The browser sends no address: the
+ * gateway reads it from the session's ID token, which this route forwards as the identity proof.
+ */
 export async function forwardNotificationDeliveryEmail(request: Request): Promise<Response> {
-  if (new URL(request.url).search !== "") {
-    cancelBody(request.body);
-    return invalid();
-  }
-  if (request.method === "DELETE") {
-    const refused = bodylessRefused(request, "DELETE");
-    cancelBody(request.body);
-    if (refused) return invalid();
-    return noContent(
-      await forward("/v1/notifications/delivery/email", {
-        method: "DELETE",
-        signal: request.signal,
-      }),
-      204,
-    );
-  }
-  if (request.method !== "PUT") {
-    cancelBody(request.body);
-    return invalid();
-  }
-  const read = await readValidJsonBody(request, validateEmailRequest);
-  if ("refusal" in read) return read.refusal;
+  const refused = bodylessRefused(request, "PUT");
+  cancelBody(request.body);
+  if (refused) return invalid();
   return noContent(
-    await forward("/v1/notifications/delivery/email", {
-      method: "PUT",
-      body: read.body,
-      signal: request.signal,
-      headers: { "content-type": "application/json" },
-    }),
-    202,
-  );
-}
-
-export async function forwardNotificationDeliveryEmailConfirmation(
-  request: Request,
-): Promise<Response> {
-  if (request.method !== "POST" || new URL(request.url).search !== "") {
-    cancelBody(request.body);
-    return invalid();
-  }
-  const read = await readValidJsonBody(request, validateEmailConfirmation);
-  if ("refusal" in read) return read.refusal;
-  const response = await forward("/v1/notifications/delivery/email/confirmation", {
-    method: "POST",
-    body: read.body,
-    signal: request.signal,
-    headers: { "content-type": "application/json" },
-  });
-  return validateFoundationResponse(
-    response,
-    200,
-    "ConfirmNotificationEmailResult",
-    request.signal,
+    await forward(
+      "/v1/notifications/delivery/email",
+      { method: "PUT", signal: request.signal },
+      { includeReauthenticationProof: true },
+    ),
+    204,
   );
 }
 
