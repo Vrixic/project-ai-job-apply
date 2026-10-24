@@ -46,12 +46,13 @@ export interface AttemptContext {
   email?: { address: string; state: EmailDestinationState };
 }
 
+// Selected columns are aliased to camelCase, so rows read the same with or without `postgres.camel`.
 interface DestinationRow {
   address: string;
   state: EmailDestinationState;
-  suppressed_reason: "permanent_failure" | "complaint" | null;
-  verified_at: Date | string | null;
-  created_at: Date | string;
+  suppressedReason: "permanent_failure" | "complaint" | null;
+  verifiedAt: Date | string | null;
+  createdAt: Date | string;
 }
 
 /**
@@ -64,14 +65,16 @@ export async function scheduleDeliveries(
 ): Promise<void> {
   const [preferences] = await sql<
     {
-      email_enabled: boolean;
-      quiet_hours_enabled: boolean;
-      quiet_start_minute: number;
-      quiet_end_minute: number;
-      time_zone: string;
+      emailEnabled: boolean;
+      quietHoursEnabled: boolean;
+      quietStartMinute: number;
+      quietEndMinute: number;
+      timeZone: string;
     }[]
   >`
-    SELECT email_enabled, quiet_hours_enabled, quiet_start_minute, quiet_end_minute, time_zone
+    SELECT email_enabled AS "emailEnabled", quiet_hours_enabled AS "quietHoursEnabled",
+      quiet_start_minute AS "quietStartMinute", quiet_end_minute AS "quietEndMinute",
+      time_zone AS "timeZone"
     FROM notifications.preferences WHERE owner_user_id = ${input.ownerUserId}::uuid
   `;
   if (!preferences) return;
@@ -79,12 +82,12 @@ export async function scheduleDeliveries(
     urgency: input.urgency,
     now: input.now,
     preferences: {
-      emailEnabled: preferences.email_enabled,
+      emailEnabled: preferences.emailEnabled,
       quietHours: {
-        enabled: preferences.quiet_hours_enabled,
-        startMinute: preferences.quiet_start_minute,
-        endMinute: preferences.quiet_end_minute,
-        timeZone: preferences.time_zone,
+        enabled: preferences.quietHoursEnabled,
+        startMinute: preferences.quietStartMinute,
+        endMinute: preferences.quietEndMinute,
+        timeZone: preferences.timeZone,
       },
     },
   });
@@ -149,16 +152,17 @@ export class PostgresDeliveryStore {
 
   async readEmailDestination(ownerUserId: string): Promise<EmailDestination | undefined> {
     const [row] = await this.client<DestinationRow[]>`
-      SELECT address, state, suppressed_reason, verified_at, created_at
+      SELECT address, state, suppressed_reason AS "suppressedReason", verified_at AS "verifiedAt",
+        created_at AS "createdAt"
       FROM notifications.email_destinations WHERE owner_user_id = ${ownerUserId}::uuid
     `;
     if (!row) return undefined;
     return {
       address: row.address,
       state: row.state,
-      ...(row.suppressed_reason ? { suppressedReason: row.suppressed_reason } : {}),
-      ...(row.verified_at ? { verifiedAt: asDate(row.verified_at) } : {}),
-      createdAt: asDate(row.created_at),
+      ...(row.suppressedReason ? { suppressedReason: row.suppressedReason } : {}),
+      ...(row.verifiedAt ? { verifiedAt: asDate(row.verifiedAt) } : {}),
+      createdAt: asDate(row.createdAt),
     };
   }
 
@@ -235,10 +239,10 @@ export class PostgresDeliveryStore {
     const rows = await this.client<
       {
         id: string;
-        owner_user_id: string;
-        inbox_item_id: string;
+        ownerUserId: string;
+        inboxItemId: string;
         channel: DeliveryChannel;
-        attempt_count: number;
+        attemptCount: number;
       }[]
     >`
       WITH due AS (
@@ -254,15 +258,16 @@ export class PostgresDeliveryStore {
         lease_until = ${iso(new Date(now.getTime() + leaseMilliseconds))}::timestamptz,
         attempt_count = attempt.attempt_count + 1, updated_at = ${iso(now)}::timestamptz
       FROM due WHERE attempt.id = due.id
-      RETURNING attempt.id, attempt.owner_user_id, attempt.inbox_item_id, attempt.channel,
-        attempt.attempt_count
+      RETURNING attempt.id, attempt.owner_user_id AS "ownerUserId",
+        attempt.inbox_item_id AS "inboxItemId", attempt.channel,
+        attempt.attempt_count AS "attemptCount"
     `;
     return rows.map((row) => ({
       id: row.id,
-      ownerUserId: row.owner_user_id,
-      inboxItemId: row.inbox_item_id,
+      ownerUserId: row.ownerUserId,
+      inboxItemId: row.inboxItemId,
       channel: row.channel,
-      attemptCount: row.attempt_count,
+      attemptCount: row.attemptCount,
     }));
   }
 
@@ -271,21 +276,23 @@ export class PostgresDeliveryStore {
       {
         kind: NotificationKind;
         urgency: NotificationUrgency;
-        item_state: string;
-        expires_at: Date | string;
-        email_enabled: boolean | null;
-        quiet_hours_enabled: boolean | null;
-        quiet_start_minute: number | null;
-        quiet_end_minute: number | null;
-        time_zone: string | null;
-        email_address: string | null;
-        email_state: EmailDestinationState | null;
+        itemState: string;
+        expiresAt: Date | string;
+        emailEnabled: boolean | null;
+        quietHoursEnabled: boolean | null;
+        quietStartMinute: number | null;
+        quietEndMinute: number | null;
+        timeZone: string | null;
+        emailAddress: string | null;
+        emailState: EmailDestinationState | null;
       }[]
     >`
-      SELECT item.kind, item.urgency, item.state AS item_state, item.expires_at,
-        preferences.email_enabled, preferences.quiet_hours_enabled,
-        preferences.quiet_start_minute, preferences.quiet_end_minute, preferences.time_zone,
-        destination.address AS email_address, destination.state AS email_state
+      SELECT item.kind, item.urgency, item.state AS "itemState", item.expires_at AS "expiresAt",
+        preferences.email_enabled AS "emailEnabled",
+        preferences.quiet_hours_enabled AS "quietHoursEnabled",
+        preferences.quiet_start_minute AS "quietStartMinute",
+        preferences.quiet_end_minute AS "quietEndMinute", preferences.time_zone AS "timeZone",
+        destination.address AS "emailAddress", destination.state AS "emailState"
       FROM notifications.inbox_items item
       LEFT JOIN notifications.preferences preferences
         ON preferences.owner_user_id = item.owner_user_id
@@ -297,17 +304,17 @@ export class PostgresDeliveryStore {
     return {
       kind: row.kind,
       urgency: row.urgency,
-      itemState: row.item_state,
-      itemExpiresAt: asDate(row.expires_at),
-      emailEnabled: row.email_enabled ?? false,
+      itemState: row.itemState,
+      itemExpiresAt: asDate(row.expiresAt),
+      emailEnabled: row.emailEnabled ?? false,
       quietHours: {
-        enabled: row.quiet_hours_enabled ?? false,
-        startMinute: row.quiet_start_minute ?? 1320,
-        endMinute: row.quiet_end_minute ?? 420,
-        timeZone: row.time_zone ?? "UTC",
+        enabled: row.quietHoursEnabled ?? false,
+        startMinute: row.quietStartMinute ?? 1320,
+        endMinute: row.quietEndMinute ?? 420,
+        timeZone: row.timeZone ?? "UTC",
       },
-      ...(row.email_address && row.email_state
-        ? { email: { address: row.email_address, state: row.email_state } }
+      ...(row.emailAddress && row.emailState
+        ? { email: { address: row.emailAddress, state: row.emailState } }
         : {}),
     };
   }

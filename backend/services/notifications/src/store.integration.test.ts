@@ -1,13 +1,12 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { NotificationsService } from "./service.js";
 import { projectApplicationEvent } from "./source-events.js";
 import { PostgresNotificationsStore } from "./store.js";
-import { mirrorSharedClient } from "./test-client.js";
+import { createSharedStyleClient } from "./test-client.js";
 import { defaultQuietHours } from "./types.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -15,11 +14,7 @@ const describeWithDatabase = databaseUrl ? describe : describe.skip;
 const execFileAsync = promisify(execFile);
 
 describeWithDatabase("Notifications store over PostgreSQL", () => {
-  const client = postgres(databaseUrl ?? "postgres://invalid", {
-    max: 4,
-    onnotice: () => undefined,
-  });
-  mirrorSharedClient(client);
+  const client = createSharedStyleClient(databaseUrl ?? "postgres://invalid", 4);
   const store = new PostgresNotificationsStore(client);
   let clock = new Date("2026-10-22T12:00:00.000Z");
   const service = new NotificationsService(store, { now: () => clock });
@@ -112,11 +107,11 @@ describeWithDatabase("Notifications store over PostgreSQL", () => {
     expect(
       results.every((result) => ["recorded", "ignored", "stale"].includes(result.outcome)),
     ).toBe(true);
-    const [cursor] = await client<{ last_revision: string }[]>`
-      SELECT last_revision FROM notifications.source_cursors
+    const [cursor] = await client<{ lastRevision: string }[]>`
+      SELECT last_revision AS "lastRevision" FROM notifications.source_cursors
       WHERE owner_user_id = ${user}::uuid AND aggregate_id = ${application}::uuid
     `;
-    expect(Number(cursor?.last_revision)).toBe(5);
+    expect(Number(cursor?.lastRevision)).toBe(5);
   });
 
   it("acknowledges and dismisses only the owner's own item and never the source", async () => {

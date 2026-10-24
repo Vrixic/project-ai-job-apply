@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DeliveryProviderError, type EmailMessage, type EmailProvider } from "./delivery.js";
@@ -9,7 +8,7 @@ import { PostgresDeliveryStore } from "./delivery-store.js";
 import { NotificationDispatcher } from "./dispatcher.js";
 import { NotificationsService } from "./service.js";
 import { PostgresNotificationsStore } from "./store.js";
-import { mirrorSharedClient } from "./test-client.js";
+import { createSharedStyleClient } from "./test-client.js";
 import { asDate } from "./timestamps.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -33,11 +32,7 @@ class FakeEmail implements EmailProvider {
 }
 
 describeWithDatabase("Notification delivery over PostgreSQL", () => {
-  const client = postgres(databaseUrl ?? "postgres://invalid", {
-    max: 6,
-    onnotice: () => undefined,
-  });
-  mirrorSharedClient(client);
+  const client = createSharedStyleClient(databaseUrl ?? "postgres://invalid", 6);
   const store = new PostgresNotificationsStore(client);
   const delivery = new PostgresDeliveryStore(client);
   let clock = new Date("2026-10-23T12:00:00.000Z");
@@ -96,17 +91,26 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
     const [row] = await client<
       {
         state: string;
-        outcome_code: string | null;
-        attempt_count: number;
-        not_before: Date | string;
-        provider_reference: string | null;
+        outcomeCode: string | null;
+        attemptCount: number;
+        notBefore: Date | string;
+        providerReference: string | null;
       }[]
     >`
-      SELECT state, outcome_code, attempt_count, not_before, provider_reference
+      SELECT state, outcome_code AS "outcomeCode", attempt_count AS "attemptCount",
+        not_before AS "notBefore", provider_reference AS "providerReference"
       FROM notifications.delivery_attempts
       WHERE inbox_item_id = ${itemId}::uuid AND channel = ${channel}
     `;
-    return row ? { ...row, not_before: asDate(row.not_before) } : undefined;
+    return row
+      ? {
+          state: row.state,
+          outcome_code: row.outcomeCode,
+          attempt_count: row.attemptCount,
+          not_before: asDate(row.notBefore),
+          provider_reference: row.providerReference,
+        }
+      : undefined;
   };
 
   it("records the verified account address, normalized and idempotently", async () => {
@@ -116,15 +120,15 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
       address: addressOf(owner),
       state: "verified",
     });
-    const [row] = await client<{ verified_at: Date }[]>`
-      SELECT verified_at FROM notifications.email_destinations WHERE owner_user_id = ${owner}::uuid
+    const [row] = await client<{ verifiedAt: Date | string }[]>`
+      SELECT verified_at AS "verifiedAt" FROM notifications.email_destinations WHERE owner_user_id = ${owner}::uuid
     `;
     advance(minute);
     await service.setAccountEmail(owner, addressOf(owner));
-    const [again] = await client<{ verified_at: Date }[]>`
-      SELECT verified_at FROM notifications.email_destinations WHERE owner_user_id = ${owner}::uuid
+    const [again] = await client<{ verifiedAt: Date | string }[]>`
+      SELECT verified_at AS "verifiedAt" FROM notifications.email_destinations WHERE owner_user_id = ${owner}::uuid
     `;
-    expect(again?.verified_at).toEqual(row?.verified_at);
+    expect(again?.verifiedAt).toEqual(row?.verifiedAt);
     // No code is emailed: the identity provider already verified the address.
     await dispatcher.run();
     expect(email.to(addressOf(owner))).toHaveLength(0);
