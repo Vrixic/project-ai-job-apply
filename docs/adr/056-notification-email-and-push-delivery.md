@@ -11,6 +11,17 @@ algorithms land, instead of staying in-app only. The owner did not name provider
 the fallback when external delivery fails, and an item carries only a classification and an opaque
 reference, never candidate content.
 
+## Amendment 2026-10-24: browser push removed
+
+The owner decided browser push is not a feature the product wants. The service worker, the browser
+subscription API, the push provider, the VAPID runtime and every candidate-facing push route and
+setting are gone, and a delivery attempt is email only. Decisions 2 and 7 and the push parts of
+decisions 3 to 5, 8 and 9 below are withdrawn and kept as history. The `push_subscriptions` table,
+the `push_enabled` column and their export and deletion coverage stay until the next Notifications
+schema change, because dropping them changes the restore manifest and the candidate-rights
+contract; they are never written. The VAPID secret container and its Terraform are removed in a
+follow-up infrastructure change.
+
 ## Decisions
 
 1. **Email through Amazon SES.** It stays in the account, authenticates with the Lambda role (no

@@ -4,7 +4,6 @@ import {
   type EmailProvider,
   maxDeliveryAttempts,
   notificationEmail,
-  type PushProvider,
   retryDelayMilliseconds,
 } from "./delivery.js";
 import type { ClaimedAttempt, PostgresDeliveryStore } from "./delivery-store.js";
@@ -20,19 +19,12 @@ export interface DispatchSummary {
 
 type Store = Pick<
   PostgresDeliveryStore,
-  | "suppressEmail"
-  | "claimDue"
-  | "loadContext"
-  | "finishAttempt"
-  | "rescheduleAttempt"
-  | "expirePushSubscription"
-  | "markPushSuccess"
+  "suppressEmail" | "claimDue" | "loadContext" | "finishAttempt" | "rescheduleAttempt"
 >;
 
 export interface DispatcherOptions {
   store: Store;
   email: EmailProvider;
-  push: PushProvider;
   /** Public web origin used in links, for example https://app.example.com. */
   webBaseUrl: string;
   now?: () => Date;
@@ -47,9 +39,8 @@ type Settled =
   | { kind: "deferred"; until: Date };
 
 /**
- * Sends due notifications. Every decision is re-read at send time, so a
- * resolved item, a channel the candidate turned off or a removed destination ends the attempt
- * without a send. Nothing here changes an inbox item or a source fact.
+ * Sends due notification emails. Every decision is re-read at send time, so a resolved item, a
+ * channel the candidate turned off or a missing destination ends the attempt without a send. Nothing here changes an inbox item or a source fact.
  */
 export class NotificationDispatcher {
   private readonly now: () => Date;
@@ -88,48 +79,21 @@ export class NotificationDispatcher {
       if (!context) return { kind: "skipped", code: "item_resolved" };
       if (context.itemState !== "unread" || context.itemExpiresAt.getTime() <= now.getTime())
         return { kind: "skipped", code: "item_resolved" };
-      const enabled = attempt.channel === "email" ? context.emailEnabled : context.pushEnabled;
-      if (!enabled) return { kind: "skipped", code: "channel_off" };
+      if (!context.emailEnabled) return { kind: "skipped", code: "channel_off" };
       if (context.urgency !== "high") {
         const until = quietHoursEnd(context.quietHours, now);
         if (until) return { kind: "deferred", until };
       }
-      if (attempt.channel === "email") {
-        if (context.email?.state !== "verified") return { kind: "skipped", code: "no_destination" };
-        emailAddress = context.email.address;
-        const sent = await this.options.email.send(
-          notificationEmail({
-            to: context.email.address,
-            kind: context.kind,
-            webBaseUrl: this.options.webBaseUrl,
-          }),
-        );
-        return { kind: "sent", reference: sent.reference };
-      }
-      if (context.pushSubscriptions.length === 0)
-        return { kind: "skipped", code: "no_destination" };
-      let delivered = 0;
-      let transient = 0;
-      for (const subscription of context.pushSubscriptions) {
-        try {
-          const result = await this.options.push.send(subscription.endpoint);
-          if (result === "delivered") {
-            delivered += 1;
-            await this.options.store.markPushSuccess(subscription.id, this.now());
-          } else {
-            await this.options.store.expirePushSubscription(subscription.id, this.now());
-          }
-        } catch (error) {
-          if (error instanceof DeliveryProviderError && error.permanent) {
-            await this.options.store.expirePushSubscription(subscription.id, this.now());
-          } else {
-            transient += 1;
-          }
-        }
-      }
-      if (delivered > 0) return { kind: "sent", reference: `subscriptions:${delivered}` };
-      if (transient > 0) return { kind: "retry", code: "transient_error" };
-      return { kind: "skipped", code: "no_destination" };
+      if (context.email?.state !== "verified") return { kind: "skipped", code: "no_destination" };
+      emailAddress = context.email.address;
+      const sent = await this.options.email.send(
+        notificationEmail({
+          to: context.email.address,
+          kind: context.kind,
+          webBaseUrl: this.options.webBaseUrl,
+        }),
+      );
+      return { kind: "sent", reference: sent.reference };
     } catch (error) {
       if (error instanceof DeliveryProviderError && error.permanent) {
         return {

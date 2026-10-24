@@ -1,10 +1,8 @@
-import { generateKeyPairSync } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
   createNotificationsDispatchHandler,
   createRuntimeNotificationsDispatcher,
   isNotificationsDispatchEvent,
-  readNotificationsVapidSecret,
 } from "./notifications-dispatch.js";
 
 const ruleArn =
@@ -122,66 +120,7 @@ describe("createNotificationsDispatchHandler", () => {
   });
 });
 
-describe("readNotificationsVapidSecret", () => {
-  const pair = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
-  const jwk = pair.publicKey.export({ format: "jwk" });
-  const publicKey = Buffer.concat([
-    Buffer.from([4]),
-    Buffer.from(jwk.x ?? "", "base64url"),
-    Buffer.from(jwk.y ?? "", "base64url"),
-  ]).toString("base64url");
-  const privateKeyPem = pair.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
-  const secret = { publicKey, privateKeyPem, subject: "mailto:ops@example.com" };
-  const respond = (body: unknown, init: ResponseInit = { status: 200 }) =>
-    vi.fn(async () => new Response(typeof body === "string" ? body : JSON.stringify(body), init));
-  const envelope = (value: unknown) => ({ SecretString: JSON.stringify(value) });
-
-  it("reads the exact secret through the local extension with the session token", async () => {
-    const fetchImplementation = respond(envelope(secret));
-    await expect(
-      readNotificationsVapidSecret("secret-id", {
-        sessionToken: "token",
-        fetchImplementation: fetchImplementation as unknown as typeof fetch,
-      }),
-    ).resolves.toEqual(secret);
-    const [url, init] = fetchImplementation.mock.calls[0] as unknown as [URL, RequestInit];
-    expect(url.href).toBe("http://localhost:2773/secretsmanager/get?secretId=secret-id");
-    expect(init.headers).toEqual({ "X-Aws-Parameters-Secrets-Token": "token" });
-  });
-
-  it("refuses missing context, an unavailable extension and malformed secrets", async () => {
-    await expect(readNotificationsVapidSecret(undefined, { sessionToken: "t" })).rejects.toThrow(
-      "NotificationsVapidSecretContextUnavailable",
-    );
-    await expect(readNotificationsVapidSecret("id")).rejects.toThrow(
-      "NotificationsVapidSecretContextUnavailable",
-    );
-    const bad = async (response: ReturnType<typeof respond>) =>
-      readNotificationsVapidSecret("id", {
-        sessionToken: "t",
-        fetchImplementation: response as unknown as typeof fetch,
-      });
-    await expect(bad(respond({}, { status: 500 }))).rejects.toThrow(
-      "NotificationsVapidSecretUnavailable",
-    );
-    await expect(bad(respond("not json"))).rejects.toThrow("NotificationsVapidSecretInvalid");
-    await expect(bad(respond({ SecretString: 5 }))).rejects.toThrow(
-      "NotificationsVapidSecretInvalid",
-    );
-    await expect(bad(respond(envelope({ ...secret, extra: 1 })))).rejects.toThrow(
-      "NotificationsVapidSecretInvalid",
-    );
-    await expect(bad(respond(envelope({ ...secret, subject: 5 })))).rejects.toThrow(
-      "NotificationsVapidSecretInvalid",
-    );
-    await expect(bad(respond(envelope([secret])))).rejects.toThrow(
-      "NotificationsVapidSecretInvalid",
-    );
-    await expect(
-      bad(vi.fn(async () => new Response("{}", { headers: { "content-length": "99999" } }))),
-    ).rejects.toThrow("NotificationsVapidSecretInvalid");
-  });
-
+describe("createRuntimeNotificationsDispatcher", () => {
   it("builds a runtime dispatcher from validated configuration only", async () => {
     const database = { client: {} } as never;
     const base = { NOTIFICATIONS_WEB_BASE_URL: "https://app.example.test" };
@@ -191,14 +130,8 @@ describe("readNotificationsVapidSecret", () => {
     });
     await expect(
       createRuntimeNotificationsDispatcher(
-        {
-          ...base,
-          NOTIFICATIONS_EMAIL_FROM: "App <no-reply@example.test>",
-          NOTIFICATIONS_VAPID_SECRET_ID: "vapid",
-          AWS_SESSION_TOKEN: "t",
-        },
+        { ...base, NOTIFICATIONS_EMAIL_FROM: "App <no-reply@example.test>" },
         database,
-        { fetchImplementation: respond(envelope(secret)) as unknown as typeof fetch },
       ),
     ).resolves.toBeDefined();
     for (const bad of [
@@ -210,11 +143,5 @@ describe("readNotificationsVapidSecret", () => {
       await expect(createRuntimeNotificationsDispatcher(bad, database)).rejects.toThrow(
         "NotificationsDispatchConfigurationInvalid",
       );
-    await expect(
-      createRuntimeNotificationsDispatcher(
-        { ...base, NOTIFICATIONS_VAPID_SECRET_ID: "v" },
-        database,
-      ),
-    ).rejects.toThrow("NotificationsVapidSecretContextUnavailable");
   });
 });

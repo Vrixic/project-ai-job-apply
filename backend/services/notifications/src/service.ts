@@ -1,4 +1,4 @@
-import { normalizeEmailAddress, validatePushEndpoint } from "./delivery.js";
+import { normalizeEmailAddress } from "./delivery.js";
 import type { PostgresDeliveryStore } from "./delivery-store.js";
 import { isValidTimeZone, type RoutingDecision, routeChannels } from "./routing.js";
 import { projectApplicationEvent } from "./source-events.js";
@@ -24,7 +24,6 @@ export class NotificationsError extends Error {
 
 export interface PreferencesUpdate {
   emailEnabled: boolean;
-  pushEnabled: boolean;
   quietHours: QuietHours;
 }
 
@@ -54,7 +53,6 @@ function minute(value: unknown): number {
 export function validatePreferencesUpdate(input: PreferencesUpdate): PreferencesUpdate {
   if (
     typeof input?.emailEnabled !== "boolean" ||
-    typeof input.pushEnabled !== "boolean" ||
     typeof input.quietHours?.enabled !== "boolean" ||
     typeof input.quietHours.timeZone !== "string" ||
     !isValidTimeZone(input.quietHours.timeZone)
@@ -66,7 +64,6 @@ export function validatePreferencesUpdate(input: PreferencesUpdate): Preferences
     throw new NotificationsError("invalid_request");
   return {
     emailEnabled: input.emailEnabled,
-    pushEnabled: input.pushEnabled,
     quietHours: {
       enabled: input.quietHours.enabled,
       startMinute,
@@ -108,12 +105,7 @@ function decodeCursor(value: string): { createdAt: Date; id: string } {
 
 type DeliveryStore = Pick<
   PostgresDeliveryStore,
-  | "createTestItem"
-  | "readEmailDestination"
-  | "setAccountEmail"
-  | "listPushSubscriptions"
-  | "addPushSubscription"
-  | "removePushSubscription"
+  "createTestItem" | "readEmailDestination" | "setAccountEmail"
 >;
 
 export interface DeliveryStatus {
@@ -121,23 +113,18 @@ export interface DeliveryStatus {
     address: string;
     state: "verified" | "suppressed";
   };
-  pushSubscriptions: { id: string; state: "active" | "expired"; createdAt: Date }[];
-  /** The public VAPID key a browser needs to subscribe, when push is configured. */
-  pushPublicKey?: string;
 }
 
 export class NotificationsService {
   private readonly now: () => Date;
   private readonly delivery: DeliveryStore | undefined;
-  private readonly pushPublicKey: string | undefined;
 
   constructor(
     private readonly store: Store,
-    options: { now?: () => Date; delivery?: DeliveryStore; pushPublicKey?: string } = {},
+    options: { now?: () => Date; delivery?: DeliveryStore } = {},
   ) {
     this.now = options.now ?? (() => new Date());
     this.delivery = options.delivery;
-    this.pushPublicKey = options.pushPublicKey;
   }
 
   private requireDelivery(): DeliveryStore {
@@ -148,20 +135,11 @@ export class NotificationsService {
   async getDeliveryStatus(ownerUserId: string): Promise<DeliveryStatus> {
     const delivery = this.requireDelivery();
     const owner = uuid(ownerUserId);
-    const [email, subscriptions] = await Promise.all([
-      delivery.readEmailDestination(owner),
-      delivery.listPushSubscriptions(owner),
-    ]);
+    const email = await delivery.readEmailDestination(owner);
     return {
       ...(email && email.state !== "pending"
         ? { email: { address: email.address, state: email.state } }
         : {}),
-      pushSubscriptions: subscriptions.map(({ id, state, createdAt }) => ({
-        id,
-        state,
-        createdAt,
-      })),
-      ...(this.pushPublicKey ? { pushPublicKey: this.pushPublicKey } : {}),
     };
   }
 
@@ -177,29 +155,11 @@ export class NotificationsService {
     await delivery.setAccountEmail(uuid(ownerUserId), normalized, this.now());
   }
 
-  async addPushSubscription(ownerUserId: string, endpoint: unknown): Promise<{ id: string }> {
-    const delivery = this.requireDelivery();
-    const checked = validatePushEndpoint(endpoint);
-    if (!checked) throw new NotificationsError("invalid_request");
-    const outcome = await delivery.addPushSubscription(uuid(ownerUserId), checked, this.now());
-    if (outcome.outcome === "limit_reached") throw new NotificationsError("limit_reached");
-    return { id: outcome.id };
-  }
-
-  /** Creates one test item, delivered to the channels the candidate turned on. */
+  /** Creates one test item, emailed when the candidate turned email on. */
   async sendTestNotification(ownerUserId: string): Promise<{ id: string }> {
     const outcome = await this.requireDelivery().createTestItem(uuid(ownerUserId), this.now());
     if (outcome.outcome === "rate_limited") throw new NotificationsError("rate_limited");
     return { id: outcome.itemId };
-  }
-
-  async removePushSubscription(ownerUserId: string, id: string): Promise<void> {
-    const removed = await this.requireDelivery().removePushSubscription(
-      uuid(ownerUserId),
-      uuid(id),
-      this.now(),
-    );
-    if (!removed) throw new NotificationsError("not_found");
   }
 
   /**

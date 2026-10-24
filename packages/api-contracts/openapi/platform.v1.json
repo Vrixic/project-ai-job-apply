@@ -7127,7 +7127,7 @@
     "/notifications/delivery": {
       "get": {
         "operationId": "getNotificationDelivery",
-        "summary": "Where notifications are delivered: the account email address and its state, and the browser push subscriptions.",
+        "summary": "Where notifications are delivered: the account email address and its state, and its state.",
         "security": [
           {
             "oidc": ["profile:read"]
@@ -7198,120 +7198,6 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      }
-    },
-    "/notifications/delivery/push-subscriptions": {
-      "post": {
-        "operationId": "addNotificationPushSubscription",
-        "summary": "Register this browser for push notifications. The push carries no content.",
-        "security": [
-          {
-            "oidc": ["profile:write"]
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddNotificationPushSubscriptionRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "The subscription was saved",
-            "headers": {
-              "Cache-Control": {
-                "required": true,
-                "schema": {
-                  "type": "string",
-                  "enum": ["no-store"]
-                }
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotificationPushSubscriptionCreated"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "413": {
-            "$ref": "#/components/responses/PayloadTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      }
-    },
-    "/notifications/delivery/push-subscriptions/{subscriptionId}": {
-      "delete": {
-        "operationId": "removeNotificationPushSubscription",
-        "summary": "Remove a browser push subscription.",
-        "security": [
-          {
-            "oidc": ["profile:write"]
-          }
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "subscriptionId",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "The subscription was removed",
-            "headers": {
-              "Cache-Control": {
-                "required": true,
-                "schema": {
-                  "type": "string",
-                  "enum": ["no-store"]
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
@@ -14557,7 +14443,6 @@
       "NotificationDeliveryStatus": {
         "type": "object",
         "description": "Where this candidate receives notifications. The in-app inbox is always on.",
-        "required": ["pushSubscriptions"],
         "properties": {
           "email": {
             "type": "object",
@@ -14574,58 +14459,6 @@
               }
             },
             "additionalProperties": false
-          },
-          "pushSubscriptions": {
-            "type": "array",
-            "maxItems": 5,
-            "items": {
-              "type": "object",
-              "required": ["id", "state", "createdAt"],
-              "properties": {
-                "id": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "state": {
-                  "type": "string",
-                  "enum": ["active", "expired"]
-                },
-                "createdAt": {
-                  "type": "string",
-                  "format": "date-time"
-                }
-              },
-              "additionalProperties": false
-            }
-          },
-          "pushPublicKey": {
-            "type": "string",
-            "description": "The public key a browser needs to subscribe. Absent when push is not configured.",
-            "minLength": 80,
-            "maxLength": 100
-          }
-        },
-        "additionalProperties": false
-      },
-      "AddNotificationPushSubscriptionRequest": {
-        "type": "object",
-        "required": ["endpoint"],
-        "properties": {
-          "endpoint": {
-            "type": "string",
-            "minLength": 12,
-            "maxLength": 2048
-          }
-        },
-        "additionalProperties": false
-      },
-      "NotificationPushSubscriptionCreated": {
-        "type": "object",
-        "required": ["id"],
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
           }
         },
         "additionalProperties": false
@@ -14643,15 +14476,8 @@
       },
       "NotificationPreferences": {
         "type": "object",
-        "description": "Delivery preferences. The in-app inbox cannot be turned off; email and push are off until the candidate turns them on. Version 0 means defaults that were never saved.",
-        "required": [
-          "version",
-          "inAppEnabled",
-          "emailEnabled",
-          "pushEnabled",
-          "quietHours",
-          "updatedAt"
-        ],
+        "description": "Delivery preferences. The in-app inbox cannot be turned off; email is off until the candidate turns it on. Version 0 means defaults that were never saved.",
+        "required": ["version", "inAppEnabled", "emailEnabled", "quietHours", "updatedAt"],
         "properties": {
           "version": {
             "type": "integer",
@@ -14663,9 +14489,6 @@
             "const": true
           },
           "emailEnabled": {
-            "type": "boolean"
-          },
-          "pushEnabled": {
             "type": "boolean"
           },
           "quietHours": {
@@ -14680,7 +14503,7 @@
       },
       "UpdateNotificationPreferencesRequest": {
         "type": "object",
-        "required": ["expectedVersion", "emailEnabled", "pushEnabled", "quietHours"],
+        "required": ["expectedVersion", "emailEnabled", "quietHours"],
         "properties": {
           "expectedVersion": {
             "type": "integer",
@@ -14688,9 +14511,6 @@
             "maximum": 2147483647
           },
           "emailEnabled": {
-            "type": "boolean"
-          },
-          "pushEnabled": {
             "type": "boolean"
           },
           "quietHours": {

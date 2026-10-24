@@ -153,10 +153,6 @@ export type NotificationPreferences = components["schemas"]["NotificationPrefere
 export type UpdateNotificationPreferencesRequest =
   components["schemas"]["UpdateNotificationPreferencesRequest"];
 export type NotificationDeliveryStatus = components["schemas"]["NotificationDeliveryStatus"];
-export type AddNotificationPushSubscriptionRequest =
-  components["schemas"]["AddNotificationPushSubscriptionRequest"];
-export type NotificationPushSubscriptionCreated =
-  components["schemas"]["NotificationPushSubscriptionCreated"];
 export type NotificationTestSent = components["schemas"]["NotificationTestSent"];
 export type ApplicationStatus = components["schemas"]["ApplicationStatus"];
 export type ApplicationCurrentAction = components["schemas"]["ApplicationCurrentAction"];

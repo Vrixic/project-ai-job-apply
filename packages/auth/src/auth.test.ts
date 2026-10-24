@@ -163,28 +163,46 @@ describe("managed OIDC verifier", () => {
     });
   });
 
-  it("reports the account email only when the provider says it is verified", async () => {
+  it("names the account from an ordinary sign-in ID token and reports only a verified email", async () => {
     const verifier = createOidcIdTokenVerifier({ issuer, audience: "auth0-client-id-1234" });
-    const claims = {
-      audience: "auth0-client-id-1234",
-      authenticatedAt: Math.floor(Date.now() / 1000) - 30,
-      authenticationMethods: ["pwd"],
-    };
+    const audience = "auth0-client-id-1234";
+    // A normal sign-in token has no auth_time or amr, which `verify` demands.
     await expect(
-      verifier.verify(
-        await issue({ ...claims, email: "candidate@example.test", emailVerified: true }),
+      verifier.verifyIdentity(
+        await issue({ audience, email: "candidate@example.test", emailVerified: true }),
       ),
-    ).resolves.toMatchObject({ verifiedEmail: "candidate@example.test" });
+    ).resolves.toEqual({
+      issuer,
+      subject: "candidate-1",
+      verifiedEmail: "candidate@example.test",
+    });
     for (const emailVerified of [false, "true", undefined]) {
-      const proof = await verifier.verify(
-        await issue({ ...claims, email: "candidate@example.test", emailVerified }),
+      const proof = await verifier.verifyIdentity(
+        await issue({ audience, email: "candidate@example.test", emailVerified }),
       );
       expect(proof.verifiedEmail).toBeUndefined();
     }
     for (const email of [42, `${"a".repeat(250)}@example.test`]) {
-      const proof = await verifier.verify(await issue({ ...claims, email, emailVerified: true }));
+      const proof = await verifier.verifyIdentity(
+        await issue({ audience, email, emailVerified: true }),
+      );
       expect(proof.verifiedEmail).toBeUndefined();
     }
+  });
+
+  it("refuses an identity proof with the wrong signature, issuer, audience or expiry", async () => {
+    const verifier = createOidcIdTokenVerifier({ issuer, audience: "auth0-client-id-1234" });
+    const audience = "auth0-client-id-1234";
+    const rejected = async (options: Parameters<typeof issue>[0]) =>
+      expect(verifier.verifyIdentity(await issue(options))).rejects.toThrow();
+    await rejected({ audience, signingKey: otherPrivateKey });
+    await rejected({ audience, tokenIssuer: "https://wrong.invalid/" });
+    await rejected({ audience: "wrong-client-id" });
+    await rejected({ audience: [audience, "other-client"] });
+    await rejected({ audience, expiresAt: "0s" });
+    await rejected({ audience, omitExpiration: true });
+    await rejected({ audience, omitIssuedAt: true });
+    await rejected({ audience, algorithm: "ES256", keyId: "ec", signingKey: ecPrivateKey });
   });
 
   it("rejects ID-token proofs with ambiguous audience or missing recent-authentication claims", async () => {

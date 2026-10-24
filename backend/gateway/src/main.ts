@@ -170,9 +170,6 @@ const notificationsService =
   process.env.NOTIFICATIONS_ENABLED === "true"
     ? new NotificationsService(new PostgresNotificationsStore(database.client), {
         delivery: new PostgresDeliveryStore(database.client),
-        ...(process.env.NOTIFICATIONS_PUSH_PUBLIC_KEY
-          ? { pushPublicKey: process.env.NOTIFICATIONS_PUSH_PUBLIC_KEY }
-          : {}),
       })
     : undefined;
 const notifications = notificationsService

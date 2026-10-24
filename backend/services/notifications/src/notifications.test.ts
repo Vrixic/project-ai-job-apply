@@ -94,27 +94,25 @@ describe("quiet hours and routing", () => {
     expect(quietHoursEnd({ ...quiet, timeZone: "Not/AZone" }, night)).toBeUndefined();
   });
 
-  it("keeps external channels off unless the candidate turned them on", () => {
+  it("keeps email off unless the candidate turned it on", () => {
     const decision = routeChannels({
       urgency: "normal",
-      preferences: { emailEnabled: false, pushEnabled: false, quietHours: defaultQuietHours },
+      preferences: { emailEnabled: false, quietHours: defaultQuietHours },
       now: afternoon,
     });
     expect(decision).toEqual({
       inApp: true,
       email: { action: "skip", reason: "channel_off" },
-      push: { action: "skip", reason: "channel_off" },
     });
   });
 
-  it("defers enabled channels during quiet hours, except for an urgent item", () => {
-    const preferences = { emailEnabled: true, pushEnabled: true, quietHours: quiet };
+  it("defers email during quiet hours, except for an urgent item", () => {
+    const preferences = { emailEnabled: true, quietHours: quiet };
     const normal = routeChannels({ urgency: "normal", preferences, now: night });
     expect(normal.email).toEqual({
       action: "defer_until",
       at: new Date("2026-10-22T11:00:00.000Z"),
     });
-    expect(normal.push).toEqual(normal.email);
     expect(routeChannels({ urgency: "high", preferences, now: night }).email).toEqual({
       action: "send_now",
     });
@@ -127,7 +125,7 @@ describe("quiet hours and routing", () => {
     expect(
       routeChannels({
         urgency: "low",
-        preferences: { emailEnabled: false, pushEnabled: false, quietHours: quiet },
+        preferences: { emailEnabled: false, quietHours: quiet },
         now: night,
       }).inApp,
     ).toBe(true);
@@ -137,7 +135,6 @@ describe("quiet hours and routing", () => {
 describe("preferences validation", () => {
   const valid = {
     emailEnabled: true,
-    pushEnabled: false,
     quietHours: { enabled: true, startMinute: 1320, endMinute: 420, timeZone: "UTC" },
   };
   it("accepts a valid update", () => {
@@ -186,7 +183,6 @@ describe("NotificationsService", () => {
     await expect(
       service.updatePreferences(USER, 2, {
         emailEnabled: false,
-        pushEnabled: false,
         quietHours: defaultQuietHours,
       }),
     ).rejects.toMatchObject({ code: "version_conflict" });

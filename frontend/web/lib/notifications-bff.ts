@@ -18,9 +18,6 @@ const ITEM_ID_PATTERN =
 const validatePreferencesRequest = compileComponentValidator(
   "UpdateNotificationPreferencesRequest",
 );
-const validatePushSubscriptionRequest = compileComponentValidator(
-  "AddNotificationPushSubscriptionRequest",
-);
 
 function problem(status: number, code: string, title: string): Response {
   return Response.json(
@@ -211,7 +208,7 @@ function noContent(response: Response, expectedStatus: 202 | 204): Response {
   return new Response(null, { status: expectedStatus, headers: { "cache-control": "no-store" } });
 }
 
-/** Email and push delivery settings (ADR-056). */
+/** Email delivery settings (ADR-056). */
 export async function forwardNotificationDeliveryStatus(request: Request): Promise<Response> {
   const refused = bodylessRefused(request, "GET");
   cancelBody(request.body);
@@ -241,29 +238,6 @@ export async function forwardNotificationDeliveryEmail(request: Request): Promis
   );
 }
 
-export async function forwardNotificationDeliveryPushSubscriptions(
-  request: Request,
-): Promise<Response> {
-  if (request.method !== "POST" || new URL(request.url).search !== "") {
-    cancelBody(request.body);
-    return invalid();
-  }
-  const read = await readValidJsonBody(request, validatePushSubscriptionRequest);
-  if ("refusal" in read) return read.refusal;
-  const response = await forward("/v1/notifications/delivery/push-subscriptions", {
-    method: "POST",
-    body: read.body,
-    signal: request.signal,
-    headers: { "content-type": "application/json" },
-  });
-  return validateFoundationResponse(
-    response,
-    201,
-    "NotificationPushSubscriptionCreated",
-    request.signal,
-  );
-}
-
 /** One test item in the candidate's own inbox, so they can see email and browser alerts work. */
 export async function forwardNotificationDeliveryTest(request: Request): Promise<Response> {
   const refused = bodylessRefused(request, "POST");
@@ -274,20 +248,4 @@ export async function forwardNotificationDeliveryTest(request: Request): Promise
     signal: request.signal,
   });
   return validateFoundationResponse(response, 201, "NotificationTestSent", request.signal);
-}
-
-export async function forwardNotificationDeliveryPushSubscription(
-  request: Request,
-  subscriptionId: string,
-): Promise<Response> {
-  const refused = bodylessRefused(request, "DELETE") || !ITEM_ID_PATTERN.test(subscriptionId);
-  cancelBody(request.body);
-  if (refused) return invalid();
-  return noContent(
-    await forward(`/v1/notifications/delivery/push-subscriptions/${subscriptionId}`, {
-      method: "DELETE",
-      signal: request.signal,
-    }),
-    204,
-  );
 }

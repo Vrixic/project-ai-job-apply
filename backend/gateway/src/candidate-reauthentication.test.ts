@@ -29,6 +29,9 @@ function verifier(overrides: Partial<Awaited<ReturnType<IdTokenVerifier["verify"
         ...overrides,
       };
     },
+    async verifyIdentity() {
+      throw new Error("The identity-only check is not part of this boundary");
+    },
   } satisfies IdTokenVerifier;
 }
 

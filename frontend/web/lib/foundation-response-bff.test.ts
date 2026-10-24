@@ -222,15 +222,7 @@ function profileAnswer() {
 const validValues: Record<FoundationResponseSchemaName, unknown> = {
   NotificationDeliveryStatus: {
     email: { address: "person@example.com", state: "verified" },
-    pushSubscriptions: [
-      {
-        id: "019b4e12-7ea3-7c36-9357-aea35ab542cc",
-        state: "active",
-        createdAt: "2026-10-22T12:00:00.000Z",
-      },
-    ],
   },
-  NotificationPushSubscriptionCreated: { id: "019b4e12-7ea3-7c36-9357-aea35ab542cc" },
   NotificationTestSent: { id: "019b4e12-7ea3-7c36-9357-aea35ab542cc" },
   CanonicalJobDetail: {
     id: "00000000-0000-7000-8000-000000000002",
@@ -312,7 +304,6 @@ const validValues: Record<FoundationResponseSchemaName, unknown> = {
     version: 0,
     inAppEnabled: true,
     emailEnabled: false,
-    pushEnabled: false,
     quietHours: { enabled: false, startMinute: 1320, endMinute: 420, timeZone: "UTC" },
     updatedAt: "2026-10-22T12:00:00.000Z",
   },

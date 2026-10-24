@@ -2,6 +2,7 @@ import type postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { scheduleDeliveries } from "./delivery-store.js";
 import type { SourceProjection } from "./source-events.js";
+import { asDate, iso } from "./timestamps.js";
 import {
   defaultQuietHours,
   type InboxItem,
@@ -19,20 +20,19 @@ interface ItemRow {
   state: InboxState;
   aggregate_id: string;
   source_revision: string | number | bigint;
-  created_at: Date;
-  updated_at: Date;
-  expires_at: Date;
+  created_at: Date | string;
+  updated_at: Date | string;
+  expires_at: Date | string;
 }
 
 interface PreferencesRow {
   version: number;
   email_enabled: boolean;
-  push_enabled: boolean;
   quiet_hours_enabled: boolean;
   quiet_start_minute: number;
   quiet_end_minute: number;
   time_zone: string;
-  updated_at: Date;
+  updated_at: Date | string;
 }
 
 export type RecordOutcome = "recorded" | "duplicate" | "stale" | "ignored";
@@ -50,9 +50,9 @@ function toItem(row: ItemRow): InboxItem {
     state: row.state,
     applicationId: row.aggregate_id,
     sourceRevision: Number(row.source_revision),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    expiresAt: row.expires_at,
+    createdAt: asDate(row.created_at),
+    updatedAt: asDate(row.updated_at),
+    expiresAt: asDate(row.expires_at),
   };
 }
 
@@ -61,14 +61,13 @@ function toPreferences(row: PreferencesRow): NotificationPreferences {
     version: row.version,
     inAppEnabled: true,
     emailEnabled: row.email_enabled,
-    pushEnabled: row.push_enabled,
     quietHours: {
       enabled: row.quiet_hours_enabled,
       startMinute: row.quiet_start_minute,
       endMinute: row.quiet_end_minute,
       timeZone: row.time_zone,
     },
-    updatedAt: row.updated_at,
+    updatedAt: asDate(row.updated_at),
   };
 }
 
@@ -96,7 +95,7 @@ export class PostgresNotificationsStore {
         INSERT INTO notifications.source_receipts
           (source_service, source_event_id, owner_user_id, event_type, received_at, outcome)
         VALUES ('applications', ${projection.eventId}, ${projection.ownerUserId}::uuid,
-          'application.status', ${now}, 'recorded')
+          'application.status', ${iso(now)}::timestamptz, 'recorded')
         ON CONFLICT (source_service, source_event_id) DO NOTHING
         RETURNING source_event_id
       `;
@@ -122,13 +121,13 @@ export class PostgresNotificationsStore {
         INSERT INTO notifications.source_cursors
           (owner_user_id, source_service, aggregate_id, last_revision, updated_at)
         VALUES (${projection.ownerUserId}::uuid, 'applications', ${projection.applicationId}::uuid,
-          ${projection.revision}, ${now})
+          ${projection.revision}, ${iso(now)}::timestamptz)
         ON CONFLICT (owner_user_id, source_service, aggregate_id)
         DO UPDATE SET last_revision = EXCLUDED.last_revision, updated_at = EXCLUDED.updated_at
       `;
       if (projection.resolves.length > 0) {
         await transaction`
-          UPDATE notifications.inbox_items SET state = 'expired', updated_at = ${now}
+          UPDATE notifications.inbox_items SET state = 'expired', updated_at = ${iso(now)}::timestamptz
           WHERE owner_user_id = ${projection.ownerUserId}::uuid AND source_service = 'applications'
             AND aggregate_id = ${projection.applicationId}::uuid
             AND kind = ANY(${[...projection.resolves]}::text[])
@@ -149,7 +148,8 @@ export class PostgresNotificationsStore {
           ${projection.open.urgency}, 'unread', 'applications', ${projection.applicationId}::uuid,
           ${projection.revision},
           ${`${projection.open.kind}:${projection.applicationId}:${projection.revision}`},
-          ${now}, ${now}, ${new Date(now.getTime() + projection.open.lifetimeMs)})
+          ${iso(now)}::timestamptz, ${iso(now)}::timestamptz,
+          ${iso(new Date(now.getTime() + projection.open.lifetimeMs))}::timestamptz)
         ON CONFLICT (owner_user_id, dedupe_key) DO NOTHING
         RETURNING id
       `;
@@ -181,7 +181,7 @@ export class PostgresNotificationsStore {
         ${
           options.after
             ? this
-                .client`AND (created_at, id) < (${options.after.createdAt}, ${options.after.id}::uuid)`
+                .client`AND (created_at, id) < (${iso(options.after.createdAt)}::timestamptz, ${options.after.id}::uuid)`
             : this.client``
         }
       ORDER BY created_at DESC, id DESC
@@ -223,7 +223,7 @@ export class PostgresNotificationsStore {
         current.state === "unread" || (current.state === "acknowledged" && to === "dismissed");
       if (!allowed) return toItem(current);
       const [updated] = await transaction<ItemRow[]>`
-        UPDATE notifications.inbox_items SET state = ${to}, updated_at = GREATEST(updated_at, ${now})
+        UPDATE notifications.inbox_items SET state = ${to}, updated_at = GREATEST(updated_at, ${iso(now)}::timestamptz)
         WHERE id = ${itemId}::uuid AND owner_user_id = ${ownerUserId}::uuid
         RETURNING ${transaction.unsafe(ITEM_COLUMNS)}
       `;
@@ -234,8 +234,8 @@ export class PostgresNotificationsStore {
   /** Items past their lifetime stop being offered. Returns how many changed. */
   async expireDue(now: Date): Promise<number> {
     const rows = await this.client`
-      UPDATE notifications.inbox_items SET state = 'expired', updated_at = GREATEST(updated_at, ${now})
-      WHERE expires_at <= ${now} AND state IN ('unread', 'acknowledged')
+      UPDATE notifications.inbox_items SET state = 'expired', updated_at = GREATEST(updated_at, ${iso(now)}::timestamptz)
+      WHERE expires_at <= ${iso(now)}::timestamptz AND state IN ('unread', 'acknowledged')
       RETURNING id
     `;
     return rows.length;
@@ -243,7 +243,7 @@ export class PostgresNotificationsStore {
 
   async readPreferences(ownerUserId: string, now: Date): Promise<NotificationPreferences> {
     const [row] = await this.client<PreferencesRow[]>`
-      SELECT version, email_enabled, push_enabled, quiet_hours_enabled, quiet_start_minute,
+      SELECT version, email_enabled, quiet_hours_enabled, quiet_start_minute,
         quiet_end_minute, time_zone, updated_at
       FROM notifications.preferences WHERE owner_user_id = ${ownerUserId}::uuid
     `;
@@ -253,7 +253,6 @@ export class PostgresNotificationsStore {
           version: 0,
           inAppEnabled: true,
           emailEnabled: false,
-          pushEnabled: false,
           quietHours: { ...defaultQuietHours },
           updatedAt: now,
         };
@@ -263,12 +262,11 @@ export class PostgresNotificationsStore {
   async updatePreferences(
     ownerUserId: string,
     expectedVersion: number,
-    update: { emailEnabled: boolean; pushEnabled: boolean; quietHours: QuietHours },
+    update: { emailEnabled: boolean; quietHours: QuietHours },
     now: Date,
   ): Promise<NotificationPreferences | null> {
     const values = {
       email: update.emailEnabled,
-      push: update.pushEnabled,
       quiet: update.quietHours.enabled,
       start: update.quietHours.startMinute,
       end: update.quietHours.endMinute,
@@ -280,19 +278,19 @@ export class PostgresNotificationsStore {
             INSERT INTO notifications.preferences
               (owner_user_id, version, in_app_enabled, email_enabled, push_enabled,
                quiet_hours_enabled, quiet_start_minute, quiet_end_minute, time_zone, updated_at)
-            VALUES (${ownerUserId}::uuid, 1, true, ${values.email}, ${values.push}, ${values.quiet},
-              ${values.start}, ${values.end}, ${values.zone}, ${now})
+            VALUES (${ownerUserId}::uuid, 1, true, ${values.email}, false, ${values.quiet},
+              ${values.start}, ${values.end}, ${values.zone}, ${iso(now)}::timestamptz)
             ON CONFLICT (owner_user_id) DO NOTHING
-            RETURNING version, email_enabled, push_enabled, quiet_hours_enabled, quiet_start_minute,
+            RETURNING version, email_enabled, quiet_hours_enabled, quiet_start_minute,
               quiet_end_minute, time_zone, updated_at
           `
         : await this.client<PreferencesRow[]>`
             UPDATE notifications.preferences SET version = version + 1,
-              email_enabled = ${values.email}, push_enabled = ${values.push},
+              email_enabled = ${values.email},
               quiet_hours_enabled = ${values.quiet}, quiet_start_minute = ${values.start},
-              quiet_end_minute = ${values.end}, time_zone = ${values.zone}, updated_at = ${now}
+              quiet_end_minute = ${values.end}, time_zone = ${values.zone}, updated_at = ${iso(now)}::timestamptz
             WHERE owner_user_id = ${ownerUserId}::uuid AND version = ${expectedVersion}
-            RETURNING version, email_enabled, push_enabled, quiet_hours_enabled, quiet_start_minute,
+            RETURNING version, email_enabled, quiet_hours_enabled, quiet_start_minute,
               quiet_end_minute, time_zone, updated_at
           `;
     return rows[0] ? toPreferences(rows[0]) : null;

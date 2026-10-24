@@ -659,11 +659,11 @@ test("D4 receipts need the seeded Notifications records and permit empty optiona
     "attemptCount",
     "historyCount",
     "notificationsPreferencesCount",
-    "notificationsPushSubscriptionCount",
   ])
     completed.ExportCoverage[name] = 1;
   for (const name of [
     "notificationsEmailDestinationCount",
+    "notificationsPushSubscriptionCount",
     "notificationsInboxCount",
     "notificationsDeliveryCount",
   ])
@@ -677,7 +677,7 @@ test("D4 receipts need the seeded Notifications records and permit empty optiona
     () => sanitizeOperatorResult("execute", completed, false, false, true),
     /operator_result_invalid/u,
   );
-  for (const name of ["notificationsPreferencesCount", "notificationsPushSubscriptionCount"]) {
+  for (const name of ["notificationsPreferencesCount"]) {
     const partial = structuredClone(completed);
     partial.ExportCoverage[name] = 0;
     assert.throws(
