@@ -670,11 +670,8 @@ describe("API Gateway Lambda boundary", () => {
 
     expect(await status("GET", "/v1/notifications/delivery")).toBe(200);
     expect(await status("GET", "/v1/notifications/delivery", { rawQueryString: "x=1" })).toBe(400);
-    expect(await status("PUT", "/v1/notifications/delivery/email", json)).toBe(200);
-    expect(await status("PUT", "/v1/notifications/delivery/email")).toBe(400);
-    expect(await status("DELETE", "/v1/notifications/delivery/email")).toBe(200);
-    expect(await status("DELETE", "/v1/notifications/delivery/email", json)).toBe(400);
-    expect(await status("POST", "/v1/notifications/delivery/email/confirmation", json)).toBe(200);
+    expect(await status("PUT", "/v1/notifications/delivery/email")).toBe(200);
+    expect(await status("PUT", "/v1/notifications/delivery/email", json)).toBe(400);
     expect(await status("POST", "/v1/notifications/delivery/push-subscriptions", json)).toBe(200);
     expect(await status("POST", "/v1/notifications/delivery/test")).toBe(200);
     expect(await status("POST", "/v1/notifications/delivery/test", json)).toBe(400);
@@ -693,6 +690,8 @@ describe("API Gateway Lambda boundary", () => {
       ["POST", "/v1/notifications/delivery/test/"],
       ["GET", "/v1/notifications/delivery/email"],
       ["GET", "/v1/notifications/delivery/email/confirmation"],
+      ["POST", "/v1/notifications/delivery/email/confirmation"],
+      ["DELETE", "/v1/notifications/delivery/email"],
     ] as const)
       expect(await status(method, path)).toBe(404);
     const anonymous = routedEvent("GET", "/v1/notifications/delivery");

@@ -87,11 +87,7 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
 
   async function confirmedEmailOwner(options: { push?: boolean; quiet?: boolean } = {}) {
     const owner = uuidv7();
-    await service.requestEmailConfirmation(owner, addressOf(owner));
-    await dispatcher.run();
-    const mail = email.to(addressOf(owner)).at(-1);
-    const code = /confirmation code is (\d{6})/.exec(mail?.text ?? "")?.[1] ?? "";
-    expect(await service.confirmEmail(owner, code)).toBe("verified");
+    await service.setAccountEmail(owner, addressOf(owner));
     await service.updatePreferences(owner, 0, {
       emailEnabled: true,
       pushEnabled: options.push ?? false,
@@ -130,77 +126,34 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
     return row;
   };
 
-  it("confirms an address with a code the dispatcher emails, then stores it verified", async () => {
+  it("records the verified account address, normalized and idempotently", async () => {
     const owner = uuidv7();
-    await service.requestEmailConfirmation(owner, `  ${addressOf(owner).toUpperCase()} `);
+    await service.setAccountEmail(owner, `  ${addressOf(owner).toUpperCase()} `);
     expect((await service.getDeliveryStatus(owner)).email).toEqual({
       address: addressOf(owner),
-      state: "pending",
-      codePending: true,
+      state: "verified",
     });
-    const summary = await dispatcher.run();
-    expect(summary.codesSent).toBeGreaterThanOrEqual(1);
-    const [mail] = email.to(addressOf(owner));
-    expect(mail?.subject).toBe("Your email confirmation code");
-    const code = /confirmation code is (\d{6})/.exec(mail?.text ?? "")?.[1] ?? "";
-    // The stored value is a hash, never the code.
-    const [row] = await client<{ code_hash: string }[]>`
-      SELECT code_hash FROM notifications.email_destinations WHERE owner_user_id = ${owner}::uuid
+    const [row] = await client<{ verified_at: Date }[]>`
+      SELECT verified_at FROM notifications.email_destinations WHERE owner_user_id = ${owner}::uuid
     `;
-    expect(row?.code_hash).toMatch(/^[0-9a-f]{64}$/);
-    expect(await service.confirmEmail(owner, code === "000000" ? "111111" : "000000")).toBe(
-      "invalid",
-    );
-    expect(await service.confirmEmail(owner, code)).toBe("verified");
-    expect((await service.getDeliveryStatus(owner)).email).toMatchObject({ state: "verified" });
-    // A second send does not happen and the code cannot be reused.
+    advance(minute);
+    await service.setAccountEmail(owner, addressOf(owner));
+    const [again] = await client<{ verified_at: Date }[]>`
+      SELECT verified_at FROM notifications.email_destinations WHERE owner_user_id = ${owner}::uuid
+    `;
+    expect(again?.verified_at).toEqual(row?.verified_at);
+    // No code is emailed: the identity provider already verified the address.
     await dispatcher.run();
-    expect(email.to(addressOf(owner))).toHaveLength(1);
-    expect(await service.confirmEmail(owner, code)).toBe("no_request");
+    expect(email.to(addressOf(owner))).toHaveLength(0);
   });
 
-  it("limits wrong guesses, expires codes and caps requests per hour", async () => {
+  it("rejects a malformed or missing address before touching storage", async () => {
     const owner = uuidv7();
-    await service.requestEmailConfirmation(owner, addressOf(owner));
-    await dispatcher.run();
-    const code = /confirmation code is (\d{6})/.exec(
-      email.to(addressOf(owner))[0]?.text ?? "",
-    )?.[1];
-    const wrong = code === "123456" ? "654321" : "123456";
-    for (let attempt = 0; attempt < 5; attempt += 1)
-      expect(await service.confirmEmail(owner, wrong)).toBe("invalid");
-    // After five wrong tries even the right code is refused.
-    expect(await service.confirmEmail(owner, code)).toBe("too_many_attempts");
-
-    // A fresh request resets the guesses; an old code expires after 15 minutes.
-    await service.requestEmailConfirmation(owner, addressOf(owner));
-    await dispatcher.run();
-    const fresh = /confirmation code is (\d{6})/.exec(
-      email.to(addressOf(owner)).at(-1)?.text ?? "",
-    )?.[1];
-    advance(16 * minute);
-    expect(await service.confirmEmail(owner, fresh)).toBe("expired");
-
-    // Five requests per hour: two were used, three more fit, the sixth is refused.
-    for (let request = 0; request < 3; request += 1)
-      await service.requestEmailConfirmation(owner, addressOf(owner));
-    await expect(service.requestEmailConfirmation(owner, addressOf(owner))).rejects.toMatchObject({
-      code: "rate_limited",
-    });
-    advance(61 * minute);
-    await expect(
-      service.requestEmailConfirmation(owner, addressOf(owner)),
-    ).resolves.toBeUndefined();
-  });
-
-  it("rejects malformed addresses and codes before touching storage", async () => {
-    const owner = uuidv7();
-    await expect(service.requestEmailConfirmation(owner, "not-an-address")).rejects.toMatchObject({
-      code: "invalid_request",
-    });
-    await expect(service.confirmEmail(owner, "12345")).rejects.toMatchObject({
-      code: "invalid_request",
-    });
+    for (const address of ["not-an-address", undefined, 42]) {
+      await expect(service.setAccountEmail(owner, address)).rejects.toMatchObject({
+        code: "invalid_request",
+      });
+    }
     expect((await service.getDeliveryStatus(owner)).email).toBeUndefined();
   });
 
@@ -275,7 +228,6 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
     expect(await attemptOf(first.itemId, "email")).toBeUndefined();
 
     const unverified = uuidv7();
-    await service.requestEmailConfirmation(unverified, addressOf(unverified));
     await service.updatePreferences(unverified, 0, {
       emailEnabled: true,
       pushEnabled: true,
@@ -356,9 +308,13 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
       outcome_code: "rejected_permanent",
     });
     expect((await service.getDeliveryStatus(owner)).email).toMatchObject({ state: "suppressed" });
-    // The same address cannot be re-requested; a different one can.
-    await expect(service.requestEmailConfirmation(owner, addressOf(owner))).rejects.toMatchObject({
-      code: "invalid_request",
+    // Recording the same address again does not lift the suppression; a changed one replaces it.
+    await service.setAccountEmail(owner, addressOf(owner));
+    expect((await service.getDeliveryStatus(owner)).email).toMatchObject({ state: "suppressed" });
+    await service.setAccountEmail(owner, `new-${addressOf(owner)}`);
+    expect((await service.getDeliveryStatus(owner)).email).toEqual({
+      address: `new-${addressOf(owner)}`,
+      state: "verified",
     });
     const inbox = await service.listInbox(owner);
     expect(inbox.items.map((item) => item.id)).toContain(itemId);
@@ -415,26 +371,23 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
     advance(2 * minute);
     const reclaimed = await delivery.claimDue(now(), 1000);
     expect(reclaimed.length).toBe(first.length + second.length);
-    expect(reclaimed.every((attempt) => attempt.attemptCount === 2)).toBe(true);
+    // Earlier tests may leave their own attempts due; only this test's four are counted here.
+    const mine = reclaimed.filter((attempt) => ids.includes(attempt.inboxItemId));
+    expect(mine).toHaveLength(4);
+    expect(mine.every((attempt) => attempt.attemptCount === 2)).toBe(true);
     for (const attempt of reclaimed)
       await delivery.finishAttempt(attempt.id, "skipped", "item_resolved", now());
     expect(ids).toHaveLength(4);
   });
 
-  it("skips scheduled mail when the address is removed or replaced", async () => {
-    const owner = await confirmedEmailOwner();
-    const { itemId } = await openItem(owner);
-    await service.removeEmail(owner);
-    expect(await attemptOf(itemId, "email")).toMatchObject({
+  it("skips scheduled mail when the account address changes", async () => {
+    const replaced = await confirmedEmailOwner();
+    const second = await openItem(replaced);
+    await service.setAccountEmail(replaced, `new-${addressOf(replaced)}`);
+    expect(await attemptOf(second.itemId, "email")).toMatchObject({
       state: "skipped",
       outcome_code: "no_destination",
     });
-    await expect(service.removeEmail(owner)).rejects.toMatchObject({ code: "not_found" });
-
-    const replaced = await confirmedEmailOwner();
-    const second = await openItem(replaced);
-    await service.requestEmailConfirmation(replaced, `new-${addressOf(replaced)}`);
-    expect(await attemptOf(second.itemId, "email")).toMatchObject({ state: "skipped" });
   });
 
   describe("push", () => {

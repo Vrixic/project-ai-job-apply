@@ -144,6 +144,10 @@ const FUTURE_ID_TOKEN_PROOF =
   "future-header-segment.future-payload-segment.future-signature-segment";
 const MISMATCHED_ID_TOKEN_PROOF =
   "mismatch-header-segment.mismatch-payload-segment.mismatch-signature-segment";
+const VERIFIED_EMAIL_ID_TOKEN_PROOF =
+  "verified-header-segment.verified-payload-segment.verified-signature-segment";
+const UNVERIFIED_EMAIL_ID_TOKEN_PROOF =
+  "unverified-header-segment.unverified-payload-segment.unverified-signature-segment";
 
 class MemoryProfileStore implements ProfileStore {
   resolveUserCalls = 0;
@@ -932,9 +936,14 @@ async function createApp(
       return {
         issuer: "https://test-issuer.invalid/",
         subject:
-          token === MISMATCHED_ID_TOKEN_PROOF ? "different-candidate" : "candidate-rights-route",
+          token === MISMATCHED_ID_TOKEN_PROOF
+            ? "different-candidate"
+            : token === VERIFIED_EMAIL_ID_TOKEN_PROOF || token === UNVERIFIED_EMAIL_ID_TOKEN_PROOF
+              ? "notif-email-owner"
+              : "candidate-rights-route",
         audience: ["candidate-web-client"],
         ...evidence,
+        ...(token === VERIFIED_EMAIL_ID_TOKEN_PROOF ? { verifiedEmail: "Person@Example.com" } : {}),
       };
     },
   };
@@ -6520,20 +6529,13 @@ describe("Notifications routes (D5-001)", () => {
       async getDeliveryStatus(...args) {
         calls.push(["getDeliveryStatus", ...args]);
         return {
-          email: { address: "person@example.com", state: "verified" as const, codePending: false },
+          email: { address: "person@example.com", state: "verified" as const },
           pushSubscriptions: [{ id: ITEM, state: "active" as const, createdAt: at }],
           pushPublicKey: "B".repeat(87),
         };
       },
-      async requestEmailConfirmation(...args) {
-        calls.push(["requestEmailConfirmation", ...args]);
-      },
-      async confirmEmail(...args) {
-        calls.push(["confirmEmail", ...args]);
-        return "verified" as const;
-      },
-      async removeEmail(...args) {
-        calls.push(["removeEmail", ...args]);
+      async setAccountEmail(...args) {
+        calls.push(["setAccountEmail", ...args]);
       },
       async addPushSubscription(...args) {
         calls.push(["addPushSubscription", ...args]);
@@ -6765,38 +6767,32 @@ describe("Notifications routes (D5-001)", () => {
     await app.close();
   });
 
-  it("serves the delivery status, email confirmation and push subscriptions", async () => {
+  it("serves the delivery status, the account email and push subscriptions", async () => {
     const { notifications, calls } = fake();
     const { app, issuer } = await createApp({ notifications });
-    const token = await issuer.issue("notif-delivery", { scope: "profile:read profile:write" });
+    const token = await issuer.issue("notif-email-owner", { scope: "profile:read profile:write" });
     const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
 
     const status = await app.inject({ method: "GET", url: "/v1/notifications/delivery", headers });
     expect(status.statusCode).toBe(200);
     expect(status.headers["cache-control"]).toBe("no-store");
     expect(status.json()).toEqual({
-      email: { address: "person@example.com", state: "verified", codePending: false },
+      email: { address: "person@example.com", state: "verified" },
       pushSubscriptions: [{ id: ITEM, state: "active", createdAt: at.toISOString() }],
       pushPublicKey: "B".repeat(87),
     });
 
-    const requested = await app.inject({
+    const used = await app.inject({
       method: "PUT",
       url: "/v1/notifications/delivery/email",
-      headers,
-      payload: JSON.stringify({ address: "person@example.com" }),
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-ai-job-apply-reauthentication": VERIFIED_EMAIL_ID_TOKEN_PROOF,
+      },
     });
-    expect(requested.statusCode).toBe(202);
-    expect(requested.body).toBe("");
-
-    const confirmed = await app.inject({
-      method: "POST",
-      url: "/v1/notifications/delivery/email/confirmation",
-      headers,
-      payload: JSON.stringify({ code: "123456" }),
-    });
-    expect(confirmed.statusCode).toBe(200);
-    expect(confirmed.json()).toEqual({ result: "verified" });
+    expect(used.statusCode).toBe(204);
+    expect(used.body).toBe("");
+    expect(used.headers["cache-control"]).toBe("no-store");
 
     const added = await app.inject({
       method: "POST",
@@ -6821,24 +6817,63 @@ describe("Notifications routes (D5-001)", () => {
     expect(test.statusCode).toBe(201);
     expect(test.json()).toEqual({ id: ITEM });
     expect(test.headers["cache-control"]).toBe("no-store");
-    const removedEmail = await app.inject({
-      method: "DELETE",
-      url: "/v1/notifications/delivery/email",
-      headers: { authorization: `Bearer ${token}` },
-    });
-    expect(removedEmail.statusCode).toBe(204);
 
     expect(calls.map((call) => call[0])).toEqual([
       "getDeliveryStatus",
-      "requestEmailConfirmation",
-      "confirmEmail",
+      "setAccountEmail",
       "addPushSubscription",
       "removePushSubscription",
       "sendTestNotification",
-      "removeEmail",
     ]);
-    expect(calls[1]?.slice(1)).toEqual([expect.any(String), "person@example.com"]);
-    expect(calls[3]?.[2]).toBe("https://fcm.googleapis.com/fcm/send/abc");
+    // The address is exactly what the verified ID token carried; the browser names none.
+    expect(calls[1]?.slice(1)).toEqual([expect.any(String), "Person@Example.com"]);
+    expect(calls[2]?.[2]).toBe("https://fcm.googleapis.com/fcm/send/abc");
+    await app.close();
+  });
+
+  it("takes the notification address only from a verified ID token for the same candidate", async () => {
+    const { notifications, calls } = fake({
+      async setAccountEmail(...args) {
+        calls.push(["setAccountEmail", ...args]);
+        if (args[1] === undefined) throw new NotificationsError("invalid_request");
+      },
+    });
+    const { app, issuer } = await createApp({ notifications });
+    const token = await issuer.issue("notif-email-owner", { scope: "profile:read profile:write" });
+    const put = (extra: Record<string, string>, payload?: unknown) =>
+      app.inject({
+        method: "PUT",
+        url: "/v1/notifications/delivery/email",
+        headers: {
+          authorization: `Bearer ${token}`,
+          ...extra,
+          ...(payload === undefined ? {} : { "content-type": "application/json" }),
+        },
+        ...(payload === undefined ? {} : { payload: JSON.stringify(payload) }),
+      });
+
+    // No proof, or a proof for another candidate, never reaches Notifications.
+    expect((await put({})).statusCode).toBe(401);
+    expect(
+      (await put({ "x-ai-job-apply-reauthentication": MISMATCHED_ID_TOKEN_PROOF })).statusCode,
+    ).toBe(401);
+    // A browser-supplied address is refused outright, even beside a valid proof.
+    expect(
+      (
+        await put(
+          { "x-ai-job-apply-reauthentication": VERIFIED_EMAIL_ID_TOKEN_PROOF },
+          { address: "someone-else@example.com" },
+        )
+      ).statusCode,
+    ).toBe(400);
+    expect(calls).toEqual([]);
+    // A proof whose email the provider did not verify carries no address, so nothing is recorded.
+    const unverified = await put({
+      "x-ai-job-apply-reauthentication": UNVERIFIED_EMAIL_ID_TOKEN_PROOF,
+    });
+    expect(unverified.statusCode).toBe(400);
+    expect(calls.map((call) => call[0])).toEqual(["setAccountEmail"]);
+    expect(calls[0]?.[2]).toBeUndefined();
     await app.close();
   });
 
@@ -6851,15 +6886,19 @@ describe("Notifications routes (D5-001)", () => {
       (await app.inject({ method: "GET", url: "/v1/notifications/delivery", headers })).statusCode,
     ).toBe(200);
     for (const [method, url, payload] of [
-      ["PUT", "/v1/notifications/delivery/email", { address: "person@example.com" }],
-      ["POST", "/v1/notifications/delivery/email/confirmation", { code: "123456" }],
+      ["PUT", "/v1/notifications/delivery/email", undefined],
       [
         "POST",
         "/v1/notifications/delivery/push-subscriptions",
         { endpoint: "https://fcm.googleapis.com/x/y" },
       ],
     ] as const) {
-      const response = await app.inject({ method, url, headers, payload: JSON.stringify(payload) });
+      const response = await app.inject({
+        method,
+        url,
+        headers: payload === undefined ? { authorization: headers.authorization } : headers,
+        ...(payload === undefined ? {} : { payload: JSON.stringify(payload) }),
+      });
       expect(response.statusCode).toBe(403);
     }
     expect(
@@ -6889,17 +6928,10 @@ describe("Notifications routes (D5-001)", () => {
 
   it("rejects malformed delivery input and maps service errors", async () => {
     const { notifications } = fake({
-      async requestEmailConfirmation(_user, address) {
-        if (address === "limited@example.com") throw new NotificationsError("rate_limited");
-        if (address === "bad@example.com") throw new NotificationsError("invalid_request");
-      },
       async addPushSubscription() {
         throw new NotificationsError("limit_reached");
       },
       async removePushSubscription() {
-        throw new NotificationsError("not_found");
-      },
-      async removeEmail() {
         throw new NotificationsError("not_found");
       },
       async sendTestNotification() {
@@ -6912,26 +6944,13 @@ describe("Notifications routes (D5-001)", () => {
     const send = (method: "PUT" | "POST", url: string, payload: unknown) =>
       app.inject({ method, url, headers, payload: JSON.stringify(payload) });
 
-    for (const bad of [{}, { address: 5 }, { address: "short" }, { address: "a@b.co", extra: 1 }])
+    for (const bad of [{}, { address: "person@example.com" }])
       expect((await send("PUT", "/v1/notifications/delivery/email", bad)).statusCode).toBe(400);
-    for (const bad of [{}, { code: "12345" }, { code: "12345a" }, { code: 123456 }])
-      expect(
-        (await send("POST", "/v1/notifications/delivery/email/confirmation", bad)).statusCode,
-      ).toBe(400);
     for (const bad of [{}, { endpoint: 4 }, { endpoint: "x" }])
       expect(
         (await send("POST", "/v1/notifications/delivery/push-subscriptions", bad)).statusCode,
       ).toBe(400);
 
-    const limited = await send("PUT", "/v1/notifications/delivery/email", {
-      address: "limited@example.com",
-    });
-    expect(limited.statusCode).toBe(429);
-    expect(limited.json()).toMatchObject({ code: "rate_limited" });
-    expect(
-      (await send("PUT", "/v1/notifications/delivery/email", { address: "bad@example.com" }))
-        .statusCode,
-    ).toBe(400);
     const testLimited = await app.inject({
       method: "POST",
       url: "/v1/notifications/delivery/test",
@@ -6956,15 +6975,15 @@ describe("Notifications routes (D5-001)", () => {
         })
       ).statusCode,
     ).toBe(404);
-    expect(
-      (
-        await app.inject({
-          method: "DELETE",
-          url: "/v1/notifications/delivery/email",
-          headers: { authorization: `Bearer ${token}` },
-        })
-      ).statusCode,
-    ).toBe(404);
+    // The code and removal routes no longer exist.
+    for (const [method, url] of [
+      ["DELETE", "/v1/notifications/delivery/email"],
+      ["POST", "/v1/notifications/delivery/email/confirmation"],
+    ] as const)
+      expect(
+        (await app.inject({ method, url, headers: { authorization: `Bearer ${token}` } }))
+          .statusCode,
+      ).toBe(404);
     await app.close();
   });
 });

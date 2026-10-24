@@ -187,7 +187,7 @@ Applications. Its SHA-256,
 serialization rule as D3.
 
 The Notifications owner exports preferences, inbox items (kind, urgency, state, an opaque application
-reference), the confirmed or pending email address, push subscriptions (identifier, state and the
+reference), the account email address used for notifications, push subscriptions (identifier, state and the
 endpoint host only, because the full endpoint is a capability URL) and delivery attempts (channel,
 state, outcome code). It never exports owner identifiers, dedupe keys, source event identifiers, the
 confirmation code hash or provider message references. Deletion removes every Notifications row for

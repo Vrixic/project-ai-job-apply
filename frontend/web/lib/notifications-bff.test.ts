@@ -7,7 +7,6 @@ vi.mock("./auth0", () => ({ getLazyAuth0Session: () => ({}) }));
 import {
   forwardNotificationCommand,
   forwardNotificationDeliveryEmail,
-  forwardNotificationDeliveryEmailConfirmation,
   forwardNotificationDeliveryPushSubscription,
   forwardNotificationDeliveryPushSubscriptions,
   forwardNotificationDeliveryStatus,
@@ -156,7 +155,7 @@ describe("notifications BFF (ADR-055)", () => {
 
 describe("notification delivery BFF (ADR-056)", () => {
   const status = {
-    email: { address: "person@example.com", state: "verified", codePending: false },
+    email: { address: "person@example.com", state: "verified" },
     pushSubscriptions: [{ id: ID, state: "active", createdAt: "2026-10-22T12:00:00.000Z" }],
     pushPublicKey: "B".repeat(87),
   };
@@ -191,124 +190,53 @@ describe("notification delivery BFF (ADR-056)", () => {
     expect(forward).not.toHaveBeenCalled();
   });
 
-  it("requests an email confirmation and answers 202 with no body", async () => {
-    forward.mockResolvedValue(new Response(null, { status: 202 }));
+  it("records the account email with a bodyless PUT carrying the session identity proof", async () => {
+    forward.mockResolvedValue(new Response(null, { status: 204 }));
     const response = await forwardNotificationDeliveryEmail(
-      req("/api/platform/notifications/delivery/email", {
-        method: "PUT",
-        body: JSON.stringify({ address: "person@example.com" }),
-        headers: { "content-type": "application/json" },
-      }),
+      req("/api/platform/notifications/delivery/email", { method: "PUT" }),
     );
-    expect(response.status).toBe(202);
+    expect(response.status).toBe(204);
     expect(await response.text()).toBe("");
     expect(forward).toHaveBeenCalledWith(
       "/v1/notifications/delivery/email",
-      expect.objectContaining({ method: "PUT", body: '{"address":"person@example.com"}' }),
-      expect.anything(),
+      expect.objectContaining({ method: "PUT" }),
+      expect.objectContaining({ includeReauthenticationProof: true }),
     );
+    expect(forward.mock.calls[0]?.[1]).not.toHaveProperty("body");
   });
 
-  it("refuses malformed, cross-origin, oversized and wrongly typed email requests", async () => {
-    const send = (init: RequestInit) =>
-      forwardNotificationDeliveryEmail(req("/api/platform/notifications/delivery/email", init));
+  it("refuses an address from the browser, a query, a cross-origin caller and other methods", async () => {
+    const url = "/api/platform/notifications/delivery/email";
     const jsonHeaders = { "content-type": "application/json" };
-    expect((await send({ method: "PUT", body: "{}", headers: jsonHeaders })).status).toBe(400);
-    expect(
-      (
-        await send({
-          method: "PUT",
-          body: JSON.stringify({ address: "person@example.com", extra: 1 }),
-          headers: jsonHeaders,
-        })
-      ).status,
-    ).toBe(400);
-    expect(
-      (
-        await send({
-          method: "PUT",
-          body: JSON.stringify({ address: "person@example.com" }),
-          headers: { "content-type": "text/plain" },
-        })
-      ).status,
-    ).toBe(415);
-    expect(
-      (
-        await send({
-          method: "PUT",
-          body: JSON.stringify({ address: "person@example.com" }),
-          headers: { ...jsonHeaders, origin: "https://evil.example" },
-        })
-      ).status,
-    ).toBe(400);
-    expect(
-      (
-        await send({
-          method: "PUT",
-          body: JSON.stringify({ address: "a".repeat(5000) }),
-          headers: jsonHeaders,
-        })
-      ).status,
-    ).toBe(413);
-    expect((await send({ method: "POST", body: "{}", headers: jsonHeaders })).status).toBe(400);
+    for (const request of [
+      req(url, {
+        method: "PUT",
+        body: JSON.stringify({ address: "a@example.com" }),
+        headers: jsonHeaders,
+      }),
+      req(url, { method: "PUT", headers: jsonHeaders }),
+      req(url, { method: "PUT", headers: { "content-length": "2" } }),
+      req(`${url}?address=a@example.com`, { method: "PUT" }),
+      req(url, { method: "PUT", headers: { origin: "https://evil.example" } }),
+      req(url, { method: "DELETE" }),
+      req(url, { method: "POST" }),
+      req(url, { method: "GET" }),
+    ])
+      expect((await forwardNotificationDeliveryEmail(request)).status).toBe(400);
     expect(forward).not.toHaveBeenCalled();
   });
 
   it("passes upstream refusals through and rejects an unexpected success status", async () => {
+    const url = "/api/platform/notifications/delivery/email";
     forward.mockResolvedValue(
       Response.json(
-        { code: "rate_limited" },
-        { status: 429, headers: { "cache-control": "no-store" } },
+        { code: "authentication_required" },
+        { status: 401, headers: { "cache-control": "no-store" } },
       ),
     );
-    const limited = await forwardNotificationDeliveryEmail(
-      req("/api/platform/notifications/delivery/email", {
-        method: "PUT",
-        body: JSON.stringify({ address: "person@example.com" }),
-        headers: { "content-type": "application/json" },
-      }),
-    );
-    expect(limited.status).toBe(429);
+    expect((await forwardNotificationDeliveryEmail(req(url, { method: "PUT" }))).status).toBe(401);
     forward.mockResolvedValue(new Response(null, { status: 200 }));
-    const odd = await forwardNotificationDeliveryEmail(
-      req("/api/platform/notifications/delivery/email", {
-        method: "PUT",
-        body: JSON.stringify({ address: "person@example.com" }),
-        headers: { "content-type": "application/json" },
-      }),
-    );
-    expect(odd.status).toBe(503);
-  });
-
-  it("removes the email address with a bodyless same-origin DELETE", async () => {
-    forward.mockResolvedValue(new Response(null, { status: 204 }));
-    const url = "/api/platform/notifications/delivery/email";
-    const removed = await forwardNotificationDeliveryEmail(req(url, { method: "DELETE" }));
-    expect(removed.status).toBe(204);
-    forward.mockClear();
-    for (const init of [
-      { method: "DELETE", headers: { origin: "https://evil.example" } },
-      { method: "DELETE", headers: { "content-type": "application/json" } },
-      { method: "DELETE", headers: { "content-length": "2" } },
-    ])
-      expect((await forwardNotificationDeliveryEmail(req(url, init))).status).toBe(400);
-    expect(forward).not.toHaveBeenCalled();
-  });
-
-  it("confirms an email with a six digit code and validates the result", async () => {
-    forward.mockResolvedValue(json({ result: "verified" }));
-    const url = "/api/platform/notifications/delivery/email/confirmation";
-    const ok = await forwardNotificationDeliveryEmailConfirmation(post(url, { code: "123456" }));
-    expect(ok.status).toBe(200);
-    expect(await ok.json()).toEqual({ result: "verified" });
-    forward.mockClear();
-    for (const bad of [{ code: "12345" }, { code: "abcdef" }, { code: 123456 }, {}])
-      expect((await forwardNotificationDeliveryEmailConfirmation(post(url, bad))).status).toBe(400);
-    expect(forward).not.toHaveBeenCalled();
-    forward.mockResolvedValue(json({ result: "approved" }));
-    expect(
-      (await forwardNotificationDeliveryEmailConfirmation(post(url, { code: "123456" }))).status,
-    ).toBe(503);
+    expect((await forwardNotificationDeliveryEmail(req(url, { method: "PUT" }))).status).toBe(503);
   });
 
   it("sends a test notification with no body and refuses anything else", async () => {

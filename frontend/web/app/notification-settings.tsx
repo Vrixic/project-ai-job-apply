@@ -1,7 +1,6 @@
 "use client";
 
 import type {
-  ConfirmNotificationEmailResult,
   NotificationDeliveryStatus,
   NotificationPreferences,
 } from "@ai-job-apply/api-contracts";
@@ -28,14 +27,6 @@ interface Draft {
   start: string;
   end: string;
 }
-
-const confirmationMessages: Record<ConfirmNotificationEmailResult["result"], string> = {
-  verified: "Email confirmed.",
-  invalid: "That code is not right. Check it and try again.",
-  expired: "That code expired. Send a new one.",
-  too_many_attempts: "Too many wrong tries. Send a new code.",
-  no_request: "No code is waiting. Send a new one.",
-};
 
 export function minutesToTime(minutes: number): string {
   const hours = String(Math.floor(minutes / 60)).padStart(2, "0");
@@ -87,14 +78,15 @@ async function call(
 export function NotificationSettings({ authenticated }: { authenticated: boolean }) {
   const [view, setView] = useState<View>({ status: "loading" });
   const [draft, setDraft] = useState<Draft>();
-  const [address, setAddress] = useState("");
-  const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string>();
   const [thisBrowserId, setThisBrowserId] = useState<string>();
 
   const load = useCallback(async () => {
     try {
+      // The account email is the notification address. Recording it can fail (for example when the
+      // provider has not verified it); the status below then shows no address.
+      await call("PUT", "/delivery/email").catch(() => undefined);
       const [deliveryResponse, preferencesResponse] = await Promise.all([
         call("GET", "/delivery"),
         call("GET", "/preferences"),
@@ -162,35 +154,6 @@ export function NotificationSettings({ authenticated }: { authenticated: boolean
   const quietInvalid =
     draft.quietEnabled &&
     (startMinute === undefined || endMinute === undefined || startMinute === endMinute);
-
-  const sendCode = () =>
-    run(async () => {
-      const response = await call("PUT", "/delivery/email", { address: address || email?.address });
-      if (response.status === 202) {
-        await load();
-        return "We are emailing you a code. It can take about a minute to arrive.";
-      }
-      if (response.status === 429) return "Too many codes were requested. Try again in an hour.";
-      return "That email address does not look right, or it cannot be used.";
-    });
-
-  const confirm = () =>
-    run(async () => {
-      const response = await call("POST", "/delivery/email/confirmation", { code });
-      if (response.status !== 200) return "That code is not valid. Enter the six digits.";
-      const body = (await response.json()) as Partial<ConfirmNotificationEmailResult>;
-      setCode("");
-      await load();
-      return confirmationMessages[body.result ?? "invalid"] ?? confirmationMessages.invalid;
-    });
-
-  const removeEmail = () =>
-    run(async () => {
-      const response = await call("DELETE", "/delivery/email");
-      setAddress("");
-      await load();
-      return response.status === 204 ? "Email address removed." : undefined;
-    });
 
   const turnOnBrowser = () =>
     run(async () => {
@@ -264,76 +227,25 @@ export function NotificationSettings({ authenticated }: { authenticated: boolean
       </p>
 
       <h3>Email</h3>
-      {!email || email.state === "suppressed" ? (
-        <div>
-          {email?.state === "suppressed" && (
-            <p role="alert">We could not deliver to {email.address}. Use a different address.</p>
-          )}
-          <label>
-            Email address
-            <input
-              type="email"
-              autoComplete="email"
-              value={address}
-              onChange={(event) => setAddress(event.target.value)}
-            />
-          </label>
-          <button
-            type="button"
-            disabled={busy || address.trim() === ""}
-            onClick={() => void sendCode()}
-          >
-            Send confirmation code
-          </button>
-        </div>
-      ) : email.state === "pending" ? (
-        <div>
-          <p>
-            Enter the six digit code we emailed to <strong>{email.address}</strong>.
-          </p>
-          <label>
-            Confirmation code
-            <input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              value={code}
-              onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
-            />
-          </label>
-          <div className="button-row">
-            <button
-              type="button"
-              disabled={busy || code.length !== 6}
-              onClick={() => void confirm()}
-            >
-              Confirm
-            </button>
-            <button type="button" disabled={busy} onClick={() => void sendCode()}>
-              Send a new code
-            </button>
-            <button type="button" disabled={busy} onClick={() => void removeEmail()}>
-              Use a different address
-            </button>
-          </div>
-        </div>
+      {email?.state === "verified" ? (
+        <label>
+          <input
+            type="checkbox"
+            checked={draft.emailEnabled}
+            onChange={(event) => setDraft({ ...draft, emailEnabled: event.target.checked })}
+          />{" "}
+          Email me at <strong>{email.address}</strong> when something new is in my inbox
+        </label>
+      ) : email?.state === "suppressed" ? (
+        <p role="alert">
+          We could not deliver to {email.address}, so email notifications are off. Change the email
+          address on your account to turn them back on.
+        </p>
       ) : (
-        <div>
-          <p>
-            Confirmed: <strong>{email.address}</strong>
-          </p>
-          <label>
-            <input
-              type="checkbox"
-              checked={draft.emailEnabled}
-              onChange={(event) => setDraft({ ...draft, emailEnabled: event.target.checked })}
-            />{" "}
-            Email me when something new is in my inbox
-          </label>
-          <button type="button" disabled={busy} onClick={() => void removeEmail()}>
-            Remove this address
-          </button>
-        </div>
+        <p>
+          Email notifications use the email address you signed up with. That address is not verified
+          yet. Verify it with your sign-in provider, then reload this page.
+        </p>
       )}
 
       <h3>Browser notifications</h3>

@@ -1,4 +1,4 @@
-import { createHash, randomInt, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
 import type { NotificationKind } from "./types.js";
 
 export const deliveryChannels = Object.freeze(["email", "push"] as const);
@@ -18,10 +18,6 @@ export type DeliveryOutcomeCode =
   | "transient_error";
 
 export const maxPushSubscriptionsPerOwner = 5;
-export const maxCodeRequestsPerHour = 5;
-export const maxCodeAttempts = 5;
-export const codeLifetimeMilliseconds = 15 * 60 * 1000;
-export const codeRequestLifetimeMilliseconds = 60 * 60 * 1000;
 export const leaseMilliseconds = 2 * 60 * 1000;
 export const maxDeliveryAttempts = 5;
 
@@ -84,21 +80,6 @@ export function hashEndpoint(endpoint: string): string {
   return createHash("sha256").update(endpoint).digest("hex");
 }
 
-export function generateVerificationCode(): string {
-  return String(randomInt(0, 1_000_000)).padStart(6, "0");
-}
-
-export function hashVerificationCode(ownerUserId: string, code: string): string {
-  return createHash("sha256").update(`notifications-email:${ownerUserId}:${code}`).digest("hex");
-}
-
-export function codeMatches(expectedHash: string, ownerUserId: string, code: string): boolean {
-  if (!/^[0-9]{6}$/.test(code) || !/^[0-9a-f]{64}$/.test(expectedHash)) return false;
-  const actual = Buffer.from(hashVerificationCode(ownerUserId, code), "hex");
-  const expected = Buffer.from(expectedHash, "hex");
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-
 export interface EmailMessage {
   to: string;
   subject: string;
@@ -128,25 +109,6 @@ export function notificationEmail(input: {
       `Open your inbox: ${base}/inbox`,
       "",
       `You get this email because email notifications are on. Turn them off in settings: ${base}/settings`,
-    ].join("\n"),
-  };
-}
-
-export function verificationEmail(input: {
-  to: string;
-  code: string;
-  webBaseUrl: string;
-}): EmailMessage {
-  const base = input.webBaseUrl.replace(/\/+$/, "");
-  return {
-    to: input.to,
-    subject: "Your email confirmation code",
-    text: [
-      `Your confirmation code is ${input.code}.`,
-      "",
-      "It expires in 15 minutes. If you did not ask for it, ignore this email.",
-      "",
-      `Settings: ${base}/settings`,
     ].join("\n"),
   };
 }

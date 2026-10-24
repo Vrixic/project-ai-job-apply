@@ -1,5 +1,5 @@
 import { normalizeEmailAddress, validatePushEndpoint } from "./delivery.js";
-import type { ConfirmCodeOutcome, PostgresDeliveryStore } from "./delivery-store.js";
+import type { PostgresDeliveryStore } from "./delivery-store.js";
 import { isValidTimeZone, type RoutingDecision, routeChannels } from "./routing.js";
 import { projectApplicationEvent } from "./source-events.js";
 import type { InboxPage, PostgresNotificationsStore, RecordOutcome } from "./store.js";
@@ -110,9 +110,7 @@ type DeliveryStore = Pick<
   PostgresDeliveryStore,
   | "createTestItem"
   | "readEmailDestination"
-  | "requestEmailCode"
-  | "confirmEmailCode"
-  | "removeEmailDestination"
+  | "setAccountEmail"
   | "listPushSubscriptions"
   | "addPushSubscription"
   | "removePushSubscription"
@@ -121,9 +119,7 @@ type DeliveryStore = Pick<
 export interface DeliveryStatus {
   email?: {
     address: string;
-    state: "pending" | "verified" | "suppressed";
-    /** A code was asked for or sent and has not been used yet. */
-    codePending: boolean;
+    state: "verified" | "suppressed";
   };
   pushSubscriptions: { id: string; state: "active" | "expired"; createdAt: Date }[];
   /** The public VAPID key a browser needs to subscribe, when push is configured. */
@@ -157,8 +153,8 @@ export class NotificationsService {
       delivery.listPushSubscriptions(owner),
     ]);
     return {
-      ...(email
-        ? { email: { address: email.address, state: email.state, codePending: email.codePending } }
+      ...(email && email.state !== "pending"
+        ? { email: { address: email.address, state: email.state } }
         : {}),
       pushSubscriptions: subscriptions.map(({ id, state, createdAt }) => ({
         id,
@@ -169,29 +165,16 @@ export class NotificationsService {
     };
   }
 
-  /** Starts confirming an address. The dispatcher emails the code within about a minute. */
-  async requestEmailConfirmation(ownerUserId: string, address: unknown): Promise<void> {
+  /**
+   * Records the address the identity provider verified for the signed-in candidate as their email
+   * destination. The caller passes only an address a verified ID token carried. An address that was
+   * suppressed after a permanent rejection stays suppressed.
+   */
+  async setAccountEmail(ownerUserId: string, address: unknown): Promise<void> {
     const delivery = this.requireDelivery();
     const normalized = normalizeEmailAddress(address);
     if (!normalized) throw new NotificationsError("invalid_request");
-    const outcome = await delivery.requestEmailCode(uuid(ownerUserId), normalized, this.now());
-    if (outcome === "rate_limited") throw new NotificationsError("rate_limited");
-    if (outcome === "suppressed") throw new NotificationsError("invalid_request", "suppressed");
-  }
-
-  async confirmEmail(ownerUserId: string, code: unknown): Promise<ConfirmCodeOutcome> {
-    const delivery = this.requireDelivery();
-    if (typeof code !== "string" || !/^[0-9]{6}$/.test(code))
-      throw new NotificationsError("invalid_request");
-    return delivery.confirmEmailCode(uuid(ownerUserId), code, this.now());
-  }
-
-  async removeEmail(ownerUserId: string): Promise<void> {
-    const removed = await this.requireDelivery().removeEmailDestination(
-      uuid(ownerUserId),
-      this.now(),
-    );
-    if (!removed) throw new NotificationsError("not_found");
+    await delivery.setAccountEmail(uuid(ownerUserId), normalized, this.now());
   }
 
   async addPushSubscription(ownerUserId: string, endpoint: unknown): Promise<{ id: string }> {

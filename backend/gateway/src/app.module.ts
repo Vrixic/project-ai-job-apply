@@ -24,8 +24,6 @@ import type {
   CandidateDataExportDownloadGrant,
   CanonicalJobDetail,
   ConfirmAccountDeletionRequest,
-  ConfirmNotificationEmailRequest,
-  ConfirmNotificationEmailResult,
   CreateAccountDeletionRequest,
   CreateApplicationRequest,
   CreateCandidateDataExportRequest,
@@ -69,7 +67,6 @@ import type {
   PutJobPreferencesRequest,
   PutJobPreferencesResponse,
   ReconcileApplicationAttemptRequest,
-  RequestNotificationEmailRequest,
   ResolveModerationCaseRequest,
   ResolveTrustAppealRequest,
   RestrictedAnswer,
@@ -308,6 +305,7 @@ export async function bindCandidateReauthenticationProof(
     ...principal,
     authenticatedAt: proof.authenticatedAt,
     authenticationMethods: proof.authenticationMethods,
+    ...(proof.verifiedEmail ? { verifiedEmail: proof.verifiedEmail } : {}),
   };
 }
 
@@ -3759,9 +3757,7 @@ export type NotificationsApi = Pick<
   | "getPreferences"
   | "updatePreferences"
   | "getDeliveryStatus"
-  | "requestEmailConfirmation"
-  | "confirmEmail"
-  | "removeEmail"
+  | "setAccountEmail"
   | "addPushSubscription"
   | "removePushSubscription"
   | "sendTestNotification"
@@ -3776,12 +3772,6 @@ class NotificationsUnavailableError extends Error {
 
 const validateUpdateNotificationPreferences = compileComponentValidator(
   "UpdateNotificationPreferencesRequest",
-);
-const validateRequestNotificationEmail = compileComponentValidator(
-  "RequestNotificationEmailRequest",
-);
-const validateConfirmNotificationEmail = compileComponentValidator(
-  "ConfirmNotificationEmailRequest",
 );
 const validateAddNotificationPushSubscription = compileComponentValidator(
   "AddNotificationPushSubscriptionRequest",
@@ -3937,52 +3927,22 @@ class NotificationsController {
     };
   }
 
-  /** Starts confirming an address. The dispatcher emails the code; this request does not. */
+  /**
+   * Makes the address the identity provider verified at sign-in the email destination. The proof is
+   * the ID token the web app holds for the session; the browser never names an address.
+   */
   @Put("/delivery/email")
-  @HttpCode(HttpStatus.ACCEPTED)
-  @Header("cache-control", "no-store")
-  async requestEmail(@Req() request: AuthenticatedRequest): Promise<void> {
-    const user = await this.identity.resolve(request, "profile:write");
-    if (!validateRequestNotificationEmail(request.body)) {
-      throw new HttpException(
-        formatValidationErrors(validateRequestNotificationEmail.errors),
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    const input = request.body as RequestNotificationEmailRequest;
-    await notificationsOperation(() =>
-      this.notifications.requestEmailConfirmation(user.id, input.address),
-    );
-  }
-
-  @Delete("/delivery/email")
   @HttpCode(HttpStatus.NO_CONTENT)
   @Header("cache-control", "no-store")
-  async removeEmail(@Req() request: AuthenticatedRequest): Promise<void> {
+  async useAccountEmail(@Req() request: AuthenticatedRequest): Promise<void> {
     assertNoRequestInput(request);
-    const user = await this.identity.resolve(request, "profile:write");
-    await notificationsOperation(() => this.notifications.removeEmail(user.id));
-  }
-
-  @Post("/delivery/email/confirmation")
-  @HttpCode(HttpStatus.OK)
-  @Header("cache-control", "no-store")
-  async confirmEmail(
-    @Req() request: AuthenticatedRequest,
-  ): Promise<ConfirmNotificationEmailResult> {
-    const user = await this.identity.resolve(request, "profile:write");
-    if (!validateConfirmNotificationEmail(request.body)) {
-      throw new HttpException(
-        formatValidationErrors(validateConfirmNotificationEmail.errors),
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    const input = request.body as ConfirmNotificationEmailRequest;
-    return {
-      result: await notificationsOperation(() =>
-        this.notifications.confirmEmail(user.id, input.code),
-      ),
-    };
+    const { principal, user } = await this.identity.resolveWithReauthenticationProof(
+      request,
+      "profile:write",
+    );
+    await notificationsOperation(() =>
+      this.notifications.setAccountEmail(user.id, principal.verifiedEmail),
+    );
   }
 
   @Post("/delivery/push-subscriptions")

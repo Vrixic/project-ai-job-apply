@@ -1,6 +1,6 @@
 # ADR-056: Email and push delivery for notifications
 
-Status: Accepted by the owner's direction 2026-10-23; core built, not deployed
+Status: Accepted by the owner's direction 2026-10-23; deployed to development 2026-10-23
 Date: 2026-10-23
 
 ## Context
@@ -34,9 +34,17 @@ reference, never candidate content.
    2 hours) up to five attempts, then the attempt is failed. A permanent email rejection suppresses
    the address. A push endpoint answering 404 or 410 expires that subscription. None of this changes
    the inbox item.
-6. **Email addresses are proven before use.** The candidate enters an address, the dispatcher emails
-   a six digit code (hash and expiry stored, at most five wrong tries, at most five code requests per
-   hour), and only a verified address receives notifications. One verified address per candidate.
+6. **The notification address is the account address.** Amended 2026-10-24 at the owner's direction
+   (sign-up already needs an email, so asking again was redundant). The first design had the candidate
+   type an address and confirm it with a six digit code. Now the web app forwards the session's ID
+   token as the identity proof, the Gateway verifies its signature, issuer, audience and expiry,
+   requires its subject to match the access token, and reads the address only when the provider
+   states `email_verified`. A browser never names an address, and an access-token claim is never used
+   for it. An unverified provider address records nothing, so email stays off. A changed account
+   address replaces the old one the next time Settings opens and cancels mail scheduled to the old
+   one. An address suppressed after a permanent rejection stays suppressed until the account address
+   changes. One address per candidate. The code columns from migration 0003 are unused and stay,
+   because migrations are forward-only.
 7. **Push endpoints are allow-listed.** The platform posts only to https endpoints on the known push
    services (Google FCM, Mozilla, Apple, Windows), with no credentials, port 443 only and no
    redirects, so a candidate cannot aim the dispatcher at another host. At most five subscriptions

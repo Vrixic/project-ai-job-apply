@@ -1,22 +1,16 @@
 import { generateKeyPairSync, verify } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
-  codeMatches,
   DeliveryProviderError,
-  generateVerificationCode,
   hashEndpoint,
-  hashVerificationCode,
   normalizeEmailAddress,
   notificationEmail,
   retryDelayMilliseconds,
   validatePushEndpoint,
-  verificationEmail,
 } from "./delivery.js";
 import { SesEmailProvider } from "./providers/ses-email.js";
 import { WebPushProvider } from "./providers/web-push.js";
 import { notificationKinds } from "./types.js";
-
-const OWNER = "019d04cf-1f80-7000-8000-00000000b001";
 
 describe("normalizeEmailAddress", () => {
   it.each([
@@ -78,20 +72,6 @@ describe("validatePushEndpoint (allow-listed push services only)", () => {
   });
 });
 
-describe("verification codes", () => {
-  it("makes six digit codes and matches only the exact owner and code", () => {
-    for (let index = 0; index < 50; index += 1)
-      expect(generateVerificationCode()).toMatch(/^[0-9]{6}$/);
-    const hash = hashVerificationCode(OWNER, "004217");
-    expect(hash).toMatch(/^[0-9a-f]{64}$/);
-    expect(codeMatches(hash, OWNER, "004217")).toBe(true);
-    expect(codeMatches(hash, OWNER, "004218")).toBe(false);
-    expect(codeMatches(hash, "019d04cf-1f80-7000-8000-00000000b002", "004217")).toBe(false);
-    expect(codeMatches(hash, OWNER, "4217")).toBe(false);
-    expect(codeMatches("not a hash", OWNER, "004217")).toBe(false);
-  });
-});
-
 describe("messages and backoff", () => {
   it("never puts application detail in a notification email", () => {
     for (const kind of notificationKinds) {
@@ -105,16 +85,6 @@ describe("messages and backoff", () => {
       expect(message.text).toContain("https://app.example.test/settings");
       expect(message.text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
     }
-  });
-
-  it("states the code and its lifetime in the confirmation email", () => {
-    const message = verificationEmail({
-      to: "person@example.com",
-      code: "123456",
-      webBaseUrl: "https://app.example.test",
-    });
-    expect(message.text).toContain("123456");
-    expect(message.text).toContain("15 minutes");
   });
 
   it("backs off 1 minute, 5 minutes, 30 minutes and 2 hours", () => {

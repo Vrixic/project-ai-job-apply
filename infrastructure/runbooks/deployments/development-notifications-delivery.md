@@ -47,14 +47,16 @@ It requires an active candidate-rights policy whose owner inventory lists `notif
 2. Release the Gateway and activity Lambdas with the candidate-rights policy
    `d4-development-synthetic-v1` and `notifications_enabled`.
 3. Enable `notifications_enabled` with the secret container first, then write the VAPID secret, then set `notifications_push_public_key` and `notifications_delivery_enabled`. The SES identity and configuration set are created with delivery, so the DKIM tokens exist only after that step.
-4. Verify: confirm an address in Settings and receive the code within about a minute; turn on browser
-   notifications and receive a push for a new inbox item.
+4. Verify: open Settings (the account email is recorded when the page loads and must be verified at
+   the identity provider), tick the email box, turn on browser notifications, save, send a test
+   notification and receive the email and the push within about a minute. In the SES sandbox the
+   account address must also be a verified SES identity.
 
 ## Operating notes
 
 - In the private runtime the dispatcher reads the VAPID secret through the Secrets Manager VPC endpoint, whose policy is an exact allow-list. The module adds the statement for the activity role while push is enabled; without it the dispatcher fails with `NotificationsVapidSecretUnavailable`.
 
-- The dispatcher result is counts only (codes sent, sent, skipped, failed, retried, deferred).
+- The dispatcher result is counts only (sent, skipped, failed, retried, deferred).
   Failures that end in `failed` leave the inbox item untouched.
 - A permanent SES rejection suppresses that address for the candidate; a different address can be
   confirmed. Bounce and complaint feeds are not wired yet.
