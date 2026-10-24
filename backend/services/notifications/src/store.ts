@@ -18,21 +18,21 @@ interface ItemRow {
   kind: NotificationKind;
   urgency: NotificationUrgency;
   state: InboxState;
-  aggregate_id: string;
-  source_revision: string | number | bigint;
-  created_at: Date | string;
-  updated_at: Date | string;
-  expires_at: Date | string;
+  aggregateId: string;
+  sourceRevision: string | number | bigint;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  expiresAt: Date | string;
 }
 
 interface PreferencesRow {
   version: number;
-  email_enabled: boolean;
-  quiet_hours_enabled: boolean;
-  quiet_start_minute: number;
-  quiet_end_minute: number;
-  time_zone: string;
-  updated_at: Date | string;
+  emailEnabled: boolean;
+  quietHoursEnabled: boolean;
+  quietStartMinute: number;
+  quietEndMinute: number;
+  timeZone: string;
+  updatedAt: Date | string;
 }
 
 export type RecordOutcome = "recorded" | "duplicate" | "stale" | "ignored";
@@ -48,11 +48,11 @@ function toItem(row: ItemRow): InboxItem {
     kind: row.kind,
     urgency: row.urgency,
     state: row.state,
-    applicationId: row.aggregate_id,
-    sourceRevision: Number(row.source_revision),
-    createdAt: asDate(row.created_at),
-    updatedAt: asDate(row.updated_at),
-    expiresAt: asDate(row.expires_at),
+    applicationId: row.aggregateId,
+    sourceRevision: Number(row.sourceRevision),
+    createdAt: asDate(row.createdAt),
+    updatedAt: asDate(row.updatedAt),
+    expiresAt: asDate(row.expiresAt),
   };
 }
 
@@ -60,18 +60,21 @@ function toPreferences(row: PreferencesRow): NotificationPreferences {
   return {
     version: row.version,
     inAppEnabled: true,
-    emailEnabled: row.email_enabled,
+    emailEnabled: row.emailEnabled,
     quietHours: {
-      enabled: row.quiet_hours_enabled,
-      startMinute: row.quiet_start_minute,
-      endMinute: row.quiet_end_minute,
-      timeZone: row.time_zone,
+      enabled: row.quietHoursEnabled,
+      startMinute: row.quietStartMinute,
+      endMinute: row.quietEndMinute,
+      timeZone: row.timeZone,
     },
-    updatedAt: asDate(row.updated_at),
+    updatedAt: asDate(row.updatedAt),
   };
 }
 
-const ITEM_COLUMNS = `id, kind, urgency, state, aggregate_id, source_revision, created_at, updated_at, expires_at`;
+// Every selected column is aliased to camelCase, so rows read the same whether or not the client is
+// created with `postgres.camel`, which the shared Gateway and workflows client is.
+const ITEM_COLUMNS = `id, kind, urgency, state, aggregate_id AS "aggregateId", source_revision AS "sourceRevision", created_at AS "createdAt", updated_at AS "updatedAt", expires_at AS "expiresAt"`;
+const PREFERENCE_COLUMNS = `version, email_enabled AS "emailEnabled", quiet_hours_enabled AS "quietHoursEnabled", quiet_start_minute AS "quietStartMinute", quiet_end_minute AS "quietEndMinute", time_zone AS "timeZone", updated_at AS "updatedAt"`;
 
 export class PostgresNotificationsStore {
   constructor(private readonly client: postgres.Sql) {}
@@ -107,13 +110,13 @@ export class PostgresNotificationsStore {
           WHERE source_service = 'applications' AND source_event_id = ${projection.eventId}
         `;
       };
-      const [cursor] = await transaction<{ last_revision: string }[]>`
-        SELECT last_revision FROM notifications.source_cursors
+      const [cursor] = await transaction<{ lastRevision: string }[]>`
+        SELECT last_revision AS "lastRevision" FROM notifications.source_cursors
         WHERE owner_user_id = ${projection.ownerUserId}::uuid
           AND source_service = 'applications' AND aggregate_id = ${projection.applicationId}::uuid
         FOR UPDATE
       `;
-      if (cursor && Number(cursor.last_revision) > projection.revision) {
+      if (cursor && Number(cursor.lastRevision) > projection.revision) {
         await setOutcome("stale");
         return { outcome: "stale" as const };
       }
@@ -243,8 +246,7 @@ export class PostgresNotificationsStore {
 
   async readPreferences(ownerUserId: string, now: Date): Promise<NotificationPreferences> {
     const [row] = await this.client<PreferencesRow[]>`
-      SELECT version, email_enabled, quiet_hours_enabled, quiet_start_minute,
-        quiet_end_minute, time_zone, updated_at
+      SELECT ${this.client.unsafe(PREFERENCE_COLUMNS)}
       FROM notifications.preferences WHERE owner_user_id = ${ownerUserId}::uuid
     `;
     return row
@@ -281,8 +283,7 @@ export class PostgresNotificationsStore {
             VALUES (${ownerUserId}::uuid, 1, true, ${values.email}, false, ${values.quiet},
               ${values.start}, ${values.end}, ${values.zone}, ${iso(now)}::timestamptz)
             ON CONFLICT (owner_user_id) DO NOTHING
-            RETURNING version, email_enabled, quiet_hours_enabled, quiet_start_minute,
-              quiet_end_minute, time_zone, updated_at
+            RETURNING ${this.client.unsafe(PREFERENCE_COLUMNS)}
           `
         : await this.client<PreferencesRow[]>`
             UPDATE notifications.preferences SET version = version + 1,
@@ -290,8 +291,7 @@ export class PostgresNotificationsStore {
               quiet_hours_enabled = ${values.quiet}, quiet_start_minute = ${values.start},
               quiet_end_minute = ${values.end}, time_zone = ${values.zone}, updated_at = ${iso(now)}::timestamptz
             WHERE owner_user_id = ${ownerUserId}::uuid AND version = ${expectedVersion}
-            RETURNING version, email_enabled, quiet_hours_enabled, quiet_start_minute,
-              quiet_end_minute, time_zone, updated_at
+            RETURNING ${this.client.unsafe(PREFERENCE_COLUMNS)}
           `;
     return rows[0] ? toPreferences(rows[0]) : null;
   }
