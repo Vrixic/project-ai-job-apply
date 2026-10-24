@@ -49,9 +49,6 @@ export function withApplicationEventFeed(options: {
       options.notifications.updatePreferences(owner, version, update),
     getDeliveryStatus: (owner) => options.notifications.getDeliveryStatus(owner),
     setAccountEmail: (owner, address) => options.notifications.setAccountEmail(owner, address),
-    addPushSubscription: (owner, endpoint) =>
-      options.notifications.addPushSubscription(owner, endpoint),
-    removePushSubscription: (owner, id) => options.notifications.removePushSubscription(owner, id),
     sendTestNotification: (owner) => options.notifications.sendTestNotification(owner),
     async listInbox(owner, listOptions) {
       if (!listOptions?.cursor) await pump(owner);

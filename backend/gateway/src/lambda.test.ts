@@ -672,15 +672,10 @@ describe("API Gateway Lambda boundary", () => {
     expect(await status("GET", "/v1/notifications/delivery", { rawQueryString: "x=1" })).toBe(400);
     expect(await status("PUT", "/v1/notifications/delivery/email")).toBe(200);
     expect(await status("PUT", "/v1/notifications/delivery/email", json)).toBe(400);
-    expect(await status("POST", "/v1/notifications/delivery/push-subscriptions", json)).toBe(200);
     expect(await status("POST", "/v1/notifications/delivery/test")).toBe(200);
     expect(await status("POST", "/v1/notifications/delivery/test", json)).toBe(400);
-    expect(await status("DELETE", `/v1/notifications/delivery/push-subscriptions/${id}`)).toBe(200);
-    expect(
-      await status("DELETE", `/v1/notifications/delivery/push-subscriptions/${id}`, json),
-    ).toBe(400);
     for (const [method, path] of [
-      ["DELETE", "/v1/notifications/delivery/push-subscriptions/not-a-uuid"],
+      ["POST", "/v1/notifications/delivery/push-subscriptions"],
       ["DELETE", `/v1/notifications/delivery/push-subscriptions/${id}/`],
       ["DELETE", "/v1/notifications/delivery/push-subscriptions"],
       ["GET", `/v1/notifications/delivery/push-subscriptions/${id}`],

@@ -7,8 +7,6 @@ vi.mock("./auth0", () => ({ getLazyAuth0Session: () => ({}) }));
 import {
   forwardNotificationCommand,
   forwardNotificationDeliveryEmail,
-  forwardNotificationDeliveryPushSubscription,
-  forwardNotificationDeliveryPushSubscriptions,
   forwardNotificationDeliveryStatus,
   forwardNotificationDeliveryTest,
   forwardNotificationList,
@@ -32,7 +30,6 @@ const prefs = {
   version: 1,
   inAppEnabled: true,
   emailEnabled: false,
-  pushEnabled: false,
   quietHours: { enabled: false, startMinute: 1320, endMinute: 420, timeZone: "UTC" },
   updatedAt: "2026-10-22T12:00:00.000Z",
 };
@@ -124,7 +121,6 @@ describe("notifications BFF (ADR-055)", () => {
     const body = {
       expectedVersion: 0,
       emailEnabled: true,
-      pushEnabled: false,
       quietHours: { enabled: true, startMinute: 1320, endMinute: 420, timeZone: "UTC" },
     };
     const put = (value: unknown, headers: Record<string, string> = {}) =>
@@ -156,16 +152,7 @@ describe("notifications BFF (ADR-055)", () => {
 describe("notification delivery BFF (ADR-056)", () => {
   const status = {
     email: { address: "person@example.com", state: "verified" },
-    pushSubscriptions: [{ id: ID, state: "active", createdAt: "2026-10-22T12:00:00.000Z" }],
-    pushPublicKey: "B".repeat(87),
   };
-  const post = (url: string, body: unknown, headers: Record<string, string> = {}) =>
-    req(url, {
-      method: "POST",
-      body: typeof body === "string" ? body : JSON.stringify(body),
-      headers: { "content-type": "application/json", ...headers },
-    });
-
   it("forwards and validates the delivery status", async () => {
     forward.mockResolvedValue(json(status));
     const response = await forwardNotificationDeliveryStatus(
@@ -263,46 +250,5 @@ describe("notification delivery BFF (ADR-056)", () => {
     expect((await forwardNotificationDeliveryTest(req(url, { method: "POST" }))).status).toBe(503);
     forward.mockResolvedValue(json({ title: "Too many" }, 429));
     expect((await forwardNotificationDeliveryTest(req(url, { method: "POST" }))).status).toBe(429);
-  });
-
-  it("registers and removes a browser push subscription", async () => {
-    forward.mockResolvedValue(json({ id: ID }, 201));
-    const url = "/api/platform/notifications/delivery/push-subscriptions";
-    const created = await forwardNotificationDeliveryPushSubscriptions(
-      post(url, { endpoint: "https://fcm.googleapis.com/fcm/send/abc" }),
-    );
-    expect(created.status).toBe(201);
-    expect(await created.json()).toEqual({ id: ID });
-    forward.mockClear();
-    for (const bad of [
-      {},
-      { endpoint: 4 },
-      { endpoint: "x" },
-      { endpoint: "https://a.example/b", extra: 1 },
-    ])
-      expect((await forwardNotificationDeliveryPushSubscriptions(post(url, bad))).status).toBe(400);
-    expect(forward).not.toHaveBeenCalled();
-
-    forward.mockResolvedValue(new Response(null, { status: 204 }));
-    const removed = await forwardNotificationDeliveryPushSubscription(
-      req(`${url}/${ID}`, { method: "DELETE" }),
-      ID,
-    );
-    expect(removed.status).toBe(204);
-    expect(forward).toHaveBeenCalledWith(
-      `/v1/notifications/delivery/push-subscriptions/${ID}`,
-      expect.objectContaining({ method: "DELETE" }),
-      expect.anything(),
-    );
-    forward.mockClear();
-    expect(
-      (
-        await forwardNotificationDeliveryPushSubscription(
-          req(`${url}/not-a-uuid`, { method: "DELETE" }),
-          "not-a-uuid",
-        )
-      ).status,
-    ).toBe(400);
-    expect(forward).not.toHaveBeenCalled();
   });
 });

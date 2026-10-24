@@ -19,8 +19,8 @@ import {
   type SavedJobs,
 } from "@ai-job-apply/matching-service";
 import {
-  type ProfileStore,
   type ProfileSectionStore,
+  type ProfileStore,
   type RestrictedAnswerVaultStore,
   type UgcContributionConsentStore,
   UgcContributionConsentUnavailableError,
@@ -36,7 +36,7 @@ import {
   type NotificationsApi,
 } from "./app.module.js";
 import type { NativeMaterialWithdrawalApi } from "./native-owner-material-cleanup.js";
-import { type StripeBillingGateway, installStripeWebhookRawBody } from "./stripe-billing.js";
+import { installStripeWebhookRawBody, type StripeBillingGateway } from "./stripe-billing.js";
 import { installTemporaryMaterialResponseGuards } from "./temporary-material-http.js";
 import {
   OidcTrustReviewerAuthority,

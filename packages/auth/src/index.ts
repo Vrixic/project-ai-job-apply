@@ -23,12 +23,23 @@ export interface IdTokenProof {
   audience: string[];
   authenticatedAt: number;
   authenticationMethods: string[];
+}
+
+/** Who a session ID token names. It carries no recent-authentication evidence. */
+export interface AccountIdentityProof {
+  issuer: string;
+  subject: string;
   /** The account address, present only when the identity provider states it is verified. */
   verifiedEmail?: string;
 }
 
 export interface IdTokenVerifier {
   verify(idToken: string): Promise<IdTokenProof>;
+  /**
+   * Signature, issuer, one exact client audience and expiry only. An ordinary sign-in ID token has
+   * no `auth_time` or `amr`, so this must not demand them the way `verify` does.
+   */
+  verifyIdentity(idToken: string): Promise<AccountIdentityProof>;
 }
 
 export class AuthenticationError extends Error {
@@ -136,6 +147,32 @@ export function createOidcIdTokenVerifier(options: {
           audience,
           authenticatedAt: payload.auth_time,
           authenticationMethods: payload.amr,
+        };
+      } catch (error) {
+        if (error instanceof AuthenticationError) {
+          throw error;
+        }
+        throw new AuthenticationError("The ID token is invalid");
+      }
+    },
+    async verifyIdentity(idToken: string): Promise<AccountIdentityProof> {
+      try {
+        const { payload } = await jwtVerify(idToken, jwks, {
+          issuer: options.issuer,
+          audience: options.audience,
+          algorithms: ["RS256"],
+          requiredClaims: ["exp", "iat"],
+        });
+        if (!payload.sub || !payload.iss) {
+          throw new AuthenticationError("The ID token is missing required identity claims");
+        }
+        const audience = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+        if (audience.length !== 1 || audience[0] !== options.audience) {
+          throw new AuthenticationError("The ID token audience is invalid");
+        }
+        return {
+          issuer: payload.iss,
+          subject: payload.sub,
           ...(payload.email_verified === true &&
           typeof payload.email === "string" &&
           payload.email.length <= 254

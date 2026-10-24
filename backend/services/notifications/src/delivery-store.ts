@@ -4,11 +4,10 @@ import {
   type DeliveryChannel,
   type DeliveryOutcomeCode,
   type DeliveryState,
-  hashEndpoint,
   leaseMilliseconds,
-  maxPushSubscriptionsPerOwner,
 } from "./delivery.js";
 import { routeChannels } from "./routing.js";
+import { asDate, iso } from "./timestamps.js";
 import type { NotificationKind, NotificationUrgency } from "./types.js";
 
 export type EmailDestinationState = "pending" | "verified" | "suppressed";
@@ -21,16 +20,8 @@ export interface EmailDestination {
   createdAt: Date;
 }
 
-export interface PushSubscriptionSummary {
-  id: string;
-  state: "active" | "expired";
-  createdAt: Date;
-  lastSuccessAt?: Date;
-}
-
 /** What recording the account address did: a new or changed address, no change, or a refusal. */
 export type SetAccountEmailOutcome = "set" | "unchanged" | "suppressed";
-export type AddPushOutcome = { outcome: "added"; id: string } | { outcome: "limit_reached" };
 
 export interface ClaimedAttempt {
   id: string;
@@ -46,7 +37,6 @@ export interface AttemptContext {
   itemState: string;
   itemExpiresAt: Date;
   emailEnabled: boolean;
-  pushEnabled: boolean;
   quietHours: {
     enabled: boolean;
     startMinute: number;
@@ -54,20 +44,19 @@ export interface AttemptContext {
     timeZone: string;
   };
   email?: { address: string; state: EmailDestinationState };
-  pushSubscriptions: { id: string; endpoint: string }[];
 }
 
 interface DestinationRow {
   address: string;
   state: EmailDestinationState;
   suppressed_reason: "permanent_failure" | "complaint" | null;
-  verified_at: Date | null;
-  created_at: Date;
+  verified_at: Date | string | null;
+  created_at: Date | string;
 }
 
 /**
- * Creates the delivery rows for a freshly opened item: one per channel the candidate turned on
- * that has a usable destination. Runs inside the item's transaction. Quiet hours set `not_before`.
+ * Creates the delivery row for a freshly opened item when the candidate turned email on and has a
+ * usable address. Runs inside the item's transaction. Quiet hours set `not_before`.
  */
 export async function scheduleDeliveries(
   sql: postgres.TransactionSql,
@@ -76,15 +65,13 @@ export async function scheduleDeliveries(
   const [preferences] = await sql<
     {
       email_enabled: boolean;
-      push_enabled: boolean;
       quiet_hours_enabled: boolean;
       quiet_start_minute: number;
       quiet_end_minute: number;
       time_zone: string;
     }[]
   >`
-    SELECT email_enabled, push_enabled, quiet_hours_enabled, quiet_start_minute, quiet_end_minute,
-      time_zone
+    SELECT email_enabled, quiet_hours_enabled, quiet_start_minute, quiet_end_minute, time_zone
     FROM notifications.preferences WHERE owner_user_id = ${input.ownerUserId}::uuid
   `;
   if (!preferences) return;
@@ -93,7 +80,6 @@ export async function scheduleDeliveries(
     now: input.now,
     preferences: {
       emailEnabled: preferences.email_enabled,
-      pushEnabled: preferences.push_enabled,
       quietHours: {
         enabled: preferences.quiet_hours_enabled,
         startMinute: preferences.quiet_start_minute,
@@ -106,24 +92,16 @@ export async function scheduleDeliveries(
     SELECT state FROM notifications.email_destinations
     WHERE owner_user_id = ${input.ownerUserId}::uuid
   `;
-  const [active] = await sql<{ count: string }[]>`
-    SELECT count(*)::text AS count FROM notifications.push_subscriptions
-    WHERE owner_user_id = ${input.ownerUserId}::uuid AND state = 'active'
+  if (routing.email.action === "skip" || destination?.state !== "verified") return;
+  const notBefore = routing.email.action === "defer_until" ? routing.email.at : input.now;
+  await sql`
+    INSERT INTO notifications.delivery_attempts
+      (id, owner_user_id, inbox_item_id, channel, state, not_before, created_at, updated_at)
+    VALUES (${uuidv7()}::uuid, ${input.ownerUserId}::uuid, ${input.itemId}::uuid, 'email',
+      'scheduled', ${iso(notBefore)}::timestamptz, ${iso(input.now)}::timestamptz,
+      ${iso(input.now)}::timestamptz)
+    ON CONFLICT (inbox_item_id, channel) DO NOTHING
   `;
-  const plan: [DeliveryChannel, Date][] = [];
-  if (routing.email.action !== "skip" && destination?.state === "verified")
-    plan.push(["email", routing.email.action === "defer_until" ? routing.email.at : input.now]);
-  if (routing.push.action !== "skip" && Number(active?.count ?? 0) > 0)
-    plan.push(["push", routing.push.action === "defer_until" ? routing.push.at : input.now]);
-  for (const [channel, notBefore] of plan) {
-    await sql`
-      INSERT INTO notifications.delivery_attempts
-        (id, owner_user_id, inbox_item_id, channel, state, not_before, created_at, updated_at)
-      VALUES (${uuidv7()}::uuid, ${input.ownerUserId}::uuid, ${input.itemId}::uuid, ${channel},
-        'scheduled', ${notBefore}, ${input.now}, ${input.now})
-      ON CONFLICT (inbox_item_id, channel) DO NOTHING
-    `;
-  }
 }
 
 export const maxTestNotificationsPerHour = 5;
@@ -138,7 +116,7 @@ export class PostgresDeliveryStore {
 
   /**
    * A candidate-requested test item. It travels the same delivery path as a real one, so it proves
-   * the configured channels end to end, and it never touches any source fact. At most five per hour.
+   * the configured channel end to end, and it never touches any source fact. At most five per hour.
    */
   async createTestItem(ownerUserId: string, now: Date): Promise<CreateTestItemOutcome> {
     return this.client.begin(async (transaction) => {
@@ -148,7 +126,7 @@ export class PostgresDeliveryStore {
       const [recent] = await transaction<{ count: string }[]>`
         SELECT count(*)::text AS count FROM notifications.inbox_items
         WHERE owner_user_id = ${ownerUserId}::uuid AND kind = 'test_notification'
-          AND created_at > ${new Date(now.getTime() - 3_600_000)}
+          AND created_at > ${iso(new Date(now.getTime() - 3_600_000))}::timestamptz
       `;
       if (Number(recent?.count ?? 0) >= maxTestNotificationsPerHour)
         return { outcome: "rate_limited" as const };
@@ -158,8 +136,9 @@ export class PostgresDeliveryStore {
           (id, owner_user_id, kind, urgency, state, source_service, aggregate_id, source_revision,
            dedupe_key, created_at, updated_at, expires_at)
         VALUES (${itemId}::uuid, ${ownerUserId}::uuid, 'test_notification', 'normal', 'unread',
-          'notifications', ${itemId}::uuid, 1, ${`test_notification:${itemId}`}, ${now}, ${now},
-          ${new Date(now.getTime() + testNotificationLifetimeMilliseconds)})
+          'notifications', ${itemId}::uuid, 1, ${`test_notification:${itemId}`},
+          ${iso(now)}::timestamptz, ${iso(now)}::timestamptz,
+          ${iso(new Date(now.getTime() + testNotificationLifetimeMilliseconds))}::timestamptz)
       `;
       await scheduleDeliveries(transaction, { ownerUserId, itemId, urgency: "normal", now });
       return { outcome: "created" as const, itemId };
@@ -178,8 +157,8 @@ export class PostgresDeliveryStore {
       address: row.address,
       state: row.state,
       ...(row.suppressed_reason ? { suppressedReason: row.suppressed_reason } : {}),
-      ...(row.verified_at ? { verifiedAt: row.verified_at } : {}),
-      createdAt: row.created_at,
+      ...(row.verified_at ? { verifiedAt: asDate(row.verified_at) } : {}),
+      createdAt: asDate(row.created_at),
     };
   }
 
@@ -203,7 +182,8 @@ export class PostgresDeliveryStore {
           INSERT INTO notifications.email_destinations
             (owner_user_id, address, state, verified_at, request_window_started_at,
              request_window_count, created_at, updated_at)
-          VALUES (${ownerUserId}::uuid, ${address}, 'verified', ${now}, ${now}, 0, ${now}, ${now})
+          VALUES (${ownerUserId}::uuid, ${address}, 'verified', ${iso(now)}::timestamptz,
+            ${iso(now)}::timestamptz, 0, ${iso(now)}::timestamptz, ${iso(now)}::timestamptz)
         `;
         return "set" as const;
       }
@@ -212,15 +192,15 @@ export class PostgresDeliveryStore {
         return "suppressed" as const;
       await transaction`
         UPDATE notifications.email_destinations SET
-          address = ${address}, state = 'verified', suppressed_reason = NULL, verified_at = ${now},
-          code_requested_at = NULL, code_hash = NULL, code_expires_at = NULL, code_attempts = 0,
-          updated_at = ${now}
+          address = ${address}, state = 'verified', suppressed_reason = NULL,
+          verified_at = ${iso(now)}::timestamptz, code_requested_at = NULL, code_hash = NULL,
+          code_expires_at = NULL, code_attempts = 0, updated_at = ${iso(now)}::timestamptz
         WHERE owner_user_id = ${ownerUserId}::uuid
       `;
       // A new address invalidates scheduled mail to the old one.
       await transaction`
         UPDATE notifications.delivery_attempts SET state = 'skipped', lease_until = NULL,
-          outcome_code = 'no_destination', updated_at = ${now}
+          outcome_code = 'no_destination', updated_at = ${iso(now)}::timestamptz
         WHERE owner_user_id = ${ownerUserId}::uuid AND channel = 'email' AND state = 'scheduled'
       `;
       return "set" as const;
@@ -236,107 +216,16 @@ export class PostgresDeliveryStore {
     await this.client.begin(async (transaction) => {
       await transaction`
         UPDATE notifications.email_destinations SET state = 'suppressed',
-          suppressed_reason = ${reason}, verified_at = NULL, updated_at = ${now}
+          suppressed_reason = ${reason}, verified_at = NULL, updated_at = ${iso(now)}::timestamptz
         WHERE owner_user_id = ${ownerUserId}::uuid AND address = ${address}
       `;
       await transaction`
         UPDATE notifications.delivery_attempts SET state = 'skipped', lease_until = NULL,
-          outcome_code = 'no_destination', updated_at = ${now}
+          outcome_code = 'no_destination', updated_at = ${iso(now)}::timestamptz
         WHERE owner_user_id = ${ownerUserId}::uuid AND channel = 'email'
           AND state IN ('scheduled', 'sending')
       `;
     });
-  }
-
-  // ---- Push subscriptions ------------------------------------------------------------------
-
-  async listPushSubscriptions(ownerUserId: string): Promise<PushSubscriptionSummary[]> {
-    const rows = await this.client<
-      { id: string; state: "active" | "expired"; created_at: Date; last_success_at: Date | null }[]
-    >`
-      SELECT id, state, created_at, last_success_at FROM notifications.push_subscriptions
-      WHERE owner_user_id = ${ownerUserId}::uuid ORDER BY created_at, id
-    `;
-    return rows.map((row) => ({
-      id: row.id,
-      state: row.state,
-      createdAt: row.created_at,
-      ...(row.last_success_at ? { lastSuccessAt: row.last_success_at } : {}),
-    }));
-  }
-
-  /** The same browser endpoint moves to the candidate who subscribed last. */
-  async addPushSubscription(
-    ownerUserId: string,
-    endpoint: string,
-    now: Date,
-  ): Promise<AddPushOutcome> {
-    return this.client.begin(async (transaction) => {
-      await transaction`
-        SELECT pg_advisory_xact_lock(hashtext(${`notifications-push:${ownerUserId}`}))
-      `;
-      const hash = hashEndpoint(endpoint);
-      const [existing] = await transaction<{ id: string; owner_user_id: string }[]>`
-        SELECT id, owner_user_id FROM notifications.push_subscriptions
-        WHERE endpoint_hash = ${hash} FOR UPDATE
-      `;
-      const [active] = await transaction<{ count: string }[]>`
-        SELECT count(*)::text AS count FROM notifications.push_subscriptions
-        WHERE owner_user_id = ${ownerUserId}::uuid AND state = 'active' AND endpoint_hash <> ${hash}
-      `;
-      if (Number(active?.count ?? 0) >= maxPushSubscriptionsPerOwner)
-        return { outcome: "limit_reached" as const };
-      if (existing) {
-        await transaction`
-          UPDATE notifications.push_subscriptions SET owner_user_id = ${ownerUserId}::uuid,
-            state = 'active', expired_at = NULL
-          WHERE id = ${existing.id}::uuid
-        `;
-        return { outcome: "added" as const, id: existing.id };
-      }
-      const id = uuidv7();
-      await transaction`
-        INSERT INTO notifications.push_subscriptions
-          (id, owner_user_id, endpoint, endpoint_hash, state, created_at)
-        VALUES (${id}::uuid, ${ownerUserId}::uuid, ${endpoint}, ${hash}, 'active', ${now})
-      `;
-      return { outcome: "added" as const, id };
-    });
-  }
-
-  async removePushSubscription(ownerUserId: string, id: string, now: Date): Promise<boolean> {
-    return this.client.begin(async (transaction) => {
-      const removed = await transaction`
-        DELETE FROM notifications.push_subscriptions
-        WHERE id = ${id}::uuid AND owner_user_id = ${ownerUserId}::uuid RETURNING id
-      `;
-      const [active] = await transaction<{ count: string }[]>`
-        SELECT count(*)::text AS count FROM notifications.push_subscriptions
-        WHERE owner_user_id = ${ownerUserId}::uuid AND state = 'active'
-      `;
-      if (Number(active?.count ?? 0) === 0) {
-        await transaction`
-          UPDATE notifications.delivery_attempts SET state = 'skipped', lease_until = NULL,
-            outcome_code = 'no_destination', updated_at = ${now}
-          WHERE owner_user_id = ${ownerUserId}::uuid AND channel = 'push' AND state = 'scheduled'
-        `;
-      }
-      return removed.length > 0;
-    });
-  }
-
-  async expirePushSubscription(id: string, now: Date): Promise<void> {
-    await this.client`
-      UPDATE notifications.push_subscriptions SET state = 'expired', expired_at = ${now}
-      WHERE id = ${id}::uuid AND state = 'active'
-    `;
-  }
-
-  async markPushSuccess(id: string, now: Date): Promise<void> {
-    await this.client`
-      UPDATE notifications.push_subscriptions SET last_success_at = ${now}
-      WHERE id = ${id}::uuid
-    `;
   }
 
   // ---- Delivery attempts -------------------------------------------------------------------
@@ -354,15 +243,16 @@ export class PostgresDeliveryStore {
     >`
       WITH due AS (
         SELECT id FROM notifications.delivery_attempts
-        WHERE not_before <= ${now}
-          AND (state = 'scheduled' OR (state = 'sending' AND lease_until < ${now}))
+        WHERE not_before <= ${iso(now)}::timestamptz
+          AND (state = 'scheduled'
+            OR (state = 'sending' AND lease_until < ${iso(now)}::timestamptz))
         ORDER BY not_before, id
         LIMIT ${limit}
         FOR UPDATE SKIP LOCKED
       )
       UPDATE notifications.delivery_attempts attempt SET state = 'sending',
-        lease_until = ${new Date(now.getTime() + leaseMilliseconds)},
-        attempt_count = attempt.attempt_count + 1, updated_at = ${now}
+        lease_until = ${iso(new Date(now.getTime() + leaseMilliseconds))}::timestamptz,
+        attempt_count = attempt.attempt_count + 1, updated_at = ${iso(now)}::timestamptz
       FROM due WHERE attempt.id = due.id
       RETURNING attempt.id, attempt.owner_user_id, attempt.inbox_item_id, attempt.channel,
         attempt.attempt_count
@@ -382,9 +272,8 @@ export class PostgresDeliveryStore {
         kind: NotificationKind;
         urgency: NotificationUrgency;
         item_state: string;
-        expires_at: Date;
+        expires_at: Date | string;
         email_enabled: boolean | null;
-        push_enabled: boolean | null;
         quiet_hours_enabled: boolean | null;
         quiet_start_minute: number | null;
         quiet_end_minute: number | null;
@@ -394,7 +283,7 @@ export class PostgresDeliveryStore {
       }[]
     >`
       SELECT item.kind, item.urgency, item.state AS item_state, item.expires_at,
-        preferences.email_enabled, preferences.push_enabled, preferences.quiet_hours_enabled,
+        preferences.email_enabled, preferences.quiet_hours_enabled,
         preferences.quiet_start_minute, preferences.quiet_end_minute, preferences.time_zone,
         destination.address AS email_address, destination.state AS email_state
       FROM notifications.inbox_items item
@@ -405,18 +294,12 @@ export class PostgresDeliveryStore {
       WHERE item.id = ${attempt.inboxItemId}::uuid AND item.owner_user_id = ${attempt.ownerUserId}::uuid
     `;
     if (!row) return undefined;
-    const subscriptions = await this.client<{ id: string; endpoint: string }[]>`
-      SELECT id, endpoint FROM notifications.push_subscriptions
-      WHERE owner_user_id = ${attempt.ownerUserId}::uuid AND state = 'active'
-      ORDER BY created_at, id
-    `;
     return {
       kind: row.kind,
       urgency: row.urgency,
       itemState: row.item_state,
-      itemExpiresAt: row.expires_at,
+      itemExpiresAt: asDate(row.expires_at),
       emailEnabled: row.email_enabled ?? false,
-      pushEnabled: row.push_enabled ?? false,
       quietHours: {
         enabled: row.quiet_hours_enabled ?? false,
         startMinute: row.quiet_start_minute ?? 1320,
@@ -426,7 +309,6 @@ export class PostgresDeliveryStore {
       ...(row.email_address && row.email_state
         ? { email: { address: row.email_address, state: row.email_state } }
         : {}),
-      pushSubscriptions: subscriptions,
     };
   }
 
@@ -440,7 +322,8 @@ export class PostgresDeliveryStore {
     await this.client`
       UPDATE notifications.delivery_attempts SET state = ${state}, lease_until = NULL,
         outcome_code = ${outcome}, provider_reference = ${providerReference ?? null},
-        sent_at = ${state === "sent" ? now : null}, updated_at = ${now}
+        sent_at = ${state === "sent" ? iso(now) : null}::timestamptz,
+        updated_at = ${iso(now)}::timestamptz
       WHERE id = ${attemptId}::uuid AND state = 'sending'
     `;
   }
@@ -455,8 +338,9 @@ export class PostgresDeliveryStore {
   ): Promise<void> {
     await this.client`
       UPDATE notifications.delivery_attempts SET state = 'scheduled', lease_until = NULL,
-        not_before = ${notBefore}, outcome_code = ${outcome},
-        attempt_count = attempt_count - ${consumeAttempt ? 0 : 1}::int, updated_at = ${now}
+        not_before = ${iso(notBefore)}::timestamptz, outcome_code = ${outcome},
+        attempt_count = attempt_count - ${consumeAttempt ? 0 : 1}::int,
+        updated_at = ${iso(now)}::timestamptz
       WHERE id = ${attemptId}::uuid AND state = 'sending'
     `;
   }

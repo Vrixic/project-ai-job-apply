@@ -4,17 +4,13 @@ import { promisify } from "node:util";
 import postgres from "postgres";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import {
-  DeliveryProviderError,
-  type EmailMessage,
-  type EmailProvider,
-  type PushProvider,
-  type PushResult,
-} from "./delivery.js";
+import { DeliveryProviderError, type EmailMessage, type EmailProvider } from "./delivery.js";
 import { PostgresDeliveryStore } from "./delivery-store.js";
 import { NotificationDispatcher } from "./dispatcher.js";
 import { NotificationsService } from "./service.js";
 import { PostgresNotificationsStore } from "./store.js";
+import { mirrorSharedClient } from "./test-client.js";
+import { asDate } from "./timestamps.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -36,22 +32,12 @@ class FakeEmail implements EmailProvider {
   }
 }
 
-class FakePush implements PushProvider {
-  readonly posted: string[] = [];
-  results = new Map<string, PushResult | DeliveryProviderError>();
-  async send(endpoint: string): Promise<PushResult> {
-    this.posted.push(endpoint);
-    const result = this.results.get(endpoint) ?? "delivered";
-    if (result instanceof DeliveryProviderError) throw result;
-    return result;
-  }
-}
-
 describeWithDatabase("Notification delivery over PostgreSQL", () => {
   const client = postgres(databaseUrl ?? "postgres://invalid", {
     max: 6,
     onnotice: () => undefined,
   });
+  mirrorSharedClient(client);
   const store = new PostgresNotificationsStore(client);
   const delivery = new PostgresDeliveryStore(client);
   let clock = new Date("2026-10-23T12:00:00.000Z");
@@ -62,11 +48,9 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
   const minute = 60_000;
   const service = new NotificationsService(store, { now, delivery });
   const email = new FakeEmail();
-  const push = new FakePush();
   const dispatcher = new NotificationDispatcher({
     store: delivery,
     email,
-    push,
     webBaseUrl: "https://app.example.test",
     now,
     batchSize: 500,
@@ -85,12 +69,11 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
   const addressOf = (owner: string) => `${owner}@example.test`;
   const quietOff = { enabled: false, startMinute: 1320, endMinute: 420, timeZone: "UTC" };
 
-  async function confirmedEmailOwner(options: { push?: boolean; quiet?: boolean } = {}) {
+  async function confirmedEmailOwner(options: { quiet?: boolean } = {}) {
     const owner = uuidv7();
     await service.setAccountEmail(owner, addressOf(owner));
     await service.updatePreferences(owner, 0, {
       emailEnabled: true,
-      pushEnabled: options.push ?? false,
       quietHours: options.quiet
         ? { enabled: true, startMinute: 1320, endMinute: 420, timeZone: "UTC" }
         : quietOff,
@@ -115,7 +98,7 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
         state: string;
         outcome_code: string | null;
         attempt_count: number;
-        not_before: Date;
+        not_before: Date | string;
         provider_reference: string | null;
       }[]
     >`
@@ -123,7 +106,7 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
       FROM notifications.delivery_attempts
       WHERE inbox_item_id = ${itemId}::uuid AND channel = ${channel}
     `;
-    return row;
+    return row ? { ...row, not_before: asDate(row.not_before) } : undefined;
   };
 
   it("records the verified account address, normalized and idempotently", async () => {
@@ -221,7 +204,6 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
     const off = uuidv7();
     await service.updatePreferences(off, 0, {
       emailEnabled: false,
-      pushEnabled: false,
       quietHours: quietOff,
     });
     const first = await openItem(off);
@@ -230,12 +212,10 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
     const unverified = uuidv7();
     await service.updatePreferences(unverified, 0, {
       emailEnabled: true,
-      pushEnabled: true,
       quietHours: quietOff,
     });
     const second = await openItem(unverified);
     expect(await attemptOf(second.itemId, "email")).toBeUndefined();
-    expect(await attemptOf(second.itemId, "push")).toBeUndefined();
   });
 
   it("skips an item the candidate already handled and a channel turned off since", async () => {
@@ -246,7 +226,6 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
     const preferences = await service.getPreferences(owner);
     await service.updatePreferences(owner, preferences.version, {
       emailEnabled: false,
-      pushEnabled: false,
       quietHours: quietOff,
     });
     const before = email.to(addressOf(owner)).length;
@@ -284,7 +263,6 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
     const preferences = await service.getPreferences(owner);
     await service.updatePreferences(owner, preferences.version, {
       emailEnabled: true,
-      pushEnabled: false,
       quietHours: { enabled: true, startMinute: 11 * 60, endMinute: 13 * 60, timeZone: "UTC" },
     });
     await dispatcher.run();
@@ -390,134 +368,10 @@ describeWithDatabase("Notification delivery over PostgreSQL", () => {
     });
   });
 
-  describe("push", () => {
-    const endpointFor = (label: string) =>
-      `https://fcm.googleapis.com/fcm/send/${label}-${uuidv7()}`;
-
-    it("subscribes, delivers a payload-less push and records the success", async () => {
-      const owner = await confirmedEmailOwner({ push: true });
-      const endpoint = endpointFor("ok");
-      const { id } = await service.addPushSubscription(owner, endpoint);
-      const { itemId } = await openItem(owner);
-      expect(await attemptOf(itemId, "push")).toMatchObject({ state: "scheduled" });
-      await dispatcher.run();
-      expect(push.posted).toContain(endpoint);
-      expect(await attemptOf(itemId, "push")).toMatchObject({
-        state: "sent",
-        provider_reference: "subscriptions:1",
-      });
-      const status = await service.getDeliveryStatus(owner);
-      expect(status.pushSubscriptions).toEqual([expect.objectContaining({ id, state: "active" })]);
-      const [row] = await client<{ last_success_at: Date | null }[]>`
-        SELECT last_success_at FROM notifications.push_subscriptions WHERE id = ${id}::uuid
-      `;
-      expect(row?.last_success_at).not.toBeNull();
-    });
-
-    it("expires a gone subscription and falls back to the inbox", async () => {
-      const owner = await confirmedEmailOwner({ push: true });
-      const endpoint = endpointFor("gone");
-      push.results.set(endpoint, "gone");
-      await service.addPushSubscription(owner, endpoint);
-      const { itemId } = await openItem(owner);
-      await dispatcher.run();
-      expect(await attemptOf(itemId, "push")).toMatchObject({
-        state: "skipped",
-        outcome_code: "no_destination",
-      });
-      expect((await service.getDeliveryStatus(owner)).pushSubscriptions[0]?.state).toBe("expired");
-      expect((await service.listInbox(owner)).items.map((item) => item.id)).toContain(itemId);
-    });
-
-    it("delivers when one of several subscriptions is gone", async () => {
-      const owner = await confirmedEmailOwner({ push: true });
-      const gone = endpointFor("gone");
-      const live = endpointFor("live");
-      push.results.set(gone, "gone");
-      await service.addPushSubscription(owner, gone);
-      await service.addPushSubscription(owner, live);
-      const { itemId } = await openItem(owner);
-      await dispatcher.run();
-      expect(await attemptOf(itemId, "push")).toMatchObject({ state: "sent" });
-      const states = (await service.getDeliveryStatus(owner)).pushSubscriptions.map((s) => s.state);
-      expect(states.sort()).toEqual(["active", "expired"]);
-    });
-
-    it("retries when the push service is unavailable and never expires the subscription", async () => {
-      clock = new Date("2026-10-29T12:00:00.000Z");
-      const owner = await confirmedEmailOwner({ push: true });
-      const endpoint = endpointFor("down");
-      push.results.set(endpoint, new DeliveryProviderError(false, "push_status_503"));
-      await service.addPushSubscription(owner, endpoint);
-      const { itemId } = await openItem(owner);
-      await dispatcher.run();
-      expect(await attemptOf(itemId, "push")).toMatchObject({
-        state: "scheduled",
-        attempt_count: 1,
-      });
-      expect((await service.getDeliveryStatus(owner)).pushSubscriptions[0]?.state).toBe("active");
-      push.results.set(endpoint, "delivered");
-      advance(2 * minute);
-      await dispatcher.run();
-      expect(await attemptOf(itemId, "push")).toMatchObject({ state: "sent", attempt_count: 2 });
-    });
-
-    it("refuses endpoints outside the push services and more than five subscriptions", async () => {
-      const owner = uuidv7();
-      await expect(
-        service.addPushSubscription(owner, "https://evil.example.com/fcm.googleapis.com/x"),
-      ).rejects.toMatchObject({ code: "invalid_request" });
-      for (let index = 0; index < 5; index += 1)
-        await service.addPushSubscription(owner, endpointFor(`n${index}`));
-      await expect(service.addPushSubscription(owner, endpointFor("n5"))).rejects.toMatchObject({
-        code: "limit_reached",
-      });
-      // Re-subscribing an existing endpoint is not a sixth subscription.
-      const again = endpointFor("again");
-      const other = uuidv7();
-      const { id } = await service.addPushSubscription(other, again);
-      await expect(service.addPushSubscription(other, again)).resolves.toEqual({ id });
-    });
-
-    it("moves a browser endpoint to the candidate who subscribed last and removes only your own", async () => {
-      const first = uuidv7();
-      const second = uuidv7();
-      const endpoint = endpointFor("shared");
-      const { id } = await service.addPushSubscription(first, endpoint);
-      await expect(service.addPushSubscription(second, endpoint)).resolves.toEqual({ id });
-      expect((await service.getDeliveryStatus(first)).pushSubscriptions).toEqual([]);
-      await expect(service.removePushSubscription(first, id)).rejects.toMatchObject({
-        code: "not_found",
-      });
-      await expect(service.removePushSubscription(second, id)).resolves.toBeUndefined();
-    });
-
-    it("skips scheduled push when the last subscription is removed", async () => {
-      const owner = await confirmedEmailOwner({ push: true });
-      const { id } = await service.addPushSubscription(owner, endpointFor("rm"));
-      const { itemId } = await openItem(owner);
-      await service.removePushSubscription(owner, id);
-      expect(await attemptOf(itemId, "push")).toMatchObject({
-        state: "skipped",
-        outcome_code: "no_destination",
-      });
-    });
-  });
-
   it("answers not_found when delivery is not configured", async () => {
     const unconfigured = new NotificationsService(store, { now });
     await expect(unconfigured.getDeliveryStatus(uuidv7())).rejects.toMatchObject({
       code: "not_found",
     });
-  });
-
-  it("exposes the public push key only when configured", async () => {
-    const configured = new NotificationsService(store, {
-      now,
-      delivery,
-      pushPublicKey: "BPublicKey",
-    });
-    expect((await configured.getDeliveryStatus(uuidv7())).pushPublicKey).toBe("BPublicKey");
-    expect((await service.getDeliveryStatus(uuidv7())).pushPublicKey).toBeUndefined();
   });
 });

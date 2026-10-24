@@ -1,7 +1,6 @@
-import { createHash } from "node:crypto";
 import type { NotificationKind } from "./types.js";
 
-export const deliveryChannels = Object.freeze(["email", "push"] as const);
+export const deliveryChannels = Object.freeze(["email"] as const);
 export type DeliveryChannel = (typeof deliveryChannels)[number];
 
 export type DeliveryState = "scheduled" | "sending" | "sent" | "failed" | "skipped";
@@ -17,7 +16,6 @@ export type DeliveryOutcomeCode =
   | "deferred_quiet_hours"
   | "transient_error";
 
-export const maxPushSubscriptionsPerOwner = 5;
 export const leaseMilliseconds = 2 * 60 * 1000;
 export const maxDeliveryAttempts = 5;
 
@@ -40,44 +38,6 @@ export function normalizeEmailAddress(value: unknown): string | undefined {
   if (!local || !domain || address.includes("..") || local.startsWith(".") || local.endsWith("."))
     return undefined;
   return EMAIL_PATTERN.test(address) ? address : undefined;
-}
-
-/**
- * The push services the platform will post to. A subscription pointing anywhere else is rejected,
- * so a candidate cannot aim the dispatcher at another host.
- */
-const pushHostSuffixes = Object.freeze([
-  "fcm.googleapis.com",
-  "updates.push.services.mozilla.com",
-  "web.push.apple.com",
-  "push.apple.com",
-  "notify.windows.com",
-]);
-
-export function validatePushEndpoint(value: unknown): string | undefined {
-  if (typeof value !== "string" || value.length > 2048) return undefined;
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return undefined;
-  }
-  if (
-    url.protocol !== "https:" ||
-    url.username !== "" ||
-    url.password !== "" ||
-    (url.port !== "" && url.port !== "443") ||
-    url.hash !== "" ||
-    url.pathname.length < 2
-  )
-    return undefined;
-  const host = url.hostname.toLowerCase();
-  const allowed = pushHostSuffixes.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
-  return allowed ? url.toString() : undefined;
-}
-
-export function hashEndpoint(endpoint: string): string {
-  return createHash("sha256").update(endpoint).digest("hex");
 }
 
 export interface EmailMessage {
@@ -113,10 +73,7 @@ export function notificationEmail(input: {
   };
 }
 
-/** Result a push provider reports for one subscription endpoint. */
-export type PushResult = "delivered" | "gone";
-
-/** Thrown by providers. `permanent` stops retries and, for email, suppresses the address. */
+/** Thrown by providers. `permanent` stops retries and suppresses the address. */
 export class DeliveryProviderError extends Error {
   constructor(
     readonly permanent: boolean,
@@ -129,8 +86,4 @@ export class DeliveryProviderError extends Error {
 
 export interface EmailProvider {
   send(message: EmailMessage): Promise<{ reference: string }>;
-}
-
-export interface PushProvider {
-  send(endpoint: string): Promise<PushResult>;
 }

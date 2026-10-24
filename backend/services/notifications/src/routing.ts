@@ -9,7 +9,6 @@ export interface RoutingDecision {
   /** Always recorded: the inbox is the fallback when external delivery fails. */
   inApp: true;
   email: ChannelDecision;
-  push: ChannelDecision;
 }
 
 export function isValidTimeZone(value: string): boolean {
@@ -50,13 +49,13 @@ export function quietHoursEnd(quiet: QuietHours, now: Date): Date | undefined {
 }
 
 /**
- * Which channels may carry an item now. External channels are off unless the candidate turned
- * them on; quiet hours defer them except for an urgent item; nothing here can remove the in-app
+ * Whether email may carry an item now. It is off unless the candidate turned it on; quiet hours
+ * defer it except for an urgent item; nothing here can remove the in-app
  * record or change the source fact.
  */
 export function routeChannels(input: {
   urgency: NotificationUrgency;
-  preferences: Pick<NotificationPreferences, "emailEnabled" | "pushEnabled" | "quietHours">;
+  preferences: Pick<NotificationPreferences, "emailEnabled" | "quietHours">;
   now: Date;
 }): RoutingDecision {
   const quietEnd =
@@ -70,6 +69,5 @@ export function routeChannels(input: {
   return {
     inApp: true,
     email: decide(input.preferences.emailEnabled),
-    push: decide(input.preferences.pushEnabled),
   };
 }

@@ -796,9 +796,9 @@ function Read-CandidateRightsExportHelperResult {
   return $result
 }
 
-# Generated-only Notifications records through the real candidate API: preferences (compare-and-set
-# on the current version) and one browser push subscription on an allow-listed push host. Email is
-# not seeded here, because confirmation sends mail; the PostgreSQL tests cover that table.
+# Generated-only Notifications record through the real candidate API: preferences (compare-and-set
+# on the current version). The email destination is not seeded here, because it comes from the
+# verified account identity; the PostgreSQL tests cover that table.
 function New-NotificationsFixture {
   param([Parameter(Mandatory)][string]$Token)
   $current = Invoke-CandidateApi GET '/notifications/preferences' $Token $null @{} @(200)
@@ -806,20 +806,17 @@ function New-NotificationsFixture {
   $preferences = [ordered]@{
     expectedVersion = $version
     emailEnabled = $false
-    pushEnabled = $false
     quietHours = [ordered]@{ enabled = $false; startMinute = 1320; endMinute = 420; timeZone = 'UTC' }
   }
   $null = Invoke-CandidateApi PUT '/notifications/preferences' $Token $preferences @{} @(200)
-  $endpoint = "https://fcm.googleapis.com/fcm/send/generated-rights-acceptance-$([guid]::NewGuid().ToString('N'))"
-  $null = Invoke-CandidateApi POST '/notifications/delivery/push-subscriptions' $Token ([ordered]@{ endpoint = $endpoint }) @{} @(201)
 }
 
 function Assert-CandidateRightsAcceptanceCoverage {
   param([Parameter(Mandatory)][object]$Coverage)
   if ($ExpectedPolicyVersion -ceq 'd4-development-synthetic-v1') {
-    # The fixed fixture creates these two records through the real API before the export is requested.
+    # The fixed fixture creates this record through the real API before the export is requested.
     $missingNotifications = @(
-      foreach ($name in @('notificationsPreferencesCount','notificationsPushSubscriptionCount')) {
+      foreach ($name in @('notificationsPreferencesCount')) {
         if ($Coverage.$name -lt 1) { $name }
       }
     )

@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { NotificationsService } from "./service.js";
 import { projectApplicationEvent } from "./source-events.js";
 import { PostgresNotificationsStore } from "./store.js";
+import { mirrorSharedClient } from "./test-client.js";
 import { defaultQuietHours } from "./types.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -18,6 +19,7 @@ describeWithDatabase("Notifications store over PostgreSQL", () => {
     max: 4,
     onnotice: () => undefined,
   });
+  mirrorSharedClient(client);
   const store = new PostgresNotificationsStore(client);
   let clock = new Date("2026-10-22T12:00:00.000Z");
   const service = new NotificationsService(store, { now: () => clock });
@@ -161,10 +163,9 @@ describeWithDatabase("Notifications store over PostgreSQL", () => {
   it("defaults preferences off, and writes them with compare-and-set", async () => {
     const user = owner();
     const initial = await service.getPreferences(user);
-    expect(initial).toMatchObject({ version: 0, emailEnabled: false, pushEnabled: false });
+    expect(initial).toMatchObject({ version: 0, emailEnabled: false });
     const saved = await service.updatePreferences(user, 0, {
       emailEnabled: true,
-      pushEnabled: false,
       quietHours: {
         enabled: true,
         startMinute: 1320,
@@ -176,17 +177,15 @@ describeWithDatabase("Notifications store over PostgreSQL", () => {
     await expect(
       service.updatePreferences(user, 0, {
         emailEnabled: false,
-        pushEnabled: false,
         quietHours: defaultQuietHours,
       }),
     ).rejects.toMatchObject({ code: "version_conflict" });
     const next = await service.updatePreferences(user, 1, {
       emailEnabled: true,
-      pushEnabled: true,
       quietHours: defaultQuietHours,
     });
     expect(next.version).toBe(2);
-    expect((await service.routeFor(user, { urgency: "normal" })).push).toEqual({
+    expect((await service.routeFor(user, { urgency: "normal" })).email).toEqual({
       action: "send_now",
     });
   });

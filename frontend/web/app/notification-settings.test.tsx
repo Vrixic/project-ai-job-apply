@@ -4,31 +4,18 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const push = vi.hoisted(() => ({
-  pushSupported: vi.fn(() => true),
-  browserNotificationsBlocked: vi.fn(() => false),
-  subscribeThisBrowser: vi.fn(),
-  unsubscribeThisBrowser: vi.fn(async () => undefined),
-  readStoredSubscriptionId: vi.fn((): string | undefined => undefined),
-  storeSubscriptionId: vi.fn(),
-}));
-vi.mock("../lib/browser-push", () => push);
-
 import { minutesToTime, NotificationSettings, timeToMinutes } from "./notification-settings";
 
-const SUB = "019d04cf-1f80-7000-8000-00000000a111";
+const ITEM = "019d04cf-1f80-7000-8000-00000000a111";
 const preferences = (overrides: Record<string, unknown> = {}) => ({
   version: 1,
   inAppEnabled: true,
   emailEnabled: false,
-  pushEnabled: false,
   quietHours: { enabled: false, startMinute: 1320, endMinute: 420, timeZone: "UTC" },
   updatedAt: "2026-10-23T12:00:00.000Z",
   ...overrides,
 });
 const delivery = (overrides: Record<string, unknown> = {}) => ({
-  pushSubscriptions: [],
-  pushPublicKey: "B".repeat(87),
   ...overrides,
 });
 
@@ -48,10 +35,6 @@ describe("NotificationSettings", () => {
     root = createRoot(container);
     calls = [];
     state = { delivery: delivery(), preferences: preferences() };
-    for (const mock of Object.values(push)) mock.mockClear();
-    push.pushSupported.mockReturnValue(true);
-    push.browserNotificationsBlocked.mockReturnValue(false);
-    push.readStoredSubscriptionId.mockReturnValue(undefined);
   });
 
   afterEach(async () => {
@@ -126,14 +109,14 @@ describe("NotificationSettings", () => {
   it("records the account email before reading the status and asks for no address", async () => {
     stubFetch();
     await render();
-    expect(container.textContent).toContain("only tell you to open the inbox");
+    expect(container.textContent).toContain("only tells you to open the inbox");
     expect(calls[0]).toEqual({ method: "PUT", path: "/delivery/email" });
     expect(
       calls.findIndex((call) => call.path === "/delivery" && call.method === "GET"),
     ).toBeGreaterThan(0);
     expect(container.querySelector('input[type="email"]')).toBeNull();
     expect(button(/send confirmation code/i)).toBeUndefined();
-    expect(container.textContent).toContain("not verified yet");
+    expect(container.textContent).toContain("could not confirm it yet");
   });
 
   it("still shows the settings when the account email cannot be recorded", async () => {
@@ -144,13 +127,13 @@ describe("NotificationSettings", () => {
     );
     await render();
     expect(container.textContent).toContain("How you hear about updates");
-    expect(container.textContent).toContain("not verified yet");
+    expect(container.textContent).toContain("could not confirm it yet");
   });
 
   it("sends a test notification and reports a rate limit plainly", async () => {
     stubFetch((method, path) =>
       method === "POST" && path === "/delivery/test"
-        ? Response.json({ id: SUB }, { status: 201 })
+        ? Response.json({ id: ITEM }, { status: 201 })
         : undefined,
     );
     await render();
@@ -215,7 +198,6 @@ describe("NotificationSettings", () => {
     expect(save?.body).toMatchObject({
       expectedVersion: 1,
       emailEnabled: true,
-      pushEnabled: false,
       quietHours: { enabled: true, startMinute: 1290, endMinute: 375 },
     });
     expect(container.querySelector('[role="status"]')?.textContent).toBe("Saved.");
@@ -230,68 +212,6 @@ describe("NotificationSettings", () => {
     await type(times[1] as HTMLInputElement, "08:00");
     expect(container.textContent).toContain("Choose two different times");
     expect(button(/save notification settings/i)?.disabled).toBe(true);
-  });
-
-  it("turns browser notifications on and registers the endpoint", async () => {
-    push.subscribeThisBrowser.mockResolvedValue({
-      outcome: "subscribed",
-      endpoint: "https://fcm.googleapis.com/fcm/send/abc",
-    });
-    stubFetch((method, path) =>
-      method === "POST" && path === "/delivery/push-subscriptions"
-        ? Response.json({ id: SUB }, { status: 201 })
-        : undefined,
-    );
-    await render();
-    await click(/turn on for this browser/i);
-    expect(push.subscribeThisBrowser).toHaveBeenCalledWith("B".repeat(87));
-    expect(calls).toContainEqual({
-      method: "POST",
-      path: "/delivery/push-subscriptions",
-      body: { endpoint: "https://fcm.googleapis.com/fcm/send/abc" },
-    });
-    expect(push.storeSubscriptionId).toHaveBeenCalledWith(SUB);
-  });
-
-  it("explains a blocked permission and a full account without registering anything", async () => {
-    push.subscribeThisBrowser.mockResolvedValue({ outcome: "denied" });
-    stubFetch();
-    await render();
-    await click(/turn on for this browser/i);
-    expect(container.querySelector('[role="status"]')?.textContent).toContain("blocked");
-    expect(calls.some((call) => call.path === "/delivery/push-subscriptions")).toBe(false);
-
-    push.subscribeThisBrowser.mockResolvedValue({ outcome: "subscribed", endpoint: "https://x" });
-    stubFetch((method, path) =>
-      method === "POST" && path === "/delivery/push-subscriptions"
-        ? Response.json({}, { status: 409 })
-        : undefined,
-    );
-    await click(/turn on for this browser/i);
-    expect(container.querySelector('[role="status"]')?.textContent).toContain("maximum number");
-    expect(push.storeSubscriptionId).not.toHaveBeenCalled();
-  });
-
-  it("turns this browser off and removes the stored subscription", async () => {
-    state.delivery = delivery({
-      pushSubscriptions: [{ id: SUB, state: "active", createdAt: "2026-10-23T12:00:00.000Z" }],
-    });
-    push.readStoredSubscriptionId.mockReturnValue(SUB);
-    stubFetch();
-    await render();
-    expect(container.textContent).toContain("1 browser set up");
-    await click(/turn off for this browser/i);
-    expect(calls).toContainEqual({ method: "DELETE", path: `/delivery/push-subscriptions/${SUB}` });
-    expect(push.unsubscribeThisBrowser).toHaveBeenCalled();
-    expect(push.storeSubscriptionId).toHaveBeenCalledWith(undefined);
-  });
-
-  it("says so when the browser cannot show notifications", async () => {
-    push.pushSupported.mockReturnValue(false);
-    stubFetch();
-    await render();
-    expect(container.textContent).toContain("This browser cannot show notifications.");
-    expect(button(/turn on for this browser/i)).toBeUndefined();
   });
 });
 

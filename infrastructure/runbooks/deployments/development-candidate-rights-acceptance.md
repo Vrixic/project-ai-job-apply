@@ -37,10 +37,9 @@ For D4 (Notifications, [ADR-056](../../../docs/adr/056-notification-email-and-pu
 its canonical SHA-256 and the owner inventory ending in `trust,applications,notifications`. In the session
 helper set both `ApplicationsInventory: true` and `NotificationsInventory: true` (Notifications alone is
 refused). D4 keeps every D3 gate and the receipt binds nine owners. Before requesting the export, the fixed
-fixture saves the disposable candidate's notification preferences and registers one push subscription on an
-allow-listed push host through the real candidate API, and the acceptance refuses to delete the account unless
-the export lists both. It deliberately does not seed an email address, because confirmation sends mail; the
-PostgreSQL tests cover that table. The Gateway and migrations must already serve the Notifications routes.
+fixture saves the disposable candidate's notification preferences through the real candidate API, and the
+acceptance refuses to delete the account unless the export lists them. It deliberately does not seed an
+email address, because that comes from the verified account identity; the PostgreSQL tests cover that table. The Gateway and migrations must already serve the Notifications routes.
 
 ## Read-only restricted-answer artifact acceptance (D3-029/D3-030)
 

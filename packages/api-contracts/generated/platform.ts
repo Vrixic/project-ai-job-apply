@@ -1526,7 +1526,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Where notifications are delivered: the account email address and its state, and the browser push subscriptions. */
+        /** Where notifications are delivered: the account email address and its state, and its state. */
         get: operations["getNotificationDelivery"];
         put?: never;
         post?: never;
@@ -1548,40 +1548,6 @@ export interface paths {
         put: operations["useAccountNotificationEmail"];
         post?: never;
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/notifications/delivery/push-subscriptions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Register this browser for push notifications. The push carries no content. */
-        post: operations["addNotificationPushSubscription"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/notifications/delivery/push-subscriptions/{subscriptionId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Remove a browser push subscription. */
-        delete: operations["removeNotificationPushSubscription"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3523,35 +3489,17 @@ export interface components {
                 /** @enum {string} */
                 state: "verified" | "suppressed";
             };
-            pushSubscriptions: {
-                /** Format: uuid */
-                id: string;
-                /** @enum {string} */
-                state: "active" | "expired";
-                /** Format: date-time */
-                createdAt: string;
-            }[];
-            /** @description The public key a browser needs to subscribe. Absent when push is not configured. */
-            pushPublicKey?: string;
-        };
-        AddNotificationPushSubscriptionRequest: {
-            endpoint: string;
-        };
-        NotificationPushSubscriptionCreated: {
-            /** Format: uuid */
-            id: string;
         };
         NotificationTestSent: {
             /** Format: uuid */
             id: string;
         };
-        /** @description Delivery preferences. The in-app inbox cannot be turned off; email and push are off until the candidate turns them on. Version 0 means defaults that were never saved. */
+        /** @description Delivery preferences. The in-app inbox cannot be turned off; email is off until the candidate turns it on. Version 0 means defaults that were never saved. */
         NotificationPreferences: {
             version: number;
             /** @constant */
             inAppEnabled: true;
             emailEnabled: boolean;
-            pushEnabled: boolean;
             quietHours: components["schemas"]["NotificationQuietHours"];
             /** Format: date-time */
             updatedAt: string;
@@ -3559,7 +3507,6 @@ export interface components {
         UpdateNotificationPreferencesRequest: {
             expectedVersion: number;
             emailEnabled: boolean;
-            pushEnabled: boolean;
             quietHours: components["schemas"]["NotificationQuietHours"];
         };
     };
@@ -7199,64 +7146,6 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            503: components["responses"]["ServiceUnavailable"];
-        };
-    };
-    addNotificationPushSubscription: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AddNotificationPushSubscriptionRequest"];
-            };
-        };
-        responses: {
-            /** @description The subscription was saved */
-            201: {
-                headers: {
-                    "Cache-Control": "no-store";
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationPushSubscriptionCreated"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
-            413: components["responses"]["PayloadTooLarge"];
-            415: components["responses"]["UnsupportedMediaType"];
-            503: components["responses"]["ServiceUnavailable"];
-        };
-    };
-    removeNotificationPushSubscription: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                subscriptionId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The subscription was removed */
-            204: {
-                headers: {
-                    "Cache-Control": "no-store";
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };

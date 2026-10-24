@@ -5,14 +5,6 @@ import type {
   NotificationPreferences,
 } from "@ai-job-apply/api-contracts";
 import { useCallback, useEffect, useState } from "react";
-import {
-  browserNotificationsBlocked,
-  pushSupported,
-  readStoredSubscriptionId,
-  storeSubscriptionId,
-  subscribeThisBrowser,
-  unsubscribeThisBrowser,
-} from "../lib/browser-push";
 
 type View =
   | { status: "loading" }
@@ -22,7 +14,6 @@ type View =
 
 interface Draft {
   emailEnabled: boolean;
-  pushEnabled: boolean;
   quietEnabled: boolean;
   start: string;
   end: string;
@@ -41,7 +32,6 @@ export function timeToMinutes(value: string): number | undefined {
 function draftFrom(preferences: NotificationPreferences): Draft {
   return {
     emailEnabled: preferences.emailEnabled,
-    pushEnabled: preferences.pushEnabled,
     quietEnabled: preferences.quietHours.enabled,
     start: minutesToTime(preferences.quietHours.startMinute),
     end: minutesToTime(preferences.quietHours.endMinute),
@@ -73,14 +63,13 @@ async function call(
 
 /**
  * Where the candidate hears about new inbox items. The inbox itself is always on and keeps every
- * update; email and browser notifications are extras, off until the candidate turns them on.
+ * update; email is an extra, off until the candidate turns it on.
  */
 export function NotificationSettings({ authenticated }: { authenticated: boolean }) {
   const [view, setView] = useState<View>({ status: "loading" });
   const [draft, setDraft] = useState<Draft>();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string>();
-  const [thisBrowserId, setThisBrowserId] = useState<string>();
 
   const load = useCallback(async () => {
     try {
@@ -99,12 +88,6 @@ export function NotificationSettings({ authenticated }: { authenticated: boolean
       const preferences = (await preferencesResponse.json()) as NotificationPreferences;
       setView({ status: "ready", delivery, preferences });
       setDraft(draftFrom(preferences));
-      const stored = readStoredSubscriptionId();
-      setThisBrowserId(
-        stored && delivery.pushSubscriptions.some((s) => s.id === stored && s.state === "active")
-          ? stored
-          : undefined,
-      );
     } catch {
       setView({ status: "error" });
     }
@@ -146,8 +129,6 @@ export function NotificationSettings({ authenticated }: { authenticated: boolean
   const { delivery, preferences } = view;
   const email = delivery.email;
   const emailVerified = email?.state === "verified";
-  const activeSubscriptions = delivery.pushSubscriptions.filter((s) => s.state === "active");
-  const canPush = pushSupported() && delivery.pushPublicKey !== undefined;
   const unchanged = JSON.stringify(draft) === JSON.stringify(draftFrom(preferences));
   const startMinute = timeToMinutes(draft.start);
   const endMinute = timeToMinutes(draft.end);
@@ -155,43 +136,12 @@ export function NotificationSettings({ authenticated }: { authenticated: boolean
     draft.quietEnabled &&
     (startMinute === undefined || endMinute === undefined || startMinute === endMinute);
 
-  const turnOnBrowser = () =>
-    run(async () => {
-      if (!delivery.pushPublicKey) return "Browser notifications are not available yet.";
-      const result = await subscribeThisBrowser(delivery.pushPublicKey);
-      if (result.outcome === "denied")
-        return "Your browser blocked notifications. Allow them for this site in its settings, then try again.";
-      if (result.outcome === "unsupported") return "This browser cannot show notifications.";
-      if (result.outcome === "failed") return "Could not turn on browser notifications.";
-      const response = await call("POST", "/delivery/push-subscriptions", {
-        endpoint: result.endpoint,
-      });
-      if (response.status === 409)
-        return "This account already has the maximum number of browsers. Turn one off first.";
-      if (response.status !== 201) return "Could not turn on browser notifications.";
-      const body = (await response.json()) as { id?: string };
-      if (body.id) storeSubscriptionId(body.id);
-      await load();
-      return "Browser notifications are on for this browser.";
-    });
-
-  const turnOffBrowser = (id: string) =>
-    run(async () => {
-      await call("DELETE", `/delivery/push-subscriptions/${id}`);
-      if (id === thisBrowserId) {
-        await unsubscribeThisBrowser();
-        storeSubscriptionId(undefined);
-      }
-      await load();
-      return "Browser notifications are off for that browser.";
-    });
-
   const sendTest = () =>
     run(async () => {
       const response = await call("POST", "/delivery/test");
       if (response.status === 429) return "Too many test notifications. Try again in an hour.";
       if (response.status !== 201) return "Could not send a test notification.";
-      return "Test sent. It is in your inbox now. Email and browser notifications you turned on arrive within about a minute.";
+      return "Test sent. It is in your inbox now. If you turned email on, it arrives within about a minute.";
     });
 
   const save = () =>
@@ -199,7 +149,6 @@ export function NotificationSettings({ authenticated }: { authenticated: boolean
       const response = await call("PUT", "/preferences", {
         expectedVersion: preferences.version,
         emailEnabled: draft.emailEnabled && emailVerified,
-        pushEnabled: draft.pushEnabled && activeSubscriptions.length > 0,
         quietHours: {
           enabled: draft.quietEnabled,
           startMinute: startMinute ?? preferences.quietHours.startMinute,
@@ -222,8 +171,8 @@ export function NotificationSettings({ authenticated }: { authenticated: boolean
         </div>
       </div>
       <p>
-        Your inbox always keeps every update. You can also get an email or a browser notification.
-        Neither one contains details about your applications; they only tell you to open the inbox.
+        Your inbox always keeps every update. You can also get an email. It contains no details
+        about your applications; it only tells you to open the inbox.
       </p>
 
       <h3>Email</h3>
@@ -243,54 +192,10 @@ export function NotificationSettings({ authenticated }: { authenticated: boolean
         </p>
       ) : (
         <p>
-          Email notifications use the email address you signed up with. That address is not verified
-          yet. Verify it with your sign-in provider, then reload this page.
+          Email notifications use the email address you signed up with, and we could not confirm it
+          yet. Reload this page. If it stays this way, check that your sign-in provider has verified
+          the address.
         </p>
-      )}
-
-      <h3>Browser notifications</h3>
-      {!canPush ? (
-        <p>
-          {pushSupported()
-            ? "Browser notifications are not available yet."
-            : "This browser cannot show notifications."}
-        </p>
-      ) : (
-        <div>
-          {browserNotificationsBlocked() && (
-            <p role="alert">
-              This browser is blocking notifications for this site. Allow them in the browser
-              settings to turn them on.
-            </p>
-          )}
-          <p>
-            {activeSubscriptions.length === 0
-              ? "No browser is set up yet."
-              : `${activeSubscriptions.length} browser${activeSubscriptions.length === 1 ? "" : "s"} set up.`}
-          </p>
-          {thisBrowserId ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void turnOffBrowser(thisBrowserId)}
-            >
-              Turn off for this browser
-            </button>
-          ) : (
-            <button type="button" disabled={busy} onClick={() => void turnOnBrowser()}>
-              Turn on for this browser
-            </button>
-          )}
-          <label>
-            <input
-              type="checkbox"
-              disabled={activeSubscriptions.length === 0}
-              checked={draft.pushEnabled && activeSubscriptions.length > 0}
-              onChange={(event) => setDraft({ ...draft, pushEnabled: event.target.checked })}
-            />{" "}
-            Notify my browsers when something new is in my inbox
-          </label>
-        </div>
       )}
 
       <h3>Quiet hours</h3>
@@ -300,7 +205,7 @@ export function NotificationSettings({ authenticated }: { authenticated: boolean
           checked={draft.quietEnabled}
           onChange={(event) => setDraft({ ...draft, quietEnabled: event.target.checked })}
         />{" "}
-        Hold email and browser notifications during these hours
+        Hold email notifications during these hours
       </label>
       {draft.quietEnabled && (
         <div>

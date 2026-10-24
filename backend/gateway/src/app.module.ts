@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import type {
   AccountDeletionRequest,
-  AddNotificationPushSubscriptionRequest,
   Application,
   ApplicationAttempt,
   ApplicationCoverLetterFile,
@@ -52,7 +51,6 @@ import type {
   NotificationInboxPage as NotificationInboxPageResponse,
   NotificationItem as NotificationItemResponse,
   NotificationPreferences as NotificationPreferencesResponse,
-  NotificationPushSubscriptionCreated,
   NotificationTestSent,
   OpenModerationCaseRequest,
   OpenTrustCaseRequest,
@@ -305,8 +303,35 @@ export async function bindCandidateReauthenticationProof(
     ...principal,
     authenticatedAt: proof.authenticatedAt,
     authenticationMethods: proof.authenticationMethods,
-    ...(proof.verifiedEmail ? { verifiedEmail: proof.verifiedEmail } : {}),
   };
+}
+
+/**
+ * Names the account address from the session's ID token. Only the signature, issuer, audience and
+ * expiry are checked, plus that the token is for the same candidate as the access token, because an
+ * ordinary sign-in ID token carries no recent-authentication evidence.
+ */
+export async function bindAccountEmailProof(
+  principal: AuthPrincipal,
+  header: string | string[] | undefined,
+  verifier: IdTokenVerifier | null,
+): Promise<AuthPrincipal> {
+  if (!verifier) {
+    throw new CandidateRightsPolicyError();
+  }
+  if (
+    typeof header !== "string" ||
+    Buffer.byteLength(header, "utf8") < 32 ||
+    Buffer.byteLength(header, "utf8") > MAXIMUM_REAUTHENTICATION_HEADER_BYTES ||
+    !COMPACT_JWT.test(header)
+  ) {
+    throw new AuthenticationError("A bounded identity proof is required");
+  }
+  const proof = await verifier.verifyIdentity(header);
+  if (proof.issuer !== principal.issuer || proof.subject !== principal.subject) {
+    throw new AuthenticationError("The identity proof does not match");
+  }
+  return { ...principal, ...(proof.verifiedEmail ? { verifiedEmail: proof.verifiedEmail } : {}) };
 }
 
 interface AuthenticatedRequest extends FastifyRequest {
@@ -575,6 +600,20 @@ class RequestIdentity {
       { allowQuarantined },
     );
     return { principal: reauthenticatedPrincipal, user };
+  }
+
+  async resolveWithAccountEmailProof(
+    request: AuthenticatedRequest,
+    requiredScope: "profile:write",
+  ) {
+    const principal = await this.authorize(request, requiredScope);
+    const proven = await bindAccountEmailProof(
+      principal,
+      request.headers[CANDIDATE_REAUTHENTICATION_HEADER],
+      this.idTokenVerifier,
+    );
+    const user = await this.store.resolveUser(proven, request.traceId ?? correlationId(undefined));
+    return { principal: proven, user };
   }
 
   async operator(request: AuthenticatedRequest): Promise<string> {
@@ -3758,8 +3797,6 @@ export type NotificationsApi = Pick<
   | "updatePreferences"
   | "getDeliveryStatus"
   | "setAccountEmail"
-  | "addPushSubscription"
-  | "removePushSubscription"
   | "sendTestNotification"
 >;
 
@@ -3772,9 +3809,6 @@ class NotificationsUnavailableError extends Error {
 
 const validateUpdateNotificationPreferences = compileComponentValidator(
   "UpdateNotificationPreferencesRequest",
-);
-const validateAddNotificationPushSubscription = compileComponentValidator(
-  "AddNotificationPushSubscriptionRequest",
 );
 const NOTIFICATION_STATES: Readonly<Record<string, readonly InboxState[]>> = Object.freeze({
   open: ["unread", "acknowledged"],
@@ -3804,7 +3838,6 @@ function projectNotificationPreferences(
     version: preferences.version,
     inAppEnabled: true,
     emailEnabled: preferences.emailEnabled,
-    pushEnabled: preferences.pushEnabled,
     quietHours: { ...preferences.quietHours },
     updatedAt: preferences.updatedAt.toISOString(),
   };
@@ -3899,7 +3932,6 @@ class NotificationsController {
       await notificationsOperation(() =>
         this.notifications.updatePreferences(user.id, input.expectedVersion, {
           emailEnabled: input.emailEnabled,
-          pushEnabled: input.pushEnabled,
           quietHours: { ...input.quietHours },
         }),
       ),
@@ -3918,12 +3950,6 @@ class NotificationsController {
     );
     return {
       ...(status.email ? { email: { ...status.email } } : {}),
-      pushSubscriptions: status.pushSubscriptions.map((subscription) => ({
-        id: subscription.id,
-        state: subscription.state,
-        createdAt: subscription.createdAt.toISOString(),
-      })),
-      ...(status.pushPublicKey ? { pushPublicKey: status.pushPublicKey } : {}),
     };
   }
 
@@ -3936,31 +3962,12 @@ class NotificationsController {
   @Header("cache-control", "no-store")
   async useAccountEmail(@Req() request: AuthenticatedRequest): Promise<void> {
     assertNoRequestInput(request);
-    const { principal, user } = await this.identity.resolveWithReauthenticationProof(
+    const { principal, user } = await this.identity.resolveWithAccountEmailProof(
       request,
       "profile:write",
     );
     await notificationsOperation(() =>
       this.notifications.setAccountEmail(user.id, principal.verifiedEmail),
-    );
-  }
-
-  @Post("/delivery/push-subscriptions")
-  @HttpCode(HttpStatus.CREATED)
-  @Header("cache-control", "no-store")
-  async addPushSubscription(
-    @Req() request: AuthenticatedRequest,
-  ): Promise<NotificationPushSubscriptionCreated> {
-    const user = await this.identity.resolve(request, "profile:write");
-    if (!validateAddNotificationPushSubscription(request.body)) {
-      throw new HttpException(
-        formatValidationErrors(validateAddNotificationPushSubscription.errors),
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    const input = request.body as AddNotificationPushSubscriptionRequest;
-    return notificationsOperation(() =>
-      this.notifications.addPushSubscription(user.id, input.endpoint),
     );
   }
 
@@ -3972,20 +3979,6 @@ class NotificationsController {
     assertNoRequestInput(request);
     const user = await this.identity.resolve(request, "profile:write");
     return notificationsOperation(() => this.notifications.sendTestNotification(user.id));
-  }
-
-  @Delete("/delivery/push-subscriptions/:subscriptionId")
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @Header("cache-control", "no-store")
-  async removePushSubscription(
-    @Req() request: AuthenticatedRequest,
-    @Param("subscriptionId") subscriptionId: string,
-  ): Promise<void> {
-    assertNoRequestInput(request);
-    const user = await this.identity.resolve(request, "profile:write");
-    await notificationsOperation(() =>
-      this.notifications.removePushSubscription(user.id, subscriptionId),
-    );
   }
 
   @Post("/:notificationId/acknowledgement")

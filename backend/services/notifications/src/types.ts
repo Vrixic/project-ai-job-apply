@@ -44,7 +44,6 @@ export interface NotificationPreferences {
   /** Always true: the in-app inbox is the fallback when external delivery fails. */
   inAppEnabled: true;
   emailEnabled: boolean;
-  pushEnabled: boolean;
   quietHours: QuietHours;
   updatedAt: Date;
 }

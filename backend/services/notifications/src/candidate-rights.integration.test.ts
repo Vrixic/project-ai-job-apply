@@ -92,7 +92,6 @@ describeWithDatabase("Notifications candidate rights", () => {
     });
     await service.updatePreferences(owner, 0, {
       emailEnabled: true,
-      pushEnabled: false,
       quietHours: { enabled: true, startMinute: 1320, endMinute: 420, timeZone: "UTC" },
     });
     const now = new Date();

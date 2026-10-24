@@ -209,12 +209,9 @@ const PROTECTED_EXACT_ROUTES = new Set([
   "GET /v1/notifications/preferences",
   "PUT /v1/notifications/preferences",
   "GET /v1/notifications/delivery",
-  "POST /v1/notifications/delivery/push-subscriptions",
 ]);
 const NOTIFICATION_TEST_ROUTE = "POST /v1/notifications/delivery/test";
 const NOTIFICATION_ACCOUNT_EMAIL_ROUTE = "PUT /v1/notifications/delivery/email";
-const NOTIFICATION_PUSH_SUBSCRIPTION_PATH_PATTERN =
-  /^\/v1\/notifications\/delivery\/push-subscriptions\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const NOTIFICATION_COMMAND_PATH_PATTERN =
   /^\/v1\/notifications\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/(?:acknowledgement|dismissal)$/;
 const OPERATION_PATH_PATTERN =
@@ -401,9 +398,6 @@ function allowedRoute(
     return { acceptsBody: false, protected: true };
   }
   if (method === "POST" && NOTIFICATION_COMMAND_PATH_PATTERN.test(path)) {
-    return { acceptsBody: false, protected: true };
-  }
-  if (method === "DELETE" && NOTIFICATION_PUSH_SUBSCRIPTION_PATH_PATTERN.test(path)) {
     return { acceptsBody: false, protected: true };
   }
   if (PROTECTED_EXACT_ROUTES.has(`${method} ${path}`)) {
@@ -1289,9 +1283,6 @@ async function createConfiguredApplication(
     process.env.NOTIFICATIONS_ENABLED === "true"
       ? new NotificationsService(new PostgresNotificationsStore(database.client), {
           delivery: new PostgresDeliveryStore(database.client),
-          ...(process.env.NOTIFICATIONS_PUSH_PUBLIC_KEY
-            ? { pushPublicKey: process.env.NOTIFICATIONS_PUSH_PUBLIC_KEY }
-            : {}),
         })
       : undefined;
   const notifications = notificationsService

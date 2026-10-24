@@ -27,12 +27,12 @@ $coverage = [ordered]@{
   privateCaptureCount = 0; trustCaseCount = 0; trustCaseEventCount = 0
   applicationCount = 1; packetCount = 1; approvalCount = 1; attemptCount = 1; historyCount = 1
   notificationsPreferencesCount = 1; notificationsEmailDestinationCount = 0
-  notificationsPushSubscriptionCount = 1; notificationsInboxCount = 0; notificationsDeliveryCount = 0
+  notificationsPushSubscriptionCount = 0; notificationsInboxCount = 0; notificationsDeliveryCount = 0
 }
 $parsed = Read-CandidateRightsExportHelperResult ($coverage | ConvertTo-Json -Compress)
 Assert-Test (Assert-CandidateRightsAcceptanceCoverage $parsed) 'Complete D4 coverage was refused.'
-# D3 gates still apply, and the two seeded Notifications records are required.
-foreach ($name in @('applicationCount','packetCount','approvalCount','attemptCount','historyCount','notificationsPreferencesCount','notificationsPushSubscriptionCount')) {
+# D3 gates still apply, and the seeded Notifications preferences record is required.
+foreach ($name in @('applicationCount','packetCount','approvalCount','attemptCount','historyCount','notificationsPreferencesCount')) {
   $copy = $coverage | ConvertTo-Json | ConvertFrom-Json
   $copy.$name = 0
   Assert-Refused { Assert-CandidateRightsAcceptanceCoverage $copy }
@@ -75,11 +75,9 @@ function Invoke-CandidateApi {
   return [pscustomobject]@{ Status = 201; Body = [pscustomobject]@{ id = ([guid]::NewGuid().ToString()) } }
 }
 New-NotificationsFixture 'generated-token'
-Assert-Test ($script:calls.Count -eq 3) 'The Notifications fixture must make exactly three API calls.'
+Assert-Test ($script:calls.Count -eq 2) 'The Notifications fixture must make exactly two API calls.'
 Assert-Test ($script:calls[0].Method -ceq 'GET' -and $script:calls[0].Path -ceq '/notifications/preferences') 'The fixture must read the current preferences version first.'
-Assert-Test ($script:calls[1].Method -ceq 'PUT' -and $script:calls[1].Body.expectedVersion -eq 3 -and -not $script:calls[1].Body.emailEnabled -and -not $script:calls[1].Body.pushEnabled) 'The fixture must save preferences at the current version with channels off.'
-Assert-Test ($script:calls[2].Method -ceq 'POST' -and $script:calls[2].Path -ceq '/notifications/delivery/push-subscriptions' -and $script:calls[2].Expected -contains 201) 'The fixture must register one subscription.'
-Assert-Test ([string]$script:calls[2].Body.endpoint -cmatch '^https://fcm\.googleapis\.com/fcm/send/generated-rights-acceptance-[a-f0-9]{32}$') 'The subscription must use an allow-listed push host and a generated path.'
+Assert-Test ($script:calls[1].Method -ceq 'PUT' -and $script:calls[1].Body.expectedVersion -eq 3 -and -not $script:calls[1].Body.emailEnabled) 'The fixture must save preferences at the current version with email off.'
 foreach ($call in $script:calls) { Assert-Test ($call.Token -ceq 'generated-token') 'Every fixture call must use the disposable identity token.' }
 Assert-Test (-not ($script:calls | Where-Object { $_.Path -like '*email*' })) 'The fixture must not trigger confirmation email.'
 
@@ -106,7 +104,7 @@ try {
     switch ($name) {
       'ownerInventoriesReconciled' { $copy.$name = 8 }
       'policySha256' { $copy.$name = 'c' * 64 }
-      'applicationsExportCoverage' { $copy.$name.notificationsPushSubscriptionCount = 0 }
+      'applicationsExportCoverage' { $copy.$name.notificationsPreferencesCount = 0 }
     }
     Save-Receipt $copy
     Assert-Refused { Read-AggregateReceipt }
@@ -124,6 +122,6 @@ function Get-ReportedLifecycleFailure([string]$Step, [string]$Message) {
   try { $null = Invoke-FixedLifecycleReported ([pscustomobject]@{}) ([pscustomobject]@{}); return '' }
   catch { return [string]$_.Exception.Message }
 }
-$d4Message = 'D4 acceptance stopped before account deletion: the Notifications export section lacks notificationsPushSubscriptionCount.'
+$d4Message = 'D4 acceptance stopped before account deletion: the Notifications export section lacks notificationsPreferencesCount.'
 Assert-Test ((Get-ReportedLifecycleFailure 'export-coverage' $d4Message) -ceq $d4Message) 'The reviewed D4 coverage refusal must be preserved.'
 Write-Output "PASS $script:checks focused D4 rights acceptance assertions; no cloud calls."

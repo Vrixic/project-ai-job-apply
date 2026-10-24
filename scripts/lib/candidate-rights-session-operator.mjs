@@ -34,7 +34,7 @@ const applicationsCoverageNames = [
   "historyCount",
 ];
 // Notifications joined the inventory with the d4 policy (ADR-056). The fixed fixture seeds the
-// preferences and the push subscription, so only those two must be nonempty.
+// preferences, so only that count must be nonempty.
 const notificationsCoverageNames = [
   "notificationsPreferencesCount",
   "notificationsEmailDestinationCount",
@@ -42,10 +42,7 @@ const notificationsCoverageNames = [
   "notificationsInboxCount",
   "notificationsDeliveryCount",
 ];
-const notificationsRequiredNames = [
-  "notificationsPreferencesCount",
-  "notificationsPushSubscriptionCount",
-];
+const notificationsRequiredNames = ["notificationsPreferencesCount"];
 
 export function sanitizeMissingCoverage(value, applicationsInventory = false) {
   const allowed = applicationsInventory ? applicationsCoverageNames : coverageNames;
