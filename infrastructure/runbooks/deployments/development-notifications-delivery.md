@@ -44,4 +44,7 @@ It requires an active candidate-rights policy whose owner inventory lists `notif
   Failures that end in `failed` leave the inbox item untouched.
 - A permanent SES rejection suppresses that address for the candidate; a different address can be
   confirmed. Bounce and complaint feeds are not wired yet.
+- The dispatcher role can only send when the shared workload permissions boundary also allows
+  `ses:SendEmail` (bootstrap `SendEmail` statement). Without it SES is never called and every attempt
+  ends as a `transient_error` retry with no log line. Apply bootstrap before relying on delivery.
 - Delivery is at least once; after a crash a duplicate message is possible.
