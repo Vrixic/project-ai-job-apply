@@ -12,6 +12,7 @@ This folder turns the architecture roadmap into an auditable delivery system.
 - `phase-2-extension-and-community.md` — Browser extension and UGC job contribution loop.
 - `phase-3-application-preparation.md` — Grounded documents, application packets, and supported ATS autofill.
 - `phase-3-1-structured-profile.md` - Structured candidate Profile replacing profile facts; follows Phase 3.
+- `phase-3-2-live-ai-generation.md` - Live AI generation (the main feature) once a provider meets the ADR-038 retention limit.
 - `phase-4-workday-and-remote.md` — Workday behavior and isolated remote preparation.
 - `phase-5-outreach-and-notifications.md` — Personalized outreach and application notifications.
 - `phase-6-mobile-and-paid.md` — Mobile companion and Free/Pro paid launch.

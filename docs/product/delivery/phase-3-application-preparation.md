@@ -1,5 +1,7 @@
 # D3 — High-Quality Application Preparation
 
+2026-10-26 owner decisions on closing D3: (1) the accountable legal and security review is carried to D6-015 (independent assessment) and D6-016 (counsel review), as D1's was, so D3 closes on its engineering criteria. (2) Live AI generation is the product's main feature but cannot meet ADR-038's 30-minute all-copy retention with any provider or account the owner has today, so it moves to the new [D3.2 Live AI generation](phase-3-2-live-ai-generation.md); D3 closes with live AI off and deterministic tailoring. (3) Greenhouse is the live submission proof for D3; Ashby's live submission proof moves to D3.2. (4) One working session with the owner will run the live Greenhouse submission and the canonical export and deletion run (the D4 nine-owner policy) with a disposable MFA user; before it, the failing step of the 2026-10-17 run is diagnosed and fixed locally. D3 stays In progress until that session passes.
+
 2026-10-21: D3-152 web preview as the rendered PDF with a User_Job_Name_ID download and attachment name
 (merged, #705); D3-153 style-preserving generation ([ADR-051](../../adr/051-style-preserving-generated-resume.md);
 [evidence](evidence/d3-style-preserving-resume-2026-10-21.md)): PDF layout capture in the parser, wrapped
@@ -376,9 +378,9 @@ remain; privacy reviews were removed 2026-10-22.
 
 - [ ] Truthful preparation, review, approval, Apply and confirmed-submission history work for the candidate.
 - [ ] Immutable approval bindings and duplicate-submission safety hold.
-- [ ] No generated-content persistence and all-copy expiry within 30 minutes (ADR-038).
-- [ ] The Greenhouse and Ashby adapters fill, attach and submit after the candidate's approval, with a safe manual fallback.
-- [ ] Candidate export and deletion complete (the canonical rights run is still FAILED) and accountable legal and security review is done.
+- [ ] No generated-content persistence and all-copy expiry within 30 minutes (ADR-038) hold with live AI off; the live provider is [D3.2](phase-3-2-live-ai-generation.md).
+- [ ] The Greenhouse adapter fills, attaches and submits after the candidate's approval on one live posting the owner picks, with a safe manual fallback. Ashby is built and tested on synthetic pages; its live proof is D3.2-007.
+- [ ] Candidate export and deletion complete in one successful canonical run (the 2026-10-17 run FAILED). The accountable legal and security review is carried to D6-015 and D6-016.
 
 ## Evidence
 
