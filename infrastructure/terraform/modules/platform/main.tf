@@ -1959,27 +1959,6 @@ data "aws_iam_policy_document" "secrets_endpoint" {
     }
   }
 
-  # The dispatcher reads its VAPID identity through the Secrets Manager endpoint (ADR-056). Without this
-  # exact statement the endpoint policy denies the read and push delivery never starts.
-  dynamic "statement" {
-    for_each = local.notifications_push_enabled ? [1] : []
-    content {
-      sid       = "ExactNotificationsVapidSecret"
-      effect    = "Allow"
-      actions   = ["secretsmanager:GetSecretValue"]
-      resources = [aws_secretsmanager_secret.notifications_vapid[0].arn]
-      principals {
-        type        = "*"
-        identifiers = ["*"]
-      }
-      condition {
-        test     = "ArnEquals"
-        variable = "aws:PrincipalArn"
-        values   = [aws_iam_role.profile_readiness_activity[0].arn]
-      }
-    }
-  }
-
   dynamic "statement" {
     for_each = anytrue([local.audit_retention_deployed, local.job_retention_deployed, local.native_cleanup_deployed, var.deploy_gateway_lambda, var.deploy_serverless_outbox, var.deploy_profile_readiness_durable, var.candidate_deletion_restore_role_enabled, local.document_complete_dark_enabled, var.deploy_ingestion_runtime, local.d2_community_deployed, var.applications_attempt_recovery_enabled]) ? [1] : []
     content {
@@ -2095,10 +2074,7 @@ resource "aws_lambda_function" "gateway" {
         CANDIDATE_RIGHTS_OWNER_INVENTORY             = var.candidate_rights_owner_inventory
         CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY      = var.candidate_rights_subprocessor_inventory
       } : {},
-      var.notifications_enabled ? merge(
-        { NOTIFICATIONS_ENABLED = "true" },
-        var.notifications_push_public_key != "" ? { NOTIFICATIONS_PUSH_PUBLIC_KEY = var.notifications_push_public_key } : {}
-      ) : {},
+      var.notifications_enabled ? { NOTIFICATIONS_ENABLED = "true" } : {},
       local.d2_policy_endpoint_enabled ? {
         D2_CONTRIBUTION_POLICY_ROUTE_ENABLED = "true"
       } : {},

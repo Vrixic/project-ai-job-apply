@@ -19,8 +19,8 @@ setting are gone, and a delivery attempt is email only. Decisions 2 and 7 and th
 decisions 3 to 5, 8 and 9 below are withdrawn and kept as history. The `push_subscriptions` table,
 the `push_enabled` column and their export and deletion coverage stay until the next Notifications
 schema change, because dropping them changes the restore manifest and the candidate-rights
-contract; they are never written. The VAPID secret container and its Terraform are removed in a
-follow-up infrastructure change.
+contract; they are never written. The VAPID secret container and its Terraform were removed on
+2026-10-26.
 
 ## Decisions
 

@@ -12,8 +12,10 @@ With `notifications_enabled = true` (Gateway routes) and `notifications_delivery
 - `ses:SendEmail` for the activity role, scoped to the identity and configuration set and bound to the
   exact From address;
 - the SES identity and a TLS-required configuration set (when `notifications_email_identity` is set);
-- a legacy empty Secrets Manager container for a VAPID identity (browser push was removed on
-  2026-10-24, so nothing reads it; the Terraform for it is removed in a follow-up change).
+
+Browser push was removed on 2026-10-24 and its VAPID secret container, endpoint statement, role
+statements and environment variables on 2026-10-26. Secrets Manager keeps the deleted container for its
+30-day recovery window, so the name cannot be reused until then.
 
 It requires an active candidate-rights policy whose owner inventory lists `notifications`
 (`d4-development-synthetic-v1`), so account deletion and export already cover this data.

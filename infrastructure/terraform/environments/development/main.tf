@@ -241,8 +241,6 @@ module "platform" {
   notifications_web_base_url                            = var.notifications_web_base_url
   notifications_email_identity                          = var.notifications_email_identity
   notifications_email_from                              = var.notifications_email_from
-  notifications_vapid_secret_provisioned                = var.notifications_vapid_secret_provisioned
-  notifications_push_public_key                         = var.notifications_push_public_key
   deploy_ingestion_runtime                              = var.deploy_ingestion_runtime
   ingestion_runtime_enabled                             = var.ingestion_runtime_enabled
   ingestion_synthetic_source_enabled                    = var.ingestion_synthetic_source_enabled
