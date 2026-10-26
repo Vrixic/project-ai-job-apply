@@ -1403,25 +1403,8 @@ variable "notifications_email_from" {
   }
 }
 
-variable "notifications_vapid_secret_provisioned" {
-  description = "Create the empty Secrets Manager container for the Web Push VAPID identity. An operator populates it."
-  type        = bool
-  default     = false
-}
-
-variable "notifications_push_public_key" {
-  description = "Public VAPID key (uncompressed P-256 point, base64url) the Gateway hands to browsers. Not a secret."
-  type        = string
-  default     = ""
-
-  validation {
-    condition     = var.notifications_push_public_key == "" || can(regex("^[A-Za-z0-9_-]{86,88}$", var.notifications_push_public_key))
-    error_message = "The public VAPID key must be empty or an 86 to 88 character base64url value."
-  }
-}
-
 variable "notifications_delivery_enabled" {
-  description = "Create the scheduled email and push dispatcher on the profile readiness activity Lambda (ADR-056)."
+  description = "Create the scheduled email dispatcher on the profile readiness activity Lambda (ADR-056)."
   type        = bool
   default     = false
 
@@ -1431,8 +1414,8 @@ variable "notifications_delivery_enabled" {
       var.deploy_profile_readiness_durable &&
       (!var.serverless_runtime_enabled || var.private_application_networking) &&
       var.notifications_web_base_url != "" &&
-      (var.notifications_email_identity != "" || var.notifications_vapid_secret_provisioned)
+      var.notifications_email_identity != ""
     )
-    error_message = "Notification delivery requires Notifications, the profile readiness activity, private egress while the runtime is enabled, a web base URL, and at least one channel (an SES identity or a VAPID secret)."
+    error_message = "Notification delivery requires Notifications, the profile readiness activity, private egress while the runtime is enabled, a web base URL, and an SES identity."
   }
 }

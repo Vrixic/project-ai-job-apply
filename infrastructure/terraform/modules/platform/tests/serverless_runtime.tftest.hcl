@@ -1834,8 +1834,6 @@ run "notification_delivery_creates_the_exact_schedule_identity_and_environment" 
     notifications_web_base_url                   = "https://app.example.test"
     notifications_email_identity                 = "example.test"
     notifications_email_from                     = "App <no-reply@example.test>"
-    notifications_vapid_secret_provisioned       = true
-    notifications_push_public_key                = "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
   }
 
   assert {
@@ -1852,27 +1850,17 @@ run "notification_delivery_creates_the_exact_schedule_identity_and_environment" 
   assert {
     condition = (
       aws_sesv2_email_identity.notifications[0].email_identity == "example.test" &&
-      aws_sesv2_configuration_set.notifications[0].configuration_set_name == "ai-job-apply-staging-notifications" &&
-      aws_secretsmanager_secret.notifications_vapid[0].name == "ai-job-apply/staging/notifications/vapid"
+      aws_sesv2_configuration_set.notifications[0].configuration_set_name == "ai-job-apply-staging-notifications"
     )
-    error_message = "The sender identity, configuration set and VAPID secret container must be created exactly."
+    error_message = "The sender identity and configuration set must be created exactly."
   }
 
   assert {
     condition = (
       aws_lambda_function.gateway[0].environment[0].variables.NOTIFICATIONS_ENABLED == "true" &&
-      aws_lambda_function.gateway[0].environment[0].variables.NOTIFICATIONS_PUSH_PUBLIC_KEY == var.notifications_push_public_key
+      !contains(keys(aws_lambda_function.gateway[0].environment[0].variables), "NOTIFICATIONS_PUSH_PUBLIC_KEY")
     )
-    error_message = "The Gateway must serve Notifications and hand browsers the public VAPID key."
-  }
-
-  assert {
-    condition = (
-      length([for s in data.aws_iam_policy_document.secrets_endpoint[0].statement : s if s.sid == "ExactNotificationsVapidSecret"]) == 1 &&
-      one([for s in data.aws_iam_policy_document.secrets_endpoint[0].statement : s if s.sid == "ExactNotificationsVapidSecret"]).actions == toset(["secretsmanager:GetSecretValue"]) &&
-      length(one([for s in data.aws_iam_policy_document.secrets_endpoint[0].statement : s if s.sid == "ExactNotificationsVapidSecret"]).condition) == 1
-    )
-    error_message = "The Secrets Manager endpoint must let only the dispatcher role read the VAPID secret."
+    error_message = "The Gateway must serve Notifications and no longer carry a browser push key."
   }
 }
 

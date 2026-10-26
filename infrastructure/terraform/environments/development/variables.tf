@@ -557,13 +557,3 @@ variable "notifications_email_from" {
   type    = string
   default = ""
 }
-
-variable "notifications_vapid_secret_provisioned" {
-  type    = bool
-  default = false
-}
-
-variable "notifications_push_public_key" {
-  type    = string
-  default = ""
-}
