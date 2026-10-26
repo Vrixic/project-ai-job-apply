@@ -305,9 +305,10 @@ resource "aws_iam_policy" "workload_boundary" {
         Resource = "arn:aws:ecr:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:repository/ai-job-apply/*"
       },
       {
-        Sid      = "ObtainEcrAuthorization"
+        # Both actions only exist on `*`; one statement keeps the boundary within the IAM size limit.
+        Sid      = "EcrAuthorizationAndTraces"
         Effect   = "Allow"
-        Action   = ["ecr:GetAuthorizationToken"]
+        Action   = ["ecr:GetAuthorizationToken", "xray:PutTelemetryRecords", "xray:PutTraceSegments"]
         Resource = "*"
       },
       {
@@ -335,16 +336,18 @@ resource "aws_iam_policy" "workload_boundary" {
         }
       },
       {
-        Sid      = "WriteApplicationTraces"
-        Effect   = "Allow"
-        Action   = ["xray:PutTelemetryRecords", "xray:PutTraceSegments"]
-        Resource = "*"
-      },
-      {
         Sid      = "ConnectExactPublicJobReader"
         Effect   = "Allow"
         Action   = ["rds-db:connect"]
         Resource = "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:dbuser:*/ai_job_apply_public_job_reader"
+      },
+      {
+        # The notifications dispatcher role narrows this to the reviewed sender identity and
+        # configuration set; a boundary without it silently denies every notification email.
+        Sid      = "SendEmail"
+        Effect   = "Allow"
+        Action   = ["ses:SendEmail"]
+        Resource = "arn:aws:ses:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*"
       },
       {
         Sid    = "ManageLambdaVpcInterfaces"

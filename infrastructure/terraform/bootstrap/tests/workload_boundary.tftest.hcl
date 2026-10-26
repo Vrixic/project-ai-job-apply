@@ -53,6 +53,23 @@ run "public_reader_boundary_is_username_and_account_scoped" {
   }
 }
 
+run "notification_email_fits_the_boundary" {
+  command = plan
+
+  assert {
+    condition = one([
+      for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement
+      if statement.Sid == "SendEmail"
+    ]) == { Sid = "SendEmail", Effect = "Allow", Action = ["ses:SendEmail"], Resource = "arn:aws:ses:us-east-2:111122223333:*" }
+    error_message = "The boundary must allow ses:SendEmail only inside this account and region, or the dispatcher role is silently denied."
+  }
+
+  assert {
+    condition     = length([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement if contains(statement.Action, "xray:PutTraceSegments") && contains(statement.Action, "ecr:GetAuthorizationToken")]) == 1
+    error_message = "Trace writing and ECR authorization must stay in the boundary."
+  }
+}
+
 run "restore_reads_default_absent" {
   command = plan
   assert {
