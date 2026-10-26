@@ -10,6 +10,7 @@ import {
   GetDurableExecutionCommand,
   type GetDurableExecutionCommandOutput,
 } from "@aws-sdk/client-lambda";
+import { durableFunctionArnMatches } from "./durable-function-arn.js";
 
 export interface NativeResumeExecutionReader {
   send(
@@ -100,7 +101,7 @@ export function createNativeResumeExecutionInspection(options: {
             if (
               value.ExecutionDataIncluded !== false ||
               value.DurableExecutionArn !== row.executionArn ||
-              value.FunctionArn !== workflowArn.slice(0, split) ||
+              !durableFunctionArnMatches(value.FunctionArn, workflowArn) ||
               value.Version !== workflowArn.slice(split + 1) ||
               value.DurableExecutionName !== nativeResumeExecutionName(row.eventId) ||
               value.InputPayload !== undefined ||

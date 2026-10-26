@@ -49,6 +49,7 @@ import type {
   SQSRecord,
 } from "aws-lambda";
 import { v7 as uuidv7 } from "uuid";
+import { durableFunctionArnMatches } from "./durable-function-arn.js";
 import { failureFields } from "./failure-fields.js";
 import {
   type IngestionActivityResultV1,
@@ -358,7 +359,7 @@ export class AwsIngestionDurableStatusReader {
       if (
         result.ExecutionDataIncluded !== false ||
         result.DurableExecutionArn !== durableExecutionArn ||
-        result.FunctionArn !== match[1]?.replace(/:[1-9][0-9]*$/u, "") ||
+        !durableFunctionArnMatches(result.FunctionArn, match[1] ?? "") ||
         result.Version !== match[2] ||
         result.DurableExecutionName !== match[3] ||
         !result.StartTimestamp ||

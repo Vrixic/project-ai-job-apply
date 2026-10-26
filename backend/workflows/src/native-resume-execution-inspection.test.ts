@@ -16,7 +16,7 @@ const row = {
 const response = {
   ExecutionDataIncluded: false,
   DurableExecutionArn: execution,
-  FunctionArn: arn.slice(0, -2),
+  FunctionArn: arn,
   Version: "9",
   DurableExecutionName: `resume-${id}`,
   StartTimestamp: new Date(1000),
@@ -58,7 +58,7 @@ it.each(["FAILED", "STOPPED", "TIMED_OUT", "SUCCEEDED", "RUNNING"] as const)(
 );
 it.each([
   { Version: "10" },
-  { FunctionArn: arn },
+  { FunctionArn: `${arn.slice(0, -2)}:10` },
   { DurableExecutionArn: `${execution}-other` },
   { DurableExecutionName: "foreign" },
   { ExecutionDataIncluded: true },

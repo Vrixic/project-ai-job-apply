@@ -226,7 +226,7 @@ function withDurable(value = withDispatch()): Evidence {
     execution: {
       DurableExecutionArn: EXECUTION_ARN,
       DurableExecutionName: "outbox-" + EVENT_ID,
-      FunctionArn: DURABLE_BASE,
+      FunctionArn: `${DURABLE_BASE}:12`,
       Version: "12",
       Status: "SUCCEEDED",
       StartTimestamp: "2026-09-01T00:00:02.000Z",
@@ -1116,9 +1116,9 @@ describe("optional actual dispatch and durable projections", () => {
       },
     ],
     [
-      "qualified base instead of SDK base",
+      "another version of the function",
       (value: Evidence) => {
-        durable(value).execution.FunctionArn += ":12";
+        durable(value).execution.FunctionArn = `${DURABLE_BASE}:13`;
       },
     ],
     [
