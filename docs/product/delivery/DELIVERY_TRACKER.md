@@ -11,6 +11,7 @@ Last updated: 2026-10-22. Program status: In progress. Started: 2026-07-27. Comp
 | D2 | Extension and community loop | Complete | 2026-09-01 | 2026-09-18 | [Phase 2 tasks](phase-2-extension-and-community.md) |
 | D3 | High-quality application preparation | In progress | 2026-09-18 | Not completed | [Phase 3 tasks](phase-3-application-preparation.md) |
 | D3.1 | Structured candidate profile | In progress | 2026-10-22 | Not completed | [Phase 3.1 tasks](phase-3-1-structured-profile.md) |
+| D3.2 | Live AI generation | Ready (not started) | Not started | Not completed | [Phase 3.2 tasks](phase-3-2-live-ai-generation.md) |
 | D4 | Workday and remote preparation | In progress | 2026-10-22 | Not completed | [Phase 4 tasks](phase-4-workday-and-remote.md) |
 | D5 | Personalized outreach and application notifications | In progress | 2026-10-22 | Not completed | [Phase 5 tasks](phase-5-outreach-and-notifications.md) |
 | D6 | Mobile and paid launch | In progress | 2026-09-28 | Not completed | [Phase 6 tasks](phase-6-mobile-and-paid.md) |
@@ -33,6 +34,8 @@ The owner answered the open questions in chat. Recorded decisions:
 - **Deferred:** Workday waits for authorized sanitized fixtures. ApplyDash stays the provisional product name.
 
 2026-10-23 owner answers: D3.1 works in the hosted app; the development runtime was shut down again (final snapshot `shutdown-20261023032139`); Stripe waits until it is needed for testing; email and push notifications (D5-002) are to be built now, ahead of search and matching work ([ADR-056](../../adr/056-notification-email-and-push-delivery.md)).
+
+2026-10-26 owner answers on closing D3: legal and security review is carried to D6-015 and D6-016; live AI generation (the main product feature) moves to the new [D3.2](phase-3-2-live-ai-generation.md) because no provider or account meets ADR-038's 30-minute retention yet, and D3 closes with live AI off; Greenhouse is the live submission proof and Ashby's moves to D3.2; one working session will run the live Greenhouse submission and the canonical export and deletion run. Email notifications (D5-002) were verified live the same day; the development runtime is dormant (final snapshot `shutdown-20261026144736`).
 
 Still needing the owner: an AWS sign-in for the deployment, the Stripe account values (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRETS`, `STRIPE_PRO_PRICE_ID`, `BILLING_APP_BASE_URL`), counsel, the independent assessor, and staging and production accounts and Auth0 tenants (D6-013, D6-014, D6-021).
 

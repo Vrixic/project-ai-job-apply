@@ -102,6 +102,8 @@ cache, WAF, or ALB controls supported by evidence.
 
 ## Decisions and scope changes
 
+2026-10-26: D3's accountable legal and security review is carried here. D6-015 (independent assessment) and D6-016 (counsel review) must cover application preparation: packets and the approval binding, Apply, the Greenhouse and Ashby submit step, candidate rights export and deletion, and the AI provider data path once D3.2 lands.
+
 | Date | Decision or change | Reason | Evidence |
 |---|---|---|---|
 | 2026-10-22 | D1 completed with deployment items carried here: D6-021 takes the retention-Lambda deployment and the ADR-023 DNS residual; D6-014 takes production and dedicated moderator identity; D6-012 gates public job-page publication and indexing. | D1 has no AWS or production work of its own after the owner removed D1-011 and the acceptance gates. | Owner direction 2026-10-22 |
