@@ -367,6 +367,7 @@ resource "aws_iam_policy" "workload_boundary" {
         Effect = "Allow"
         Action = [
           "lambda:CheckpointDurableExecution",
+          "lambda:GetDurableExecution",
           "lambda:GetDurableExecutionState",
           "lambda:InvokeFunction"
         ]
