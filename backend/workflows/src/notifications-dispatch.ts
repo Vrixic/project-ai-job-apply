@@ -44,6 +44,7 @@ export function createNotificationsDispatchHandler(options: {
   dispatcher: { run(): Promise<DispatchSummary> };
   expireDue: () => Promise<number>;
   expectedRuleArn: string;
+  log?: (entry: Record<string, string | number>) => void;
 }): (event: unknown) => Promise<NotificationsDispatchResult> {
   if (!RULE_ARN.test(options.expectedRuleArn)) {
     throw new Error("NotificationsDispatchConfigurationInvalid");
@@ -71,6 +72,10 @@ export function createNotificationsDispatchHandler(options: {
     if (dispatchFailure !== undefined) throw dispatchFailure;
     if (expiryFailure !== undefined) throw expiryFailure;
     if (!summary) throw new Error("NotificationsDispatchResultMissing");
+    // Quiet runs stay quiet: the rule fires every minute.
+    if (summary.sent + summary.skipped + summary.failed + summary.retried + summary.deferred > 0) {
+      options.log?.({ event: "notifications_dispatched", expired, ...summary });
+    }
     return { schemaVersion: 1, expired, ...summary };
   };
 }
@@ -109,7 +114,12 @@ export async function createRuntimeNotificationsDispatcher(
     : new UnavailableEmail();
   const store = new PostgresDeliveryStore(database.client);
   return {
-    dispatcher: new NotificationDispatcher({ store, email, webBaseUrl }),
+    dispatcher: new NotificationDispatcher({
+      store,
+      email,
+      webBaseUrl,
+      log: (entry) => console.error(entry),
+    }),
     expireDue: () => new PostgresNotificationsStore(database.client).expireDue(new Date()),
   };
 }

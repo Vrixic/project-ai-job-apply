@@ -66,6 +66,39 @@ describe("createNotificationsDispatchHandler", () => {
     expect(run).toHaveBeenCalledOnce();
   });
 
+  it("logs a run only when something happened", async () => {
+    const log = vi.fn();
+    const quiet = createNotificationsDispatchHandler({
+      dispatcher: {
+        run: async () => ({ sent: 0, skipped: 0, failed: 0, retried: 0, deferred: 0 }),
+      },
+      expireDue: async () => 0,
+      expectedRuleArn: ruleArn,
+      log,
+    });
+    await quiet(scheduledEvent());
+    expect(log).not.toHaveBeenCalled();
+
+    const busy = createNotificationsDispatchHandler({
+      dispatcher: {
+        run: async () => ({ sent: 0, skipped: 0, failed: 0, retried: 1, deferred: 0 }),
+      },
+      expireDue: async () => 0,
+      expectedRuleArn: ruleArn,
+      log,
+    });
+    await busy(scheduledEvent());
+    expect(log).toHaveBeenCalledWith({
+      event: "notifications_dispatched",
+      expired: 0,
+      sent: 0,
+      skipped: 0,
+      failed: 0,
+      retried: 1,
+      deferred: 0,
+    });
+  });
+
   it("refuses a foreign event before any work", async () => {
     const run = vi.fn(async () => summary);
     const expireDue = vi.fn(async () => 0);
