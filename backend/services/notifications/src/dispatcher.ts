@@ -29,6 +29,12 @@ export interface DispatcherOptions {
   webBaseUrl: string;
   now?: () => Date;
   batchSize?: number;
+  /** Receives content-free diagnostics only: an error class or provider code, never an address. */
+  log?: (entry: {
+    event: "notification_delivery_error";
+    reason: string;
+    permanent: boolean;
+  }) => void;
 }
 
 type Settled =
@@ -37,6 +43,11 @@ type Settled =
   | { kind: "retry"; code: DeliveryOutcomeCode }
   | { kind: "failed"; code: DeliveryOutcomeCode; suppressAddress?: string }
   | { kind: "deferred"; until: Date };
+
+function errorClass(error: unknown): string {
+  const name = error instanceof Error ? error.name : "NonError";
+  return /^[A-Za-z0-9_]{1,64}$/u.test(name) ? name : "UnnamedError";
+}
 
 /**
  * Sends due notification emails. Every decision is re-read at send time, so a resolved item, a
@@ -95,6 +106,12 @@ export class NotificationDispatcher {
       );
       return { kind: "sent", reference: sent.reference };
     } catch (error) {
+      // Only the class or provider code is reported: messages can carry addresses or credentials.
+      this.options.log?.({
+        event: "notification_delivery_error",
+        reason: error instanceof DeliveryProviderError ? error.code : errorClass(error),
+        permanent: error instanceof DeliveryProviderError && error.permanent,
+      });
       if (error instanceof DeliveryProviderError && error.permanent) {
         return {
           kind: "failed",

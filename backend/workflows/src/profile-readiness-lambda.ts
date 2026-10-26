@@ -360,6 +360,7 @@ export const activity: Handler<
       dispatcher: runtime.dispatcher,
       expireDue: runtime.expireDue,
       expectedRuleArn: dispatchRuleArn,
+      log: (entry) => console.info(entry),
     })(event);
   }
   // Terraform supplies this exact rule only while candidate rights are enabled.

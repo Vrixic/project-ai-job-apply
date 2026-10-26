@@ -42,6 +42,9 @@ It requires an active candidate-rights policy whose owner inventory lists `notif
 
 - The dispatcher result is counts only (sent, skipped, failed, retried, deferred).
   Failures that end in `failed` leave the inbox item untouched.
+- Diagnose delivery in the application log group: `notifications_dispatched` (counts, only when a run did
+  something) and `notification_delivery_error` (an error class or provider code such as
+  `ses_AccessDeniedException`, never an address). A retry with no such line predates this logging.
 - A permanent SES rejection suppresses that address for the candidate; a different address can be
   confirmed. Bounce and complaint feeds are not wired yet.
 - The dispatcher role can only send when the shared workload permissions boundary also allows
