@@ -3,6 +3,7 @@ import {
   ACCEPTED_CANDIDATE_DELETION_POLICIES,
   RESTORED_CANDIDATE_RIGHTS_OWNERS,
 } from "./candidate-deletion-restore-policy.js";
+import { durableFunctionArnMatches } from "./durable-function-arn.js";
 
 type Timestamp = string | Date;
 type Tag = Readonly<{ Key: string; Value: string }>;
@@ -531,7 +532,7 @@ function corroborateDurable(
     durableBase + ":" + version + "/durable-execution/" + dispatch.durableExecutionName + "/";
   if (
     !/^[1-9]\d{0,9}$/u.test(version) ||
-    execution.FunctionArn !== durableBase ||
+    !durableFunctionArnMatches(execution.FunctionArn, durableBase + ":" + version) ||
     execution.Status !== "SUCCEEDED" ||
     execution.ExecutionDataIncluded !== true ||
     execution.DurableExecutionName !== dispatch.durableExecutionName ||

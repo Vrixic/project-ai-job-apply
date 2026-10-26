@@ -431,13 +431,40 @@ describe("ingestion Lambda transport", () => {
     );
   });
 
+  it("accepts the live qualified function ARN and refuses another function or version", async () => {
+    const executionArn = `${durableFunctionArn}/durable-execution/${executionName}/opaqueExecution01`;
+    const response = (functionArn: string) => ({
+      ExecutionDataIncluded: false,
+      DurableExecutionArn: executionArn,
+      DurableExecutionName: executionName,
+      FunctionArn: functionArn,
+      Version: "7",
+      Status: "SUCCEEDED",
+      StartTimestamp: new Date("2026-08-16T12:00:00.000Z"),
+      EndTimestamp: new Date("2026-08-16T12:01:00.000Z"),
+    });
+    const read = (functionArn: string) =>
+      new AwsIngestionDurableStatusReader({
+        send: vi.fn().mockResolvedValue(response(functionArn)),
+      }).getStatus(executionArn);
+    await expect(read(durableFunctionArn)).resolves.toBe("SUCCEEDED");
+    await expect(read(durableFunctionArn.replace(/:7$/u, ""))).resolves.toBe("SUCCEEDED");
+    await expect(read(durableFunctionArn.replace(/:7$/u, ":8"))).rejects.toThrow(
+      "IngestionDurableReconciliationRejected",
+    );
+    await expect(read(durableFunctionArn.replace("synthetic-ingestion", "other"))).rejects.toThrow(
+      "IngestionDurableReconciliationRejected",
+    );
+  });
+
   it("reconciles durable status without requesting or accepting execution data", async () => {
     const executionArn = `${durableFunctionArn}/durable-execution/${executionName}/opaqueExecution01`;
     const metadata = {
       ExecutionDataIncluded: false,
       DurableExecutionArn: executionArn,
       DurableExecutionName: executionName,
-      FunctionArn: durableFunctionArn.replace(/:7$/u, ""),
+      // The service returns the version-qualified ARN of the execution's function.
+      FunctionArn: durableFunctionArn,
       Version: "7",
       StartTimestamp: new Date("2026-08-16T12:00:00.000Z"),
     };

@@ -17,6 +17,7 @@ import type {
   PreparationNudgePublisher,
   PreparationStatusReader,
 } from "./application-preparation-recovery.js";
+import { durableFunctionArnMatches } from "./durable-function-arn.js";
 
 export interface PreparationLambdaReader {
   send(
@@ -51,7 +52,7 @@ export function createAwsPreparationStatusReader(
         if (
           result.ExecutionDataIncluded !== false ||
           result.DurableExecutionArn !== dispatch.executionArn ||
-          result.FunctionArn !== dispatch.functionArn.slice(0, split) ||
+          !durableFunctionArnMatches(result.FunctionArn, dispatch.functionArn) ||
           result.Version !== dispatch.functionArn.slice(split + 1) ||
           result.DurableExecutionName !== dispatch.executionName ||
           !(result.StartTimestamp instanceof Date) ||

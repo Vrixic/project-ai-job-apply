@@ -35,7 +35,7 @@ const dispatch: PreparationDispatch = {
 const response = {
   ExecutionDataIncluded: false,
   DurableExecutionArn: executionArn,
-  FunctionArn: functionArn.replace(/:7$/u, ""),
+  FunctionArn: functionArn,
   Version: "7",
   DurableExecutionName: executionName,
   StartTimestamp: start,
@@ -94,7 +94,7 @@ describe("metadata-only preparation status reader", () => {
     >[] = [
       { ExecutionDataIncluded: true },
       { DurableExecutionArn: `${executionArn}-foreign` },
-      { FunctionArn: functionArn },
+      { FunctionArn: functionArn.replace(/:7$/u, ":8") },
       { Version: "8" },
       { DurableExecutionName: "foreign" },
       { StartTimestamp: new Date(Number.NaN) },
