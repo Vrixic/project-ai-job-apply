@@ -20,8 +20,8 @@ import {
   validateCandidateRightsActivityInput,
 } from "./candidate-rights-durable.js";
 import type { CandidateDeletionRecoveryLedger } from "./candidate-rights-recovery-ledger.js";
-import { enrichRestrictedPacketExport } from "./restricted-packet-export.js";
 import { failureFields } from "./failure-fields.js";
+import { enrichRestrictedPacketExport } from "./restricted-packet-export.js";
 
 export interface CandidateExportArtifact {
   objectKey: string;
