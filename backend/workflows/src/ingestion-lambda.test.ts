@@ -497,6 +497,31 @@ describe("ingestion Lambda transport", () => {
     }
   });
 
+  it("leaves a content-free trace of what the durable status call failed with", async () => {
+    const executionArn = `${durableFunctionArn}/durable-execution/${executionName}/opaqueExecution01`;
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      await expect(
+        new AwsIngestionDurableStatusReader({
+          send: vi.fn().mockRejectedValue(
+            Object.assign(new Error("raw message with an address"), {
+              name: "AccessDeniedException",
+              $metadata: { httpStatusCode: 403 },
+            }),
+          ),
+        }).getStatus(executionArn),
+      ).rejects.toThrow("IngestionDurableReconciliationUnavailable");
+      expect(error).toHaveBeenCalledWith({
+        event: "ingestion_durable_status_failed",
+        errorName: "AccessDeniedException",
+        httpStatus: 403,
+      });
+      expect(JSON.stringify(error.mock.calls)).not.toContain("address");
+    } finally {
+      error.mockRestore();
+    }
+  });
+
   it("builds and verifies an exact identifier-only integrity-bound nudge", () => {
     const nudge = buildIngestionDispatchNudge({
       dispatchId,

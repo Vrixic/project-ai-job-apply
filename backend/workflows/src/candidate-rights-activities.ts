@@ -21,6 +21,7 @@ import {
 } from "./candidate-rights-durable.js";
 import type { CandidateDeletionRecoveryLedger } from "./candidate-rights-recovery-ledger.js";
 import { enrichRestrictedPacketExport } from "./restricted-packet-export.js";
+import { failureFields } from "./failure-fields.js";
 
 export interface CandidateExportArtifact {
   objectKey: string;
@@ -157,33 +158,10 @@ function assertExportSchema(value: unknown, stage: ExportValidationStage): void 
   if (issue) rejectExportSchema(stage, issue);
 }
 
-/**
- * Fixed-format fields that say why a resume purge step failed without carrying a message, a key, or an identifier: the
- * error name, a PostgreSQL SQLSTATE, an AWS error code, and an HTTP status, each only when it has the expected shape.
- */
+/** Why a resume purge step failed, as fixed-format fields only (see failure-fields.ts). */
 function resumePurgeFailureFields(error: unknown): Record<string, string | number> {
   if (error instanceof CandidateRightsActivityRejected) return { errorCode: error.code };
-  const fields: Record<string, string | number> = { errorCode: "ResumePurgeStepFailed" };
-  if (typeof error !== "object" || error === null) return fields;
-  const value = error as {
-    name?: unknown;
-    code?: unknown;
-    Code?: unknown;
-    $metadata?: { httpStatusCode?: unknown };
-  };
-  if (typeof value.name === "string" && /^[A-Za-z][A-Za-z0-9_]{0,63}$/u.test(value.name)) {
-    fields.errorName = value.name;
-  }
-  if (typeof value.code === "string" && /^[0-9A-Z]{5}$/u.test(value.code))
-    fields.sqlState = value.code;
-  const awsCode = typeof value.Code === "string" ? value.Code : value.code;
-  if (typeof awsCode === "string" && /^[A-Za-z][A-Za-z0-9_]{1,63}$/u.test(awsCode))
-    fields.errorReason = awsCode;
-  const status = value.$metadata?.httpStatusCode;
-  if (typeof status === "number" && Number.isInteger(status) && status >= 100 && status <= 599) {
-    fields.httpStatus = status;
-  }
-  return fields;
+  return { errorCode: "ResumePurgeStepFailed", ...failureFields(error) };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

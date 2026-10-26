@@ -49,6 +49,7 @@ import type {
   SQSRecord,
 } from "aws-lambda";
 import { v7 as uuidv7 } from "uuid";
+import { failureFields } from "./failure-fields.js";
 import {
   type IngestionActivityResultV1,
   type IngestionWorkflowInputV1,
@@ -381,6 +382,8 @@ export class AwsIngestionDurableStatusReader {
       if (error instanceof Error && error.message === "IngestionDurableReconciliationRejected") {
         throw error;
       }
+      // The cause is flattened below; keep a content-free trace of what the status call actually failed with.
+      console.error({ event: "ingestion_durable_status_failed", ...failureFields(error) });
       throw new Error("IngestionDurableReconciliationUnavailable");
     }
   }
