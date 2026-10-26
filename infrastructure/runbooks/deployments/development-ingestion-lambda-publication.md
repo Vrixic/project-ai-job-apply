@@ -67,3 +67,11 @@ Verification repeats exact-version readback for all eight objects. A separate ch
 Terraform release may consume only each verified ZIP entry's key, object version, artifact SHA-256,
 and Lambda-compatible base64 SHA-256. Publication alone is not deployment, provider approval,
 source activation, network acceptance, or representative runtime evidence.
+
+## Execution status reads and the workload boundary
+
+The coordinator reads an old transport's durable execution status with `lambda:GetDurableExecution`. The shared
+workload permissions boundary must allow that action (it is in `OperateOwnedServerlessWorkflows`); a boundary that
+omits it gives an implicit deny with no application error, and every scheduled run then ends in
+`IngestionDurableReconciliationUnavailable`, so nothing new is imported. Confirm with
+`aws iam simulate-principal-policy` on the coordinator role and look for `AllowedByPermissionsBoundary`.

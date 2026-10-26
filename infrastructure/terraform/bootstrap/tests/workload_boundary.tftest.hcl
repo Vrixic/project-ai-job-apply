@@ -70,6 +70,18 @@ run "notification_email_fits_the_boundary" {
   }
 }
 
+run "durable_execution_status_reads_fit_the_boundary" {
+  command = plan
+
+  assert {
+    condition = contains(one([
+      for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement
+      if statement.Sid == "OperateOwnedServerlessWorkflows"
+    ]).Action, "lambda:GetDurableExecution")
+    error_message = "The boundary must allow lambda:GetDurableExecution, or the ingestion coordinator is silently denied when it reads an execution status."
+  }
+}
+
 run "restore_reads_default_absent" {
   command = plan
   assert {
