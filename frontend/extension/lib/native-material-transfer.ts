@@ -14,10 +14,13 @@ import {
 } from "@ai-job-apply/api-contracts/browser-validators";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 import { parseHandoffLink } from "./application-handoff";
-import { providerForUrl } from "./providers";
 import { sameNativeTransferBinding as same } from "./native-transfer-binding";
+import { providerForUrl } from "./providers";
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
+// Chrome names a document with 32 hex characters, not a dashed UUID.
+const BROWSER_DOCUMENT_ID = /^[A-Fa-f0-9]{32}$/u;
+const browserDocumentId = (value: string) => BROWSER_DOCUMENT_ID.test(value) || UUID.test(value);
 const unavailable = () => Error("NativeMaterialTransferUnavailable");
 
 /** Largest original file attached automatically; mirrors the contract's uploaded-resume limit. */
@@ -122,7 +125,7 @@ export function createNativeMaterialTransfer(options: {
       (sender.tab?.id ?? -1) >= 0 &&
       !sender.tab?.incognito &&
       typeof sender.documentId === "string" &&
-      UUID.test(sender.documentId) &&
+      browserDocumentId(sender.documentId) &&
       (!state.sender ||
         (state.sender.tabId === sender.tab?.id && state.sender.documentId === sender.documentId))
     );
@@ -193,7 +196,7 @@ export function createNativeMaterialTransfer(options: {
         (!uploadedOnly && !validateApplicationNativeTransferAdmission(probe)) ||
         !Number.isFinite(deadline) ||
         now >= deadline ||
-        !UUID.test(selection.documentId) ||
+        !browserDocumentId(selection.documentId) ||
         !Number.isSafeInteger(selection.tabId) ||
         selection.tabId < 0 ||
         !providerForUrl(selection.employerUrl) ||
