@@ -321,31 +321,23 @@ describe("bounded memory-only native file transfer", () => {
     expect(f.revalidate).toHaveBeenCalledTimes(3);
   });
 
-  it.each([
-    "origin",
-    "url",
-    "frame",
-    "lifecycle",
-    "document",
-    "tab",
-    "incognito",
-    "extension",
-    "native",
-  ])("refuses a mismatched or missing Chrome sender %s", async (mode) => {
-    const f = setup();
-    const sender = structuredClone(f.sender);
-    if (mode === "origin") sender.origin = "https://other.example.invalid";
-    if (mode === "url") sender.url = `${ORIGIN}/jobs?application=${id(10)}&job=${id(5)}`;
-    if (mode === "frame") sender.frameId = 1;
-    if (mode === "lifecycle") sender.documentLifecycle = "prerender";
-    if (mode === "document") delete sender.documentId;
-    if (mode === "tab") delete sender.tab;
-    if (mode === "incognito" && sender.tab) sender.tab.incognito = true;
-    if (mode === "extension") sender.id = "a".repeat(32);
-    if (mode === "native") sender.nativeApplication = "other";
-    await expect(f.transfer.begin(f.begin, sender)).rejects.toThrow();
-    expect(f.revalidate).not.toHaveBeenCalled();
-  });
+  it.each(["origin", "frame", "lifecycle", "document", "tab", "incognito", "extension", "native"])(
+    "refuses a mismatched or missing Chrome sender %s",
+    async (mode) => {
+      const f = setup();
+      const sender = structuredClone(f.sender);
+      if (mode === "origin") sender.origin = "https://other.example.invalid";
+      if (mode === "frame") sender.frameId = 1;
+      if (mode === "lifecycle") sender.documentLifecycle = "prerender";
+      if (mode === "document") delete sender.documentId;
+      if (mode === "tab") delete sender.tab;
+      if (mode === "incognito" && sender.tab) sender.tab.incognito = true;
+      if (mode === "extension") sender.id = "a".repeat(32);
+      if (mode === "native") sender.nativeApplication = "other";
+      await expect(f.transfer.begin(f.begin, sender)).rejects.toThrow();
+      expect(f.revalidate).not.toHaveBeenCalled();
+    },
+  );
 
   it("atomically refuses concurrent begin while the first owner check is unresolved", async () => {
     const f = setup();

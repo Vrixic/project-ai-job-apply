@@ -258,12 +258,17 @@ export function installNativeTransferBackground(options: {
         const text = JSON.stringify(message);
         if (new TextEncoder().encode(text).byteLength > 4096) throw unavailable();
         const value: unknown = JSON.parse(text);
-        const link = sender.url ? parseHandoffLink(sender.url, options.webOrigin) : undefined;
+        // Chrome reports the address the page loaded with, not a later history.replaceState, so the
+        // link comes from the validated identifiers. The verified origin and tab bind the sender.
+        const link = validateApplicationApplyIntent(value)
+          ? parseHandoffLink(
+              `${options.webOrigin}/jobs?application=${value.applicationId}&job=${value.jobId}`,
+              options.webOrigin,
+            )
+          : undefined;
         if (
           !validateApplicationApplyIntent(value) ||
           !link ||
-          link.applicationId !== value.applicationId ||
-          link.jobId !== value.jobId ||
           sender.id ||
           sender.nativeApplication ||
           sender.origin !== options.webOrigin ||
