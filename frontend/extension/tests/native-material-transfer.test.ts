@@ -18,7 +18,7 @@ const ORIGIN = "https://workspace.example.invalid";
 const controllers: ReturnType<typeof createNativeMaterialTransfer>[] = [];
 vi.mock("../../web/lib/native-material-client", () => ({ readNativeMaterial: vi.fn() }));
 
-function setup() {
+function setup(documentId = id(6)) {
   const now = Date.now();
   const selection: NativeTransferSelection = {
     applicationId: id(1),
@@ -42,7 +42,7 @@ function setup() {
     jobId: id(5),
     ownerFence: "SIMULATED-OWNER",
     tabId: 7,
-    documentId: id(6),
+    documentId,
     employerUrl: "https://boards.greenhouse.io/synthetic/jobs/123",
     variantId: "synthetic-unit-only",
   };
@@ -319,6 +319,13 @@ describe("bounded memory-only native file transfer", () => {
     expect(inventory.signal.aborted).toBe(true);
     expect(inventory.files).toHaveLength(0);
     expect(f.revalidate).toHaveBeenCalledTimes(3);
+  });
+
+  it("accepts the 32 hex character document id Chrome reports", async () => {
+    const chromeId = "A1B2C3D4E5F60718293A4B5C6D7E8F90";
+    const f = setup(chromeId);
+    const sender = { ...f.sender, documentId: chromeId };
+    await expect(f.transfer.begin(f.begin, sender)).resolves.toBeDefined();
   });
 
   it.each(["origin", "frame", "lifecycle", "document", "tab", "incognito", "extension", "native"])(
