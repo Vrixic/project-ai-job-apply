@@ -51,18 +51,22 @@ export function mountApplicationHandoff() {
                 : "Not submitted by the extension, or not confirmed. Check the employer page, finish by hand if needed, then record the outcome in the application workspace.";
           return;
         }
-        if (!response.ok) throw Error();
+        if (!response.ok) throw Object.assign(Error(), { stage: response.stage });
         status.textContent =
           action === "select"
             ? response.resume === "uploaded"
               ? "Employer tab selected. Your own uploaded resume is ready to attach. Transfer availability still depends on adapter acceptance."
               : "Employer tab selected for one minute. Your generated resume is sent from the application workspace tab automatically; keep that tab open. Transfer availability still depends on adapter acceptance."
             : "Approved file transfer cleared. If Apply had started, review the workspace before any further submission.";
-      } catch {
+      } catch (error) {
+        const step =
+          action === "select" && error instanceof Error && "stage" in error && error.stage
+            ? ` (stopped at: ${String(error.stage)})`
+            : "";
         status.textContent =
           action === "apply"
             ? "Apply could not complete. Review the application workspace before trying any further submission."
-            : "The file transfer could not be selected. Check the employer tab, current approval and extension sign-in.";
+            : `The file transfer could not be selected. Check the employer tab, current approval and extension sign-in.${step}`;
       } finally {
         if (ownsBusy) busy = false;
         button.disabled = false;

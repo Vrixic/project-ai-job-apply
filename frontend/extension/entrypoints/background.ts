@@ -8,7 +8,6 @@ import {
   employerPageForSource,
   parseObservedApplicationForm,
 } from "@ai-job-apply/ats-sdk/observed-form";
-import { applicationExecutionRegistry } from "../lib/providers";
 import { safeActionErrorMessage } from "../lib/action-error";
 import {
   type ApprovedHandoff,
@@ -69,6 +68,7 @@ import {
   logout,
   refresh,
 } from "../lib/protocol";
+import { applicationExecutionRegistry } from "../lib/providers";
 import {
   CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY,
   ExtensionContributionPolicyRuntime,
@@ -1157,6 +1157,11 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
         delivery: await deliveryReadiness(await activeStoredCapture()),
         error: safeActionErrorMessage(error, message.action),
         ok: false,
+        ...(message.action === "application_native_select" &&
+        error instanceof Error &&
+        "stage" in error
+          ? { stage: String(error.stage) }
+          : {}),
         ...(["shared_jobs_refresh", "status", "pending", "refresh", "login", "logout"].includes(
           message.action,
         )
