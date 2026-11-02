@@ -63,9 +63,15 @@ export function JobDetailPanel({
   jobId,
   authenticated,
   onSubmitted,
+  standalone = false,
+  applicationId,
 }: {
   jobId: string;
   authenticated: boolean;
+  /** The job has its own page: details load at once and cannot be collapsed. */
+  standalone?: boolean;
+  /** An existing application to open, from a link to the job. */
+  applicationId?: string;
   /** Called once the candidate's submission for this job is logged. */
   onSubmitted?: () => void;
 }) {
@@ -104,6 +110,12 @@ export function JobDetailPanel({
       cancelRequest(pending);
     };
   }, [scope]);
+
+  // A job opened by its own link shows its details at once, with no toggle.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: load reads the current scope through its ref.
+  useEffect(() => {
+    if (standalone && authenticated) void load();
+  }, [standalone, authenticated, scope]);
 
   useEffect(() => {
     if (!authenticated) return;
@@ -206,27 +218,30 @@ export function JobDetailPanel({
 
   return (
     <div className="job-detail">
-      <button
-        ref={trigger}
-        className="secondary-button"
-        type="button"
-        aria-expanded={Boolean(result)}
-        aria-controls={panelId}
-        disabled={loading}
-        onClick={() => {
-          if (result) heading.current?.focus();
-          else void load();
-        }}
-      >
-        View details and sources
-      </button>
+      {standalone ? null : (
+        <button
+          ref={trigger}
+          className="secondary-button"
+          type="button"
+          aria-expanded={Boolean(result)}
+          aria-controls={panelId}
+          disabled={loading}
+          onClick={() => {
+            if (result) heading.current?.focus();
+            else void load();
+          }}
+        >
+          View details and sources
+        </button>
+      )}
+      {standalone && !result ? <p role="status">Loading job details…</p> : null}
       {result && (
         <section
           id={panelId}
           className="job-detail-content"
           aria-labelledby={headingId}
           onKeyDown={(event) => {
-            if (event.key === "Escape") {
+            if (event.key === "Escape" && !standalone) {
               event.preventDefault();
               event.stopPropagation();
               close();
@@ -237,9 +252,11 @@ export function JobDetailPanel({
             <h4 id={headingId} ref={heading} tabIndex={-1}>
               Job details and sources
             </h4>
-            <button className="secondary-button" type="button" onClick={close}>
-              Close details
-            </button>
+            {standalone ? null : (
+              <button className="secondary-button" type="button" onClick={close}>
+                Close details
+              </button>
+            )}
           </div>
           <p role="status" aria-live="polite">
             {loading
@@ -312,6 +329,7 @@ export function JobDetailPanel({
                   <ApplicationsWorkspace
                     jobId={result.detail.id}
                     jobTitle={result.detail.title}
+                    {...(applicationId ? { applicationId } : {})}
                     applyUrl={result.detail.sources[0]?.canonicalUrl}
                     {...(onSubmitted ? { onApplied: onSubmitted } : {})}
                   />
