@@ -6,7 +6,6 @@ import {
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 import { executeApprovedApplication } from "./application-executor";
 import { parseHandoffLink, readApprovedHandoff, readJson } from "./application-handoff";
-import { providerForUrl } from "./providers";
 import {
   createNativeMaterialTransfer,
   type NativeTransferSelection,
@@ -14,6 +13,7 @@ import {
   UPLOADED_RESUME_MAXIMUM_BYTES,
 } from "./native-material-transfer";
 import { sameNativeTransferBinding } from "./native-transfer-binding";
+import { providerForUrl } from "./providers";
 
 const unavailable = () => Error("NativeMaterialTransferUnavailable");
 
@@ -26,6 +26,8 @@ export function installNativeTransferBackground(options: {
 }) {
   let generation = 0;
   let selecting: AbortController | undefined;
+  // Which step of a selection last ran, so a refusal can say where it stopped. Never any content.
+  let stage = "";
   // Identifiers only, in memory only. The packet itself is always re-read with the extension's own
   // session; this just lets the popup find the application without a pasted link.
   let intent:
@@ -158,11 +160,14 @@ export function installNativeTransferBackground(options: {
     signal: AbortSignal,
     documentId?: string,
   ): Promise<NativeTransferSelection> {
+    stage = "employer-tab";
     const link = parseHandoffLink(reviewLink, options.webOrigin);
     const tab = await chrome.tabs.get(tabId);
     const provider = tab.url ? providerForUrl(tab.url) : undefined;
     if (!link || !tab.url || tab.incognito || !provider || signal.aborted) throw unavailable();
+    stage = "sign-in";
     const session = await options.identity(signal);
+    stage = "approval";
     const snapshot = await readApprovedHandoff(
       link,
       tab.url,
@@ -175,6 +180,7 @@ export function installNativeTransferBackground(options: {
       session.accessToken,
       signal,
     );
+    stage = "application";
     const packet = validateApplication(application) ? application.currentPacket : undefined;
     const approval = validateApplication(application) ? application.approval : undefined;
     if (
@@ -189,10 +195,12 @@ export function installNativeTransferBackground(options: {
       application.currentAction !== "ready_to_submit"
     )
       throw unavailable();
+    stage = "page-access";
     const documents = await chrome.scripting.executeScript({
       target: documentId ? { tabId, documentIds: [documentId] } : { tabId, frameIds: [0] },
       func: () => ({ url: location.href, topFrame: window.top === window }),
     });
+    stage = "page-match";
     const captured = documents[0];
     const identity = await options.identity(signal);
     const current = await chrome.tabs.get(tabId);
@@ -210,6 +218,7 @@ export function installNativeTransferBackground(options: {
       Date.now() >= snapshot.deadline
     )
       throw unavailable();
+    stage = "resume";
     const materials = packet.temporaryMaterials ?? [];
     // The packet, never the website, says which resume to use: a generated file bound to its
     // original generation, otherwise the candidate's own uploaded original bound by its digest.
@@ -319,6 +328,7 @@ export function installNativeTransferBackground(options: {
     /** Explicit trusted extension action while the exact employer tab is active. */
     async select(reviewLink: string) {
       clear();
+      stage = "";
       const fence = generation;
       const controller = new AbortController();
       selecting = controller;
@@ -331,6 +341,7 @@ export function installNativeTransferBackground(options: {
           const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
           if (tabs.length !== 1 || tabs[0]?.id === undefined) throw unavailable();
           const selected = await protectedSelection(reviewLink, tabs[0].id, controller.signal);
+          stage = "transfer";
           if (fence !== generation || controller.signal.aborted) throw unavailable();
           transfer.select(selected);
           if (selected.uploadedResume) {
@@ -347,7 +358,7 @@ export function installNativeTransferBackground(options: {
         return await Promise.race([work(), stopped]);
       } catch {
         if (fence === generation) clear();
-        throw unavailable();
+        throw Object.assign(unavailable(), { stage });
       } finally {
         clearTimeout(timer);
         if (selecting === controller) selecting = undefined;
