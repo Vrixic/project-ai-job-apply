@@ -110,7 +110,8 @@ export function createNativeMaterialTransfer(options: {
     );
   }
   function senderMatches(state: NonNullable<typeof current>, sender: chrome.runtime.MessageSender) {
-    const link = sender.url ? parseHandoffLink(sender.url, options.webOrigin) : undefined;
+    // The sender is bound by the verified origin, the tab and the document, not by its address:
+    // Chrome reports the load address, which a later history.replaceState does not change.
     return (
       !sender.id &&
       !sender.nativeApplication &&
@@ -122,9 +123,6 @@ export function createNativeMaterialTransfer(options: {
       !sender.tab?.incognito &&
       typeof sender.documentId === "string" &&
       UUID.test(sender.documentId) &&
-      link?.href === state.selection.reviewLink &&
-      link?.applicationId === state.selection.applicationId &&
-      link?.jobId === state.selection.jobId &&
       (!state.sender ||
         (state.sender.tabId === sender.tab?.id && state.sender.documentId === sender.documentId))
     );

@@ -407,19 +407,25 @@ describe("the apply intent from the website", () => {
     expect(f.send).not.toHaveBeenCalled();
   });
 
+  it("accepts the intent while the browser still reports the load address of the page", async () => {
+    const f = setup();
+    const sender = { ...f.sender, url: `${WEB}/jobs` };
+    await expect(
+      new Promise((resolve) => {
+        const listener = (chrome.runtime.onMessageExternal.addListener as ReturnType<typeof vi.fn>)
+          .mock.calls[0]?.[0] as (m: unknown, s: unknown, r: (v: unknown) => void) => boolean;
+        expect(listener(INTENT, sender, resolve)).toBe(true);
+      }),
+    ).resolves.toMatchObject({ schema: "application-apply-intent-receipt.v1" });
+    expect(await f.composition.pendingIntent()).toMatchObject({ ok: true, reviewLink: LINK });
+  });
+
   it.each([
     ["another website origin", { origin: "https://evil.example" }],
     ["an extension sender", { id: "other-extension-id" }],
     ["a subframe", { frameId: 3 }],
     ["an inactive document", { documentLifecycle: "prerender" as const }],
     ["a private window", { tab: { id: 9, incognito: true } as chrome.tabs.Tab }],
-    ["a page that is not the review link", { url: `${WEB}/jobs` }],
-    [
-      "another application's page",
-      {
-        url: `${WEB}/jobs?application=00000000-0000-7000-8000-000000000099&job=00000000-0000-7000-8000-000000000002`,
-      },
-    ],
   ])("refuses an intent from %s", async (_name, change) => {
     const f = setup();
     const sender = { ...f.sender, ...change };
@@ -437,7 +443,6 @@ describe("the apply intent from the website", () => {
     ["an unknown field", { ...INTENT, token: "x" }],
     ["a malformed id", { ...INTENT, applicationId: "nope" }],
     ["a malformed hash", { ...INTENT, packetHash: "short" }],
-    ["another job than the page's", { ...INTENT, jobId: "00000000-0000-7000-8000-000000000077" }],
     ["an oversized body", { ...INTENT, padding: "x".repeat(5000) }],
   ])("refuses an intent with %s", async (_name, value) => {
     const f = setup();

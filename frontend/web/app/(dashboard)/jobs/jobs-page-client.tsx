@@ -1,7 +1,7 @@
 "use client";
 
-import { ApplicationsWorkspace } from "../../applications-workspace";
 import { AppliedJobsPanel } from "../../applied-jobs-panel";
+import { JobDetailPanel } from "../../job-detail-panel";
 import { JobSearchForm } from "../../job-search-form";
 import { SavedJobsPanel } from "../../saved-jobs-panel";
 
@@ -16,21 +16,24 @@ export function JobsPageClient({
   authenticated: boolean;
   initialApplication?: { id: string; jobId: string };
 }) {
+  // A link to one job and its application opens that job on its own, apart from the search.
+  if (authenticated && initialApplication) {
+    return (
+      <section aria-label="Job">
+        <p>
+          <a href="/jobs">Back to jobs</a>
+        </p>
+        <JobDetailPanel
+          standalone
+          authenticated
+          jobId={initialApplication.jobId}
+          applicationId={initialApplication.id}
+        />
+      </section>
+    );
+  }
   return (
     <section aria-label="Jobs">
-      {authenticated &&
-      applicationsUiEnabled &&
-      process.env.NEXT_PUBLIC_APPLICATION_EXTENSION_HANDOFF === "enabled" &&
-      initialApplication ? (
-        <section aria-label="Application from extension">
-          <h2>Application review</h2>
-          <ApplicationsWorkspace
-            key={`${initialApplication.id}:${initialApplication.jobId}`}
-            jobId={initialApplication.jobId}
-            applicationId={initialApplication.id}
-          />
-        </section>
-      ) : null}
       <JobSearchForm
         authenticated={authenticated}
         savedPanel={<SavedJobsPanel authenticated={authenticated} />}

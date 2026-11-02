@@ -140,6 +140,25 @@ describe("JobDetailPanel", () => {
     expect(document.activeElement).toBe(container.querySelector("h4"));
   });
 
+  it("shows a job's own page at once, with no toggle or close", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json(detail()));
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(<JobDetailPanel standalone jobId={JOB_ID} authenticated />));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("Synthetic Engineer");
+    expect(container.textContent).toContain("Build synthetic tools.");
+    expect(
+      Array.from(container.querySelectorAll("button")).map((entry) => entry.textContent),
+    ).not.toContain("View details and sources");
+    expect(container.textContent).not.toContain("Close details");
+    await act(async () =>
+      container
+        .querySelector("h4")
+        ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+    );
+    expect(container.textContent).toContain("Synthetic Engineer");
+  });
+
   it("closes with Escape, returns focus, and makes reopening an explicit fresh read", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json(detail()));
     vi.stubGlobal("fetch", fetchMock);
