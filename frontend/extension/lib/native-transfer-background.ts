@@ -378,7 +378,13 @@ export function installNativeTransferBackground(options: {
     consume: transfer.consume,
     consumeSelected: transfer.consumeSelected,
     async apply(reviewLink: string, fillOnly = false) {
-      const owned = transfer.consumeSelected(reviewLink);
+      let owned: ReturnType<typeof transfer.consumeSelected>;
+      try {
+        owned = transfer.consumeSelected(reviewLink);
+      } catch {
+        // No current selection or no resume received yet: the candidate selects the page again.
+        throw Object.assign(unavailable(), { stage: "selection-or-resume" });
+      }
       try {
         return await executeApprovedApplication({
           apiOrigin: options.apiOrigin,

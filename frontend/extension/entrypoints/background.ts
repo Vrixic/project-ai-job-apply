@@ -1157,7 +1157,8 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
         delivery: await deliveryReadiness(await activeStoredCapture()),
         error: safeActionErrorMessage(error, message.action),
         ok: false,
-        ...(message.action === "application_native_select" &&
+        ...((message.action === "application_native_select" ||
+          message.action === "application_native_apply") &&
         error instanceof Error &&
         "stage" in error
           ? { stage: String(error.stage) }

@@ -63,6 +63,8 @@ export async function executeApprovedApplication(options: {
   let originalPacket: NonNullable<Application["currentPacket"]> | undefined;
   let api: ReturnType<typeof applicationExecutionApi> | undefined;
   let dispatchSent = false;
+  // The step that ran last, so a refusal can say where it stopped. Never any content.
+  let stage = "";
   let commandSent = false;
   let resultSent = false;
   let command: ApplicationExecutionCommand | undefined;
@@ -299,7 +301,9 @@ export async function executeApprovedApplication(options: {
   };
   try {
     current();
+    stage = "approval";
     await bounded(options.preflight(selection, controller.signal));
+    stage = "page-proof";
     await documentProof();
     const session = await identity();
     const application = await bounded(
@@ -325,6 +329,7 @@ export async function executeApprovedApplication(options: {
     originalPacket = structuredClone(application.currentPacket);
     // The candidate's own original must be exactly the file the approved packet binds, and is
     // checked before any attempt exists: a mismatch refuses here with no employer or server effect.
+    stage = "resume";
     const uploadedFiles = options.owned.files.filter((file) => file.kind === "uploaded_resume");
     if (
       uploadedFiles.length > 1 ||
@@ -356,6 +361,7 @@ export async function executeApprovedApplication(options: {
     clearTimeout(timer);
     timer = setTimeout(abort, Math.max(0, deadline - Date.now()));
     current();
+    stage = "page-script";
     await bounded(
       chrome.scripting.executeScript({
         target: { tabId: selection.tabId, documentIds: [selection.documentId] },
@@ -363,6 +369,7 @@ export async function executeApprovedApplication(options: {
         world: "ISOLATED",
       }),
     );
+    stage = "page-inspect";
     const inspection: unknown = await bounded(
       chrome.tabs.sendMessage(
         selection.tabId,
@@ -381,8 +388,10 @@ export async function executeApprovedApplication(options: {
       (originalPacket.form && inspection.formHash !== originalPacket.form.formHash)
     )
       throw unavailable();
+    stage = "approval-again";
     await bounded(options.preflight(selection, controller.signal));
     await documentProof();
+    stage = "attempt-start";
     api = applicationExecutionApi({
       apiOrigin: options.apiOrigin,
       accessToken: session.accessToken,
@@ -425,6 +434,7 @@ export async function executeApprovedApplication(options: {
       attempt.resolvedAt
     )
       throw unavailable();
+    stage = "attempt-dispatch";
     await freshAttempt("started");
     dispatchSent = true;
     const dispatched = await bounded(api.dispatch(attempt.id));
@@ -472,6 +482,7 @@ export async function executeApprovedApplication(options: {
         (uploadedFiles.length ? 3_700_000 : 850_000)
     )
       throw unavailable();
+    stage = "page-fill";
     chrome.runtime.onMessage.addListener(proofListener);
     commandSent = true;
     const response: unknown = await bounded(
@@ -486,6 +497,7 @@ export async function executeApprovedApplication(options: {
       response.attemptId !== attempt.id
     )
       throw unavailable();
+    stage = "record";
     current();
     await identity();
     if (response.result.kind === "confirmed") {
@@ -516,6 +528,7 @@ export async function executeApprovedApplication(options: {
       ok: false,
       outcome: dispatchSent ? "unknown" : "review_required",
       reviewLink: selection.reviewLink,
+      stage,
     };
   } finally {
     abort();
