@@ -323,11 +323,11 @@ describe("GeneratedResumePanel", () => {
       expect(send).toHaveBeenCalledTimes(2);
     });
 
-    it("regenerates from the ready state", async () => {
+    it("offers no regeneration while the resume is ready", async () => {
       const { bound, send, app } = native();
       const handlers = await render({ kind: "ready", material: bound }, { application: app, send });
-      await act(async () => button("Generate again")?.click());
-      expect(handlers.onGenerate).toHaveBeenCalledTimes(1);
+      expect(container.textContent).not.toContain("Generate again");
+      expect(handlers.onGenerate).not.toHaveBeenCalled();
     });
 
     it("reads the synchronous tailored resume file when native materials are off", async () => {
