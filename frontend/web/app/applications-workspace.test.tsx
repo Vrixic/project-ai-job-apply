@@ -262,7 +262,13 @@ class FakeBff {
       return json({ outcome: "started", application: this.app }, 201);
     }
     if (rest.endsWith("/reconciliation") && method === "POST") {
-      this.app = this.base("applied", {});
+      this.app =
+        body?.kind === "user_attested_not_submitted"
+          ? this.base("approved", {
+              currentPacket: this.app.currentPacket,
+              ...(this.app.approval ? { approval: this.app.approval } : {}),
+            })
+          : this.base("applied", {});
       return json(this.app);
     }
     if (rest.startsWith("/resume/content") && method === "GET") {
@@ -560,6 +566,27 @@ describe("ApplicationsWorkspace: cover letter", () => {
 });
 
 describe("ApplicationsWorkspace: Apply", () => {
+  it("goes back to preparing after the candidate says it was not submitted", async () => {
+    const bff = new FakeBff();
+    await mount(bff);
+    await click("Apply");
+    await click("Record submission");
+    await click("It was not submitted");
+    expect(bff.calls.some((call) => call.url.endsWith("/reopen"))).toBe(true);
+    expect(bff.app?.status).toBe("review_required");
+    expect(button("Apply")).toBeDefined();
+    expect(container.textContent).not.toContain("Finish on the employer's page");
+  });
+
+  it("lets the candidate start over from an approved application", async () => {
+    const bff = new FakeBff();
+    await mount(bff);
+    await click("Apply");
+    await click("Start over");
+    expect(bff.app?.status).toBe("review_required");
+    expect(button("Apply")).toBeDefined();
+  });
+
   it("applies directly with the uploaded resume: packet, approval, then the employer page", async () => {
     const bff = new FakeBff();
     await mount(bff);

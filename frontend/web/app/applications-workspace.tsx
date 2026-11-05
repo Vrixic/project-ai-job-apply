@@ -757,7 +757,7 @@ function JobApplicationWorkspace({
     current: Application,
     attemptId: string,
     kind: "submitted" | "not_submitted",
-  ) {
+  ): Promise<Application> {
     const path = `/api/platform/applications/${current.id}/attempts/${attemptId}/reconciliation`;
     const signature = `${attemptId}:${kind}`;
     if (reconciliationIntent.current?.signature !== signature) {
@@ -772,7 +772,7 @@ function JobApplicationWorkspace({
           : { kind: "user_attested_not_submitted", acknowledgesDuplicateRisk: true };
       reconciliationIntent.current = { signature, body };
     }
-    await settle(
+    return settle(
       await applicationsCall("POST", path, {
         ...options,
         body: reconciliationIntent.current.body,
@@ -807,7 +807,10 @@ function JobApplicationWorkspace({
       setNotice("That action is not available in the current state.");
       throw new Error("No open attempt");
     }
-    await reconcile(current, attempt.id, outcome);
+    const settled = await reconcile(current, attempt.id, outcome);
+    // Nothing reached the employer, so go back to preparing and let the candidate apply again.
+    if (outcome === "not_submitted" && settled.status === "approved")
+      await ensureEditable(settled).catch(() => undefined);
   }
 
   const actions: ApplicationReviewActions | undefined = application
@@ -986,6 +989,11 @@ function JobApplicationWorkspace({
               {...(fetchImplementation ? { fetchImplementation } : {})}
               onRecordSubmission={({ outcome, observation }) =>
                 recordSubmission(outcome, observation)
+              }
+              onStartOver={() =>
+                run(async () => {
+                  await ensureEditable(application);
+                })
               }
             />
           ) : null}
