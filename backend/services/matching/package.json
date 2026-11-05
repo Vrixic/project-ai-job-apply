@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@ai-job-apply/api-contracts": "workspace:*",
-    "postgres": "3.4.9",
-    "uuid": "14.0.2"
+    "postgres": "4.0.0",
+    "uuid": "14.0.3"
   }
 }
