@@ -40,16 +40,21 @@ export function ApplicationBasicsDialog({
     <dialog
       ref={dialog}
       aria-labelledby="apply-screening-heading"
-      className="apply-basics"
+      className="screening-dialog"
       onClose={onClose}
     >
       {basics.status === "unavailable" ? (
         <>
           <h3 id="apply-screening-heading">We could not check your profile</h3>
           <p role="alert">Applying is paused until we can.</p>
-          <button type="button" onClick={basics.retry}>
-            Check again
-          </button>
+          <div className="screening-actions">
+            <button type="button" onClick={basics.retry}>
+              Check again
+            </button>
+            <button type="button" className="screening-close" onClick={onClose}>
+              Close
+            </button>
+          </div>
         </>
       ) : (
         <>
@@ -63,17 +68,24 @@ export function ApplicationBasicsDialog({
               <li key={item.key}>{item.label}</li>
             ))}
           </ul>
-          <a href={profileHrefFor(basics.missing)} target="_blank" rel="noopener">
-            Go to my profile
-          </a>
-          <button type="button" onClick={basics.retry}>
-            I completed it, check again
-          </button>
+          <div className="screening-actions">
+            <a
+              className="button-link"
+              href={profileHrefFor(basics.missing)}
+              target="_blank"
+              rel="noopener"
+            >
+              Go to my profile
+            </a>
+            <button type="button" className="screening-secondary" onClick={basics.retry}>
+              I completed it, check again
+            </button>
+            <button type="button" className="screening-close" onClick={onClose}>
+              Close
+            </button>
+          </div>
         </>
       )}
-      <button type="button" onClick={onClose}>
-        Close
-      </button>
     </dialog>
   );
 }
