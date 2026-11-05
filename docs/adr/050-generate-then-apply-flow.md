@@ -140,3 +140,15 @@ separate decision against ADR-049 and ADR-046.
   cadence; the bounded timeout caps what the candidate waits.
 - All checks use synthetic identity, BFF and native responses. Live token acceptance by the native
   process, installed-extension behavior, provider retention and accountable reviews remain open.
+
+## Amendment 2026-11-05: Apply waits for the profile basics
+
+Owner direction: the answers an application form always asks come from the candidate's ApplyDash
+profile, are collected from every new candidate, and no one applies until they are all there. The web
+now checks the saved profile (`lib/application-basics.ts`, `useApplicationBasics`) and holds the Apply
+button, with the missing items named and linked to the Profile, until it holds a first and last name,
+an email, a phone number, one education entry with school, degree and field of study, and, while the
+saved-answer vault is offered, saved answers for United States work authorization and visa
+sponsorship. A profile that cannot be read pauses Apply (fail closed). Nothing is inferred or filled
+in for the candidate. Using the saved authorization answers to answer the employer's own questions is
+a separate decision (ADR-010 treats them as restricted) and is not part of this change.

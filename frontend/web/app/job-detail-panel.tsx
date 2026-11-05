@@ -331,6 +331,7 @@ export function JobDetailPanel({
                     jobTitle={result.detail.title}
                     {...(applicationId ? { applicationId } : {})}
                     applyUrl={result.detail.sources[0]?.canonicalUrl}
+                    requireBasics
                     {...(onSubmitted ? { onApplied: onSubmitted } : {})}
                   />
                 ) : null}
