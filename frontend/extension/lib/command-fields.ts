@@ -3,19 +3,15 @@ import type { ApplicationExecutionCommand, ApplicationPacket } from "@ai-job-app
 type CommandField = ApplicationExecutionCommand["fields"][number];
 
 /**
- * The fields an execution command may carry: only immutable, approved, non-restricted values, each
- * flagged when it still needs the candidate. A full name is composed from the approved first and
+ * The fields an execution command may carry: the approved values the candidate set, each flagged
+ * when it still needs the candidate. Consent, signatures, challenges and documents never travel. A full name is composed from the approved first and
  * last name for pages that ask for one "Name" field (ADR-053); it adds no new candidate fact.
  */
 export function commandFieldsFromPacket(packet: Pick<ApplicationPacket, "fields">): CommandField[] {
   const fields: CommandField[] = packet.fields
     .filter(
       (field) =>
-        field.origin !== "answer_vault" &&
-        !field.reasons.includes("restricted_answer") &&
-        !/^(?:authorization|demographic|disclosure|attestation|signature|challenge|captcha|mfa|documents?)\./u.test(
-          field.fieldKey,
-        ),
+        !/^(?:attestation|signature|challenge|captcha|mfa|documents?)\./u.test(field.fieldKey),
     )
     .map((field) => ({
       fieldKey: field.fieldKey,

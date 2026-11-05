@@ -186,7 +186,10 @@ function setup(
       commands.push(command);
       wireCommands.push(structuredClone(command));
       expect(posts.filter((path) => path.endsWith("/dispatch"))).toHaveLength(1);
-      expect(command.fields.map((field) => field.fieldKey)).toEqual(["contact.email"]);
+      expect(command.fields.map((field) => field.fieldKey)).toEqual([
+        "contact.email",
+        "authorization.us_authorized",
+      ]);
       expect(command.deadline).toBeLessThanOrEqual(
         uploaded ? Date.parse(approval.expiresAt) : material.expiresAtMs,
       );

@@ -299,8 +299,9 @@ describe("Ashby execution surface", () => {
     );
     // The office question has no packet value in this page's mapping, so it is left alone.
     expect(yes?.getAttribute("aria-pressed")).toBe("false");
-    // Sponsorship is a direct-action field: never filled even when the packet carries a value.
-    expect((doc.getElementById("visa-0") as HTMLInputElement).checked).toBe(false);
+    // Sponsorship is an answer the candidate set, so it is filled like any other: No is chosen.
+    expect((doc.getElementById("visa-0") as HTMLInputElement).checked).toBe(true);
+    expect((doc.getElementById("visa-1") as HTMLInputElement).checked).toBe(false);
     expect(events).toContain("_systemfield_name:input");
     expect(events).toContain("_systemfield_email:change");
     expect(submit).not.toHaveBeenCalled();
@@ -349,16 +350,23 @@ describe("full name for pages with a single Name field (ADR-053)", () => {
     } as never);
     expect(onlyFirst.some((entry) => entry.fieldKey === "identity.legal_name.full")).toBe(false);
   });
-  it("never forwards restricted, vault or document fields", () => {
+  it("forwards the answers the candidate set, and never consent, signature or document fields", () => {
     const fields = commandFieldsFromPacket({
       fields: [
         field("authorization.us_authorized", "Yes"),
         field("contact.email", "a@example.invalid", { origin: "answer_vault" }),
         field("documents.resume", "x"),
+        field("attestation.truthful", "yes"),
+        field("signature.electronic", "A Candidate"),
         field("links.github", "https://example.invalid", { reasons: ["restricted_answer"] }),
         field("contact.phone", "555"),
       ],
     } as never);
-    expect(fields.map((entry) => entry.fieldKey)).toEqual(["contact.phone"]);
+    expect(fields.map((entry) => entry.fieldKey)).toEqual([
+      "authorization.us_authorized",
+      "contact.email",
+      "links.github",
+      "contact.phone",
+    ]);
   });
 });

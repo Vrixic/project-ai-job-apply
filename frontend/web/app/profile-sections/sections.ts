@@ -135,7 +135,7 @@ export const PROFILE_SECTIONS: Readonly<Record<SectionKey, ProfileSectionConfig>
         type: "text",
         required: true,
         maxLength: 300,
-        help: "Reused only when a form asks exactly this question. Questions about work authorization, demographics or legal disclosures belong in Restricted answers.",
+        help: "Reused only when a form asks exactly this question.",
       },
       { name: "answer", label: "Answer", type: "textarea", required: true, maxLength: 2000 },
     ],

@@ -9,6 +9,7 @@ import {
   REASON_COPY,
   reviewGroups,
 } from "./application-review-state";
+import { CommonQuestions } from "./common-questions";
 
 export interface ApplicationReviewActions {
   onProvideEntry(entry: { fieldKey: string; value: string | boolean }): Promise<void> | void;
@@ -167,7 +168,9 @@ function PacketReview({
 
   const statusCopy = STATUS_COPY[application.status];
   const showAnswers = editable && (groups.needsInput.length > 0 || confirm.length > 0);
-  if (!statusCopy && !showAnswers && application.packetAvailability !== "withheld") return null;
+  const showCommon = application.status === "review_required";
+  if (!statusCopy && !showAnswers && !showCommon && application.packetAvailability !== "withheld")
+    return null;
 
   return (
     <section aria-labelledby={headingId}>
@@ -183,6 +186,12 @@ function PacketReview({
       ) : null}
       <fieldset disabled={busy}>
         <legend>Answers and checks</legend>
+        {showCommon ? (
+          <CommonQuestions
+            application={application}
+            onAnswer={(entry) => void run(() => actions.onProvideEntry(entry), "Answer saved.")}
+          />
+        ) : null}
         {showAnswers && groups.needsInput.length > 0 ? (
           <section aria-label="Answers that need your input">
             <h4>We need your answer</h4>

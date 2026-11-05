@@ -173,9 +173,24 @@ describe("review state for Apply", () => {
 });
 
 describe("ApplicationReviewPanel", () => {
-  it("shows nothing when there is nothing left to decide", async () => {
+  it("shows only the common questions when there is nothing else left to decide", async () => {
     await render(application([resumeField, autoField]));
-    expect(container.textContent).toBe("");
+    expect(container.textContent).toContain("Your answers to common questions");
+    expect(container.textContent).not.toContain("We need your answer");
+    expect(container.textContent).not.toContain("Check these answers");
+  });
+
+  it("saves a Yes or No answer to a common question as the candidate's own", async () => {
+    const handlers = await render(application([resumeField, autoField]));
+    const select = container.querySelector("select") as HTMLSelectElement;
+    await act(async () => {
+      select.value = "no";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(handlers.onProvideEntry).toHaveBeenCalledWith({
+      fieldKey: "authorization.us_authorized",
+      value: false,
+    });
   });
 
   it("has no approval ceremony, material review or cancel controls", async () => {
