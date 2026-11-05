@@ -127,6 +127,7 @@ if (!Object.hasOwn(globalThis, installed)) {
           )
             throw Error("ApplicationExecutionUnavailable");
         };
+        let ran = "";
         let total = 0;
         const kinds = new Set<string>();
         for (const file of message.files) {
@@ -181,6 +182,9 @@ if (!Object.hasOwn(globalThis, installed)) {
           packet: message.fields,
           files: state.files,
           ...(message.fillOnly ? { fillOnly: true } : {}),
+          onStage: (stage) => {
+            ran = stage;
+          },
           profile,
           registry: applicationExecutionRegistry,
           deadline: message.deadline,
@@ -212,6 +216,9 @@ if (!Object.hasOwn(globalThis, installed)) {
           nonce: message.nonce,
           attemptId: message.attemptId,
           result,
+          ...(result.kind !== "confirmed" && result.kind !== "challenge_required" && ran
+            ? { stage: ran }
+            : {}),
         };
       } finally {
         for (const file of message.files) file.contentBase64 = "";

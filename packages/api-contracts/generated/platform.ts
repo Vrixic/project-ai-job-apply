@@ -3438,6 +3438,7 @@ export interface components {
             /** Format: uuid */
             attemptId: string;
             result: components["schemas"]["ApplicationSubmissionResultRequest"];
+            stage?: string;
         };
         ApplicationExecutionCancel: {
             /** @constant */

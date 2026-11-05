@@ -1,6 +1,7 @@
 import type { ApplicationSubmissionResultRequest } from "@ai-job-apply/api-contracts";
 import { buildFillPlan, type PacketValue } from "@ai-job-apply/ats-sdk/plan";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
+import { writtenValueMatches } from "./field-value";
 import type { TransferredNativeFile } from "./native-material-transfer";
 import type {
   ApplicationInspection,
@@ -35,7 +36,13 @@ export async function executeApplication(options: {
   onStage?(stage: string): void;
 }): Promise<ApplicationSubmissionResultRequest> {
   const { document } = options;
-  const mark = (stage: string) => options.onStage?.(stage);
+  let where = "";
+  let detail = "";
+  const mark = (stage: string) => {
+    where = stage;
+    detail = "";
+    options.onStage?.(stage);
+  };
   const { provider } = options;
   const profile = Object.freeze(structuredClone(options.profile));
   const view = document.defaultView;
@@ -206,6 +213,9 @@ export async function executeApplication(options: {
       signal: controller.signal,
       revalidateApproval: fresh,
       throwOnFailure: true,
+      onField: (fieldKey) => {
+        detail = fieldKey;
+      },
     });
     const expectedFills = plan.actions.filter(
       (action) => action.kind === "fill" || action.kind === "select",
@@ -214,6 +224,7 @@ export async function executeApplication(options: {
     if (filled.filled.length !== expectedFills.length) throw unavailable();
     const requireWrittenFields = () => {
       for (const action of expectedFills) {
+        detail = action.fieldKey;
         const controls = inspection?.resolve(action.ref);
         const control = controls?.[0];
         if (controls?.length !== 1 || !control) throw unavailable();
@@ -235,10 +246,11 @@ export async function executeApplication(options: {
           !(
             control instanceof view.HTMLInputElement || control instanceof view.HTMLTextAreaElement
           ) ||
-          control.value !== String(action.value)
+          !writtenValueMatches(control, String(action.value))
         )
           throw unavailable();
       }
+      detail = "";
     };
     mark("written-fields");
     requireWrittenFields();
@@ -424,7 +436,13 @@ export async function executeApplication(options: {
       await Promise.race([new Promise<void>((resolve) => setTimeout(resolve, 200)), stopped]);
     }
     return { kind: "timeout" };
-  } catch {
+  } catch (error) {
+    // The step, field name and error kind only: never a value.
+    const kind =
+      error instanceof Error ? error.message.replace(/[^A-Za-z0-9]/gu, "").slice(0, 40) : "";
+    options.onStage?.(
+      `${where}${detail ? `:${detail.replace(/[^A-Za-z0-9._-]/gu, "").slice(0, 40)}` : ""}${kind ? ` ${kind}` : ""}`,
+    );
     return { kind: submitted || claimed ? "unrecognized_response" : "precondition_failed" };
   } finally {
     if (keepForReview) controller.abort();

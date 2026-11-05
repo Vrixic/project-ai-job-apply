@@ -1,5 +1,6 @@
 import { buildFillPlan, type PacketValue } from "@ai-job-apply/ats-sdk/plan";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
+import { writtenValueMatches } from "../field-value";
 import type { GreenhouseInspection } from "./inspect";
 
 function requireActionable(control: Element, view: Window) {
@@ -32,6 +33,7 @@ export async function fillGreenhouseFields(
     revalidateApproval(): Promise<void>;
     /** Submission composition must distinguish a stopped fill from candidate-only review. */
     throwOnFailure?: boolean;
+    onField?(fieldKey: string): void;
   },
 ): Promise<{ filled: readonly string[]; reviewRequired: boolean }> {
   const filled: string[] = [];
@@ -60,6 +62,7 @@ export async function fillGreenhouseFields(
   try {
     for (const action of plan.actions) {
       if (action.kind !== "fill" && action.kind !== "select") continue;
+      authority.onField?.(action.fieldKey);
       await Promise.race([authority.revalidateApproval(), stopped]);
       if (!current()) throw new Error("GreenhouseFillUnavailable");
       const controls = inspection.resolve(action.ref);
@@ -117,7 +120,7 @@ export async function fillGreenhouseFields(
             control,
             String(action.value),
           );
-          matchesApproved = () => control.value === String(action.value);
+          matchesApproved = () => writtenValueMatches(control, String(action.value));
         }
       } else throw new Error("GreenhouseFillUnavailable");
       // A synchronous employer event handler can replace a control or introduce a challenge.
