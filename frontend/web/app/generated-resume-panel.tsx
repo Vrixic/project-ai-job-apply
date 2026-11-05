@@ -147,7 +147,6 @@ export function GeneratedResumePanel({
           nowMs={nowMs}
           busy={busy}
           fileName={fileName}
-          onGenerate={onGenerate}
           onPreviewShown={onPreviewShown}
           {...(fetchImplementation ? { fetchImplementation } : {})}
         />
@@ -169,7 +168,6 @@ function ReadyResume({
   nowMs,
   busy,
   fileName,
-  onGenerate,
   onPreviewShown,
   fetchImplementation,
 }: {
@@ -180,7 +178,6 @@ function ReadyResume({
   nowMs: number;
   busy: boolean;
   fileName: string;
-  onGenerate(): void;
   onPreviewShown(contentSha256: string): void;
   fetchImplementation?: typeof globalThis.fetch;
 }) {
@@ -322,9 +319,6 @@ function ReadyResume({
       <p>
         <button type="button" disabled={busy || loaded.phase !== "ready"} onClick={download}>
           Download PDF
-        </button>{" "}
-        <button type="button" className="link-button" disabled={busy} onClick={onGenerate}>
-          Generate again
         </button>
       </p>
       <p role="status" aria-live="polite">
