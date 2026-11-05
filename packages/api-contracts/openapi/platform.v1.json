@@ -14176,7 +14176,8 @@
           },
           "documentId": {
             "type": "string",
-            "format": "uuid"
+            "description": "The browser's own document id for the employer page: 32 hexadecimal characters, or a UUID.",
+            "pattern": "^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12})$"
           },
           "employerUrl": {
             "type": "string",
