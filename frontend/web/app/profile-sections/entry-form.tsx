@@ -49,8 +49,9 @@ export function EntryForm({
           required: field.required === true,
           disabled: busy,
           "aria-describedby": helpId,
-          onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-            setValues((current) => ({ ...current, [field.name]: event.target.value })),
+          onChange: (
+            event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+          ) => setValues((current) => ({ ...current, [field.name]: event.target.value })),
         };
         return (
           <div className="profile-entry-field" key={field.name}>
@@ -60,7 +61,20 @@ export function EntryForm({
                 {field.help}
               </span>
             )}
-            {field.type === "textarea" || field.type === "bullets" ? (
+            {field.type === "select" ? (
+              <select {...common}>
+                <option value="">Choose…</option>
+                {/* A value saved or imported before this list existed stays selectable. */}
+                {common.value && !field.options?.includes(common.value) ? (
+                  <option value={common.value}>{common.value} (saved)</option>
+                ) : null}
+                {(field.options ?? []).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            ) : field.type === "textarea" || field.type === "bullets" ? (
               <textarea
                 {...common}
                 rows={field.type === "bullets" ? 6 : 4}
