@@ -450,6 +450,28 @@ export function createNativeMaterialTransfer(options: {
         },
       };
     },
+    /**
+     * Whether a live selection for this exact review link and tab already exists, so selecting the
+     * same page again keeps the resume it already received instead of discarding it.
+     */
+    holds(reviewLink: string, tabId: number) {
+      const state = current;
+      if (
+        !state ||
+        state.phase === "consumed" ||
+        state.selection.reviewLink !== reviewLink ||
+        state.selection.tabId !== tabId ||
+        !active(state)
+      )
+        return undefined;
+      return {
+        resume: state.selection.uploadedResume ? ("uploaded" as const) : ("generated" as const),
+      };
+    },
+    /** The step the current selection is in, for a refusal message. Never any content. */
+    phase() {
+      return current?.phase ?? "none";
+    },
     /** Browser navigation/removal and extension identity/cancel hooks own this invalidation. */
     documentChanged(tabId: number) {
       if (current && (current.selection.tabId === tabId || current.sender?.tabId === tabId))

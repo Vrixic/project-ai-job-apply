@@ -90,12 +90,16 @@ export function installNativeTransferBackground(options: {
     },
   });
 
-  function clear() {
+  // Selecting the page again keeps the pending Apply: only identity changes and Clear end it.
+  function clearSelection() {
     generation++;
     selecting?.abort();
     selecting = undefined;
-    clearIntent();
     transfer.clear();
+  }
+  function clear() {
+    clearIntent();
+    clearSelection();
   }
 
   /** Pulls the candidate's own original with the extension's session and verifies it exactly. */
@@ -327,7 +331,13 @@ export function installNativeTransferBackground(options: {
     clear,
     /** Explicit trusted extension action while the exact employer tab is active. */
     async select(reviewLink: string) {
-      clear();
+      // The same page selected again (the popup selects it each time it opens) keeps its resume.
+      const link = parseHandoffLink(reviewLink, options.webOrigin);
+      const open = await chrome.tabs.query({ active: true, currentWindow: true });
+      const openTab = open.length === 1 ? open[0]?.id : undefined;
+      const kept = link && openTab !== undefined ? transfer.holds(link.href, openTab) : undefined;
+      if (kept) return { ok: true, resume: kept.resume };
+      clearSelection();
       stage = "";
       const fence = generation;
       const controller = new AbortController();
@@ -357,7 +367,7 @@ export function installNativeTransferBackground(options: {
         };
         return await Promise.race([work(), stopped]);
       } catch {
-        if (fence === generation) clear();
+        if (fence === generation) clearSelection();
         throw Object.assign(unavailable(), { stage });
       } finally {
         clearTimeout(timer);
@@ -383,7 +393,7 @@ export function installNativeTransferBackground(options: {
         owned = transfer.consumeSelected(reviewLink);
       } catch {
         // No current selection or no resume received yet: the candidate selects the page again.
-        throw Object.assign(unavailable(), { stage: "selection-or-resume" });
+        throw Object.assign(unavailable(), { stage: `selection-or-resume:${transfer.phase()}` });
       }
       try {
         return await executeApprovedApplication({
