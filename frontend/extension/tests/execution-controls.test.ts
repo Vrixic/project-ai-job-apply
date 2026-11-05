@@ -1,4 +1,4 @@
-import { AdapterRegistry, ADAPTER_DECLARATIONS } from "@ai-job-apply/ats-sdk/registry";
+import { ADAPTER_DECLARATIONS, AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 import { describe, expect, it } from "vitest";
 import { applicationExecutionControls, buildExecutionControls } from "../lib/providers/controls";
 

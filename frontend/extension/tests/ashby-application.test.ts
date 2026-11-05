@@ -7,8 +7,8 @@ import {
   ashbyChallengePresent,
   inspectAshbyApplication,
 } from "../lib/ashby/inspect";
-import { ashbyProvider } from "../lib/ashby/provider";
 import { ashbyExecutionProfile } from "../lib/ashby/profiles";
+import { ashbyProvider } from "../lib/ashby/provider";
 import { commandFieldsFromPacket } from "../lib/command-fields";
 import { providerForUrl } from "../lib/providers";
 

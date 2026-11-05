@@ -18,6 +18,7 @@ import { employerPageForSource } from "@ai-job-apply/ats-sdk/observed-form";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 import { applicationExecutionApi } from "./application-execution-api";
 import { readJson } from "./application-handoff";
+import { attachmentName } from "./attachment-name";
 import { commandFieldsFromPacket } from "./command-fields";
 import type { NativeTransferSelection, TransferredNativeFile } from "./native-material-transfer";
 import { sameNativeTransferBinding } from "./native-transfer-binding";
@@ -67,6 +68,8 @@ export async function executeApprovedApplication(options: {
   let stage = "";
   // The check inside the step that ran last. Never any content.
   let sub = "";
+  // Read from the canonical job the executor itself fetched; names the attached files.
+  let jobTitle = "";
   let commandSent = false;
   let resultSent = false;
   let command: ApplicationExecutionCommand | undefined;
@@ -128,6 +131,10 @@ export async function executeApprovedApplication(options: {
       !documents[0].result?.topFrame
     )
       throw unavailable();
+  };
+  const approvedName = (fieldKey: string) => {
+    const value = originalPacket?.fields.find((field) => field.fieldKey === fieldKey)?.value;
+    return typeof value === "string" ? value : undefined;
   };
   const packetMatches = (application: Application) => {
     const packet = application.currentPacket;
@@ -191,6 +198,7 @@ export async function executeApprovedApplication(options: {
       )
     )
       throw unavailable();
+    jobTitle = job.title;
     const encoded = new TextEncoder().encode(activeJobRevisionDigestInput(job));
     const digest = new Uint8Array(await bounded(crypto.subtle.digest("SHA-256", encoded)));
     encoded.fill(0);
@@ -483,6 +491,13 @@ export async function executeApprovedApplication(options: {
       fields: commandFieldsFromPacket(originalPacket),
       files: options.owned.files.map((file) => ({
         kind: file.kind,
+        fileName: attachmentName({
+          kind: file.kind,
+          firstName: approvedName("identity.legal_name.first"),
+          lastName: approvedName("identity.legal_name.last"),
+          jobTitle,
+          format: file.format,
+        }),
         ...(file.generationId ? { generationId: file.generationId } : {}),
         format: file.format,
         mediaType: file.mediaType,

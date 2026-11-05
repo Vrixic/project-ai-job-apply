@@ -143,6 +143,7 @@ if (!Object.hasOwn(globalThis, installed)) {
           state.files.push({
             kind: file.kind,
             ...(file.generationId ? { generationId: file.generationId } : {}),
+            ...(file.fileName ? { fileName: file.fileName } : {}),
             format: file.format,
             mediaType: file.mediaType,
             sha256: file.sha256,

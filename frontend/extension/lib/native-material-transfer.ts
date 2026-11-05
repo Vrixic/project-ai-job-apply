@@ -56,6 +56,8 @@ export interface TransferredNativeFile {
   mediaType: string;
   sha256: string;
   bytes: Uint8Array;
+  /** The name the employer page sees, set by the executor just before the page run. */
+  fileName?: string;
 }
 
 function boundedMessage(value: unknown, maxBytes: number): unknown {

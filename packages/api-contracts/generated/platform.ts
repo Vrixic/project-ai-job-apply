@@ -3376,6 +3376,8 @@ export interface components {
             kind: "tailored_resume" | "cover_letter" | "uploaded_resume";
             /** Format: uuid */
             generationId?: string;
+            /** @description The name the employer page sees, built by the extension from the approved name and the job title. */
+            fileName?: string;
             /** @enum {string} */
             format: "pdf" | "docx";
             mediaType: string;
