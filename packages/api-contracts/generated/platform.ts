@@ -3441,6 +3441,7 @@ export interface components {
             attemptId: string;
             result: components["schemas"]["ApplicationSubmissionResultRequest"];
             stage?: string;
+            notes?: string[];
         };
         ApplicationExecutionCancel: {
             /** @constant */

@@ -37,6 +37,8 @@ export async function executeApplication(options: {
   onStage?(stage: string): void;
   /** Pause after scrolling to each control being filled, so the candidate can watch. Default none. */
   paceMs?: number;
+  /** Short codes for the candidate about what the fill left to them. Never any value. */
+  onNotes?(notes: readonly string[]): void;
 }): Promise<ApplicationSubmissionResultRequest> {
   const { document } = options;
   let where = "";
@@ -224,6 +226,13 @@ export async function executeApplication(options: {
     const expectedFills = plan.actions.filter(
       (action) => action.kind === "fill" || action.kind === "select",
     );
+    {
+      const notes = [...(filled.notes ?? [])];
+      const selectedRefs = new Set(filled.selected ?? []);
+      const needs = plan.unresolvedRequired.filter((ref) => !selectedRefs.has(ref)).length;
+      if (needs > 0) notes.push(`needs:${needs}`);
+      options.onNotes?.(notes);
+    }
     mark("fill-check");
     if (filled.filled.length !== expectedFills.length) throw unavailable();
     const requireWrittenFields = () => {

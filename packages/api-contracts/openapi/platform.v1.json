@@ -14298,6 +14298,14 @@
           "stage": {
             "type": "string",
             "pattern": "^[A-Za-z0-9:_. -]{1,120}$"
+          },
+          "notes": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9_.:-]{1,80}$"
+            }
           }
         },
         "additionalProperties": false

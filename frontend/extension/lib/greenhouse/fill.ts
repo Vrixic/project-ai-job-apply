@@ -41,10 +41,13 @@ export async function fillGreenhouseFields(
   filled: readonly string[];
   /** Custom dropdowns chosen by exact option. Counted apart: an unmatched one is left to the candidate. */
   selected: readonly string[];
+  /** Short codes for the candidate, such as `other:education.school`. Never any value. */
+  notes?: readonly string[];
   reviewRequired: boolean;
 }> {
   const filled: string[] = [];
   const selected: string[] = [];
+  const notes: string[] = [];
   const deadline = authority.deadline;
   const variantId = authority.variantId;
   const current = () =>
@@ -199,17 +202,21 @@ export async function fillGreenhouseFields(
         inspection.resolve(action.ref);
         requireActionable(control, view);
       }
-      const label = await selectExactOption(control, view, action.fieldKey, entry.value.trim(), {
+      const chosen = await selectExactOption(control, view, action.fieldKey, entry.value.trim(), {
         current,
         wait: (ms) =>
           Promise.race([new Promise<void>((resolve) => setTimeout(resolve, ms)), stopped]),
       });
       inspection.resolve(action.ref);
-      if (label) selected.push(action.ref);
+      if (chosen) {
+        selected.push(action.ref);
+        if (chosen.fallback) notes.push(`other:${action.fieldKey}`);
+      }
     }
     return {
       filled,
       selected,
+      ...(notes.length ? { notes } : {}),
       reviewRequired:
         plan.requiresTakeover || plan.actions.some((action) => action.kind === "require_user"),
     };
