@@ -29,6 +29,8 @@ export async function executeApplication(options: {
   claim(): boolean;
   /** Fresh protected owning attempt/job/packet/material/document proof; no approval reopening. */
   revalidateDispatched(): Promise<void>;
+  /** Fill and attach for the candidate's own review and stop: nothing is submitted. */
+  fillOnly?: boolean;
 }): Promise<ApplicationSubmissionResultRequest> {
   const { document } = options;
   const { provider } = options;
@@ -60,6 +62,8 @@ export async function executeApplication(options: {
   let inspection: ApplicationInspection | undefined;
   let submitted = false;
   let claimed = false;
+  // A fill-only run leaves the attached files on the page for the candidate to review.
+  let keepForReview = false;
   const stopped = new Promise<never>((_, reject) => {
     controller.signal.addEventListener("abort", () => reject(unavailable()), { once: true });
   });
@@ -155,7 +159,8 @@ export async function executeApplication(options: {
     });
     // A challenge page is prepared completely but never submitted: the candidate completes the
     // challenge and submits themselves (ADR-046 amendment). The click below is unreachable for it.
-    const takeover = plan.requiresTakeover;
+    // A fill-only run is the same preparation the candidate reviews and submits themselves.
+    const takeover = plan.requiresTakeover || options.fillOnly === true;
     const plannedAttachments = plan.actions.filter((action) => action.kind === "attach_artifact");
     if (
       plannedAttachments.length !== files.length ||
@@ -323,7 +328,10 @@ export async function executeApplication(options: {
       throw unavailable();
     actionable(button);
     current();
-    if (takeover) return { kind: "challenge_required" };
+    if (takeover) {
+      keepForReview = options.fillOnly === true;
+      return { kind: "challenge_required" };
+    }
     // Spend synchronously before click. No later code path invokes click again.
     submitted = true;
     const clickedAt = Date.now();
@@ -382,10 +390,11 @@ export async function executeApplication(options: {
   } catch {
     return { kind: submitted || claimed ? "unrecognized_response" : "precondition_failed" };
   } finally {
-    abort();
+    if (keepForReview) controller.abort();
+    else abort();
     clearTimeout(timer);
     options.signal.removeEventListener("abort", abort);
     inspection?.dispose();
-    clearAttachments();
+    if (!keepForReview) clearAttachments();
   }
 }

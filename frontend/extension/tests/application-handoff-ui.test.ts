@@ -59,7 +59,7 @@ beforeEach(() => {
   });
   clipboard.mockClear();
   document.body.innerHTML =
-    '<button id="logout">Logout</button><section id="application-handoff" hidden><input><button data-handoff-load>Load</button><button data-handoff-form>Copy structure</button><button data-handoff-clear>Clear</button><button data-native-apply hidden>Apply</button><button data-native-clear hidden>Clear files</button><div data-handoff-content></div><div data-handoff-status></div></section>';
+    '<button id="logout">Logout</button><section id="application-handoff" hidden><input><button data-handoff-load>Load</button><button data-handoff-form>Copy structure</button><button data-handoff-clear>Clear</button><button data-native-fill hidden>Fill</button><button data-native-apply hidden>Apply</button><button data-native-clear hidden>Clear files</button><div data-handoff-content></div><div data-handoff-status></div></section>';
   for (const target of [window, document]) {
     const original = target.addEventListener.bind(target);
     vi.spyOn(target, "addEventListener").mockImplementation(((
@@ -104,6 +104,25 @@ function copyButton() {
   return button;
 }
 describe("manual handoff UI", () => {
+  it("fills for the candidate's review without asking to submit", async () => {
+    send.mockImplementation(async (message) =>
+      message.action === "application_native_apply"
+        ? { ok: true, outcome: "review_required" }
+        : { ok: true },
+    );
+    control<HTMLInputElement>("input").value = LINK;
+    const fill = control<HTMLButtonElement>("[data-native-fill]");
+    expect(fill.hidden).toBe(false);
+    fill.click();
+    await flush();
+    expect(send).toHaveBeenCalledWith({
+      action: "application_native_apply",
+      reviewLink: LINK,
+      fillOnly: true,
+    });
+    expect(control("[data-handoff-status]").textContent).toContain("Nothing was submitted");
+  });
+
   it("allows Clear during a pending Apply and blocks duplicate Apply", async () => {
     let finish: (value: unknown) => void = () => undefined;
     send.mockImplementation(async (message) =>

@@ -17,8 +17,8 @@ import { activeJobRevisionDigestInput } from "@ai-job-apply/api-contracts/job-re
 import { employerPageForSource } from "@ai-job-apply/ats-sdk/observed-form";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 import { applicationExecutionApi } from "./application-execution-api";
-import { commandFieldsFromPacket } from "./command-fields";
 import { readJson } from "./application-handoff";
+import { commandFieldsFromPacket } from "./command-fields";
 import type { NativeTransferSelection, TransferredNativeFile } from "./native-material-transfer";
 import { sameNativeTransferBinding } from "./native-transfer-binding";
 import { providerForUrl } from "./providers";
@@ -31,6 +31,8 @@ export async function executeApprovedApplication(options: {
   registry: AdapterRegistry;
   identity(signal: AbortSignal): Promise<{ accessToken: string; identityFence: string }>;
   preflight(selection: NativeTransferSelection, signal: AbortSignal): Promise<void>;
+  /** Fill for the candidate's review without submitting. */
+  fillOnly?: boolean;
   owned: {
     files: TransferredNativeFile[];
     signal: AbortSignal;
@@ -452,6 +454,7 @@ export async function executeApprovedApplication(options: {
       variantId: profile.variantId,
       adapterVersion: profile.adapterVersion,
       deadline,
+      ...(options.fillOnly ? { fillOnly: true } : {}),
       fields: commandFieldsFromPacket(originalPacket),
       files: options.owned.files.map((file) => ({
         kind: file.kind,
