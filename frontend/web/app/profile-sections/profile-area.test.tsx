@@ -128,6 +128,7 @@ describe("ProfileArea", () => {
     expect(tabs.map((text) => text?.replace(/ \(.*\)/u, ""))).toEqual([
       "Personal",
       "Education",
+      "Screening questions",
       "Work experience",
       "Skills",
       "Application answers",
@@ -142,6 +143,21 @@ describe("ProfileArea", () => {
     );
     await click("Job preferences");
     expect(container.textContent).toContain("Preferences panel");
+  });
+
+  it("opens the tab the apply popup links to", async () => {
+    window.history.replaceState(null, "", "/profile?tab=screening&from=apply");
+    try {
+      await render();
+      expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
+        "Screening questions",
+      );
+      expect(container.textContent).toContain(
+        "Are you legally authorized to work in the United States?",
+      );
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
   });
 
   it("adds a skill with a versioned, idempotent request and deletes it only after confirming", async () => {

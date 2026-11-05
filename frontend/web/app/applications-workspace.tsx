@@ -42,13 +42,14 @@ import {
   NATIVE_MATERIAL_SIGN_OUT_CHANNEL,
 } from "../lib/native-material-sign-out-signal";
 import { resumeFileName } from "../lib/resume-file-name";
-import { ApplicationBasicsGate } from "./application-basics-gate";
+import { ApplicationBasicsDialog } from "./application-basics-gate";
 import { ApplicationPreparationProgress } from "./application-preparation-progress";
 import { type ApplicationReviewActions, ApplicationReviewPanel } from "./application-review-panel";
 import {
   acknowledgementsForApply,
   applyBlockers,
   canApply,
+  explicitReviewFields,
   reviewGroups,
 } from "./application-review-state";
 import { ApplyPanel, type ExtensionHandoffState, safeApplyUrl } from "./apply-panel";
@@ -133,6 +134,22 @@ function JobApplicationWorkspace({
   const headingId = useId();
   const basics = useApplicationBasics(requireBasics);
   const basicsBlocked = requireBasics && (basics.status !== "ready" || basics.missing.length > 0);
+  // The popup opens by itself once, when the profile check finds something missing, and on Apply.
+  const [basicsOpen, setBasicsOpen] = useState(false);
+  const basicsAnnounced = useRef(false);
+  useEffect(() => {
+    if (!requireBasics || basics.status === "loading") return;
+    if (!basicsBlocked) {
+      basicsAnnounced.current = false;
+      setBasicsOpen(false);
+    } else if (!basicsAnnounced.current) {
+      basicsAnnounced.current = true;
+      setBasicsOpen(true);
+    }
+  }, [requireBasics, basics.status, basicsBlocked]);
+  // The candidate's screening answers, kept where the asynchronous prepare steps can read them.
+  const screening = useRef(basics.answers);
+  screening.current = basics.answers;
   const candidateName = useCandidateName();
   const resumeFileNameFor = (current: Application) =>
     resumeFileName({ candidateName, jobTitle, applicationId: current.id });
@@ -189,7 +206,11 @@ function JobApplicationWorkspace({
     view.kind === "preparing" ? 1000 : 15_000,
   );
   const groups = application ? reviewGroups(application) : undefined;
-  const blockers = groups ? applyBlockers(groups, acknowledged) : [];
+  // The candidate's own saved answers need no per-application check, so none is asked for.
+  const autoAcknowledged = new Set(
+    groups ? explicitReviewFields(groups).map((f) => f.fieldKey) : [],
+  );
+  const blockers = groups ? applyBlockers(groups, autoAcknowledged) : [];
   const href = safeApplyUrl(applyUrl);
 
   const acceptApplication = useCallback((next: Application) => {
@@ -500,7 +521,7 @@ function JobApplicationWorkspace({
       );
     const form = settings.selected?.form ?? current.currentPacket?.form;
     const selectedKeys = new Set(selections.map((selection) => selection.fieldKey));
-    const userEntries = Object.entries({ ...previousEntries, ...answers })
+    const userEntries = Object.entries({ ...previousEntries, ...answers, ...screening.current })
       .filter(([fieldKey]) => !selectedKeys.has(fieldKey))
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([fieldKey, value]) => ({ fieldKey, value }));
@@ -584,7 +605,6 @@ function JobApplicationWorkspace({
     (packet?.artifactHashes.resume !== undefined &&
       shownResumeHash === packet.artifactHashes.resume);
   const applyDisabled =
-    basicsBlocked ||
     busy ||
     checking ||
     !href ||
@@ -597,7 +617,10 @@ function JobApplicationWorkspace({
 
   function apply(forceUploaded = false) {
     // Nothing starts until the Profile holds the basics every application asks.
-    if (basicsBlocked) return;
+    if (basicsBlocked) {
+      setBasicsOpen(true);
+      return;
+    }
     // A second click while one is running must not open another employer tab.
     if (starting.current) return;
     const displayedHash = packet?.packetHash;
@@ -651,12 +674,14 @@ function JobApplicationWorkspace({
       // Checks and the resume preview belong to the packet the candidate was shown. A packet that
       // was rebuilt during this click inherits none of them.
       const rebuilt = next.currentPacket?.packetHash !== displayedHash;
-      const confirmed: ReadonlySet<string> = rebuilt ? new Set<string>() : acknowledged;
+      const confirmed: ReadonlySet<string> = new Set(
+        explicitReviewFields(nextGroups).map((field) => field.fieldKey),
+      );
       if (!canApply(nextGroups, confirmed) || (rebuilt && resume === "generated")) {
         setNotice(
           rebuilt
-            ? "Your answers were updated. Review them below, then press Apply."
-            : "Answer or check the items below, then press Apply.",
+            ? "Your answers were updated. Check the resume shown above, then press Apply."
+            : "Some answers are still missing. Complete your profile, then press Apply.",
         );
         throw new Error("Needs input");
       }
@@ -874,6 +899,13 @@ function JobApplicationWorkspace({
   return (
     <section aria-labelledby={headingId} className="apply-flow">
       <h2 id={headingId}>Apply to this job</h2>
+      {requireBasics ? (
+        <ApplicationBasicsDialog
+          basics={basics}
+          open={basicsOpen}
+          onClose={() => setBasicsOpen(false)}
+        />
+      ) : null}
       {checking && !application ? (
         <p role="status">Checking for an existing application...</p>
       ) : lookupFailed ? (
@@ -920,21 +952,6 @@ function JobApplicationWorkspace({
                   {...(fetchImplementation ? { fetchImplementation } : {})}
                 />
               ) : null}
-              {application && actions && !preparation ? (
-                <ApplicationReviewPanel
-                  application={application}
-                  actions={actions}
-                  acknowledged={acknowledged}
-                  onToggle={(fieldKey) =>
-                    setAcknowledged((current) => {
-                      const next = new Set(current);
-                      if (next.has(fieldKey)) next.delete(fieldKey);
-                      else next.add(fieldKey);
-                      return next;
-                    })
-                  }
-                />
-              ) : null}
               {application &&
               !preparation &&
               savedAnswerSelectionEnabled &&
@@ -956,7 +973,6 @@ function JobApplicationWorkspace({
                   }}
                 />
               ) : null}
-              {requireBasics ? <ApplicationBasicsGate basics={basics} /> : null}
               <section aria-label="Apply" className="apply-action">
                 <p>
                   {plan.resume === "generated"

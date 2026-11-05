@@ -687,7 +687,7 @@ describe("ApplicationsWorkspace: Apply", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("blocks Apply until empty answers are given and sensitive answers are checked", async () => {
+  it("blocks Apply while an answer only the candidate can give is missing, and asks for no per-answer checks", async () => {
     const bff = new FakeBff();
     bff.needsInput = true;
     bff.sensitive = true;
@@ -695,16 +695,16 @@ describe("ApplicationsWorkspace: Apply", () => {
     // Preparing the packet is part of Apply; with answers needed it stops before approval.
     await click("Apply");
     expect(bff.approvals()).toEqual([]);
-    expect(container.textContent).toContain("We need your answer");
-    expect(container.textContent).toContain("Check these answers");
+    expect(container.textContent).not.toContain("Check these answers");
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull();
     expect(button("Apply")?.disabled).toBe(true);
     expect(container.textContent).toContain("1 answer(s) still need your input.");
-    expect(container.textContent).toContain("1 answer(s) still need your check.");
+    expect(container.textContent).not.toContain("still need your check");
     expect(openedTab.location.replace).not.toHaveBeenCalled();
     expect(openedTab.close).toHaveBeenCalled();
   });
 
-  it("requires the sensitive answer check and sends exactly what was checked", async () => {
+  it("sends the candidate's own saved answers as confirmed, without asking again", async () => {
     const bff = new FakeBff();
     bff.sensitive = true;
     await mount(bff);
@@ -712,12 +712,7 @@ describe("ApplicationsWorkspace: Apply", () => {
     // Make the generated state irrelevant: apply with the uploaded resume once the packet exists.
     bff.mode = "never";
     await click("Skip and apply with my uploaded resume");
-    expect(bff.approvals()).toEqual([]);
-    expect(button("Apply")?.disabled).toBe(true);
-    const box = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
-    await act(async () => box?.click());
-    expect(button("Apply")?.disabled).toBe(false);
-    await click("Apply");
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull();
     expect(bff.approvals()).toEqual([
       expect.objectContaining({
         acknowledgedFieldKeys: ["authorization.work_in_country", "documents.resume"],
@@ -758,21 +753,61 @@ describe("ApplicationsWorkspace: Apply", () => {
     expect(window.open).toHaveBeenCalledTimes(1);
   });
 
-  it("does not carry checks over to a packet rebuilt during Apply", async () => {
+  it("approves the packet it rebuilt during Apply with that packet's own answers", async () => {
     const bff = new FakeBff();
     bff.sensitive = true;
     bff.mode = "never";
     await mount(bff);
     await click("Generate resume");
-    const box = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
-    await act(async () => box?.click());
-    // The generated packet is still preparing, so Apply rebuilds it for the uploaded resume. The
-    // candidate checked the old packet's answers, not the new one's.
+    // The generated packet is still preparing, so Apply rebuilds it for the uploaded resume. There
+    // are no per-answer checks to carry over: the saved answers travel with the packet itself.
     await click("Apply");
-    expect(bff.approvals()).toEqual([]);
-    expect(container.textContent).toContain("Your answers were updated");
-    expect(openedTab.location.replace).not.toHaveBeenCalled();
-    expect(openedTab.close).toHaveBeenCalled();
+    expect(bff.approvals()).toEqual([
+      expect.objectContaining({
+        acknowledgedFieldKeys: ["authorization.work_in_country", "documents.resume"],
+      }),
+    ]);
+  });
+
+  it("holds Apply back with a popup that sends the candidate to the unfilled part of their profile", async () => {
+    const bff = new FakeBff();
+    const profileJson = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: {
+          "content-type": status === 200 ? "application/json" : "application/problem+json",
+        },
+      });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string) =>
+        String(input).endsWith("/personal")
+          ? profileJson({ code: "not_found" }, 404)
+          : String(input).includes("education-entries")
+            ? profileJson({ entries: [] })
+            : profileJson({ answers: [] }),
+      ),
+    );
+    try {
+      await mount(bff, { requireBasics: true });
+      const dialog = container.querySelector("dialog");
+      expect(dialog?.hasAttribute("open")).toBe(true);
+      expect(dialog?.textContent).toContain("Complete your screening to apply");
+      expect(dialog?.querySelector("a")?.getAttribute("href")).toBe(
+        "/profile?tab=personal&from=apply",
+      );
+      expect(container.textContent).not.toContain("Check these answers");
+      // Closing it does not let the candidate through: Apply opens it again and approves nothing.
+      await act(async () =>
+        (Array.from(dialog?.querySelectorAll("button") ?? []).at(-1) as HTMLElement).click(),
+      );
+      expect(container.querySelector("dialog")?.hasAttribute("open")).toBe(false);
+      await click("Apply");
+      expect(container.querySelector("dialog")?.hasAttribute("open")).toBe(true);
+      expect(bff.approvals()).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("opens an already approved application at the employer step", async () => {

@@ -49,14 +49,14 @@ candidate has set to fill the application. What changed in this step:
   supersedes the D3-013 threshold for those fields.
 - Consent, signatures, challenges, CAPTCHAs, one-time codes and documents are not answers: they are
   never automated and never travel in the execution command.
-- The job page asks the common Yes/No questions (work authorization, sponsorship, whether the posted
-  salary meets expectations) in the review step. The answer is the candidate's own entry on that
-  application and is acknowledged in the packet review like any answer the candidate gives.
+- The candidate answers the screening questions (work authorization, sponsorship) once, in a Screening
+  questions tab of the Profile, saved as ordinary saved answers. The Profile service no longer refuses
+  those questions. Apply is held back by a popup, not an inline block, until the Profile has them and
+  the other basics; the popup links to the first tab with something missing. An application sends the
+  saved answers as the candidate's own entries and no per-answer check is asked for.
 - A "No" to a United States question is not used for an employer question that also names another
   country, because it says nothing about that country.
 
-Not changed yet, and needing a separate decision because they are data-affecting: the saved-answer
-vault, its tables, encryption, export and deletion coverage, and the Profile service's refusal to
-store these questions as Application answers. Saving the answers once in the Profile, as the owner
-wants, needs the Profile service to accept them and the packet source to read them, which is a backend
-release. Until then the vault tab is gone from the Profile page and nothing new is written to it.
+Not changed yet, and needing a separate decision because it is data-affecting: the saved-answer vault,
+its tables, encryption, and its parts of data export and account deletion. The vault tab is gone from
+the Profile page and nothing new is written to it.

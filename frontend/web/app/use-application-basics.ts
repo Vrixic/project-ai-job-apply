@@ -1,27 +1,31 @@
 "use client";
 
-import type { ProfileEducationEntry } from "@ai-job-apply/api-contracts";
+import type { ProfileApplicationAnswer, ProfileEducationEntry } from "@ai-job-apply/api-contracts";
 import { useCallback, useEffect, useState } from "react";
 import { type MissingBasic, missingBasics } from "../lib/application-basics";
+import { type ScreeningFieldKey, screeningAnswers } from "../lib/screening-questions";
 import { loadEntries, loadPersonal } from "./profile-sections/api";
 import { PROFILE_SECTIONS } from "./profile-sections/sections";
 
 export interface ApplicationBasics {
   status: "loading" | "ready" | "unavailable";
   missing: readonly MissingBasic[];
+  /** The candidate's screening answers, as the entries an application is prepared with. */
+  answers: Partial<Record<ScreeningFieldKey, boolean>>;
   retry(): void;
 }
 
 /**
- * Checks the candidate's saved Profile for the basics every application needs. It fails closed: a
- * profile that cannot be read is not a complete one. It checks again when the candidate comes back to
- * this tab, since they complete the basics in the Profile.
+ * Checks the candidate's saved Profile for the basics and screening answers every application needs.
+ * It fails closed: a profile that cannot be read is not a complete one. It checks again when the
+ * candidate comes back to this tab, since they complete the basics in the Profile.
  */
 export function useApplicationBasics(enabled: boolean): ApplicationBasics {
-  const [state, setState] = useState<{
-    status: "loading" | "ready" | "unavailable";
-    missing: readonly MissingBasic[];
-  }>({ status: "loading", missing: [] });
+  const [state, setState] = useState<Omit<ApplicationBasics, "retry">>({
+    status: "loading",
+    missing: [],
+    answers: {},
+  });
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((current) => current + 1), []);
 
@@ -31,17 +35,24 @@ export function useApplicationBasics(enabled: boolean): ApplicationBasics {
     const check = () => {
       void (async () => {
         try {
-          const [personal, entries] = await Promise.all([
+          const [personal, entries, saved] = await Promise.all([
             loadPersonal(),
             loadEntries(PROFILE_SECTIONS.education),
+            loadEntries(PROFILE_SECTIONS.applicationAnswer),
           ]);
           if (!current) return;
+          const answers = screeningAnswers(saved as ProfileApplicationAnswer[]);
           setState({
             status: "ready",
-            missing: missingBasics({ personal, education: entries as ProfileEducationEntry[] }),
+            answers,
+            missing: missingBasics({
+              personal,
+              education: entries as ProfileEducationEntry[],
+              screening: answers,
+            }),
           });
         } catch {
-          if (current) setState({ status: "unavailable", missing: [] });
+          if (current) setState({ status: "unavailable", missing: [], answers: {} });
         }
       })();
     };

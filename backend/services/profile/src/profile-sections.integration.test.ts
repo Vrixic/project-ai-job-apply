@@ -13,7 +13,6 @@ import {
   ProfileSectionLimitError,
   ProfileSectionNotFoundError,
   ProfileSectionOrderError,
-  ProfileSectionRestrictedQuestionError,
   ProfileSectionVersionConflictError,
 } from "./profile-sections.js";
 
@@ -240,17 +239,15 @@ describeWithDatabase("PostgresProfileSectionStore (ADR-052)", () => {
         trace,
       ),
     ).rejects.toThrow(ProfileSectionDuplicateError);
+    // Screening questions are ordinary saved answers: the candidate's own, reused as given.
     for (const question of [
       "Are you legally authorized to work in the United States?",
       "Will you require visa sponsorship?",
-      "What is your gender?",
-      "Are you a protected veteran?",
     ]) {
       await expect(
-        store.createEntry(owner, "applicationAnswer", { question, answer: "x" }, key(), trace),
-      ).rejects.toThrow(ProfileSectionRestrictedQuestionError);
+        store.createEntry(owner, "applicationAnswer", { question, answer: "Yes" }, key(), trace),
+      ).resolves.toMatchObject({ question, answer: "Yes" });
     }
-    // An update cannot turn a saved question into a restricted one either.
     await expect(
       store.updateEntry(
         owner,
@@ -260,7 +257,7 @@ describeWithDatabase("PostgresProfileSectionStore (ADR-052)", () => {
         key(),
         trace,
       ),
-    ).rejects.toThrow(ProfileSectionRestrictedQuestionError);
+    ).resolves.toMatchObject({ question: "Do you require sponsorship?" });
   });
 
   it("matches a saved answer only by the exact normalized question key, for its owner", async () => {
@@ -275,12 +272,22 @@ describeWithDatabase("PostgresProfileSectionStore (ADR-052)", () => {
     );
     const asked = await store.matchApplicationAnswer(owner, "  WHY do you want to work here?? ");
     expect(asked).toMatchObject({ id: saved.id, answer: "Synthetic reason." });
-    // Similar wording, other owners and restricted questions never match.
+    // Similar wording and other owners never match.
     expect(await store.matchApplicationAnswer(owner, "Why do you want to join us?")).toBeNull();
     expect(await store.matchApplicationAnswer(other, "Why do you want to work here?")).toBeNull();
     expect(
       await store.matchApplicationAnswer(owner, "Are you authorized to work in the US?"),
     ).toBeNull();
+    await store.createEntry(
+      owner,
+      "applicationAnswer",
+      { question: "Are you authorized to work in the US?", answer: "Yes" },
+      key(),
+      trace,
+    );
+    expect(
+      await store.matchApplicationAnswer(owner, "are you authorized to work in the us"),
+    ).toMatchObject({ answer: "Yes" });
     expect(await store.matchApplicationAnswer(owner, "   ")).toBeNull();
     // An edited answer is what matches afterwards; a deleted one no longer does.
     await store.updateEntry(
