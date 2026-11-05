@@ -4,6 +4,7 @@ import type {
   ProfileSkillEntry,
   ProfileWorkExperienceEntry,
 } from "@ai-job-apply/api-contracts";
+import { DEGREE_OPTIONS, FIELD_OF_STUDY_OPTIONS } from "../../lib/education-options";
 
 export type ProfileEntryRecord =
   | ProfileEducationEntry
@@ -11,7 +12,7 @@ export type ProfileEntryRecord =
   | ProfileSkillEntry
   | ProfileApplicationAnswer;
 
-export type FieldType = "text" | "textarea" | "date" | "bullets";
+export type FieldType = "text" | "textarea" | "date" | "bullets" | "select";
 
 export interface FieldConfig {
   name: string;
@@ -20,6 +21,8 @@ export interface FieldConfig {
   required?: boolean;
   maxLength: number;
   help?: string;
+  /** The choices of a select field. */
+  options?: readonly string[];
 }
 
 export type SectionKey = "education" | "workExperience" | "skill" | "applicationAnswer";
@@ -58,8 +61,14 @@ export const PROFILE_SECTIONS: Readonly<Record<SectionKey, ProfileSectionConfig>
     empty: "No education saved yet.",
     fields: [
       { name: "school", label: "School", type: "text", required: true, maxLength: 200 },
-      { name: "degree", label: "Degree", type: "text", maxLength: 200 },
-      { name: "fieldOfStudy", label: "Field of study", type: "text", maxLength: 200 },
+      { name: "degree", label: "Degree", type: "select", options: DEGREE_OPTIONS, maxLength: 200 },
+      {
+        name: "fieldOfStudy",
+        label: "Field of study",
+        type: "select",
+        options: FIELD_OF_STUDY_OPTIONS,
+        maxLength: 200,
+      },
       { name: "startDate", label: "Start date", type: "date", maxLength: 10 },
       { name: "endDate", label: "End date", type: "date", maxLength: 10 },
     ],
