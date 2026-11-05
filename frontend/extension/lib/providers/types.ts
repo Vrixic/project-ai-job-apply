@@ -63,7 +63,12 @@ export interface ApplicationProvider {
     inspection: ApplicationInspection,
     packet: readonly PacketValue[],
     authority: FillAuthority,
-  ): Promise<{ filled: readonly string[]; reviewRequired: boolean }>;
+  ): Promise<{
+    filled: readonly string[];
+    selected?: readonly string[];
+    notes?: readonly string[];
+    reviewRequired: boolean;
+  }>;
   /** The one element that contains the application's controls and submit control. */
   root(document: Document): Element;
   /** The one submit control inside the root for the profile's selector. */

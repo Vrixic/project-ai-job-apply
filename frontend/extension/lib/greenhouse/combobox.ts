@@ -64,6 +64,9 @@ const shownValue = (control: HTMLInputElement) =>
     control.closest(".select__control")?.querySelector(".select__single-value")?.textContent,
   );
 
+/** Fields whose dropdown the board gives an "Other" entry for a value it does not list. */
+const OTHER_FALLBACK = new Set(["education.school", "education.degree", "education.field"]);
+
 export interface ComboboxHooks {
   /** False once the run is stopped, past its deadline or no longer approved. */
   current(): boolean;
@@ -72,8 +75,10 @@ export interface ComboboxHooks {
 }
 
 /**
- * Chooses the option that is exactly the approved value. Returns the chosen label, or undefined
- * when there is no single exact option (the dropdown is then left empty for the candidate).
+ * Chooses the option that is exactly the approved value. For education fields a value the board
+ * does not list gets the board's own "Other" instead, reported as a fallback. Returns the chosen
+ * label, or undefined when there is no single exact option (the dropdown is then left empty for
+ * the candidate).
  */
 export async function selectExactOption(
   control: HTMLInputElement,
@@ -81,7 +86,7 @@ export async function selectExactOption(
   fieldKey: string,
   value: string,
   hooks: ComboboxHooks,
-): Promise<string | undefined> {
+): Promise<{ label: string; fallback: boolean } | undefined> {
   const setInput = (text: string) => {
     Object.getOwnPropertyDescriptor(view.HTMLInputElement.prototype, "value")?.set?.call(
       control,
@@ -113,6 +118,29 @@ export async function selectExactOption(
     while (!done() && Date.now() < end && hooks.current()) await hooks.wait(100);
     return done();
   };
+  // A list the board cuts off at a page (a searched list) must be searched; a shorter one is complete.
+  const searchable = () =>
+    optionsOf(control).length >= 100 ||
+    listboxOf(control)?.querySelector(".select__menu-notice--loading") != null;
+  // After typing, wait for the board's list to settle. It first filters what it already has, then
+  // loads, so "none" and "other options" only count once the board has had time to load.
+  const settle = async (label: string) => {
+    const start = Date.now();
+    let otherSince = 0;
+    while (Date.now() < start + 4_000 && hooks.current()) {
+      if (exactOption(optionsOf(control), fieldKey, label)) return;
+      const list = listboxOf(control);
+      const loading = list?.querySelector(".select__menu-notice--loading") != null;
+      if (Date.now() - start >= 1_200 && !loading) {
+        if (list?.querySelector(".select__menu-notice--no-options")) return;
+        if (optionsOf(control).length > 0) {
+          otherSince ||= Date.now();
+          if (Date.now() - otherSince > 1_000) return;
+        }
+      } else otherSince = 0;
+      await hooks.wait(100);
+    }
+  };
   const giveUp = async () => {
     if (control.value) setInput("");
     key("Escape");
@@ -126,18 +154,27 @@ export async function selectExactOption(
   // The options render a moment after the menu opens; a searched list stays empty until typed into.
   await until(() => optionsOf(control).length > 0, 800);
   let option = exactOption(optionsOf(control), fieldKey, value);
-  if (!option) {
+  if (!option && searchable()) {
     // A long list is searched: type the value and wait for the board to list what it has.
     setInput(value);
-    await until(() => exactOption(optionsOf(control), fieldKey, value) !== undefined, 4_000);
+    await settle(value);
     option = exactOption(optionsOf(control), fieldKey, value);
+  }
+  let fallback = false;
+  if (!option && OTHER_FALLBACK.has(fieldKey) && hooks.current()) {
+    if (searchable() || control.value) {
+      setInput("Other");
+      await settle("Other");
+    }
+    option = exactOption(optionsOf(control), fieldKey, "Other");
+    fallback = option !== undefined;
   }
   if (!option || !hooks.current()) return giveUp();
   const label = option.textContent?.replace(/\s+/gu, " ").trim() ?? "";
   await press(option);
   (option as HTMLElement).click();
   if (!(await until(() => shownValue(control) === normalize(label), 1_500))) return giveUp();
-  return label;
+  return { label, fallback };
 }
 
 /** Whether the dropdown shows exactly this label as its chosen value. */

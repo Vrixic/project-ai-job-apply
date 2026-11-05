@@ -3,6 +3,31 @@ import { FORM_CAPTURE_FAILURE, HANDOFF_FAILURE } from "./application-handoff";
 import { extensionConfiguration } from "./config";
 
 /** Popup/side-panel memory only. No document content or persistent handoff queue. */
+const NOTE_FIELDS: Readonly<Record<string, string>> = {
+  "education.school": "School",
+  "education.degree": "Degree",
+  "education.field": "Discipline",
+};
+
+/** What the fill left to the candidate, in words. The codes carry no page text and no value. */
+function fillNotes(notes: unknown): string {
+  if (!Array.isArray(notes)) return "";
+  const parts: string[] = [];
+  for (const note of notes) {
+    if (typeof note !== "string") continue;
+    const [kind, rest = ""] = note.split(":");
+    if (kind === "other" && NOTE_FIELDS[rest])
+      parts.push(
+        `${NOTE_FIELDS[rest]} was not in the board's list, so Other was chosen: check it.`,
+      );
+    else if (kind === "needs" && /^[0-9]{1,3}$/u.test(rest))
+      parts.push(
+        `${rest} required question${rest === "1" ? "" : "s"} still need${rest === "1" ? "s" : ""} you.`,
+      );
+  }
+  return parts.length ? ` ${parts.join(" ")}` : "";
+}
+
 export function mountApplicationHandoff() {
   const section = document.querySelector<HTMLElement>("#application-handoff");
   if (!section || !extensionConfiguration.applicationHandoffWebOrigin) return;
@@ -51,7 +76,7 @@ export function mountApplicationHandoff() {
         if (action === "fill") {
           status.textContent =
             response.ok && response.result === "challenge_required"
-              ? "Filled for your review. Nothing was submitted. Check the employer page; submit it yourself or leave it."
+              ? `Filled for your review. Nothing was submitted. Check the employer page; submit it yourself or leave it.${fillNotes(response.notes)}`
               : `The page could not be filled completely. Nothing was submitted. Check the employer page and try again.${where}${typeof response.result === "string" ? ` (page run: ${response.result}${typeof response.pageStage === "string" && response.pageStage ? `, at ${response.pageStage}` : ""})` : ""}`;
           return;
         }

@@ -174,14 +174,35 @@ describe("filling a custom dropdown", () => {
     expect(control.querySelector(".select__single-value")?.textContent).toBe("Bachelor's Degree");
     expect(input.getAttribute("aria-expanded")).toBe("false");
   });
-  it("leaves the dropdown untouched when no option is exactly the value", async () => {
-    const { input, control } = dropdownPage(["Associate's Degree", "Other"]);
+  it("chooses the board's Other, and says so, when an education value is not listed", async () => {
+    const { control } = dropdownPage(["Associate's Degree", "Other"]);
+    const result = await fillGreenhouseFields(
+      inspectGreenhouseApplication(document, URL),
+      packet("Certificate"),
+      authority(),
+    );
+    expect(result.selected).toEqual(["f0"]);
+    expect(result.notes).toEqual(["other:education.degree"]);
+    expect(control.querySelector(".select__single-value")?.textContent).toBe("Other");
+  });
+  it("does not report a fallback when the exact option was chosen", async () => {
+    dropdownPage(["Bachelor's Degree", "Other"]);
+    const result = await fillGreenhouseFields(
+      inspectGreenhouseApplication(document, URL),
+      packet("Bachelor of Science"),
+      authority(),
+    );
+    expect(result.notes).toBeUndefined();
+  });
+  it("leaves the dropdown untouched when the board lists neither the value nor Other", async () => {
+    const { input, control } = dropdownPage(["Associate's Degree", "Master's Degree"]);
     const result = await fillGreenhouseFields(
       inspectGreenhouseApplication(document, URL),
       packet("Certificate"),
       authority(),
     );
     expect(result.selected).toEqual([]);
+    expect(result.notes).toBeUndefined();
     expect(control.querySelector(".select__single-value")).toBeNull();
     expect(input.value).toBe("");
   });

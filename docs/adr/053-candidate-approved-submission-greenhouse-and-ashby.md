@@ -80,7 +80,9 @@ list is long, and chooses the one option whose text is exactly that value (case 
 A degree is also matched to its listed level by a fixed table in `lib/greenhouse/combobox.ts`
 ("Bachelor of Science" to "Bachelor's Degree"); that table is the only mapping. No exact option, a
 doubt, or an answer the candidate already chose leaves the dropdown to the candidate, with its typed
-search cleared. Restricted fields (authorization, demographic, disclosure and the like) are still never
+search cleared. For school, degree and discipline only, a value the board does not list gets the
+board's own "Other" entry instead (owner direction 2026-11-05), and the popup says so; it also says
+how many required questions still need the candidate. Restricted fields (authorization, demographic, disclosure and the like) are still never
 filled. A "Preferred First Name" nobody saved defaults to the approved first name, as the full name is
 composed from the first and last name; it adds no new candidate fact. Attached files are named
 `First_Last_Job_Title.pdf` from the approved names and the job title the extension read itself.

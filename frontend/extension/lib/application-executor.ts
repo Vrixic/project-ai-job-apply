@@ -287,7 +287,11 @@ export async function executeApprovedApplication(options: {
     );
     return true;
   };
-  const record = async (result: ApplicationSubmissionResultRequest, pageStage?: string) => {
+  const record = async (
+    result: ApplicationSubmissionResultRequest,
+    pageStage?: string,
+    notes?: readonly string[],
+  ) => {
     if (!api || !attempt || resultSent) throw unavailable();
     resultSent = true;
     const response = await bounded(api.result(attempt.id, result, crypto.randomUUID()));
@@ -317,6 +321,7 @@ export async function executeApprovedApplication(options: {
       // What the page run reported, with no content, so the popup can say whether it filled.
       result: result.kind,
       ...(pageStage ? { pageStage } : {}),
+      ...(notes?.length ? { notes: [...notes] } : {}),
       reviewLink: selection.reviewLink,
     };
   };
@@ -546,7 +551,7 @@ export async function executeApprovedApplication(options: {
       )
         throw unavailable();
     }
-    return await record(response.result, response.stage);
+    return await record(response.result, response.stage, response.notes);
   } catch {
     // A sent dispatch is ambiguous even if its acknowledgement was lost. Never resend it.
     if (dispatchSent && attempt && api && !resultSent && !controller.signal.aborted) {

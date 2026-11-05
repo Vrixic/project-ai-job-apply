@@ -128,6 +128,7 @@ if (!Object.hasOwn(globalThis, installed)) {
             throw Error("ApplicationExecutionUnavailable");
         };
         let ran = "";
+        let notes: readonly string[] = [];
         let total = 0;
         const kinds = new Set<string>();
         for (const file of message.files) {
@@ -184,6 +185,9 @@ if (!Object.hasOwn(globalThis, installed)) {
           files: state.files,
           ...(message.fillOnly ? { fillOnly: true } : {}),
           paceMs: 450,
+          onNotes: (list) => {
+            notes = list;
+          },
           onStage: (stage) => {
             ran = stage;
           },
@@ -218,6 +222,7 @@ if (!Object.hasOwn(globalThis, installed)) {
           nonce: message.nonce,
           attemptId: message.attemptId,
           result,
+          ...(notes.length ? { notes: [...notes] } : {}),
           ...(result.kind !== "confirmed" && result.kind !== "challenge_required" && ran
             ? { stage: ran }
             : {}),

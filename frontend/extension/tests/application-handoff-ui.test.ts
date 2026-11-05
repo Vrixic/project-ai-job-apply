@@ -123,6 +123,27 @@ describe("manual handoff UI", () => {
     expect(control("[data-handoff-status]").textContent).toContain("Filled for your review");
   });
 
+  it("says what the fill left to the candidate", async () => {
+    send.mockImplementation(async (message) =>
+      message.action === "application_native_apply"
+        ? {
+            ok: true,
+            outcome: "review_required",
+            result: "challenge_required",
+            notes: ["other:education.school", "needs:3", "other:unknown.key", "needs:x"],
+          }
+        : { ok: true },
+    );
+    control<HTMLInputElement>("input").value = LINK;
+    control<HTMLButtonElement>("[data-native-fill]").click();
+    await flush();
+    const text = control("[data-handoff-status]").textContent ?? "";
+    expect(text).toContain("School was not in the board's list, so Other was chosen: check it.");
+    expect(text).toContain("3 required questions still need you.");
+    expect(text).not.toContain("unknown.key");
+    expect(text).not.toContain("needs:x");
+  });
+
   it("allows Clear during a pending Apply and blocks duplicate Apply", async () => {
     let finish: (value: unknown) => void = () => undefined;
     send.mockImplementation(async (message) =>
