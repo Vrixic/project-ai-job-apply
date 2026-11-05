@@ -71,6 +71,20 @@ because that needs a real submission, which was not made.
    the exact adapter version and implementation hash. The production extension distribution still needs
    the legal and security reviews (LR-D3-01/02); this ADR changes nothing about those gates.
 
+## Amendment 2026-11-05: exact selection in custom dropdowns
+
+The Greenhouse board lists some fields (school, degree, discipline) in custom dropdowns, not native
+selects. The extension now drives such a dropdown only when an approved packet value maps to the
+field: it opens the dropdown with a mouse press and release, searches it by typing the value when the
+list is long, and chooses the one option whose text is exactly that value (case and spacing aside).
+A degree is also matched to its listed level by a fixed table in `lib/greenhouse/combobox.ts`
+("Bachelor of Science" to "Bachelor's Degree"); that table is the only mapping. No exact option, a
+doubt, or an answer the candidate already chose leaves the dropdown to the candidate, with its typed
+search cleared. Restricted fields (authorization, demographic, disclosure and the like) are still never
+filled. A "Preferred First Name" nobody saved defaults to the approved first name, as the full name is
+composed from the first and last name; it adds no new candidate fact. Attached files are named
+`First_Last_Job_Title.pdf` from the approved names and the job title the extension read itself.
+
 ## Enabling (D3-159)
 
 The execution build enables providers by name through `EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON`

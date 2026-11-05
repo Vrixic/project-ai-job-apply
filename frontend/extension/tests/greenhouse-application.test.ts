@@ -124,7 +124,7 @@ describe("Greenhouse local adapter primitives", () => {
         packet,
         auth,
       ),
-    ).toEqual({ filled: [], reviewRequired: true });
+    ).toEqual({ filled: [], selected: [], reviewRequired: true });
     expect(auth.revalidateApproval).not.toHaveBeenCalled();
     expect(dom.window.document.querySelector("input")?.value).toBe("");
   });
@@ -138,7 +138,7 @@ describe("Greenhouse local adapter primitives", () => {
       packet,
       authority(),
     );
-    expect(result).toEqual({ filled: ["f0"], reviewRequired: false });
+    expect(result).toEqual({ filled: ["f0"], selected: [], reviewRequired: false });
     expect(document.querySelector("input")?.value).toBe("synthetic@example.invalid");
     expect(submit).not.toHaveBeenCalled();
   });
@@ -173,7 +173,7 @@ describe("Greenhouse local adapter primitives", () => {
       packet,
       authority(),
     );
-    expect(result).toEqual({ filled: ["f0"], reviewRequired: false });
+    expect(result).toEqual({ filled: ["f0"], selected: [], reviewRequired: false });
     expect(native?.get?.call(input)).toBe("synthetic@example.invalid");
   });
   it("finds a control by its name after the board replaces an upload control", () => {
@@ -225,7 +225,7 @@ describe("Greenhouse local adapter primitives", () => {
       ],
       authority(),
     );
-    expect(result).toEqual({ filled: ["f0"], reviewRequired: true });
+    expect(result).toEqual({ filled: ["f0"], selected: [], reviewRequired: true });
     expect(change).not.toHaveBeenCalled();
     expect((document.querySelector("#last") as HTMLInputElement).value).toBe("");
   });
@@ -259,7 +259,7 @@ describe("Greenhouse local adapter primitives", () => {
       auth,
     );
     await vi.advanceTimersByTimeAsync(100);
-    expect(await result).toEqual({ filled: [], reviewRequired: true });
+    expect(await result).toEqual({ filled: [], selected: [], reviewRequired: true });
     expect(dom.window.document.querySelector("input")?.value).toBe("");
   });
   it("aborts a hung approval read without late effects", async () => {
@@ -280,7 +280,7 @@ describe("Greenhouse local adapter primitives", () => {
       auth,
     );
     controller.abort();
-    expect(await work).toEqual({ filled: [], reviewRequired: true });
+    expect(await work).toEqual({ filled: [], selected: [], reviewRequired: true });
     settle?.(undefined);
     await Promise.resolve();
     expect(dom.window.document.querySelector("input")?.value).toBe("");
@@ -302,7 +302,7 @@ describe("Greenhouse local adapter primitives", () => {
       packet,
       authority(),
     );
-    expect(result).toEqual({ filled: [], reviewRequired: true });
+    expect(result).toEqual({ filled: [], selected: [], reviewRequired: true });
     expect(dom.window.document.querySelector("input")?.value).toBe("");
   });
   it("does not fill controls disabled by a fieldset", async () => {
@@ -316,7 +316,7 @@ describe("Greenhouse local adapter primitives", () => {
         packet,
         authority(),
       ),
-    ).toEqual({ filled: [], reviewRequired: true });
+    ).toEqual({ filled: [], selected: [], reviewRequired: true });
   });
   it.each(["missing", "duplicate", "disabled"])(
     "refuses %s options without nearest matching",
@@ -367,7 +367,7 @@ describe("Greenhouse local adapter primitives", () => {
           packet,
           authority(),
         ),
-      ).toEqual({ filled: ["f0"], reviewRequired: true });
+      ).toEqual({ filled: ["f0"], selected: [], reviewRequired: true });
       expect(change).not.toHaveBeenCalled();
     },
   );
@@ -383,7 +383,7 @@ describe("Greenhouse local adapter primitives", () => {
         packet,
         authority(),
       ),
-    ).toEqual({ filled: ["f0"], reviewRequired: true });
+    ).toEqual({ filled: ["f0"], selected: [], reviewRequired: true });
     expect(input.value).toBe("");
   });
   it.each(["invalid", "pattern", "invalid-change"])(
@@ -405,7 +405,7 @@ describe("Greenhouse local adapter primitives", () => {
           packet,
           authority(),
         ),
-      ).toEqual({ filled: ["f0"], reviewRequired: true });
+      ).toEqual({ filled: ["f0"], selected: [], reviewRequired: true });
       expect(changes).toBe(mode === "invalid-change" ? 1 : 0);
     },
   );
@@ -437,7 +437,7 @@ describe("Greenhouse local adapter primitives", () => {
           packet,
           authority(),
         ),
-      ).toEqual({ filled: ["f0"], reviewRequired: true });
+      ).toEqual({ filled: ["f0"], selected: [], reviewRequired: true });
       expect(change).not.toHaveBeenCalled();
     },
   );

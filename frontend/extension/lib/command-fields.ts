@@ -44,5 +44,18 @@ export function commandFieldsFromPacket(packet: Pick<ApplicationPacket, "fields"
       value: `${first.value.trim()} ${last.value.trim()}`,
       needsUserAction: false,
     });
+  // A preferred first name nobody saved is the first name itself: no new candidate fact.
+  if (
+    first &&
+    !first.needsUserAction &&
+    typeof first.value === "string" &&
+    first.value.trim() &&
+    !byKey.has("identity.preferred_name")
+  )
+    fields.push({
+      fieldKey: "identity.preferred_name",
+      value: first.value.trim(),
+      needsUserAction: false,
+    });
   return fields;
 }

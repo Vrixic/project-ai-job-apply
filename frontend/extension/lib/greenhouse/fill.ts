@@ -1,6 +1,7 @@
 import { buildFillPlan, type PacketValue } from "@ai-job-apply/ats-sdk/plan";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 import { writtenValueMatches } from "../field-value";
+import { selectExactOption } from "./combobox";
 import type { GreenhouseInspection } from "./inspect";
 
 function requireActionable(control: Element, view: Window) {
@@ -36,8 +37,14 @@ export async function fillGreenhouseFields(
     onField?(fieldKey: string): void;
     reveal?(control: Element): Promise<void>;
   },
-): Promise<{ filled: readonly string[]; reviewRequired: boolean }> {
+): Promise<{
+  filled: readonly string[];
+  /** Custom dropdowns chosen by exact option. Counted apart: an unmatched one is left to the candidate. */
+  selected: readonly string[];
+  reviewRequired: boolean;
+}> {
   const filled: string[] = [];
+  const selected: string[] = [];
   const deadline = authority.deadline;
   const variantId = authority.variantId;
   const current = () =>
@@ -47,7 +54,7 @@ export async function fillGreenhouseFields(
     deadline <= Date.now() + 60_000 &&
     authority.registry.status("greenhouse-application-v1", variantId, new Date()).mode ===
       "autofill";
-  if (!current()) return { filled, reviewRequired: true };
+  if (!current()) return { filled, selected, reviewRequired: true };
   const plan = buildFillPlan(inspection.form, structuredClone(packet), {
     resume: false,
     coverLetter: false,
@@ -156,15 +163,60 @@ export async function fillGreenhouseFields(
       if (!current()) throw new Error("GreenhouseFillUnavailable");
       requireWritten();
     }
+    // Custom dropdowns the plan cannot fill as plain values: choose the one option that is exactly
+    // the approved value. No exact option, or any doubt, leaves the dropdown to the candidate.
+    const approved = new Map(packet.map((entry) => [entry.fieldKey, entry]));
+    for (const action of plan.actions) {
+      if (action.kind !== "require_user" || action.reason !== "unsupported_control") continue;
+      const entry = action.fieldKey ? approved.get(action.fieldKey) : undefined;
+      if (
+        !action.fieldKey ||
+        !entry ||
+        entry.needsUserAction ||
+        typeof entry.value !== "string" ||
+        !entry.value.trim()
+      )
+        continue;
+      authority.onField?.(action.fieldKey);
+      await Promise.race([authority.revalidateApproval(), stopped]);
+      if (!current()) throw new Error("GreenhouseFillUnavailable");
+      const controls = inspection.resolve(action.ref);
+      const control = controls[0];
+      const view = control?.ownerDocument.defaultView;
+      if (
+        controls.length !== 1 ||
+        !control ||
+        !view ||
+        !(control instanceof view.HTMLInputElement) ||
+        control.getAttribute("role") !== "combobox" ||
+        control.type !== "text"
+      )
+        continue;
+      requireActionable(control, view);
+      if (authority.reveal) {
+        await Promise.race([authority.reveal(control), stopped]);
+        if (!current()) throw new Error("GreenhouseFillUnavailable");
+        inspection.resolve(action.ref);
+        requireActionable(control, view);
+      }
+      const label = await selectExactOption(control, view, action.fieldKey, entry.value.trim(), {
+        current,
+        wait: (ms) =>
+          Promise.race([new Promise<void>((resolve) => setTimeout(resolve, ms)), stopped]),
+      });
+      inspection.resolve(action.ref);
+      if (label) selected.push(action.ref);
+    }
     return {
       filled,
+      selected,
       reviewRequired:
         plan.requiresTakeover || plan.actions.some((action) => action.kind === "require_user"),
     };
   } catch {
     if (authority.throwOnFailure) throw new Error("GreenhouseFillUnavailable");
     // Partial effects require review. Never replay or restore a previous value automatically.
-    return { filled, reviewRequired: true };
+    return { filled, selected, reviewRequired: true };
   } finally {
     clearTimeout(timer);
     authority.signal.removeEventListener("abort", abort);
