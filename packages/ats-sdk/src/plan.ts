@@ -48,18 +48,11 @@ export interface FillPlan {
   unresolvedRequired: string[];
 }
 
-// D3-013's adopted threshold requires candidate action for every restricted field, even when
-// the approved packet carries a previously reviewed value.
-const DIRECT_ACTION_PREFIXES = [
-  "authorization.",
-  "demographic.",
-  "disclosure.",
-  "attestation.",
-  "signature.",
-  "challenge.",
-  "captcha.",
-  "mfa.",
-];
+// Consent, signatures and challenges are never automated, whatever the packet holds. Answers the
+// candidate set (work authorization, sponsorship, disclosures, voluntary self-identification) are
+// ordinary answers: the planner fills them when the approved packet carries a value. The owner
+// removed the restricted-answer rule on 2026-11-05; this supersedes D3-013's threshold for them.
+const DIRECT_ACTION_PREFIXES = ["attestation.", "signature.", "challenge.", "captcha.", "mfa."];
 const MIN_CONFIDENCE = 0.8;
 
 function optionMatch(field: FormField, value: string): string | undefined {
@@ -151,7 +144,9 @@ export function buildFillPlan(
     }
     const value = entry.value;
     if (field.type === "select" || field.type === "radio") {
-      const option = typeof value === "string" ? optionMatch(field, value) : undefined;
+      // A Yes/No answer is a boolean in the packet and the words Yes and No on the page.
+      const wanted = typeof value === "boolean" ? (value ? "Yes" : "No") : value;
+      const option = typeof wanted === "string" ? optionMatch(field, wanted) : undefined;
       if (option === undefined) requireUser("option_not_found", fieldKey);
       else actions.push({ kind: "select", ref: field.ref, fieldKey, option });
       continue;
@@ -170,7 +165,8 @@ export function buildFillPlan(
       kind: "fill",
       ref: field.ref,
       fieldKey,
-      value: value as string | number | boolean,
+      // A Yes/No answer typed into a plain field is the words, not "true" or "false".
+      value: typeof value === "boolean" ? (value ? "Yes" : "No") : (value as string | number),
     });
   }
   return { actions, requiresTakeover: form.challengePresent, unresolvedRequired: unresolved };

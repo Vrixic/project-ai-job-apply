@@ -15,7 +15,7 @@ import { EntrySection } from "./entry-section";
 import { PersonalSection } from "./personal-section";
 import { PROFILE_SECTIONS, type SectionKey } from "./sections";
 
-type TabId = "personal" | SectionKey | "resume" | "preferences" | "restricted";
+type TabId = "personal" | SectionKey | "resume" | "preferences";
 
 interface Tab {
   id: TabId;
@@ -41,17 +41,13 @@ export function ProfileArea({
   name,
   email,
   preferences,
-  restricted,
 }: {
   authenticated: boolean;
   name?: string | undefined;
   email?: string | undefined;
   preferences: ReactNode;
-  restricted?: ReactNode;
 }) {
-  const tabs: readonly Tab[] = restricted
-    ? [...BASE_TABS, { id: "restricted", label: "Restricted answers" }]
-    : BASE_TABS;
+  const tabs: readonly Tab[] = BASE_TABS;
   const [active, setActive] = useState<TabId>("personal");
   const [drafts, setDrafts] = useState<ProfileImportDraft[]>([]);
   const tabRefs = useRef(new Map<TabId, HTMLButtonElement>());
@@ -193,7 +189,6 @@ export function ProfileArea({
                 </section>
               )}
               {tab.id === "preferences" && preferences}
-              {tab.id === "restricted" && restricted}
             </>
           )}
         </div>

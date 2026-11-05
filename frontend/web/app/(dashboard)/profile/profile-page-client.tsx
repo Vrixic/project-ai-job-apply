@@ -21,7 +21,6 @@ import {
   type WorkMode,
 } from "../../preference-form-state";
 import { ProfileArea } from "../../profile-sections/profile-area";
-import { RestrictedAnswersForm } from "../../restricted-answers-form";
 
 const workModeOptions: ReadonlyArray<{ value: WorkMode; label: string }> = [
   { value: "remote", label: "Remote" },
@@ -160,12 +159,10 @@ async function apiRequest<T>(
 
 export function ProfilePageClient({
   authenticated,
-  restrictedAnswerVaultUiEnabled = false,
   name,
   email,
 }: {
   authenticated: boolean;
-  restrictedAnswerVaultUiEnabled?: boolean;
   name?: string | undefined;
   email?: string | undefined;
 }) {
@@ -778,11 +775,6 @@ export function ProfilePageClient({
       name={name}
       email={email}
       preferences={preferencesPanel}
-      restricted={
-        restrictedAnswerVaultUiEnabled ? (
-          <RestrictedAnswersForm authenticated={authenticated} />
-        ) : undefined
-      }
     />
   );
 }

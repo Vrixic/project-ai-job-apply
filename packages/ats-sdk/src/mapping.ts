@@ -72,8 +72,16 @@ const SYNONYMS: readonly Synonym[] = [
   {
     key: "job.salary_expectation",
     patterns: [
-      /\b(?:salary|compensation|pay)\s+(?:expectation|requirement)s?\b/u,
+      /^(?!.*\b(?:meet|match|acceptable|within)\b).*\b(?:salary|compensation|pay)\s+(?:expectation|requirement)s?\b/u,
       /\bdesired\s+(?:salary|pay)\b/u,
+    ],
+  },
+  {
+    // "Does the posted salary meet your expectations?" is a Yes/No about this job's range.
+    key: "job.salary_acceptable",
+    patterns: [
+      /\b(?:meet|match)\b.*\b(?:salary|compensation|pay)\s+(?:expectation|requirement)s?\b/u,
+      /\b(?:salary|compensation|pay)\b.*\b(?:meets?|matches|acceptable)\b.*\bexpectations?\b/u,
     ],
   },
   { key: "job.relocation", patterns: [/\brelocat\w*\b/u] },
@@ -82,10 +90,14 @@ const SYNONYMS: readonly Synonym[] = [
     key: "authorization.us_authorized",
     patterns: [
       /\b(?:legally\s+)?(?:authori[sz]ed|eligible)\s+to\s+work\b/u,
-      /\bwork\s+authori[sz]ation\b/u,
+      // "Do you require a work authorization?" asks the opposite, and is the sponsorship question.
+      /^(?!.*\b(?:require|need|sponsor\w*)\b).*\bwork\s+authori[sz]ation\b/u,
     ],
   },
-  { key: "authorization.sponsorship_required", patterns: [/\bsponsor\w*\b/u] },
+  {
+    key: "authorization.sponsorship_required",
+    patterns: [/\bsponsor\w*\b/u, /\b(?:require|need)\b.*\bwork\s+authori[sz]ation\b/u],
+  },
   { key: "authorization.export_control", patterns: [/\bexport\s+control\b/u] },
   { key: "demographic.gender", patterns: [/\bgender\b/u] },
   { key: "demographic.race_ethnicity", patterns: [/\b(?:race|ethnic\w*)\b/u] },

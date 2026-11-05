@@ -86,21 +86,21 @@ describe("preferred first name", () => {
 });
 
 /** A small stand-in for the board's dropdown: opens on mouse release, lists options, shows the pick. */
-function dropdownPage(labels: string[]) {
+function dropdownPage(labels: string[], id = "degree--0", question = "Degree") {
   window.history.replaceState(null, "", URL);
   document.body.innerHTML = `<form id="application_form">
-    <label for="degree--0">Degree</label>
+    <label for="${id}">${question}</label>
     <div class="select__control"><div class="select__value-container">
-      <input id="degree--0" type="text" role="combobox" aria-expanded="false" aria-haspopup="true">
+      <input id="${id}" type="text" role="combobox" aria-expanded="false" aria-haspopup="true">
     </div></div>
   </form>`;
-  const input = document.querySelector("#degree--0") as HTMLInputElement;
+  const input = document.querySelector(`#${id}`) as HTMLInputElement;
   const control = document.querySelector(".select__control") as HTMLElement;
   control.addEventListener("mouseup", () => {
     input.setAttribute("aria-expanded", "true");
-    input.setAttribute("aria-controls", "react-select-degree--0-listbox");
+    input.setAttribute("aria-controls", `react-select-${id}-listbox`);
     const list = document.createElement("div");
-    list.id = "react-select-degree--0-listbox";
+    list.id = `react-select-${id}-listbox`;
     for (const label of labels) {
       const option = document.createElement("div");
       option.setAttribute("role", "option");
@@ -230,5 +230,46 @@ describe("filling a custom dropdown", () => {
     );
     expect(result.selected).toEqual([]);
     expect(control.querySelector(".select__single-value")?.textContent).toBe("Other");
+  });
+});
+
+describe("a Yes/No question the candidate answered", () => {
+  const ask = (
+    answer: boolean | string,
+    question: string,
+    fieldKey = "authorization.us_authorized",
+  ) => {
+    const page = dropdownPage(["Yes", "No"], "question_1", question);
+    return fillGreenhouseFields(
+      inspectGreenhouseApplication(document, URL),
+      [{ fieldKey, value: answer, needsUserAction: false }],
+      authority(),
+    ).then((result) => ({ result, page }));
+  };
+  it("chooses Yes for true and No for false", async () => {
+    const yes = await ask(true, "Are you legally authorized to work in the United States?");
+    expect(yes.result.selected).toEqual(["f0"]);
+    expect(yes.page.control.querySelector(".select__single-value")?.textContent).toBe("Yes");
+    document.body.innerHTML = "";
+    const no = await ask(false, "Are you legally authorized to work in the United States?");
+    expect(no.page.control.querySelector(".select__single-value")?.textContent).toBe("No");
+  });
+  it("answers a sponsorship question from the sponsorship answer", async () => {
+    const page = await ask(
+      true,
+      "Do you require or will you require a work authorization?",
+      "authorization.sponsorship_required",
+    );
+    expect(page.page.control.querySelector(".select__single-value")?.textContent).toBe("Yes");
+  });
+  it("does not answer No for a question that also names another country", async () => {
+    const { result, page } = await ask(false, "Are you eligible to work in the U.S. or Canada?");
+    expect(result.selected).toEqual([]);
+    expect(result.notes).toEqual(["check:authorization.us_authorized"]);
+    expect(page.control.querySelector(".select__single-value")).toBeNull();
+  });
+  it("still answers Yes for a question that names another country", async () => {
+    const { result } = await ask(true, "Are you eligible to work in the U.S. or Canada?");
+    expect(result.selected).toEqual(["f0"]);
   });
 });

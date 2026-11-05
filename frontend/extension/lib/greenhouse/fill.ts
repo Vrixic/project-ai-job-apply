@@ -172,13 +172,16 @@ export async function fillGreenhouseFields(
     for (const action of plan.actions) {
       if (action.kind !== "require_user" || action.reason !== "unsupported_control") continue;
       const entry = action.fieldKey ? approved.get(action.fieldKey) : undefined;
-      if (
-        !action.fieldKey ||
-        !entry ||
-        entry.needsUserAction ||
-        typeof entry.value !== "string" ||
-        !entry.value.trim()
-      ) {
+      // A Yes/No answer is a boolean in the packet and the words Yes and No in the dropdown.
+      const wanted =
+        typeof entry?.value === "boolean"
+          ? entry.value
+            ? "Yes"
+            : "No"
+          : typeof entry?.value === "string"
+            ? entry.value.trim()
+            : "";
+      if (!action.fieldKey || !entry || entry.needsUserAction || !wanted) {
         // An education dropdown with nothing saved for it: the candidate adds it to their profile.
         if (action.fieldKey?.startsWith("education.")) notes.push(`empty:${action.fieldKey}`);
         continue;
@@ -205,7 +208,17 @@ export async function fillGreenhouseFields(
         inspection.resolve(action.ref);
         requireActionable(control, view);
       }
-      const chosen = await selectExactOption(control, view, action.fieldKey, entry.value.trim(), {
+      // "No" to a United States question says nothing about the other country it also names.
+      const label = inspection.form.fields.find((field) => field.ref === action.ref)?.label ?? "";
+      if (
+        action.fieldKey === "authorization.us_authorized" &&
+        entry.value === false &&
+        /\b(?:canada|united kingdom|u\.?k\.?|europe\w*|e\.?u\.?|mexico|australia)\b/iu.test(label)
+      ) {
+        notes.push(`check:${action.fieldKey}`);
+        continue;
+      }
+      const chosen = await selectExactOption(control, view, action.fieldKey, wanted, {
         current,
         wait: (ms) =>
           Promise.race([new Promise<void>((resolve) => setTimeout(resolve, ms)), stopped]),

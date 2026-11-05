@@ -37,3 +37,26 @@ Candidates can reuse truthful answers with fewer repeated clicks, but restricted
 become invisible “autopilot” values. D3 must implement dedicated storage, authorization, consent,
 review, expiry/context matching, deletion/export, audit, and adversarial tests before activation.
 Legal/privacy and security reviewers may impose narrower storage or reuse conditions.
+
+## Amendment 2026-11-05: answers the candidate sets are ordinary answers
+
+Owner direction: remove the concept of restricted answers; the extension uses the answers the
+candidate has set to fill the application. What changed in this step:
+
+- The fill planner and the extension no longer treat authorization, disclosure or demographic fields
+  as "always the candidate's action". When the approved packet carries a value the candidate set, it is
+  filled, including a Yes/No answer chosen from a custom dropdown, exactly or not at all. This
+  supersedes the D3-013 threshold for those fields.
+- Consent, signatures, challenges, CAPTCHAs, one-time codes and documents are not answers: they are
+  never automated and never travel in the execution command.
+- The job page asks the common Yes/No questions (work authorization, sponsorship, whether the posted
+  salary meets expectations) in the review step. The answer is the candidate's own entry on that
+  application and is acknowledged in the packet review like any answer the candidate gives.
+- A "No" to a United States question is not used for an employer question that also names another
+  country, because it says nothing about that country.
+
+Not changed yet, and needing a separate decision because they are data-affecting: the saved-answer
+vault, its tables, encryption, export and deletion coverage, and the Profile service's refusal to
+store these questions as Application answers. Saving the answers once in the Profile, as the owner
+wants, needs the Profile service to accept them and the packet source to read them, which is a backend
+release. Until then the vault tab is gone from the Profile page and nothing new is written to it.

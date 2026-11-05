@@ -1,8 +1,4 @@
-import type {
-  ProfileEducationEntry,
-  ProfilePersonal,
-  RestrictedAnswer,
-} from "@ai-job-apply/api-contracts";
+import type { ProfileEducationEntry, ProfilePersonal } from "@ai-job-apply/api-contracts";
 import { describe, expect, it } from "vitest";
 import { missingBasics } from "./application-basics";
 
@@ -29,74 +25,56 @@ const education = (extra: Partial<ProfileEducationEntry> = {}): ProfileEducation
   displayOrder: 0,
   ...extra,
 });
-const answer = (fieldKey: string, state: "active" | "deleted" = "active"): RestrictedAnswer =>
-  ({
-    id: "00000000-0000-7000-8000-000000000002",
-    fieldKey,
-    valueType: "boolean",
-    sensitivity: "restricted",
-    state,
-    version: 1,
-    confirmedAt: NOW,
-  }) as RestrictedAnswer;
-const both = [answer("authorization.us_authorized"), answer("authorization.sponsorship_required")];
+const without = (entry: ProfileEducationEntry, key: "degree" | "fieldOfStudy") => {
+  const { [key]: _omitted, ...rest } = entry;
+  return rest;
+};
 
 describe("missingBasics", () => {
   it("is empty when the profile holds every basic", () => {
-    expect(
-      missingBasics({ personal: personal(), education: [education()], restricted: both }),
-    ).toEqual([]);
+    expect(missingBasics({ personal: personal(), education: [education()] })).toEqual([]);
   });
   it("names everything missing from an empty profile", () => {
-    expect(
-      missingBasics({ personal: undefined, education: [], restricted: [] }).map((m) => m.key),
-    ).toEqual([
+    expect(missingBasics({ personal: undefined, education: [] }).map((m) => m.key)).toEqual([
       "name",
       "email",
       "phone",
       "education",
-      "authorization.us_authorized",
-      "authorization.sponsorship_required",
     ]);
   });
   it("needs a first and a last name, not a single word", () => {
     expect(
-      missingBasics({
-        personal: personal({ fullName: "Pat" }),
-        education: [education()],
-        restricted: both,
-      }).map((m) => m.key),
+      missingBasics({ personal: personal({ fullName: "Pat" }), education: [education()] }).map(
+        (m) => m.key,
+      ),
     ).toEqual(["name"]);
   });
   it("needs a degree and a field of study, not only a school", () => {
-    for (const omitted of ["degree", "fieldOfStudy"] as const) {
-      const { [omitted]: _omitted, ...entry } = education();
+    for (const omitted of ["degree", "fieldOfStudy"] as const)
       expect(
-        missingBasics({ personal: personal(), education: [entry], restricted: both }).map(
-          (m) => m.key,
-        ),
+        missingBasics({
+          personal: personal(),
+          education: [without(education(), omitted)],
+        }).map((m) => m.key),
       ).toEqual(["education"]);
-    }
   });
-  it("accepts any one complete education entry among several", () => {
+  it("judges the first education entry, which is the one an application uses", () => {
+    const complete = education({ displayOrder: 1 });
+    const incomplete = without(education({ displayOrder: 0 }), "degree");
+    expect(missingBasics({ personal: personal(), education: [complete, incomplete] })).toHaveLength(
+      1,
+    );
     expect(
       missingBasics({
         personal: personal(),
-        education: [(({ degree: _degree, ...rest }) => rest)(education()), education()],
-        restricted: both,
+        education: [incomplete, complete].reverse(),
       }),
-    ).toEqual([]);
-  });
-  it("ignores a deleted saved answer and does not require answers the vault does not offer", () => {
+    ).toHaveLength(1);
     expect(
       missingBasics({
         personal: personal(),
-        education: [education()],
-        restricted: [answer("authorization.us_authorized", "deleted"), both[1] as RestrictedAnswer],
-      }).map((m) => m.key),
-    ).toEqual(["authorization.us_authorized"]);
-    expect(
-      missingBasics({ personal: personal(), education: [education()], restricted: undefined }),
+        education: [complete, education({ displayOrder: 0 })],
+      }),
     ).toEqual([]);
   });
 });

@@ -13995,7 +13995,7 @@
           "fieldKey": {
             "type": "string",
             "maxLength": 100,
-            "pattern": "^(?!(?:authorization|demographic|disclosure|attestation|signature|challenge|captcha|mfa|documents?)\\.)[a-z][a-z0-9_.]+$"
+            "pattern": "^(?!(?:attestation|signature|challenge|captcha|mfa|documents?)\\.)[a-z][a-z0-9_.]+$"
           },
           "value": {
             "oneOf": [

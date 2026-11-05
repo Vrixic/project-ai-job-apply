@@ -239,9 +239,10 @@ describe("fill plan", () => {
     const byRef = new Map(plan.actions.map((action) => [action.ref, action]));
     expect(byRef.get("f0")).toMatchObject({ kind: "fill", value: "Alex" });
     expect(byRef.get("f2")).toMatchObject({ kind: "fill", value: "alex@example.test" });
-    // Restricted answers always require candidate action, including previously reviewed values.
-    expect(byRef.get("f4")).toMatchObject({ kind: "require_user", reason: "direct_action_field" });
-    expect(byRef.get("f5")).toMatchObject({ kind: "require_user", reason: "direct_action_field" });
+    // Answers the candidate set (work authorization, sponsorship) are filled like any other.
+    expect(byRef.get("f4")).toMatchObject({ kind: "select", option: "Yes" });
+    // A value that is not exactly one of the options is never nudged to the nearest one.
+    expect(byRef.get("f5")).toMatchObject({ kind: "require_user", reason: "option_not_found" });
     expect(byRef.get("f6")).toMatchObject({
       kind: "attach_artifact",
       fieldKey: "documents.resume",
@@ -250,7 +251,7 @@ describe("fill plan", () => {
     expect(byRef.get("f7")).toMatchObject({ kind: "require_user", reason: "direct_action_field" });
     expect(byRef.get("f3")).toMatchObject({ kind: "require_user", reason: "no_packet_value" });
     expect(byRef.get("f8")).toMatchObject({ kind: "skip", reason: "unmapped_optional" });
-    expect(plan.unresolvedRequired).toEqual(["f4", "f7"]);
+    expect(plan.unresolvedRequired).toEqual(["f7"]);
     expect(plan.requiresTakeover).toBe(false);
   });
 
@@ -297,17 +298,66 @@ describe("fill plan", () => {
     }
   });
 
-  it("never fills restricted answers or signatures even when supplied and reviewed in the packet", () => {
+  it("fills authorization, disclosure and self-identification answers the candidate set", () => {
     const cases = [
       ["Work authorization", "authorization.us_authorized"],
       ["Sponsorship", "authorization.sponsorship_required"],
       ["Export control", "authorization.export_control"],
       ["Gender", "demographic.gender"],
-      ["Race", "demographic.race_ethnicity"],
       ["Veteran", "demographic.veteran"],
       ["Disability", "demographic.disability"],
-      ["Signature", "signature.electronic"],
     ];
+    for (const [label, fieldKey] of cases) {
+      const form = extractGenericForm(page(`<label>${label}<input required></label>`));
+      const plan = buildFillPlan(
+        form,
+        [{ fieldKey: fieldKey as string, value: "Candidate answer", needsUserAction: false }],
+        { resume: false, coverLetter: false },
+      );
+      expect(plan.actions).toEqual([
+        { kind: "fill", ref: "f0", fieldKey, value: "Candidate answer" },
+      ]);
+    }
+  });
+
+  it("matches a Yes/No answer to the Yes and No options, and never to anything near them", () => {
+    const form = extractGenericForm(
+      page(
+        '<label for="a">Authorized to work</label><select id="a" required><option>Yes</option><option>No</option></select><label for="b">Gender</label><select id="b"><option>Yes, maybe</option><option>No</option></select>',
+      ),
+    );
+    const plan = buildFillPlan(
+      form,
+      [
+        { fieldKey: "authorization.us_authorized", value: true, needsUserAction: false },
+        { fieldKey: "demographic.gender", value: true, needsUserAction: false },
+      ],
+      { resume: false, coverLetter: false },
+    );
+    expect(plan.actions[0]).toEqual({
+      kind: "select",
+      ref: "f0",
+      fieldKey: "authorization.us_authorized",
+      option: "Yes",
+    });
+    expect(plan.actions[1]).toMatchObject({ kind: "require_user", reason: "option_not_found" });
+  });
+
+  it("tells the sponsorship question from the work authorization question", () => {
+    const form = extractGenericForm(
+      page(
+        "<label>Are you eligible to work in the U.S. or Canada? <input required></label><label>Do you require or will you require a work authorization? <input required></label><label>Does our posted annual salary of $100,000-$150,000 meet your salary expectations? <input></label>",
+      ),
+    );
+    expect(mapFormFields(form).map((mapping) => mapping.fieldKey)).toEqual([
+      "authorization.us_authorized",
+      "authorization.sponsorship_required",
+      "job.salary_acceptable",
+    ]);
+  });
+
+  it("never fills signatures or attestations even when supplied and reviewed in the packet", () => {
+    const cases = [["Signature", "signature.electronic"]];
     for (const [label, fieldKey] of cases) {
       const form = extractGenericForm(page(`<label>${label}<input required></label>`));
       const plan = buildFillPlan(

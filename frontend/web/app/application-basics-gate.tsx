@@ -4,7 +4,6 @@ import type { ApplicationBasics } from "./use-application-basics";
 const SECTION_NAME = {
   personal: "Personal",
   education: "Education",
-  restricted: "Restricted Answer Vault",
 } as const;
 
 /**

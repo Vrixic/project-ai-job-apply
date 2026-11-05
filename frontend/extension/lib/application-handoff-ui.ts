@@ -7,6 +7,7 @@ const NOTE_FIELDS: Readonly<Record<string, string>> = {
   "education.school": "School",
   "education.degree": "Degree",
   "education.field": "Discipline",
+  "authorization.us_authorized": "Work authorization",
 };
 
 /** What the fill left to the candidate, in words. The codes carry no page text and no value. */
@@ -22,6 +23,10 @@ function fillNotes(notes: unknown): string {
       );
     else if (kind === "empty" && NOTE_FIELDS[rest])
       parts.push(`${NOTE_FIELDS[rest]} has no saved value: add it in your ApplyDash profile.`);
+    else if (kind === "check" && NOTE_FIELDS[rest])
+      parts.push(
+        `${NOTE_FIELDS[rest]}: your United States answer does not settle a question that names another country, so it is left to you.`,
+      );
     else if (kind === "needs" && /^[0-9]{1,3}$/u.test(rest))
       parts.push(
         `${rest} required question${rest === "1" ? "" : "s"} still need${rest === "1" ? "s" : ""} you.`,
