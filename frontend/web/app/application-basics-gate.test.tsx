@@ -4,7 +4,7 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApplicationBasicsDialog, profileHrefFor } from "./application-basics-gate";
-import type { ApplicationBasics } from "./use-application-basics";
+import { type ApplicationBasics, screeningRequired } from "./use-application-basics";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -37,6 +37,14 @@ const missing = [
   { key: "phone", label: "Your phone number", section: "personal" as const },
   { key: "q", label: "Are you legally authorized to work?", section: "screening" as const },
 ];
+
+describe("screeningRequired", () => {
+  it("is on only when the deployment says the screening answers can be saved", () => {
+    expect(screeningRequired({})).toBe(false);
+    expect(screeningRequired({ NEXT_PUBLIC_SCREENING_ANSWERS_REQUIRED: "enabled" })).toBe(true);
+    expect(screeningRequired({ NEXT_PUBLIC_SCREENING_ANSWERS_REQUIRED: "true" })).toBe(false);
+  });
+});
 
 describe("ApplicationBasicsDialog", () => {
   it("links to the first Profile tab that still has something to fill in", () => {

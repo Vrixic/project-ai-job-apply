@@ -33,7 +33,12 @@ const answered = {
   "authorization.us_authorized": true,
   "authorization.sponsorship_required": false,
 } as const;
-const complete = { personal: personal(), education: [education()], screening: answered };
+const complete = {
+  personal: personal(),
+  education: [education()],
+  screening: answered,
+  requireScreening: true,
+};
 
 describe("missingBasics", () => {
   it("is empty when the profile holds every basic and screening answer", () => {
@@ -41,10 +46,12 @@ describe("missingBasics", () => {
   });
   it("names everything missing from an empty profile, in the order it is asked", () => {
     expect(
-      missingBasics({ personal: undefined, education: [], screening: {} }).map((m) => [
-        m.key,
-        m.section,
-      ]),
+      missingBasics({
+        personal: undefined,
+        education: [],
+        screening: {},
+        requireScreening: true,
+      }).map((m) => [m.key, m.section]),
     ).toEqual([
       ["name", "personal"],
       ["email", "personal"],
@@ -74,6 +81,11 @@ describe("missingBasics", () => {
     expect(missingBasics({ ...complete, education: [incomplete, later] })).toHaveLength(1);
     expect(
       missingBasics({ ...complete, education: [later, education({ displayOrder: 0 })] }),
+    ).toEqual([]);
+  });
+  it("does not ask for the screening answers until they are required", () => {
+    expect(
+      missingBasics({ personal: personal(), education: [education()], screening: {} }),
     ).toEqual([]);
   });
   it("counts a No as an answer, and an unanswered question as missing", () => {

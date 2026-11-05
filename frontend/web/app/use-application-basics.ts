@@ -7,6 +7,13 @@ import { type ScreeningFieldKey, screeningAnswers } from "../lib/screening-quest
 import { loadEntries, loadPersonal } from "./profile-sections/api";
 import { PROFILE_SECTIONS } from "./profile-sections/sections";
 
+/** The screening answers are required once the Profile service saves them (a deployment step). */
+export function screeningRequired(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  return environment.NEXT_PUBLIC_SCREENING_ANSWERS_REQUIRED === "enabled";
+}
+
 export interface ApplicationBasics {
   status: "loading" | "ready" | "unavailable";
   missing: readonly MissingBasic[];
@@ -49,6 +56,7 @@ export function useApplicationBasics(enabled: boolean): ApplicationBasics {
               personal,
               education: entries as ProfileEducationEntry[],
               screening: answers,
+              requireScreening: screeningRequired(),
             }),
           });
         } catch {
