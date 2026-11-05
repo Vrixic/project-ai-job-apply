@@ -327,6 +327,19 @@ export function installNativeTransferBackground(options: {
     return true;
   });
 
+  /**
+   * The resume reaches the extension a few seconds after the page is selected. A candidate who
+   * acts sooner waits for it here instead of being refused.
+   */
+  async function waitForResume(maximumMs = 20_000) {
+    const until = Date.now() + maximumMs;
+    while (
+      ["selected", "admitting", "admitted", "committing"].includes(transfer.phase()) &&
+      Date.now() < until
+    )
+      await new Promise<void>((resolve) => setTimeout(resolve, 200));
+  }
+
   return {
     clear,
     /** Explicit trusted extension action while the exact employer tab is active. */
@@ -387,7 +400,9 @@ export function installNativeTransferBackground(options: {
     // Private executor composition only. No content in popup snapshots or external responses.
     consume: transfer.consume,
     consumeSelected: transfer.consumeSelected,
+    waitForResume,
     async apply(reviewLink: string, fillOnly = false) {
+      await waitForResume();
       let owned: ReturnType<typeof transfer.consumeSelected>;
       try {
         owned = transfer.consumeSelected(reviewLink);
