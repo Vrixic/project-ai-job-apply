@@ -44,10 +44,14 @@ export function mountApplicationHandoff() {
                 ? { action: "application_native_apply", reviewLink: input.value, fillOnly: true }
                 : { action: "application_native_clear" },
         );
+        const where =
+          typeof response.stage === "string" && response.stage
+            ? ` (stopped at: ${response.stage})`
+            : "";
         if (action === "fill") {
           status.textContent = response.ok
             ? "Filled for your review. Nothing was submitted. Check the employer page; submit it yourself or leave it."
-            : "The page could not be filled. Nothing was submitted. Check the employer page and try again.";
+            : `The page could not be filled. Nothing was submitted. Check the employer page and try again.${where}`;
           return;
         }
         if (action === "apply") {
@@ -56,7 +60,7 @@ export function mountApplicationHandoff() {
               ? "The employer confirmed submission. Return to the application workspace to view history."
               : response.outcome === "unknown"
                 ? "The submission outcome is uncertain. Return to the workspace to review it; do not submit again."
-                : "Not submitted by the extension, or not confirmed. Check the employer page, finish by hand if needed, then record the outcome in the application workspace.";
+                : `Not submitted by the extension, or not confirmed. Check the employer page, finish by hand if needed, then record the outcome in the application workspace.${where}`;
           return;
         }
         if (!response.ok) throw Object.assign(Error(), { stage: response.stage });
@@ -68,13 +72,18 @@ export function mountApplicationHandoff() {
             : "Approved file transfer cleared. If Apply had started, review the workspace before any further submission.";
       } catch (error) {
         const step =
-          action === "select" && error instanceof Error && "stage" in error && error.stage
+          (action === "select" || action === "fill" || action === "apply") &&
+          error instanceof Error &&
+          "stage" in error &&
+          error.stage
             ? ` (stopped at: ${String(error.stage)})`
             : "";
         status.textContent =
           action === "apply"
-            ? "Apply could not complete. Review the application workspace before trying any further submission."
-            : `The file transfer could not be selected. Check the employer tab, current approval and extension sign-in.${step}`;
+            ? `Apply could not complete. Review the application workspace before trying any further submission.${step}`
+            : action === "fill"
+              ? `The page could not be filled. Nothing was submitted. Select the employer page again and retry.${step}`
+              : `The file transfer could not be selected. Check the employer tab, current approval and extension sign-in.${step}`;
       } finally {
         if (ownsBusy) busy = false;
         button.disabled = false;
