@@ -317,9 +317,13 @@ export async function executeApplication(options: {
       const copy = new Uint8Array(file.bytes);
       try {
         transfer.items.add(
-          new view.File([copy], `${kind === "uploaded_resume" ? "resume" : kind}${suffix}`, {
-            type: file.mediaType,
-          }),
+          new view.File(
+            [copy],
+            file.fileName ?? `${kind === "uploaded_resume" ? "resume" : kind}${suffix}`,
+            {
+              type: file.mediaType,
+            },
+          ),
         );
       } finally {
         copy.fill(0);

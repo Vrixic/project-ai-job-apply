@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
 import {
   applicationExecutionForBuild,
   applicationExecutionProvidersForBuild,
