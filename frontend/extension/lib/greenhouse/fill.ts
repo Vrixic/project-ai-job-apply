@@ -86,7 +86,11 @@ export async function fillGreenhouseFields(
         )
           throw new Error("GreenhouseFillUnavailable");
         const intended = option.value;
-        control.value = intended;
+        // The native setter, so a framework that tracks the value sees a real change.
+        Object.getOwnPropertyDescriptor(view.HTMLSelectElement.prototype, "value")?.set?.call(
+          control,
+          intended,
+        );
         matchesApproved = () =>
           control.value === intended &&
           control.selectedOptions.length === 1 &&
@@ -94,17 +98,25 @@ export async function fillGreenhouseFields(
           !option.disabled &&
           !option.parentElement?.hasAttribute("disabled");
       } else if (control instanceof view.HTMLTextAreaElement) {
-        control.value = String(action.value);
+        Object.getOwnPropertyDescriptor(view.HTMLTextAreaElement.prototype, "value")?.set?.call(
+          control,
+          String(action.value),
+        );
         matchesApproved = () => control.value === String(action.value);
       } else if (control instanceof view.HTMLInputElement && field.type !== "file") {
         if (field.type === "checkbox") {
           if (typeof action.value !== "boolean") throw new Error("GreenhouseFillUnavailable");
-          control.checked = action.value;
+          if (control.checked !== action.value) control.click();
           matchesApproved = () => control.checked === action.value;
         } else {
           if (!["text", "date", "number"].includes(field.type))
             throw new Error("GreenhouseFillUnavailable");
-          control.value = String(action.value);
+          // A controlled field (the current job-boards form is React) discards a value set the
+          // ordinary way, so the native setter is used and the input event then reports it.
+          Object.getOwnPropertyDescriptor(view.HTMLInputElement.prototype, "value")?.set?.call(
+            control,
+            String(action.value),
+          );
           matchesApproved = () => control.value === String(action.value);
         }
       } else throw new Error("GreenhouseFillUnavailable");

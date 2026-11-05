@@ -76,5 +76,10 @@ export interface ApplicationProvider {
    * says which one. Only honored after the one click; any other URL change stops the run.
    */
   isConfirmationUrl?(employerUrl: string, currentUrl: string): boolean;
+  /**
+   * A board that swaps its upload control for its own "attached" display once it accepts a file says
+   * whether it now shows this file name. The replaced control is not looked up again.
+   */
+  attachmentAccepted?(root: Element, fileName: string): boolean;
   profile(variantId: string, adapterVersion: string): Readonly<ExecutionProfile> | undefined;
 }

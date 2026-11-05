@@ -142,6 +142,56 @@ describe("Greenhouse local adapter primitives", () => {
     expect(document.querySelector("input")?.value).toBe("synthetic@example.invalid");
     expect(submit).not.toHaveBeenCalled();
   });
+  it("sets a framework-controlled field through the native setter", async () => {
+    const dom = page();
+    const document = dom.window.document;
+    const input = document.querySelector("input") as HTMLInputElement;
+    const native = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value");
+    // A controlled field discards a plain assignment, as a React-controlled input does.
+    Object.defineProperty(input, "value", {
+      configurable: true,
+      get: () => native?.get?.call(input) ?? "",
+      set: () => undefined,
+    });
+    const result = await fillGreenhouseFields(
+      inspectGreenhouseApplication(document, URL),
+      packet,
+      authority(),
+    );
+    expect(result).toEqual({ filled: ["f0"], reviewRequired: false });
+    expect(native?.get?.call(input)).toBe("synthetic@example.invalid");
+  });
+  it("finds a control by its name after the board replaces an upload control", () => {
+    const dom = page(
+      '<label for="resume">Resume</label><input id="resume" name="resume" type="file"><label for="school">School</label><input id="school" name="school" type="text">',
+    );
+    const document = dom.window.document;
+    const inspection = inspectGreenhouseApplication(document, URL);
+    const school = document.querySelector("#school");
+    const ref = inspection.form.fields.find((field) => field.name === "school")?.ref ?? "";
+    // The board swaps the upload for its own attached display; positions after it shift.
+    const upload = document.querySelector("#resume");
+    upload?.parentElement?.querySelector('label[for="resume"]')?.remove();
+    upload?.replaceWith(
+      Object.assign(document.createElement("div"), {
+        className: "file-upload__filename",
+        textContent: "tailored_resume.pdf",
+      }),
+    );
+    expect(inspection.resolve(ref)).toEqual([school]);
+    expect(
+      greenhouseProvider.attachmentAccepted?.(
+        document.querySelector("form") as Element,
+        "tailored_resume.pdf",
+      ),
+    ).toBe(true);
+    expect(
+      greenhouseProvider.attachmentAccepted?.(
+        document.querySelector("form") as Element,
+        "other.pdf",
+      ),
+    ).toBe(false);
+  });
   it("stops after synchronous challenge insertion without emitting change or touching the next field", async () => {
     const dom = page('<label for="last">Last name</label><input id="last" name="last">');
     const document = dom.window.document;

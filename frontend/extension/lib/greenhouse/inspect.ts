@@ -112,7 +112,22 @@ function captureGreenhouseApplication(document: Document, expectedUrl: string) {
     }
     handles.set(field.ref, Object.freeze(matches));
   }
-  return { identity, form, root, handles, structure: formStructureDigestInput(form) };
+  return {
+    identity,
+    form,
+    root,
+    handles,
+    structure: formStructureDigestInput(form),
+    stable: stableStructure(form),
+  };
+}
+
+/** The structure without upload controls: a board may replace one once it accepts a file. */
+function stableStructure(form: Parameters<typeof formStructureDigestInput>[0]) {
+  return formStructureDigestInput({
+    ...form,
+    fields: form.fields.filter((field) => field.type !== "file"),
+  });
 }
 
 export function inspectGreenhouseApplication(
@@ -120,7 +135,7 @@ export function inspectGreenhouseApplication(
   expectedUrl: string,
 ): GreenhouseInspection {
   const captured = captureGreenhouseApplication(document, expectedUrl);
-  const { identity, form, root, handles, structure } = captured;
+  const { identity, form, root, handles, structure, stable } = captured;
   let disposed = false;
   return {
     identity,
@@ -130,9 +145,12 @@ export function inspectGreenhouseApplication(
     resolve(ref: string): readonly Element[] {
       if (disposed) throw refused();
       const fresh = captureGreenhouseApplication(document, expectedUrl);
-      if (fresh.structure !== structure || fresh.root !== root) throw refused();
+      if (fresh.stable !== stable || fresh.root !== root) throw refused();
+      // Refs are positions, and a replaced upload control shifts them. The field's name is its identity.
+      const name = form.fields.find((field) => field.ref === ref)?.name;
       const original = handles.get(ref);
-      const current = fresh.handles.get(ref);
+      const currentRef = fresh.form.fields.find((field) => field.name === name)?.ref;
+      const current = currentRef === undefined ? undefined : fresh.handles.get(currentRef);
       if (
         !original ||
         !current ||
