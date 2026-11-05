@@ -3402,7 +3402,7 @@ export interface components {
             nonce: string;
             /** Format: uuid */
             attemptId: string;
-            /** Format: uuid */
+            /** @description The browser's own document id for the employer page: 32 hexadecimal characters, or a UUID. */
             documentId: string;
             employerUrl: string;
             packetHash: string;
