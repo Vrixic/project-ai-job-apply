@@ -21,6 +21,8 @@ export function missingBasics(input: {
   personal: ProfilePersonal | undefined;
   education: readonly ProfileEducationEntry[];
   screening: Partial<Record<ScreeningFieldKey, boolean>>;
+  /** Off until the Profile service accepts the screening questions as saved answers. */
+  requireScreening?: boolean;
 }): MissingBasic[] {
   const missing: MissingBasic[] = [];
   const words = (input.personal?.fullName ?? "").trim().split(/\s+/u).filter(Boolean);
@@ -38,7 +40,7 @@ export function missingBasics(input: {
       section: "education",
     });
   for (const item of SCREENING_QUESTIONS) {
-    if (input.screening[item.fieldKey] === undefined)
+    if (input.requireScreening === true && input.screening[item.fieldKey] === undefined)
       missing.push({ key: item.fieldKey, label: item.question, section: "screening" });
   }
   return missing;
