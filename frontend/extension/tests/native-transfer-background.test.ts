@@ -516,3 +516,38 @@ describe("the apply intent from the website", () => {
     });
   });
 });
+
+it("waits for a resume that is still arriving instead of refusing, and gives up when none comes", async () => {
+  const f = setup();
+  const packet = f.fixture.application.currentPacket;
+  await f.composition.select(LINK);
+  const admission = await f.message<ApplicationNativeTransferAdmission>(f.begin);
+  const waiting = f.composition.waitForResume();
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  expect(() => f.composition.consumeSelected(LINK)).toThrow();
+  const bytes = new TextEncoder().encode("%PDF-Synthetic only");
+  await f.message<ApplicationNativeTransferReceipt>({
+    schema: "application-native-transfer-commit.v1",
+    admission,
+    files: [
+      {
+        format: "pdf",
+        mediaType: "application/pdf",
+        fileName: "resume.pdf",
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        sizeBytes: bytes.length,
+        contentSha256: packet?.artifactHashes.resume,
+        temporaryMaterial: packet?.temporaryMaterials?.[0],
+        contentBase64: Buffer.from(bytes).toString("base64"),
+      },
+    ],
+  });
+  await waiting;
+  expect(f.composition.consumeSelected(LINK).files).toHaveLength(1);
+  const idle = setup();
+  await idle.composition.select(LINK);
+  const started = Date.now();
+  await idle.composition.waitForResume(300);
+  expect(Date.now() - started).toBeGreaterThanOrEqual(250);
+  expect(() => idle.composition.consumeSelected(LINK)).toThrow();
+});
