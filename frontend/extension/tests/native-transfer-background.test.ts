@@ -345,6 +345,15 @@ it.each([
   expect(() => f.composition.consumeSelected(LINK)).toThrow();
 });
 
+it("keeps the selection and its file when the same page is selected again", async () => {
+  const f = uploadedSetup();
+  await f.composition.select(LINK);
+  await expect(f.composition.select(LINK)).resolves.toEqual({ ok: true, resume: "uploaded" });
+  const pulls = f.send.mock.calls.filter(([url]) => String(url).includes("/resume/uploaded"));
+  expect(pulls).toHaveLength(1);
+  expect(f.composition.consumeSelected(LINK).files).toHaveLength(1);
+});
+
 it("refuses when the packet carries no resume at all", async () => {
   const f = uploadedSetup();
   const packet = f.fixture.application.currentPacket;
