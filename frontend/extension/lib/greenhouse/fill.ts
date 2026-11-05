@@ -34,6 +34,7 @@ export async function fillGreenhouseFields(
     /** Submission composition must distinguish a stopped fill from candidate-only review. */
     throwOnFailure?: boolean;
     onField?(fieldKey: string): void;
+    reveal?(control: Element): Promise<void>;
   },
 ): Promise<{ filled: readonly string[]; reviewRequired: boolean }> {
   const filled: string[] = [];
@@ -73,6 +74,12 @@ export async function fillGreenhouseFields(
       // Unsupported custom widgets and files are left to the candidate. No synthetic click.
       if (controls.length !== 1) throw new Error("GreenhouseFillUnavailable");
       requireActionable(control, view);
+      if (authority.reveal) {
+        await Promise.race([authority.reveal(control), stopped]);
+        if (!current()) throw new Error("GreenhouseFillUnavailable");
+        inspection.resolve(action.ref);
+        requireActionable(control, view);
+      }
       let matchesApproved: () => boolean;
       if (action.kind === "select") {
         if (!(control instanceof view.HTMLSelectElement) || control.multiple)

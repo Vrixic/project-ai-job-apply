@@ -182,6 +182,7 @@ if (!Object.hasOwn(globalThis, installed)) {
           packet: message.fields,
           files: state.files,
           ...(message.fillOnly ? { fillOnly: true } : {}),
+          paceMs: 450,
           onStage: (stage) => {
             ran = stage;
           },
