@@ -130,7 +130,13 @@ describe("manual handoff UI", () => {
             ok: true,
             outcome: "review_required",
             result: "challenge_required",
-            notes: ["other:education.school", "needs:3", "other:unknown.key", "needs:x"],
+            notes: [
+              "other:education.school",
+              "empty:education.degree",
+              "needs:3",
+              "other:unknown.key",
+              "needs:x",
+            ],
           }
         : { ok: true },
     );
@@ -139,6 +145,7 @@ describe("manual handoff UI", () => {
     await flush();
     const text = control("[data-handoff-status]").textContent ?? "";
     expect(text).toContain("School was not in the board's list, so Other was chosen: check it.");
+    expect(text).toContain("Degree has no saved value: add it in your ApplyDash profile.");
     expect(text).toContain("3 required questions still need you.");
     expect(text).not.toContain("unknown.key");
     expect(text).not.toContain("needs:x");

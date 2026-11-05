@@ -206,6 +206,17 @@ describe("filling a custom dropdown", () => {
     expect(control.querySelector(".select__single-value")).toBeNull();
     expect(input.value).toBe("");
   });
+  it("says an education dropdown has no saved value to fill", async () => {
+    const { control } = dropdownPage(["Bachelor's Degree", "Other"]);
+    const result = await fillGreenhouseFields(
+      inspectGreenhouseApplication(document, URL),
+      [{ fieldKey: "contact.email", value: "pat@example.invalid", needsUserAction: false }],
+      authority(),
+    );
+    expect(result.selected).toEqual([]);
+    expect(result.notes).toEqual(["empty:education.degree"]);
+    expect(control.querySelector(".select__single-value")).toBeNull();
+  });
   it("does not touch a dropdown the candidate already answered", async () => {
     const { control } = dropdownPage(["Bachelor's Degree", "Other"]);
     const answered = document.createElement("div");

@@ -20,6 +20,8 @@ function fillNotes(notes: unknown): string {
       parts.push(
         `${NOTE_FIELDS[rest]} was not in the board's list, so Other was chosen: check it.`,
       );
+    else if (kind === "empty" && NOTE_FIELDS[rest])
+      parts.push(`${NOTE_FIELDS[rest]} has no saved value: add it in your ApplyDash profile.`);
     else if (kind === "needs" && /^[0-9]{1,3}$/u.test(rest))
       parts.push(
         `${rest} required question${rest === "1" ? "" : "s"} still need${rest === "1" ? "s" : ""} you.`,

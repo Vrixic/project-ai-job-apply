@@ -42,6 +42,7 @@ import {
   NATIVE_MATERIAL_SIGN_OUT_CHANNEL,
 } from "../lib/native-material-sign-out-signal";
 import { resumeFileName } from "../lib/resume-file-name";
+import { ApplicationBasicsGate } from "./application-basics-gate";
 import { ApplicationPreparationProgress } from "./application-preparation-progress";
 import { type ApplicationReviewActions, ApplicationReviewPanel } from "./application-review-panel";
 import {
@@ -58,6 +59,7 @@ import {
   type SavedApplicationAnswerSelection,
   SavedApplicationAnswers,
 } from "./saved-application-answers";
+import { useApplicationBasics } from "./use-application-basics";
 import { useMaterialExpiry } from "./use-material-expiry";
 
 type Entries = Readonly<Record<string, string | boolean>>;
@@ -84,6 +86,7 @@ export function ApplicationsWorkspace({
   fetchImplementation,
   coverLetterPreparationEnabled = coverLetterUiEnabled,
   savedAnswerSelectionEnabled = savedAnswersUiEnabled,
+  requireBasics = false,
   onApplied,
 }: {
   jobId: string;
@@ -95,6 +98,8 @@ export function ApplicationsWorkspace({
   fetchImplementation?: typeof globalThis.fetch;
   coverLetterPreparationEnabled?: boolean;
   savedAnswerSelectionEnabled?: boolean;
+  /** Holds Apply back until the Profile has the basics every application asks. */
+  requireBasics?: boolean;
   /** Called once the candidate's submission is logged. The caller then owns showing it. */
   onApplied?: () => void;
 }) {
@@ -107,6 +112,7 @@ export function ApplicationsWorkspace({
       applyUrl={applyUrl}
       coverLetterPreparationEnabled={coverLetterPreparationEnabled}
       savedAnswerSelectionEnabled={savedAnswerSelectionEnabled}
+      requireBasics={requireBasics}
       {...(onApplied ? { onApplied } : {})}
       {...(fetchImplementation ? { fetchImplementation } : {})}
     />
@@ -121,9 +127,12 @@ function JobApplicationWorkspace({
   fetchImplementation,
   coverLetterPreparationEnabled,
   savedAnswerSelectionEnabled,
+  requireBasics = false,
   onApplied,
 }: Parameters<typeof ApplicationsWorkspace>[0]) {
   const headingId = useId();
+  const basics = useApplicationBasics(requireBasics);
+  const basicsBlocked = requireBasics && (basics.status !== "ready" || basics.missing.length > 0);
   const candidateName = useCandidateName();
   const resumeFileNameFor = (current: Application) =>
     resumeFileName({ candidateName, jobTitle, applicationId: current.id });
@@ -575,6 +584,7 @@ function JobApplicationWorkspace({
     (packet?.artifactHashes.resume !== undefined &&
       shownResumeHash === packet.artifactHashes.resume);
   const applyDisabled =
+    basicsBlocked ||
     busy ||
     checking ||
     !href ||
@@ -586,6 +596,8 @@ function JobApplicationWorkspace({
     Boolean(preparation);
 
   function apply(forceUploaded = false) {
+    // Nothing starts until the Profile holds the basics every application asks.
+    if (basicsBlocked) return;
     // A second click while one is running must not open another employer tab.
     if (starting.current) return;
     const displayedHash = packet?.packetHash;
@@ -944,6 +956,7 @@ function JobApplicationWorkspace({
                   }}
                 />
               ) : null}
+              {requireBasics ? <ApplicationBasicsGate basics={basics} /> : null}
               <section aria-label="Apply" className="apply-action">
                 <p>
                   {plan.resume === "generated"

@@ -178,8 +178,11 @@ export async function fillGreenhouseFields(
         entry.needsUserAction ||
         typeof entry.value !== "string" ||
         !entry.value.trim()
-      )
+      ) {
+        // An education dropdown with nothing saved for it: the candidate adds it to their profile.
+        if (action.fieldKey?.startsWith("education.")) notes.push(`empty:${action.fieldKey}`);
         continue;
+      }
       authority.onField?.(action.fieldKey);
       await Promise.race([authority.revalidateApproval(), stopped]);
       if (!current()) throw new Error("GreenhouseFillUnavailable");
