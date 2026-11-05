@@ -49,9 +49,10 @@ export function mountApplicationHandoff() {
             ? ` (stopped at: ${response.stage})`
             : "";
         if (action === "fill") {
-          status.textContent = response.ok
-            ? "Filled for your review. Nothing was submitted. Check the employer page; submit it yourself or leave it."
-            : `The page could not be filled. Nothing was submitted. Check the employer page and try again.${where}`;
+          status.textContent =
+            response.ok && response.result === "challenge_required"
+              ? "Filled for your review. Nothing was submitted. Check the employer page; submit it yourself or leave it."
+              : `The page could not be filled completely. Nothing was submitted. Check the employer page and try again.${where}${typeof response.result === "string" ? ` (page run: ${response.result})` : ""}`;
           return;
         }
         if (action === "apply") {

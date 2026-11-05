@@ -296,6 +296,8 @@ export async function executeApprovedApplication(options: {
     return {
       ok: true,
       outcome: result.kind === "confirmed" ? "confirmed" : "review_required",
+      // What the page run reported, with no content, so the popup can say whether it filled.
+      result: result.kind,
       reviewLink: selection.reviewLink,
     };
   };

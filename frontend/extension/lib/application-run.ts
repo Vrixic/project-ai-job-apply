@@ -31,8 +31,11 @@ export async function executeApplication(options: {
   revalidateDispatched(): Promise<void>;
   /** Fill and attach for the candidate's own review and stop: nothing is submitted. */
   fillOnly?: boolean;
+  /** Reports the step that is starting, so a refusal can say where it stopped. Never any content. */
+  onStage?(stage: string): void;
 }): Promise<ApplicationSubmissionResultRequest> {
   const { document } = options;
+  const mark = (stage: string) => options.onStage?.(stage);
   const { provider } = options;
   const profile = Object.freeze(structuredClone(options.profile));
   const view = document.defaultView;
@@ -132,7 +135,9 @@ export async function executeApplication(options: {
     return reference && /^[a-zA-Z0-9_-]{1,200}$/u.test(reference) ? { node, reference } : undefined;
   };
   try {
+    mark("revalidate");
     await fresh();
+    mark("inspect");
     if (!view || confirmationNodes().length !== 0) throw unavailable();
     inspection = provider.inspect(document, options.employerUrl);
     const bytes = new TextEncoder().encode(inspection.structure);
@@ -142,6 +147,7 @@ export async function executeApplication(options: {
     bytes.fill(0);
     const formHash = [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
     digest.fill(0);
+    mark("form-hash");
     if (formHash !== options.formHash) throw unavailable();
     current();
     const files = options.files;
@@ -151,6 +157,7 @@ export async function executeApplication(options: {
       new Set(files.map((file) => file.kind)).size !== files.length
     )
       throw unavailable();
+    mark("plan");
     const plan = buildFillPlan(inspection.form, options.packet, {
       resume: files.some(
         (file) => file.kind === "tailored_resume" || file.kind === "uploaded_resume",
@@ -174,6 +181,7 @@ export async function executeApplication(options: {
       )
     )
       throw unavailable();
+    mark("root");
     const root = provider.root(document);
     // Required candidate-only controls may already be completed; inspect validity, never values.
     for (const action of takeover ? [] : plan.actions) {
@@ -183,11 +191,14 @@ export async function executeApplication(options: {
       if (!provider.controlsSatisfied(inspection.resolve(action.ref), required))
         return { kind: "precondition_failed" };
     }
+    mark("submit-control");
     const button = provider.submitControl(root, profile);
     actionable(button);
+    mark("claim");
     await fresh();
     if (!options.claim()) throw unavailable();
     claimed = true;
+    mark("fill");
     const filled = await provider.fill(inspection, options.packet, {
       registry: options.registry,
       variantId: profile.variantId,
@@ -199,6 +210,7 @@ export async function executeApplication(options: {
     const expectedFills = plan.actions.filter(
       (action) => action.kind === "fill" || action.kind === "select",
     );
+    mark("fill-check");
     if (filled.filled.length !== expectedFills.length) throw unavailable();
     const requireWrittenFields = () => {
       for (const action of expectedFills) {
@@ -228,6 +240,7 @@ export async function executeApplication(options: {
           throw unavailable();
       }
     };
+    mark("written-fields");
     requireWrittenFields();
     const requireAttachments = () => {
       for (const { control, file, ref } of attachments) {
@@ -244,6 +257,7 @@ export async function executeApplication(options: {
           throw unavailable();
       }
     };
+    mark("attach");
     for (const action of plan.actions) {
       if (action.kind !== "attach_artifact") continue;
       await fresh();
@@ -298,6 +312,7 @@ export async function executeApplication(options: {
       current();
       inspection.resolve(action.ref);
       control.files = transfer.files;
+      let swapped = false;
       for (const event of ["input", "change"]) {
         current();
         requireWrittenFields();
@@ -312,13 +327,35 @@ export async function executeApplication(options: {
           throw unavailable();
         control.dispatchEvent(new view.Event(event, { bubbles: true }));
       }
-      inspection.resolve(action.ref);
-      if (control.files?.length !== 1 || !control.validity.valid) throw unavailable();
+      if (provider.attachmentAccepted) {
+        // Some boards replace the upload control with their own display once they take the file.
+        const settleBy = Math.min(deadline, Date.now() + 2_000);
+        while (control.isConnected && Date.now() < settleBy)
+          await Promise.race([new Promise<void>((resolve) => setTimeout(resolve, 50)), stopped]);
+        if (!control.isConnected) {
+          // The board may show its upload progress first; give it a moment to show the file.
+          const acceptedBy = Math.min(deadline, Date.now() + 8_000);
+          while (!provider.attachmentAccepted(root, intended.name) && Date.now() < acceptedBy)
+            await Promise.race([new Promise<void>((resolve) => setTimeout(resolve, 100)), stopped]);
+          if (!provider.attachmentAccepted(root, intended.name)) throw unavailable();
+          swapped = true;
+          attachments.splice(
+            attachments.findIndex((candidate) => candidate.control === control),
+            1,
+          );
+        }
+      }
+      if (!swapped) {
+        inspection.resolve(action.ref);
+        if (control.files?.length !== 1 || !control.validity.valid) throw unavailable();
+      }
     }
+    mark("final-check");
     await fresh();
     requireWrittenFields();
     requireAttachments();
-    for (const field of inspection.form.fields) inspection.resolve(field.ref);
+    for (const field of inspection.form.fields)
+      if (field.type !== "file") inspection.resolve(field.ref);
     if (
       !root.isConnected ||
       (!takeover && !provider.rootValid(root)) ||

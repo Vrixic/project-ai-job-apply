@@ -97,5 +97,10 @@ export const greenhouseProvider: ApplicationProvider = {
     );
   },
   isConfirmationUrl,
+  attachmentAccepted(root, fileName) {
+    return Array.from(root.querySelectorAll(".file-upload__filename")).some(
+      (element) => element.textContent?.includes(fileName) === true,
+    );
+  },
   profile: greenhouseExecutionProfile,
 };

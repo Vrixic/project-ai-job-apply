@@ -107,7 +107,7 @@ describe("manual handoff UI", () => {
   it("fills for the candidate's review without asking to submit", async () => {
     send.mockImplementation(async (message) =>
       message.action === "application_native_apply"
-        ? { ok: true, outcome: "review_required" }
+        ? { ok: true, outcome: "review_required", result: "challenge_required" }
         : { ok: true },
     );
     control<HTMLInputElement>("input").value = LINK;
@@ -120,7 +120,7 @@ describe("manual handoff UI", () => {
       reviewLink: LINK,
       fillOnly: true,
     });
-    expect(control("[data-handoff-status]").textContent).toContain("Nothing was submitted");
+    expect(control("[data-handoff-status]").textContent).toContain("Filled for your review");
   });
 
   it("allows Clear during a pending Apply and blocks duplicate Apply", async () => {
