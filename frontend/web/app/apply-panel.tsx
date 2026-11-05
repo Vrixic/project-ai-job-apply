@@ -48,6 +48,7 @@ export function ApplyPanel({
   handoff = { phase: "none" },
   promptOutcome = false,
   onRecordSubmission,
+  onStartOver,
   fetchImplementation,
 }: {
   application: Application;
@@ -63,6 +64,8 @@ export function ApplyPanel({
     outcome: "submitted" | "not_submitted";
     observation?: ManualFormObservation | undefined;
   }): Promise<void> | void;
+  /** Goes back to preparing the application from the start, with nothing sent to the employer. */
+  onStartOver?(): Promise<void> | void;
   fetchImplementation?: typeof globalThis.fetch;
 }) {
   const headingId = useId();
@@ -154,7 +157,8 @@ export function ApplyPanel({
       <h3 id={headingId}>Finish on the employer's page</h3>
       {expired ? (
         <p role="alert">
-          Your generated resume expired. Generate it again, or apply with your uploaded resume.
+          Your generated resume expired. Start over to generate it again, or apply with your
+          uploaded resume.
         </p>
       ) : application.status === "reconciliation_required" ? (
         <p role="alert">
@@ -183,6 +187,11 @@ export function ApplyPanel({
       <button type="button" ref={trigger} disabled={expired} onClick={() => setOpen(true)}>
         Record submission
       </button>
+      {starting && onStartOver ? (
+        <button type="button" disabled={recording} onClick={() => void onStartOver()}>
+          Start over
+        </button>
+      ) : null}
       {open ? (
         <div className="modal-backdrop">
           {/* biome-ignore lint/a11y/noStaticElementInteractions: the dialog handles Escape and Tab for its own focus trap. */}

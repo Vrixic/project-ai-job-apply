@@ -147,6 +147,17 @@ function dialog(): HTMLElement | null {
 }
 
 describe("ApplyPanel", () => {
+  it("offers Start over before anything is recorded, only when the caller can reopen", async () => {
+    const onStartOver = vi.fn();
+    await mount({ onStartOver });
+    await act(async () => {
+      button("Start over").click();
+    });
+    expect(onStartOver).toHaveBeenCalledTimes(1);
+    await mount({ application: { ...approved(), status: "takeover" } });
+    expect(container.textContent).not.toContain("Start over");
+  });
+
   it("is minimal: a heading, the employer link and one record action", async () => {
     await mount();
     const link = container.querySelector("a");
