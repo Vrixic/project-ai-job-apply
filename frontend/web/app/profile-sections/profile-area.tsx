@@ -10,12 +10,14 @@ import {
   useState,
 } from "react";
 import { ResumeUploadForm } from "../resume-upload-form";
+import { useApplicationBasics } from "../use-application-basics";
 import { loadDrafts } from "./api";
 import { EntrySection } from "./entry-section";
 import { PersonalSection } from "./personal-section";
+import { ScreeningSection } from "./screening-section";
 import { PROFILE_SECTIONS, type SectionKey } from "./sections";
 
-type TabId = "personal" | SectionKey | "resume" | "preferences";
+type TabId = "personal" | SectionKey | "screening" | "resume" | "preferences";
 
 interface Tab {
   id: TabId;
@@ -25,6 +27,7 @@ interface Tab {
 const BASE_TABS: readonly Tab[] = [
   { id: "personal", label: "Personal" },
   { id: "education", label: "Education" },
+  { id: "screening", label: "Screening questions" },
   { id: "workExperience", label: "Work experience" },
   { id: "skill", label: "Skills" },
   { id: "applicationAnswer", label: "Application answers" },
@@ -49,6 +52,19 @@ export function ProfileArea({
 }) {
   const tabs: readonly Tab[] = BASE_TABS;
   const [active, setActive] = useState<TabId>("personal");
+  const basics = useApplicationBasics(authenticated);
+  const stillNeeded = basics.missing.filter((item) => item.section === active);
+
+  // The apply popup links here with the tab that still has something to fill in.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("tab");
+    const match = BASE_TABS.find((tab) => tab.id === wanted);
+    if (match) setActive(match.id);
+  }, []);
+  // Coming back to a tab, or saving in one, is when what is still missing can have changed.
+  const refreshBasics = basics.retry;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a tab change is the trigger
+  useEffect(() => refreshBasics(), [active]);
   const [drafts, setDrafts] = useState<ProfileImportDraft[]>([]);
   const tabRefs = useRef(new Map<TabId, HTMLButtonElement>());
   const mounted = useRef(true);
@@ -155,6 +171,12 @@ export function ProfileArea({
         >
           {active === tab.id && (
             <>
+              {stillNeeded.length > 0 && (
+                <output className="profile-import-banner" aria-live="polite">
+                  Still needed before you can apply:{" "}
+                  {stillNeeded.map((item) => item.label).join("; ")}.
+                </output>
+              )}
               {tab.id === "personal" && (
                 <PersonalSection
                   authenticated={authenticated}
@@ -187,6 +209,9 @@ export function ProfileArea({
                     onDocumentDeleted={() => void refreshDrafts()}
                   />
                 </section>
+              )}
+              {tab.id === "screening" && (
+                <ScreeningSection authenticated={authenticated} onSaved={refreshBasics} />
               )}
               {tab.id === "preferences" && preferences}
             </>

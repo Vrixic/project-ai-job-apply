@@ -25,7 +25,6 @@ import {
   normalizeQuestionKey,
   type PersonalRecordLike,
   profileEntriesToGraphFacts,
-  restrictedQuestionCategory,
   type SkillRecordLike,
   type WorkRecordLike,
 } from "@ai-job-apply/domain";
@@ -276,9 +275,6 @@ function checkContent(section: ProfileEntrySection, content: Json): void {
     throw new ProfileSectionInputError("the end date precedes the start date");
   }
   if (section === "applicationAnswer") {
-    if (restrictedQuestionCategory(String(content.question)) !== undefined) {
-      throw new ProfileSectionRestrictedQuestionError();
-    }
     if (naturalKey(section, content)?.length === 0) {
       throw new ProfileSectionInputError("the question is empty");
     }
@@ -594,7 +590,6 @@ export class PostgresProfileSectionStore implements ProfileSectionStore {
     userId: string,
     question: string,
   ): Promise<ProfileApplicationAnswer | null> {
-    if (restrictedQuestionCategory(question) !== undefined) return null;
     const key = normalizeQuestionKey(question);
     if (key.length === 0) return null;
     const rows = await this.client.unsafe<EntryRow[]>(

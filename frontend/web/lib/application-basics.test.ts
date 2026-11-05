@@ -29,52 +29,59 @@ const without = (entry: ProfileEducationEntry, key: "degree" | "fieldOfStudy") =
   const { [key]: _omitted, ...rest } = entry;
   return rest;
 };
+const answered = {
+  "authorization.us_authorized": true,
+  "authorization.sponsorship_required": false,
+} as const;
+const complete = { personal: personal(), education: [education()], screening: answered };
 
 describe("missingBasics", () => {
-  it("is empty when the profile holds every basic", () => {
-    expect(missingBasics({ personal: personal(), education: [education()] })).toEqual([]);
+  it("is empty when the profile holds every basic and screening answer", () => {
+    expect(missingBasics(complete)).toEqual([]);
   });
-  it("names everything missing from an empty profile", () => {
-    expect(missingBasics({ personal: undefined, education: [] }).map((m) => m.key)).toEqual([
-      "name",
-      "email",
-      "phone",
-      "education",
+  it("names everything missing from an empty profile, in the order it is asked", () => {
+    expect(
+      missingBasics({ personal: undefined, education: [], screening: {} }).map((m) => [
+        m.key,
+        m.section,
+      ]),
+    ).toEqual([
+      ["name", "personal"],
+      ["email", "personal"],
+      ["phone", "personal"],
+      ["education", "education"],
+      ["authorization.us_authorized", "screening"],
+      ["authorization.sponsorship_required", "screening"],
     ]);
   });
   it("needs a first and a last name, not a single word", () => {
     expect(
-      missingBasics({ personal: personal({ fullName: "Pat" }), education: [education()] }).map(
-        (m) => m.key,
-      ),
+      missingBasics({ ...complete, personal: personal({ fullName: "Pat" }) }).map((m) => m.key),
     ).toEqual(["name"]);
   });
   it("needs a degree and a field of study, not only a school", () => {
     for (const omitted of ["degree", "fieldOfStudy"] as const)
       expect(
-        missingBasics({
-          personal: personal(),
-          education: [without(education(), omitted)],
-        }).map((m) => m.key),
+        missingBasics({ ...complete, education: [without(education(), omitted)] }).map(
+          (m) => m.key,
+        ),
       ).toEqual(["education"]);
   });
   it("judges the first education entry, which is the one an application uses", () => {
-    const complete = education({ displayOrder: 1 });
+    const later = education({ displayOrder: 1 });
     const incomplete = without(education({ displayOrder: 0 }), "degree");
-    expect(missingBasics({ personal: personal(), education: [complete, incomplete] })).toHaveLength(
-      1,
-    );
+    expect(missingBasics({ ...complete, education: [later, incomplete] })).toHaveLength(1);
+    expect(missingBasics({ ...complete, education: [incomplete, later] })).toHaveLength(1);
     expect(
-      missingBasics({
-        personal: personal(),
-        education: [incomplete, complete].reverse(),
-      }),
-    ).toHaveLength(1);
-    expect(
-      missingBasics({
-        personal: personal(),
-        education: [complete, education({ displayOrder: 0 })],
-      }),
+      missingBasics({ ...complete, education: [later, education({ displayOrder: 0 })] }),
     ).toEqual([]);
+  });
+  it("counts a No as an answer, and an unanswered question as missing", () => {
+    expect(
+      missingBasics({
+        ...complete,
+        screening: { "authorization.us_authorized": false },
+      }).map((m) => m.key),
+    ).toEqual(["authorization.sponsorship_required"]);
   });
 });
