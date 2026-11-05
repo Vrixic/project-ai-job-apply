@@ -3412,6 +3412,8 @@ export interface components {
             deadline: number;
             fields: components["schemas"]["ApplicationExecutionField"][];
             files: components["schemas"]["ApplicationExecutionFile"][];
+            /** @description Fill the approved answers and attach the files, then stop for the candidate's review. Nothing is submitted. */
+            fillOnly?: boolean;
         };
         ApplicationExecutionProof: {
             /** @constant */

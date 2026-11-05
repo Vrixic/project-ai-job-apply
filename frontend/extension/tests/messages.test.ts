@@ -73,4 +73,21 @@ describe("extension message boundary", () => {
       }),
     ).toBeUndefined();
   });
+
+  it("accepts a fill-only apply only with the exact flag and link", () => {
+    const reviewLink = "https://workspace.example.invalid/jobs?application=a&job=b";
+    expect(
+      parseExtensionMessage({ action: "application_native_apply", reviewLink, fillOnly: true }),
+    ).toEqual({ action: "application_native_apply", reviewLink, fillOnly: true });
+    expect(
+      parseExtensionMessage({ action: "application_native_apply", reviewLink, fillOnly: false }),
+    ).toBeUndefined();
+    expect(
+      parseExtensionMessage({ action: "application_native_apply", reviewLink, extra: true }),
+    ).toBeUndefined();
+    expect(parseExtensionMessage({ action: "application_native_apply", reviewLink })).toEqual({
+      action: "application_native_apply",
+      reviewLink,
+    });
+  });
 });

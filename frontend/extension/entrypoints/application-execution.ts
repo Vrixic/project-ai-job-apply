@@ -180,6 +180,7 @@ if (!Object.hasOwn(globalThis, installed)) {
           attemptId: message.attemptId,
           packet: message.fields,
           files: state.files,
+          ...(message.fillOnly ? { fillOnly: true } : {}),
           profile,
           registry: applicationExecutionRegistry,
           deadline: message.deadline,

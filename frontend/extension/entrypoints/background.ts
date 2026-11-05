@@ -1040,7 +1040,7 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
       }
       if (message.action === "application_native_apply") {
         if (!nativeTransfer) throw Error("ApplicationExecutionUnavailable");
-        return await nativeTransfer.apply(message.reviewLink);
+        return await nativeTransfer.apply(message.reviewLink, message.fillOnly === true);
       }
       if (message.action === "application_native_clear") return { ok: true };
       if (message.action === "application_pending_intent")

@@ -25,7 +25,7 @@ export function mountApplicationHandoff() {
   const nativeInstructions = section.querySelector<HTMLElement>("[data-native-instructions]");
   if (nativeInstructions && extensionConfiguration.applicationExecutionEnabled)
     nativeInstructions.hidden = false;
-  for (const action of ["select", "clear", "apply"] as const) {
+  for (const action of ["select", "clear", "fill", "apply"] as const) {
     const button = section.querySelector<HTMLButtonElement>(`[data-native-${action}]`);
     if (!button || !extensionConfiguration.applicationExecutionEnabled) continue;
     button.hidden = false;
@@ -40,8 +40,16 @@ export function mountApplicationHandoff() {
             ? { action: "application_native_select", reviewLink: input.value }
             : action === "apply"
               ? { action: "application_native_apply", reviewLink: input.value }
-              : { action: "application_native_clear" },
+              : action === "fill"
+                ? { action: "application_native_apply", reviewLink: input.value, fillOnly: true }
+                : { action: "application_native_clear" },
         );
+        if (action === "fill") {
+          status.textContent = response.ok
+            ? "Filled for your review. Nothing was submitted. Check the employer page; submit it yourself or leave it."
+            : "The page could not be filled. Nothing was submitted. Check the employer page and try again.";
+          return;
+        }
         if (action === "apply") {
           status.textContent =
             response.ok && response.outcome === "confirmed"

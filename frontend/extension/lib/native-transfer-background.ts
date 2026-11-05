@@ -377,13 +377,14 @@ export function installNativeTransferBackground(options: {
     // Private executor composition only. No content in popup snapshots or external responses.
     consume: transfer.consume,
     consumeSelected: transfer.consumeSelected,
-    async apply(reviewLink: string) {
+    async apply(reviewLink: string, fillOnly = false) {
       const owned = transfer.consumeSelected(reviewLink);
       try {
         return await executeApprovedApplication({
           apiOrigin: options.apiOrigin,
           registry: options.registry,
           identity: options.identity,
+          ...(fillOnly ? { fillOnly: true } : {}),
           owned,
           async preflight(selection, signal) {
             const proof = await protectedSelection(
