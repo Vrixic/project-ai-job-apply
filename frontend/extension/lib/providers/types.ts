@@ -40,6 +40,8 @@ export interface FillAuthority {
   throwOnFailure?: boolean;
   /** Names the field being filled, for a refusal message. Never any value. */
   onField?(fieldKey: string): void;
+  /** Scrolls the control about to be filled into view for the candidate. Moves the view only. */
+  reveal?(control: Element): Promise<void>;
 }
 
 /**

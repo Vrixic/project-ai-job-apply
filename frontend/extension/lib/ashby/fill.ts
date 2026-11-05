@@ -60,6 +60,11 @@ export async function fillAshbyFields(
       const field = inspection.form.fields.find((candidate) => candidate.ref === action.ref);
       const view = controls[0]?.ownerDocument.defaultView;
       if (!field || !view || controls.length === 0) throw unavailable();
+      if (authority.reveal && controls[0]) {
+        await Promise.race([authority.reveal(controls[0]), stopped]);
+        if (!current()) throw unavailable();
+        inspection.resolve(action.ref);
+      }
       let matchesApproved: () => boolean;
       let eventTarget: Element | undefined;
       if (action.kind === "select") {

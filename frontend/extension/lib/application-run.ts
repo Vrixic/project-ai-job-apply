@@ -8,6 +8,7 @@ import type {
   ApplicationProvider,
   ExecutionProfile,
 } from "./providers/types";
+import { revealControl } from "./reveal";
 
 const unavailable = () => Error("ApplicationExecutionUnavailable");
 
@@ -34,6 +35,8 @@ export async function executeApplication(options: {
   fillOnly?: boolean;
   /** Reports the step that is starting, so a refusal can say where it stopped. Never any content. */
   onStage?(stage: string): void;
+  /** Pause after scrolling to each control being filled, so the candidate can watch. Default none. */
+  paceMs?: number;
 }): Promise<ApplicationSubmissionResultRequest> {
   const { document } = options;
   let where = "";
@@ -216,6 +219,7 @@ export async function executeApplication(options: {
       onField: (fieldKey) => {
         detail = fieldKey;
       },
+      reveal: (control) => revealControl(control, options.paceMs ?? 0, stopped),
     });
     const expectedFills = plan.actions.filter(
       (action) => action.kind === "fill" || action.kind === "select",
@@ -286,6 +290,8 @@ export async function executeApplication(options: {
       )
         throw unavailable();
       actionable(control);
+      await revealControl(control, options.paceMs ?? 0, stopped);
+      current();
       const file = files.find((candidate) =>
         action.fieldKey === "documents.resume"
           ? candidate.kind === "tailored_resume" || candidate.kind === "uploaded_resume"

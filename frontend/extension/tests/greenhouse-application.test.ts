@@ -142,6 +142,21 @@ describe("Greenhouse local adapter primitives", () => {
     expect(document.querySelector("input")?.value).toBe("synthetic@example.invalid");
     expect(submit).not.toHaveBeenCalled();
   });
+  it("scrolls to each field before it fills it", async () => {
+    const dom = page();
+    const document = dom.window.document;
+    const order: string[] = [];
+    const reveal = vi.fn(async (control: Element) => {
+      order.push(`reveal:${(control as HTMLInputElement).value === "" ? "empty" : "filled"}`);
+    });
+    await fillGreenhouseFields(inspectGreenhouseApplication(document, URL), packet, {
+      ...authority(),
+      reveal,
+    });
+    expect(reveal).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(["reveal:empty"]);
+    expect(document.querySelector("input")?.value).toBe("synthetic@example.invalid");
+  });
   it("sets a framework-controlled field through the native setter", async () => {
     const dom = page();
     const document = dom.window.document;
