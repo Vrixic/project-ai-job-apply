@@ -65,6 +65,8 @@ export async function executeApprovedApplication(options: {
   let dispatchSent = false;
   // The step that ran last, so a refusal can say where it stopped. Never any content.
   let stage = "";
+  // The check inside the step that ran last. Never any content.
+  let sub = "";
   let commandSent = false;
   let resultSent = false;
   let command: ApplicationExecutionCommand | undefined;
@@ -138,7 +140,9 @@ export async function executeApprovedApplication(options: {
     );
   };
   const freshAttempt = async (status: "started" | "dispatched") => {
+    sub = `${status}:identity`;
     const session = await identity();
+    sub = `${status}:application`;
     const application = await bounded(
       readJson(
         new URL(`/v1/applications/${selection.applicationId}`, options.apiOrigin),
@@ -155,6 +159,7 @@ export async function executeApprovedApplication(options: {
       !originalPacket
     )
       throw unavailable();
+    sub = `${status}:attempt`;
     const matches = application.attempts.filter((candidate) => candidate.id === attempt?.id);
     const ownedAttempt = matches[0];
     if (
@@ -168,6 +173,7 @@ export async function executeApprovedApplication(options: {
       (status === "dispatched" && ownedAttempt.dispatchedAt !== attempt.dispatchedAt)
     )
       throw unavailable();
+    sub = `${status}:job`;
     const job = await bounded(
       readJson(
         new URL(`/v1/jobs/${selection.jobId}`, options.apiOrigin),
@@ -192,6 +198,7 @@ export async function executeApprovedApplication(options: {
     digest.fill(0);
     if (originalPacket.jobRevision !== hash || application.currentPacket?.jobRevision !== hash)
       throw unavailable();
+    sub = `${status}:material`;
     for (const material of selection.materials) {
       const kind = material.kind === "tailored_resume" ? "resume" : "cover-letter";
       const url = new URL(
@@ -208,6 +215,7 @@ export async function executeApprovedApplication(options: {
       )
         throw unavailable();
     }
+    sub = `${status}:final`;
     const finalApplication = await bounded(
       readJson(
         new URL(`/v1/applications/${selection.applicationId}`, options.apiOrigin),
@@ -232,9 +240,11 @@ export async function executeApprovedApplication(options: {
       )
     )
       throw unavailable();
+    sub = `${status}:document`;
     await documentProof();
     await identity();
     current();
+    sub = "";
   };
   const proofListener: Parameters<typeof chrome.runtime.onMessage.addListener>[0] = (
     message: unknown,
@@ -455,7 +465,9 @@ export async function executeApprovedApplication(options: {
     )
       throw unavailable();
     attempt = dispatched;
+    stage = "attempt-recheck";
     await freshAttempt("dispatched");
+    stage = "command-build";
     command = {
       schema: "application-execution-command.v1",
       nonce,
@@ -479,12 +491,15 @@ export async function executeApprovedApplication(options: {
       })),
     };
     // The candidate's own original (up to 2 MiB) may exceed the generated-file wire limit.
+    stage = "command-check";
+    if (!validateApplicationExecutionCommand(command)) throw unavailable();
     if (
-      !validateApplicationExecutionCommand(command) ||
       new TextEncoder().encode(JSON.stringify(command)).byteLength >
-        (uploadedFiles.length ? 3_700_000 : 850_000)
-    )
+      (uploadedFiles.length ? 3_700_000 : 850_000)
+    ) {
+      stage = "command-size";
       throw unavailable();
+    }
     stage = "page-fill";
     chrome.runtime.onMessage.addListener(proofListener);
     commandSent = true;
@@ -522,7 +537,10 @@ export async function executeApprovedApplication(options: {
     if (dispatchSent && attempt && api && !resultSent && !controller.signal.aborted) {
       try {
         await identity();
-        return await record({ kind: "unrecognized_response" }, `executor:${stage}`);
+        return await record(
+          { kind: "unrecognized_response" },
+          `executor:${stage}${sub ? `>${sub}` : ""}`,
+        );
       } catch {
         /* Requires reconciliation. */
       }
@@ -531,7 +549,7 @@ export async function executeApprovedApplication(options: {
       ok: false,
       outcome: dispatchSent ? "unknown" : "review_required",
       reviewLink: selection.reviewLink,
-      stage,
+      stage: `${stage}${sub ? `>${sub}` : ""}`,
     };
   } finally {
     abort();
