@@ -38,6 +38,8 @@ export interface FillAuthority {
   revalidateApproval(): Promise<void>;
   /** Submission composition must distinguish a stopped fill from candidate-only review. */
   throwOnFailure?: boolean;
+  /** Names the field being filled, for a refusal message. Never any value. */
+  onField?(fieldKey: string): void;
 }
 
 /**

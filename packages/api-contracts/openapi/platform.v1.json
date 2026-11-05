@@ -14288,6 +14288,10 @@
           },
           "result": {
             "$ref": "#/components/schemas/ApplicationSubmissionResultRequest"
+          },
+          "stage": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9:_. -]{1,120}$"
           }
         },
         "additionalProperties": false
