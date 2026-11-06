@@ -35,14 +35,17 @@ try {
   const dependencyRoots = runPnpm(["why", "image-size", "--recursive", "--json"], [0]);
   const remediation = verifyImageSizeRemediation({ repositoryRoot, dependencyRoots });
   const report = runPnpm(["audit", "--audit-level", "high", "--json"], [0, 1]);
-  const additionalRoots = runPnpm(["why", "node-forge", "braces", "--recursive", "--json"], [0]);
+  const additionalRoots = runPnpm(
+    ["why", "node-forge", "braces", "deepmerge", "--recursive", "--json"],
+    [0],
+  );
   const result = evaluateInstalledDependencyAudit({
     repositoryRoot,
     dependencyRoots: additionalRoots,
     report,
   });
   process.stdout.write(
-    `Dependency audit passed: exact local image-size, node-forge and braces remediation verified across ${remediation.dependencyPaths + result.dependencyPaths} mobile build paths; ${result.remediatedAdvisories} known advisory records remediated, ${result.registryOmittedAdvisories} omitted by the registry. No risk exceptions.\n`,
+    `Dependency audit passed: exact local image-size, braces and deepmerge remediation and the exact upstream node-forge release verified across ${remediation.dependencyPaths + result.dependencyPaths} mobile build paths; ${result.remediatedAdvisories} known advisory records remediated, ${result.registryOmittedAdvisories} omitted by the registry. No risk exceptions.\n`,
   );
 } catch {
   process.stderr.write(
