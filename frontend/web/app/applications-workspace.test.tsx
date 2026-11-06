@@ -908,6 +908,27 @@ describe("ApplicationsWorkspace: extension hand-off", () => {
     expect(JSON.stringify(messages)).not.toMatch(/token|authorization|candidate@example/iu);
   });
 
+  it("asks the extension to open its side panel in the turn of the Apply click, with no data", async () => {
+    currentBff = new FakeBff();
+    const messages = extension([]);
+    await mount(currentBff);
+    const apply = button("Apply");
+    if (!apply) throw new Error("No Apply button");
+    // Nothing is awaited between the click and the request: the browser opens a panel only then.
+    act(() => apply.click());
+    expect(messages).toEqual([{ schema: "application-open-panel.v1" }]);
+    await settle();
+  });
+
+  it("does not ask for the panel when no extension is configured", async () => {
+    vi.stubEnv("NEXT_PUBLIC_APPLICATION_EXTENSION_TRANSFER_ENABLED", "false");
+    currentBff = new FakeBff();
+    const messages = extension([]);
+    await mount(currentBff);
+    await click("Apply");
+    expect(messages).toEqual([]);
+  });
+
   it("sends the generated PDF once the extension asks, and only as PDF", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     currentBff = new FakeBff();

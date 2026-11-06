@@ -1,4 +1,4 @@
-import { isPanelAccessGranted } from "./side-panel";
+import { isPanelNotice } from "./side-panel";
 
 interface Listenable<Args extends unknown[]> {
   addListener(listener: (...args: Args) => void): void;
@@ -42,7 +42,7 @@ export function followActiveTab(
       changed();
   };
   const message = (value: unknown, sender: { id?: string; tab?: unknown }) => {
-    if (isPanelAccessGranted(value, sender, api.runtime.id)) changed();
+    if (isPanelNotice(value, sender, api.runtime.id)) changed();
   };
   api.tabs?.onActivated?.addListener(changed);
   api.tabs?.onUpdated?.addListener(updated);

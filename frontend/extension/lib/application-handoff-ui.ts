@@ -155,7 +155,7 @@ export function mountApplicationHandoff() {
       // Opening the extension on the page gives that access; nothing is selected or cleared yet.
       if (page && !page.visible) {
         status.textContent =
-          "Go to the employer page, then click the ApplyDash icon there so ApplyDash can fill it.";
+          "Your application is ready. On the employer page, click the ApplyDash icon once so ApplyDash can fill it.";
         return;
       }
       if (input.value && input.value !== response.reviewLink) return;

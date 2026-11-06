@@ -80,3 +80,23 @@ clears an earlier selection because of a tab it cannot see. A preview belongs to
 made from and is dropped when the candidate moves to another page. The message that tells the
 panel is accepted only from the extension's own background. Trust, approval, binding and
 fill-only/submit rules are unchanged.
+
+## Amendment: the panel opens when Apply is pressed (2026-11-06)
+
+Owner direction: the extension should appear on its own after Apply. The browser opens a panel
+only in the turn of a click, and the website's Apply handler waits on the network before it
+arms the extension, so the website sends a separate request in the click's own turn:
+`application-open-panel.v1`, exactly `{ "schema": "application-open-panel.v1" }` and nothing else
+(no identifier, page or data). The extension handles it first and synchronously, opens the side panel
+for the sender's window, and answers `application-open-panel-receipt.v1` with whether the browser
+agreed. It is accepted under the same sender rules as the apply intent: the website's own origin,
+its top document, active, a normal (not private) window, and no extension sender. Nothing waits for
+the answer; without the extension or its panel Apply is unchanged. Checked in Edge: the browser
+accepts the open from this message after a real click.
+
+Opening the panel does not give the extension the employer page: that access is still the
+`activeTab` grant, which only the toolbar icon click gives (checked: with the panel open and no
+click, script access to the new tab is refused and its address stays hidden). So the panel opens
+beside the employer page, tells the candidate their application is ready and to click the icon once,
+and the armed application notifies an open panel so it can say so. Standing access to the provider
+sites would remove that click but is a permission change for the owner to decide; none is made.

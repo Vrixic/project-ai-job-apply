@@ -14,6 +14,13 @@ import {
 } from "./native-material-transfer";
 import { sameNativeTransferBinding } from "./native-transfer-binding";
 import { providerForUrl } from "./providers";
+import {
+  isOpenPanelRequest,
+  notifyPanel,
+  OPEN_PANEL_RECEIPT,
+  OPEN_PANEL_REQUEST,
+  openSidePanel,
+} from "./side-panel";
 
 const unavailable = () => Error("NativeMaterialTransferUnavailable");
 
@@ -266,6 +273,30 @@ export function installNativeTransferBackground(options: {
   chrome.runtime.onMessageExternal.addListener((message: unknown, sender, respond) => {
     const schema =
       message && typeof message === "object" && "schema" in message ? message.schema : undefined;
+    if (schema === OPEN_PANEL_REQUEST) {
+      // The website sends this in the turn of the candidate's Apply click, the only moment the
+      // browser opens a panel, so it is handled before anything else. It carries no data; only the
+      // website's own top document in a normal window may ask, and it can ask for nothing but this.
+      const windowId = sender.tab?.windowId;
+      if (
+        !isOpenPanelRequest(message) ||
+        sender.id ||
+        sender.nativeApplication ||
+        sender.origin !== options.webOrigin ||
+        sender.frameId !== 0 ||
+        sender.documentLifecycle !== "active" ||
+        sender.tab?.incognito ||
+        typeof windowId !== "number" ||
+        windowId < 0
+      ) {
+        respond({ error: "ApplicationOpenPanelUnavailable" });
+        return false;
+      }
+      void openSidePanel(windowId).then((opened) =>
+        respond({ schema: OPEN_PANEL_RECEIPT, opened }),
+      );
+      return true;
+    }
     if (schema === "application-apply-intent.v1") {
       void (async () => {
         const text = JSON.stringify(message);
@@ -303,6 +334,7 @@ export function installNativeTransferBackground(options: {
           timer: setTimeout(clearIntent, 10 * 60_000),
         };
         rememberIntent(link.href, deadline);
+        notifyPanel();
         return { schema: "application-apply-intent-receipt.v1", expiresAtMs: deadline };
       })().then(respond, () => respond({ error: "ApplicationApplyIntentUnavailable" }));
       return true;

@@ -350,7 +350,8 @@ extension on the employer tab; the click happens once.
 The web native workspace separately requires `NEXT_PUBLIC_APPLICATION_EXTENSION_TRANSFER_ENABLED=true`
 and `NEXT_PUBLIC_APPLICATION_EXTENSION_ID` set to one exact installed Chrome extension ID. Pressing
 **Apply** in the website opens the employer page and sends an identifiers-only apply intent
-(`application-apply-intent.v1`); the side panel then offers that application and the candidate confirms
+(`application-apply-intent.v1`; in the click's own turn it first sends the data-free
+`application-open-panel.v1`, which opens the side panel beside the employer page); the side panel then offers that application and the candidate confirms
 on the employer tab (no manifest or permission change). The generated resume is PDF only and is
 pushed by the website; when none is valid the extension pulls the candidate's uploaded resume
 (original format, at most 2 MiB) with its own session. An expired or mismatched file is never

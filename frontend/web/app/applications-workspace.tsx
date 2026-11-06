@@ -34,6 +34,7 @@ import {
   type NativeExtensionMessenger,
   nativeExtensionId,
   nativeExtensionMessenger,
+  requestExtensionPanel,
   sendApplyIntent,
   transferWhenSelected,
 } from "../lib/native-extension-transfer";
@@ -634,6 +635,8 @@ function JobApplicationWorkspace({
     } catch {
       employerTab = null;
     }
+    // The extension's side panel opens beside the employer page now, in the turn of this click.
+    if (href) requestExtensionPanel(nativeExtensionId(), nativeExtensionMessenger());
     void run(async () => {
       try {
         let current = await ensureApplication();
