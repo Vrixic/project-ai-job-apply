@@ -99,6 +99,10 @@ function setup(
   ]);
   vi.spyOn(registry, "executionStatus").mockReturnValue({ mode: "autofill", reasons: [] });
   const controller = new AbortController();
+  let reachPage: () => void = () => undefined;
+  const pageReached = new Promise<void>((resolve) => {
+    reachPage = resolve;
+  });
   const posts: string[] = [];
   const results: ApplicationSubmissionResultRequest[] = [];
   const listeners = new Set<Parameters<typeof chrome.runtime.onMessage.addListener>[0]>();
@@ -199,6 +203,11 @@ function setup(
         controller.abort();
         return new Promise(() => {});
       }
+      // The page is still working when the run's budget runs out.
+      if (mode === "budget-spent") {
+        reachPage();
+        return new Promise(() => {});
+      }
       const sender = {
         id: "a".repeat(32),
         tab: { id: 7, incognito: false },
@@ -263,6 +272,7 @@ function setup(
   });
   const preflight = vi.fn(async () => undefined);
   return {
+    pageReached,
     posts,
     results,
     commands,
@@ -271,18 +281,19 @@ function setup(
     sendMessage,
     preflight,
     application,
-    run: () =>
+    run: (extra: { fillOnly?: boolean; ownedMs?: number; identityFor?: () => string } = {}) =>
       executeApprovedApplication({
+        ...(extra.fillOnly ? { fillOnly: true } : {}),
         apiOrigin: "https://api.example",
         registry,
         identity: async () => ({
           accessToken: "synthetic-private-credential",
-          identityFence: "synthetic-owner",
+          identityFence: extra.identityFor?.() ?? "synthetic-owner",
         }),
         preflight,
         owned: {
           signal: controller.signal,
-          deadline: Date.now() + 30_000,
+          deadline: Date.now() + (extra.ownedMs ?? 30_000),
           selection,
           files: uploaded
             ? [
@@ -353,6 +364,65 @@ it.each(["lost-result", "wrong-terminal-time", "worker-loss"])(
     expect(fixture.listeners.size).toBe(0);
   },
 );
+
+it("still reports a dispatched attempt whose run ran out of budget, so the application is not stranded", async () => {
+  vi.useFakeTimers();
+  try {
+    const fixture = setup("budget-spent");
+    const run = fixture.run();
+    // Let the run reach the page, then let its budget run out while the page is still working.
+    await fixture.pageReached;
+    await vi.advanceTimersByTimeAsync(35_000);
+    expect(await run).toMatchObject({
+      ok: true,
+      outcome: "review_required",
+      result: "unrecognized_response",
+    });
+    expect(fixture.commands).toHaveLength(1);
+    expect(fixture.results).toEqual([{ kind: "unrecognized_response" }]);
+    expect(fixture.posts.filter((path) => path.endsWith("/result"))).toHaveLength(1);
+    expect(fixture.listeners.size).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("gives a fill-only run longer than the short lease, and a run that can submit does not get it", async () => {
+  const fillOnly = setup("success");
+  expect(await fillOnly.run({ fillOnly: true, ownedMs: 4 * 60_000 })).toMatchObject({
+    ok: true,
+  });
+  const reach = (fillOnly.commands[0]?.deadline ?? 0) - Date.now();
+  expect(reach).toBeGreaterThan(2 * 60_000);
+  expect(reach).toBeLessThanOrEqual(5 * 60_000);
+  expect((fillOnly.commands[0] as { fillOnly?: boolean }).fillOnly).toBe(true);
+
+  const submit = setup("success");
+  expect(await submit.run({ ownedMs: 4 * 60_000 })).toMatchObject({ ok: true });
+  expect((submit.commands[0]?.deadline ?? 0) - Date.now()).toBeLessThanOrEqual(60_000);
+  expect((submit.commands[0] as { fillOnly?: boolean }).fillOnly).toBeUndefined();
+});
+
+it("does not report an attempt for a different signed-in account", async () => {
+  vi.useFakeTimers();
+  try {
+    const fixture = setup("budget-spent");
+    let reached = false;
+    void fixture.pageReached.then(() => {
+      reached = true;
+    });
+    // The same account while the run starts and is checked, another one when it is reported.
+    const run = fixture.run({
+      identityFor: () => (reached ? "another-owner" : "synthetic-owner"),
+    });
+    await fixture.pageReached;
+    await vi.advanceTimersByTimeAsync(35_000);
+    expect(await run).toMatchObject({ ok: false, outcome: "unknown" });
+    expect(fixture.results).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 it("refuses a changed owning attempt before dispatch or any page action", async () => {
   const fixture = setup("changed-attempt");

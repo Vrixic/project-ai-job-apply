@@ -6,6 +6,7 @@ import {
   validateApplicationExecutionProofResult,
 } from "@ai-job-apply/api-contracts/browser-validators";
 import { executeApplication } from "../lib/application-run";
+import { FILL_ONLY_BUDGET_MS, runBudgetMs } from "../lib/execution-budget";
 import type { TransferredNativeFile } from "../lib/native-material-transfer";
 import { applicationExecutionRegistry, providerForUrl } from "../lib/providers";
 
@@ -46,7 +47,8 @@ if (!Object.hasOwn(globalThis, installed)) {
           spent ||
           active ||
           message.deadline <= Date.now() ||
-          message.deadline > Date.now() + 60_000
+          // Inspection only reads the page; the run's own mode is checked when its command arrives.
+          message.deadline > Date.now() + FILL_ONLY_BUDGET_MS
         )
           throw Error("ApplicationExecutionUnavailable");
         const provider = providerForUrl(message.employerUrl);
@@ -95,7 +97,7 @@ if (!Object.hasOwn(globalThis, installed)) {
           spent ||
           active ||
           message.deadline <= Date.now() ||
-          message.deadline > Date.now() + 60_000 ||
+          message.deadline > Date.now() + runBudgetMs(message.fillOnly) ||
           location.href !== message.employerUrl
         )
           throw Error("ApplicationExecutionUnavailable");

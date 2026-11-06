@@ -1,4 +1,5 @@
 import { buildFillPlan, type PacketValue } from "@ai-job-apply/ats-sdk/plan";
+import { RUN_BUDGET_MS } from "../execution-budget";
 import type { ApplicationInspection, FillAuthority } from "../providers/types";
 
 const unavailable = () => new Error("AshbyFillUnavailable");
@@ -36,7 +37,7 @@ export async function fillAshbyFields(
     !authority.signal.aborted &&
     Number.isFinite(deadline) &&
     Date.now() < deadline &&
-    deadline <= Date.now() + 60_000 &&
+    deadline <= Date.now() + (authority.maximumMs ?? RUN_BUDGET_MS) &&
     authority.registry.status(ashbyAdapterId, authority.variantId, new Date()).mode === "autofill";
   if (!current()) return { filled, reviewRequired: true };
   const plan = buildFillPlan(inspection.form, structuredClone(packet), {

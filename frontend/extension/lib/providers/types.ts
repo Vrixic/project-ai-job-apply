@@ -36,6 +36,8 @@ export interface FillAuthority {
   deadline: number;
   signal: AbortSignal;
   revalidateApproval(): Promise<void>;
+  /** The furthest the deadline may be from now: the short lease unless a fill-only run has more. */
+  maximumMs?: number;
   /** Submission composition must distinguish a stopped fill from candidate-only review. */
   throwOnFailure?: boolean;
   /** Names the field being filled, for a refusal message. Never any value. */

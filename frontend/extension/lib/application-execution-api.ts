@@ -10,6 +10,7 @@ import {
   validateStartApplicationSubmissionRequest,
 } from "@ai-job-apply/api-contracts/browser-validators";
 import { safeApiOrigin } from "./config";
+import { RUN_BUDGET_MS } from "./execution-budget";
 
 const unavailable = () => Error("ApplicationExecutionUnavailable");
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
@@ -20,8 +21,11 @@ export function applicationExecutionApi(options: {
   accessToken: string;
   applicationId: string;
   deadline: number;
+  /** The furthest the deadline may be from now: the short lease unless a fill-only run asks more. */
+  maximumMs?: number;
   signal: AbortSignal;
 }) {
+  const maximumMs = options.maximumMs ?? RUN_BUDGET_MS;
   if (!safeApiOrigin(options.apiOrigin) || !UUID.test(options.applicationId)) throw unavailable();
   const root = `/v1/applications/${options.applicationId}`;
   async function post(path: string, value?: unknown, key?: string): Promise<unknown> {
@@ -32,7 +36,7 @@ export function applicationExecutionApi(options: {
       options.signal.aborted ||
       !Number.isFinite(options.deadline) ||
       options.deadline <= now ||
-      options.deadline > now + 60_000 ||
+      options.deadline > now + maximumMs ||
       (key !== undefined && !/^[a-zA-Z0-9_-]{16,128}$/u.test(key))
     )
       throw unavailable();
