@@ -1,5 +1,6 @@
 import { buildFillPlan, type PacketValue } from "@ai-job-apply/ats-sdk/plan";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
+import { RUN_BUDGET_MS } from "../execution-budget";
 import { writtenValueMatches } from "../field-value";
 import { selectExactOption } from "./combobox";
 import type { GreenhouseInspection } from "./inspect";
@@ -30,6 +31,8 @@ export async function fillGreenhouseFields(
     registry: AdapterRegistry;
     variantId: string;
     deadline: number;
+    /** The furthest the deadline may be from now: the short lease unless a fill-only run has more. */
+    maximumMs?: number;
     signal: AbortSignal;
     revalidateApproval(): Promise<void>;
     /** Submission composition must distinguish a stopped fill from candidate-only review. */
@@ -54,7 +57,7 @@ export async function fillGreenhouseFields(
     !authority.signal.aborted &&
     Number.isFinite(deadline) &&
     Date.now() < deadline &&
-    deadline <= Date.now() + 60_000 &&
+    deadline <= Date.now() + (authority.maximumMs ?? RUN_BUDGET_MS) &&
     authority.registry.status("greenhouse-application-v1", variantId, new Date()).mode ===
       "autofill";
   if (!current()) return { filled, selected, reviewRequired: true };

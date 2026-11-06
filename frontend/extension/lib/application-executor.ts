@@ -20,6 +20,7 @@ import { applicationExecutionApi } from "./application-execution-api";
 import { readJson } from "./application-handoff";
 import { attachmentName } from "./attachment-name";
 import { commandFieldsFromPacket } from "./command-fields";
+import { RECOVERY_BUDGET_MS, runBudgetMs } from "./execution-budget";
 import type { NativeTransferSelection, TransferredNativeFile } from "./native-material-transfer";
 import { sameNativeTransferBinding } from "./native-transfer-binding";
 import { providerForUrl } from "./providers";
@@ -49,7 +50,7 @@ export async function executeApprovedApplication(options: {
   const controller = new AbortController();
   const abort = () => controller.abort();
   let deadline = Math.min(
-    Date.now() + 60_000,
+    Date.now() + runBudgetMs(options.fillOnly),
     options.owned.deadline,
     selection.approvalExpiresAtMs,
     ...selection.materials.map((material) => material.expiresAtMs),
@@ -149,14 +150,36 @@ export async function executeApprovedApplication(options: {
   const freshAttempt = async (status: "started" | "dispatched") => {
     sub = `${status}:identity`;
     const session = await identity();
-    sub = `${status}:application`;
-    const application = await bounded(
-      readJson(
-        new URL(`/v1/applications/${selection.applicationId}`, options.apiOrigin),
-        session.accessToken,
-        controller.signal,
+    sub = `${status}:read`;
+    // These reads do not depend on each other, and this check runs several times in one fill, so
+    // they go out together: each round trip to the platform is real time. What each one says is
+    // still checked below, in order, and the application is read once more after all of it.
+    const [application, job, ...proofs] = await Promise.all([
+      bounded(
+        readJson(
+          new URL(`/v1/applications/${selection.applicationId}`, options.apiOrigin),
+          session.accessToken,
+          controller.signal,
+        ),
       ),
-    );
+      bounded(
+        readJson(
+          new URL(`/v1/jobs/${selection.jobId}`, options.apiOrigin),
+          session.accessToken,
+          controller.signal,
+        ),
+      ),
+      ...selection.materials.map((material) => {
+        const kind = material.kind === "tailored_resume" ? "resume" : "cover-letter";
+        const url = new URL(
+          `/v1/applications/${selection.applicationId}/${kind}/authorization`,
+          options.apiOrigin,
+        );
+        url.searchParams.set("generationId", material.generationId);
+        return bounded(readJson(url, session.accessToken, controller.signal));
+      }),
+    ]);
+    sub = `${status}:application`;
     if (
       !validateApplication(application) ||
       !packetMatches(application) ||
@@ -181,13 +204,6 @@ export async function executeApprovedApplication(options: {
     )
       throw unavailable();
     sub = `${status}:job`;
-    const job = await bounded(
-      readJson(
-        new URL(`/v1/jobs/${selection.jobId}`, options.apiOrigin),
-        session.accessToken,
-        controller.signal,
-      ),
-    );
     if (
       !validateCanonicalJobDetail(job) ||
       job.id !== selection.jobId ||
@@ -207,14 +223,8 @@ export async function executeApprovedApplication(options: {
     if (originalPacket.jobRevision !== hash || application.currentPacket?.jobRevision !== hash)
       throw unavailable();
     sub = `${status}:material`;
-    for (const material of selection.materials) {
-      const kind = material.kind === "tailored_resume" ? "resume" : "cover-letter";
-      const url = new URL(
-        `/v1/applications/${selection.applicationId}/${kind}/authorization`,
-        options.apiOrigin,
-      );
-      url.searchParams.set("generationId", material.generationId);
-      const proof = await bounded(readJson(url, session.accessToken, controller.signal));
+    for (const [index, material] of selection.materials.entries()) {
+      const proof = proofs[index];
       if (
         !validateApplicationTemporaryMaterialAuthorization(proof) ||
         proof.packetId !== selection.packetId ||
@@ -291,10 +301,12 @@ export async function executeApprovedApplication(options: {
     result: ApplicationSubmissionResultRequest,
     pageStage?: string,
     notes?: readonly string[],
+    own?: { api: ReturnType<typeof applicationExecutionApi>; wrap: typeof bounded },
   ) => {
-    if (!api || !attempt || resultSent) throw unavailable();
+    const client = own ?? (api ? { api, wrap: bounded } : undefined);
+    if (!client || !attempt || resultSent) throw unavailable();
     resultSent = true;
-    const response = await bounded(api.result(attempt.id, result, crypto.randomUUID()));
+    const response = await client.wrap(client.api.result(attempt.id, result, crypto.randomUUID()));
     const resolved = response.attempts.find((candidate) => candidate.id === attempt?.id);
     if (
       response.id !== selection.applicationId ||
@@ -423,6 +435,7 @@ export async function executeApprovedApplication(options: {
       accessToken: session.accessToken,
       applicationId: selection.applicationId,
       deadline,
+      maximumMs: runBudgetMs(options.fillOnly),
       signal: controller.signal,
     });
     const startedAt = Date.now();
@@ -553,16 +566,42 @@ export async function executeApprovedApplication(options: {
     }
     return await record(response.result, response.stage, response.notes);
   } catch {
-    // A sent dispatch is ambiguous even if its acknowledgement was lost. Never resend it.
-    if (dispatchSent && attempt && api && !resultSent && !controller.signal.aborted) {
+    // A sent dispatch is ambiguous even if its acknowledgement was lost. Never resend it. It is
+    // reported however the run ended, including when its own budget ran out or it was stopped:
+    // an attempt left "dispatched" strands the application until the platform's sweep resolves it.
+    // The report has a short budget of its own, authorizes no page action, and needs the same
+    // signed-in owner. When the owner stopped the run (cleared it, signed out, moved the page) it
+    // is left to the platform's sweep, as before.
+    if (dispatchSent && attempt && !resultSent && !options.owned.signal.aborted) {
+      const own = new AbortController();
+      const ownTimer = setTimeout(() => own.abort(), RECOVERY_BUDGET_MS);
+      const ownStopped = new Promise<never>((_, reject) => {
+        own.signal.addEventListener("abort", () => reject(unavailable()), { once: true });
+      });
+      void ownStopped.catch(() => undefined);
       try {
-        await identity();
+        const session = await Promise.race([options.identity(own.signal), ownStopped]);
+        if (session.identityFence !== selection.ownerFence) throw unavailable();
         return await record(
           { kind: "unrecognized_response" },
           `executor:${stage}${sub ? `>${sub}` : ""}`,
+          undefined,
+          {
+            api: applicationExecutionApi({
+              apiOrigin: options.apiOrigin,
+              accessToken: session.accessToken,
+              applicationId: selection.applicationId,
+              deadline: Date.now() + RECOVERY_BUDGET_MS,
+              signal: own.signal,
+            }),
+            wrap: <T>(work: Promise<T>) => Promise.race([work, ownStopped]),
+          },
         );
       } catch {
         /* Requires reconciliation. */
+      } finally {
+        clearTimeout(ownTimer);
+        own.abort();
       }
     }
     return {

@@ -565,6 +565,53 @@ describe("ApplicationsWorkspace: cover letter", () => {
   });
 });
 
+describe("ApplicationsWorkspace: an interrupted fill", () => {
+  it("says what happened instead of showing an empty section, and checks again on request", async () => {
+    const bff = new FakeBff();
+    const build = bff as unknown as {
+      base(status: Application["status"], extras?: Record<string, unknown>): Application;
+    };
+    bff.app = build.base("submitting", {
+      attempts: [
+        {
+          id: "00000000-0000-7000-8000-000000000012",
+          sequence: 1,
+          status: "dispatched",
+          adapterId: "greenhouse-application-v1",
+          adapterVersion: "1.0.0",
+          startedAt: new Date().toISOString(),
+          dispatchedAt: new Date().toISOString(),
+        },
+      ],
+    });
+    await mount(bff);
+    expect(container.textContent).toContain("Apply to this job");
+    expect(container.textContent).toContain("has not reported back");
+    expect(container.textContent).toContain("ApplyDash submitted nothing");
+    expect(button("Apply")).toBeUndefined();
+    const before = bff.calls.length;
+    await click("Check again");
+    expect(bff.calls.length).toBeGreaterThan(before);
+    // Once the platform has resolved the attempt, the usual choice comes back.
+    bff.app = build.base("reconciliation_required", {
+      attempts: [
+        {
+          id: "00000000-0000-7000-8000-000000000012",
+          sequence: 1,
+          status: "ambiguous",
+          adapterId: "greenhouse-application-v1",
+          adapterVersion: "1.0.0",
+          startedAt: new Date().toISOString(),
+          dispatchedAt: new Date().toISOString(),
+          resolvedAt: new Date().toISOString(),
+        },
+      ],
+    });
+    await click("Check again");
+    expect(container.textContent).not.toContain("has not reported back");
+  });
+});
+
 describe("ApplicationsWorkspace: Apply", () => {
   it("goes back to preparing after the candidate says it was not submitted", async () => {
     const bff = new FakeBff();

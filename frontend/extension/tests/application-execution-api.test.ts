@@ -37,6 +37,35 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+it("refuses a deadline further away than the short lease, unless the run was given more", async () => {
+  const send = vi.fn().mockResolvedValue(response(attempt()));
+  vi.stubGlobal("fetch", send);
+  const far = Date.now() + 4 * 60_000;
+  const { api } = setup(far);
+  await expect(api.dispatch(ATTEMPT)).rejects.toThrow();
+  expect(send).not.toHaveBeenCalled();
+  const controller = new AbortController();
+  const roomy = applicationExecutionApi({
+    apiOrigin: "https://api.example",
+    accessToken: "synthetic-private-credential",
+    applicationId: APP,
+    deadline: far,
+    maximumMs: 5 * 60_000,
+    signal: controller.signal,
+  });
+  await expect(roomy.dispatch(ATTEMPT)).resolves.toMatchObject({ id: ATTEMPT });
+  // Even a roomy run has a ceiling.
+  const tooFar = applicationExecutionApi({
+    apiOrigin: "https://api.example",
+    accessToken: "synthetic-private-credential",
+    applicationId: APP,
+    deadline: Date.now() + 6 * 60_000,
+    maximumMs: 5 * 60_000,
+    signal: controller.signal,
+  });
+  await expect(tooFar.dispatch(ATTEMPT)).rejects.toThrow();
+});
+
 it("uses owning routes and keeps dispatch bodyless without an invented retry key", async () => {
   const application = handoffFixture().application;
   const send = vi

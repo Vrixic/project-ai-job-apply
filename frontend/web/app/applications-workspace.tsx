@@ -420,8 +420,12 @@ function JobApplicationWorkspace({
     };
     window.addEventListener("focus", refreshOnReturn);
     document.addEventListener("visibilitychange", refreshOnReturn);
+    // A fill that was interrupted is resolved by the platform within minutes; look now and then.
+    const poll =
+      application.status === "submitting" ? setInterval(refreshOnReturn, 20_000) : undefined;
     return () => {
       disposed = true;
+      clearInterval(poll);
       clearTimeout(timer);
       pending?.abort();
       window.removeEventListener("focus", refreshOnReturn);
@@ -1011,6 +1015,19 @@ function JobApplicationWorkspace({
                 </button>
               </section>
             </>
+          ) : null}
+          {application && inFlight && !awaitingOutcome ? (
+            <section aria-label="Apply" className="apply-action">
+              <p role="status">
+                A fill on the employer's page started and has not reported back, so it is not known
+                how far it got. ApplyDash submitted nothing. The platform clears this on its own
+                within about 15 minutes of when it started; then you can say what happened or start
+                over.
+              </p>
+              <button type="button" onClick={() => void refresh(application.id)}>
+                Check again
+              </button>
+            </section>
           ) : null}
           {application && (approvedReady || awaitingOutcome) ? (
             <ApplyPanel

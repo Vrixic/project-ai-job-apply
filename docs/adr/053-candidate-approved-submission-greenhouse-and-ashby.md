@@ -106,3 +106,27 @@ requires a QA-representativeness date (removed by the owner on 2026-10-21).
 - Risks accepted by the owner: a mapping error can put a true answer in the wrong field, which is why
   unknown or duplicate controls fail closed; the provider's anti-abuse may reject the click; and
   confirmation detection needs live tuning.
+
+## Amendment: run budget, interrupted attempts (2026-11-06)
+
+Owner test: a fill stopped at `page-fill>dispatched:identity` and the job page showed an empty
+"Apply to this job" section. Reproduced in real Chrome: every field is preceded by a freshness
+check that reads the platform (application, job, material authorization, application again), so on
+a real connection a fill of a dozen fields spends the whole 60-second run lease and the next check
+refuses. A refused run after dispatch was also never reported, because the run's own stop signal
+had fired, so the attempt stayed `dispatched` and the application `submitting` until the platform's
+15-minute sweep.
+
+- A run that can submit keeps the 60-second lease. A fill-only run submits nothing and is reviewed
+  and submitted by the candidate, so it gets 5 minutes, still bounded by the approval and material
+  leases (`lib/execution-budget.ts`; the API client, the page entry and both provider fills take the
+  budget from the mode instead of a fixed 60 seconds).
+- The independent reads of a freshness check go out together; the application is still read once
+  more after all of them, and every result is still checked.
+- A dispatched attempt that does not finish is reported (`unrecognized_response`, which the platform
+  records as ambiguous) however the run ended, with a separate 15-second budget that authorizes no
+  page action and requires the same signed-in owner. A run the owner stopped (cleared, signed out,
+  page moved) is left to the sweep, as before.
+- The job page shows an interrupted attempt ("has not reported back", nothing was submitted) with a
+  Check again button and a light poll, instead of an empty section.
+

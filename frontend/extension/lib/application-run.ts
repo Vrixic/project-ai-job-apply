@@ -1,6 +1,7 @@
 import type { ApplicationSubmissionResultRequest } from "@ai-job-apply/api-contracts";
 import { buildFillPlan, type PacketValue } from "@ai-job-apply/ats-sdk/plan";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
+import { runBudgetMs } from "./execution-budget";
 import { writtenValueMatches } from "./field-value";
 import type { TransferredNativeFile } from "./native-material-transfer";
 import type {
@@ -94,7 +95,7 @@ export async function executeApplication(options: {
       controller.signal.aborted ||
       !atExpectedUrl() ||
       Date.now() >= deadline ||
-      deadline > Date.now() + 60_000 ||
+      deadline > Date.now() + runBudgetMs(options.fillOnly) ||
       !Number.isFinite(deadline) ||
       options.registry.executionStatus(
         provider.adapterId,
@@ -215,6 +216,7 @@ export async function executeApplication(options: {
       registry: options.registry,
       variantId: profile.variantId,
       deadline,
+      maximumMs: runBudgetMs(options.fillOnly),
       signal: controller.signal,
       revalidateApproval: fresh,
       throwOnFailure: true,
