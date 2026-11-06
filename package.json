@@ -16,14 +16,16 @@
       "fast-uri@>=3.0.0 <3.1.9": "3.1.9",
       "fast-uri@>=4.0.0 <4.2.3": "4.2.3",
       "fastify@<5.12.6": "5.12.7",
+      "glob@>=9.0.0 <14.0.2": "14.0.4",
       "js-yaml@>=4.0.0 <4.3.2": "4.3.2",
+      "minimatch@>=7.0.0 <11.0.1": "11.0.5",
       "minimatch@10.2.6>brace-expansion": "5.0.12",
       "minimatch@5.1.9>brace-expansion": "5.0.12",
       "nanoid@<3.3.18": "3.3.18",
       "next@16.2.12>postcss": "8.5.24",
       "next@16.4.2>sharp": "0.35.5",
       "node-forge@<1.4.3": "1.4.3",
-      "qs@<6.16.0": "6.16.0",
+      "qs@<6.16.1": "6.16.1",
       "shell-quote@<1.11.0": "1.11.0",
       "source-map-js@<1.2.2": "1.2.2",
       "undici@>=8.0.0 <8.12.2": "8.12.2",
@@ -32,7 +34,8 @@
     },
     "patchedDependencies": {
       "image-size@1.2.1": "patches/image-size@1.2.1.patch",
-      "braces@3.0.3": "patches/braces@3.0.3.patch"
+      "braces@3.0.3": "patches/braces@3.0.3.patch",
+      "deepmerge@4.3.1": "patches/deepmerge@4.3.1.patch"
     }
   },
   "scripts": {
@@ -60,7 +63,7 @@
     "lint": "biome lint .",
     "skills:validate": "node scripts/validate-skills.mjs",
     "test": "turbo run test --concurrency=1",
-    "test:dependency-security": "node --test scripts/tests/image-size-security.test.mjs scripts/tests/dependency-remediations.test.mjs scripts/tests/node-forge-security.test.mjs scripts/tests/braces-security.test.mjs scripts/tests/additional-dependency-remediations.test.mjs",
+    "test:dependency-security": "node --test scripts/tests/image-size-security.test.mjs scripts/tests/dependency-remediations.test.mjs scripts/tests/node-forge-security.test.mjs scripts/tests/braces-security.test.mjs scripts/tests/deepmerge-security.test.mjs scripts/tests/additional-dependency-remediations.test.mjs scripts/tests/upstream-pin-remediations.test.mjs",
     "test:d1-browser-assurance": "node scripts/tests/d1-browser-assurance/run.mjs",
     "test:d1-admin-browser-assurance": "node scripts/tests/d1-admin-browser-assurance/run.mjs",
     "test:d1-public-job-page-assurance": "turbo run build --filter=@ai-job-apply/web && node scripts/tests/d1-public-job-page-assurance/run.mjs",

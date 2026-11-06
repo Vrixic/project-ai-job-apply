@@ -22,24 +22,51 @@ const remediatedAdvisories = new Map([
 ]);
 export const ADDITIONAL_REMEDIATIONS = Object.freeze([
   Object.freeze({
-    package: "node-forge",
-    version: "1.4.0",
-    main: "lib/index.js",
-    cve: "CVE-2026-85393",
-    advisory: "GHSA-86w9-cpqp-85rv",
-    patchPath: "patches/node-forge@1.4.0.patch",
-    patchSha256: "4fa957cddb4b4601a48b535053d0fec7ed013f9d075660a38365f285fc830fe0",
-    treeSha256: "9f4c2e0cd1e399787e1cc7fb5efea061db319cec1f098e13824787e204ff03fa",
-  }),
-  Object.freeze({
     package: "braces",
     version: "3.0.3",
     main: "index.js",
     cve: "CVE-2026-93687",
     advisory: "GHSA-vfj7-8cjw-p6xm",
+    severity: "high",
+    // Where the installed copy may sit, and how the registry reports its path.
+    parents: Object.freeze(["micromatch"]),
+    firstHops: Object.freeze(["expo"]),
+    auditSuffix: ">micromatch>braces",
     patchPath: "patches/braces@3.0.3.patch",
     patchSha256: "816530fe94f297f2ae23f1d98d9c4795b4898b9720e81fa900f0a89b84a1d707",
     treeSha256: "185e0a8b074390a55748d7ec0965da52d2c69b821cb3cdbfb0ee033efd156fda",
+  }),
+  // No upstream release fixes this (4.3.1 is the latest). mergeObject copied an own `__proto__` key
+  // of the target through the prototype setter, so a merged result could take an attacker's
+  // prototype. The patch defines every merged key as an own data property instead.
+  Object.freeze({
+    package: "deepmerge",
+    version: "4.3.1",
+    main: "dist/cjs.js",
+    cve: "CVE-2026-93753",
+    advisory: "GHSA-gcqx-w48m-w2h4",
+    severity: "low",
+    parents: Object.freeze(["@expo/config"]),
+    firstHops: Object.freeze(["expo", "react-native-auth0"]),
+    auditSuffix: ">@expo/config>deepmerge",
+    patchPath: "patches/deepmerge@4.3.1.patch",
+    patchSha256: "13b2e96c286a41d7b4259bfdb34d125622736e7dfd6271a2d64d541caef621e6",
+    treeSha256: "7fad449baa2bfea8eedc07f46d58caf1d5a90f7a0ce8776eb0cf944f00bd78b5",
+  }),
+]);
+// Exact upstream releases that fix an advisory, installed as published with no local patch.
+// node-forge 1.4.3 (2026-11-04) re-encodes and compares the RSASSA-PKCS1-v1_5 DigestInfo, which
+// is the fix the earlier local 1.4.0 patch backported (CVE-2026-85393), and it is outside every
+// affected range in the registry audit. The mobile build tooling is the only importer that reaches
+// it; the installed tree is pinned by digest, and any registry advisory for it fails the audit.
+export const UPSTREAM_PINS = Object.freeze([
+  Object.freeze({
+    package: "node-forge",
+    version: "1.4.3",
+    main: "lib/index.js",
+    treeSha256: "9b6be415be2445073b7c08e1ebcfdbcee25de2a48d89ff3b98f92a33867ad96f",
+    parents: Object.freeze(["@expo/cli", "@expo/code-signing-certificates"]),
+    firstHops: Object.freeze(["expo", "react-native-auth0"]),
   }),
 ]);
 // The registry reports the affected transitive path from the mobile importer through either of its
@@ -250,12 +277,10 @@ export function verifyAdditionalDependencyRemediations({ repositoryRoot, depende
             root.name !== "@ai-job-apply/mobile" ||
             typeof root.path !== "string" ||
             path.resolve(root.path) !== path.resolve(repositoryRoot, "frontend/mobile") ||
-            next[0] !== "expo" ||
+            !remediation.firstHops.includes(next[0]) ||
             dependencyName !== name ||
             dependency.version !== version ||
-            (name === "braces" && next.at(-2) !== "micromatch") ||
-            (name === "node-forge" &&
-              !["@expo/cli", "@expo/code-signing-certificates"].includes(next.at(-2))) ||
+            !remediation.parents.includes(next.at(-2)) ||
             typeof dependency.path !== "string" ||
             !path.isAbsolute(dependency.path)
           )
@@ -289,9 +314,105 @@ export function verifyAdditionalDependencyRemediations({ repositoryRoot, depende
   return { dependencyPaths, installationsVerified };
 }
 
+export function verifyUpstreamPins({ repositoryRoot, dependencyRoots }) {
+  if (!Array.isArray(dependencyRoots) || dependencyRoots.length === 0) fail();
+  const metadata = JSON.parse(readFileSync(path.join(repositoryRoot, "package.json"), "utf8"));
+  if (metadata.pnpm?.auditConfig !== undefined) fail();
+  const lock = readFileSync(path.join(repositoryRoot, "pnpm-lock.yaml"), "utf8").replace(
+    /\r\n/gu,
+    "\n",
+  );
+  const snapshots = lock.split(/^snapshots:\n/mu);
+  if (snapshots.length !== 2) fail();
+  const moduleBoundary = realpathSync(path.join(repositoryRoot, "node_modules"));
+  let dependencyPaths = 0;
+  let installationsVerified = 0;
+  for (const pin of UPSTREAM_PINS) {
+    const { package: name, version } = pin;
+    // Installed as published: no local patch for it, and the override that forces the release.
+    const patchSection = lock.match(/^patchedDependencies:\n((?:[ \t].*\n|\n)*)/mu)?.[1] ?? "";
+    if (
+      Object.keys(metadata.pnpm?.patchedDependencies ?? {}).some((key) =>
+        key.startsWith(`${name}@`),
+      ) ||
+      patchSection.split("\n").some((line) => line.startsWith(`  ${name}@`)) ||
+      metadata.pnpm?.overrides?.[`${name}@<${version}`] !== version
+    )
+      fail();
+    // One installation of the package in the lockfile, at exactly this version, referenced only so.
+    if (
+      JSON.stringify(
+        snapshots[1]
+          .split("\n")
+          .filter((line) => line.startsWith(`  ${name}@`))
+          .map((line) => line.replace(/ \{\}$/u, "")),
+      ) !== JSON.stringify([`  ${name}@${version}:`]) ||
+      lock
+        .split("\n")
+        .some(
+          (line) =>
+            line.trimStart().startsWith(`${name}: `) && line.trim() !== `${name}: ${version}`,
+        )
+    )
+      fail();
+    const installations = new Set();
+    let visited = 0;
+    function visit(dependencies, trail, root) {
+      if (dependencies === undefined) return;
+      if (!isRecord(dependencies) || trail.length > 64) fail();
+      for (const [dependencyName, dependency] of Object.entries(dependencies)) {
+        if (!isRecord(dependency) || ++visited > 50_000) fail();
+        const next = [...trail, dependencyName];
+        if (dependencyName === name || dependency.from === name) {
+          if (
+            root.name !== "@ai-job-apply/mobile" ||
+            typeof root.path !== "string" ||
+            path.resolve(root.path) !== path.resolve(repositoryRoot, "frontend/mobile") ||
+            !pin.firstHops.includes(next[0]) ||
+            dependencyName !== name ||
+            dependency.version !== version ||
+            !pin.parents.includes(next.at(-2)) ||
+            typeof dependency.path !== "string" ||
+            !path.isAbsolute(dependency.path)
+          )
+            fail();
+          const resolved = realpathSync(dependency.path);
+          const relative = path.relative(moduleBoundary, resolved);
+          if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) fail();
+          installations.add(resolved);
+          dependencyPaths++;
+        }
+        for (const section of dependencySections) visit(dependency[section], next, root);
+      }
+    }
+    for (const root of dependencyRoots) {
+      if (!isRecord(root)) fail();
+      for (const section of dependencySections) visit(root[section], [], root);
+    }
+    if (installations.size === 0) fail();
+    for (const directory of installations) {
+      const installed = JSON.parse(readFileSync(path.join(directory, "package.json"), "utf8"));
+      if (
+        installed.name !== name ||
+        installed.version !== version ||
+        installed.main !== pin.main ||
+        installedPackageTreeSha256(directory) !== pin.treeSha256
+      )
+        fail();
+      installationsVerified++;
+    }
+  }
+  return { dependencyPaths, installationsVerified };
+}
+
 export function evaluateInstalledDependencyAudit({ repositoryRoot, dependencyRoots, report }) {
   const remediation = verifyAdditionalDependencyRemediations({ repositoryRoot, dependencyRoots });
-  return { ...evaluateAudit(report, true), ...remediation };
+  const pins = verifyUpstreamPins({ repositoryRoot, dependencyRoots });
+  return {
+    ...evaluateAudit(report, true),
+    dependencyPaths: remediation.dependencyPaths + pins.dependencyPaths,
+    installationsVerified: remediation.installationsVerified + pins.installationsVerified,
+  };
 }
 
 export function evaluateAuditReport(report) {
@@ -322,7 +443,7 @@ function evaluateAudit(report, additionalVerified) {
         observed.has(cve) ||
         advisory.github_advisory_id !== additional.advisory ||
         advisory.module_name !== additional.package ||
-        advisory.severity !== "high" ||
+        advisory.severity !== additional.severity ||
         advisory.patched_versions !== "<0.0.0" ||
         advisory.findings.some(
           (finding) =>
@@ -334,17 +455,13 @@ function evaluateAudit(report, additionalVerified) {
               (entry) =>
                 typeof entry !== "string" ||
                 !entry.startsWith("frontend__mobile>expo>") ||
-                (additional.package === "braces"
-                  ? !entry.endsWith(">micromatch>braces")
-                  : ![">@expo/cli>node-forge", ">@expo/code-signing-certificates>node-forge"].some(
-                      (suffix) => entry.endsWith(suffix),
-                    )),
+                !entry.endsWith(additional.auditSuffix),
             ),
         )
       )
         fail();
       observed.add(cve);
-      expectedCounts.high++;
+      expectedCounts[additional.severity]++;
       continue;
     }
     if (

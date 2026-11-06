@@ -9,6 +9,7 @@ import {
   ADDITIONAL_REMEDIATIONS,
   evaluateAuditReport,
   evaluateInstalledDependencyAudit,
+  UPSTREAM_PINS,
   verifyAdditionalDependencyRemediations,
 } from "../lib/dependency-remediations.mjs";
 
@@ -18,9 +19,21 @@ const expoRequire = createRequire(mobileRequire.resolve("expo/package.json"));
 const cliRequire = createRequire(expoRequire.resolve("@expo/cli/package.json"));
 const fileMapRequire = createRequire(cliRequire.resolve("@expo/metro-file-map/package.json"));
 const micromatchRequire = createRequire(fileMapRequire.resolve("micromatch/package.json"));
+const configRequire = createRequire(expoRequire.resolve("@expo/config/package.json"));
 const installed = {
   "node-forge": path.dirname(cliRequire.resolve("node-forge/package.json")),
   braces: path.dirname(micromatchRequire.resolve("braces/package.json")),
+  deepmerge: path.dirname(configRequire.resolve("deepmerge/package.json")),
+};
+// How the registry reports each remediated package's path from the mobile importer.
+const reportPath = {
+  braces: "frontend__mobile>expo>@expo/cli>@expo/metro-file-map>micromatch>braces",
+  deepmerge: "frontend__mobile>expo>@expo/config>deepmerge",
+};
+const severityCounts = () => {
+  const counts = { info: 0, low: 0, moderate: 0, high: 0, critical: 0 };
+  for (const item of ADDITIONAL_REMEDIATIONS) counts[item.severity]++;
+  return counts;
 };
 
 function report() {
@@ -32,22 +45,13 @@ function report() {
           cves: [item.cve],
           github_advisory_id: item.advisory,
           module_name: item.package,
-          severity: "high",
+          severity: item.severity,
           patched_versions: "<0.0.0",
-          findings: [
-            {
-              version: item.version,
-              paths: [
-                item.package === "braces"
-                  ? "frontend__mobile>expo>@expo/cli>@expo/metro-file-map>micromatch>braces"
-                  : "frontend__mobile>expo>@expo/cli>node-forge",
-              ],
-            },
-          ],
+          findings: [{ version: item.version, paths: [reportPath[item.package]] }],
         },
       ]),
     ),
-    metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 2, critical: 0 } },
+    metadata: { vulnerabilities: severityCounts() },
   };
 }
 
@@ -68,6 +72,10 @@ function fixture(t) {
     cpSync(installed[item.package], directory, { recursive: true });
     leaves[item.package] = { version: item.version, path: directory };
   }
+  // The exact upstream node-forge release is verified in the same pass.
+  const forgeDirectory = path.join(repositoryRoot, "node_modules", "node-forge");
+  cpSync(installed["node-forge"], forgeDirectory, { recursive: true });
+  leaves["node-forge"] = { version: UPSTREAM_PINS[0].version, path: forgeDirectory };
   return {
     repositoryRoot,
     leaves,
@@ -85,6 +93,7 @@ function fixture(t) {
                   micromatch: { dependencies: { braces: leaves.braces } },
                 },
               },
+              "@expo/config": { dependencies: { deepmerge: leaves.deepmerge } },
             },
           },
         },
@@ -99,11 +108,13 @@ test("registry recognition requires verified installations, not advisory IDs alo
   assert.deepEqual(evaluateInstalledDependencyAudit(input), {
     remediatedAdvisories: 2,
     registryOmittedAdvisories: 2,
-    dependencyPaths: 2,
-    installationsVerified: 2,
+    dependencyPaths: 3,
+    installationsVerified: 3,
   });
   input.report.advisories = {};
-  input.report.metadata.vulnerabilities.high = 0;
+  input.report.metadata.vulnerabilities = severityCounts();
+  for (const severity of Object.keys(input.report.metadata.vulnerabilities))
+    input.report.metadata.vulnerabilities[severity] = 0;
   assert.equal(evaluateInstalledDependencyAudit(input).registryOmittedAdvisories, 4);
 });
 
@@ -277,7 +288,8 @@ for (const [label, mutate] of [
 test("missing installed patches refuse even when registry omits their advisories", (t) => {
   const input = fixture(t);
   input.report.advisories = {};
-  input.report.metadata.vulnerabilities.high = 0;
+  for (const severity of Object.keys(input.report.metadata.vulnerabilities))
+    input.report.metadata.vulnerabilities[severity] = 0;
   writeFileSync(path.join(input.leaves.braces.path, "index.js"), "unpatched");
   assert.throws(() => evaluateInstalledDependencyAudit(input));
   assert.throws(() => verifyAdditionalDependencyRemediations(input));

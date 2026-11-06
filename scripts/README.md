@@ -341,9 +341,9 @@ Both are included in maintained infrastructure and full repository verification.
 - `validate-serverless-workflow-infrastructure.mjs` — Enforces the steady-state Lambda durable,
   migration-only container, and retired-path absence policies.
 - `audit-dependencies.mjs` — Audits the complete lockfile and verifies the exact local
-  `image-size@1.2.1`, `node-forge@1.4.0`, and `braces@3.0.3` remediations: patches, lock bindings,
-  installed package bytes, and mobile-only
-  dependency paths. No vulnerability exception or expiry renewal is used. Unexpected advisories
+  `image-size@1.2.1`, `braces@3.0.3` and `deepmerge@4.3.1` remediations (patches, lock bindings,
+  installed package bytes) and the exact upstream `node-forge@1.4.3` release (no patch), all on
+  mobile-only dependency paths. No vulnerability exception or expiry renewal is used. Unexpected advisories
   and registry/tool failures remain blocking.
 - `pnpm test:dependency-security` — Runs bounded parser regressions and applied-remediation audit
   tests. Included in `pnpm check` and `verify-phase0.ps1`.
