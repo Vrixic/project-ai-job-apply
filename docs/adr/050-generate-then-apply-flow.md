@@ -152,3 +152,14 @@ saved-answer vault is offered, saved answers for United States work authorizatio
 sponsorship. A profile that cannot be read pauses Apply (fail closed). Nothing is inferred or filled
 in for the candidate. Using the saved authorization answers to answer the employer's own questions is
 a separate decision (ADR-010 treats them as restricted) and is not part of this change.
+
+## Amendment: the candidate sets a desired salary (2026-11-06)
+
+Owner direction: the Profile gets a Salary section the candidate must fill in, and every salary
+question is answered from it. It is the annual salary they want, in US dollars, kept as an ordinary
+saved answer under a question no employer asks ("Desired annual salary (ApplyDash profile)"), so no
+backend, contract or migration changes. Apply waits for it like the other basics (a missing basic
+named "Your desired annual salary" in the popup, which links to `/profile?tab=salary`). An
+application carries it as the candidate's own `job.salary_expectation` entry, a number, as the
+screening answers are carried. It is not the "salary minimum" in Job preferences, which only
+informs job matching.

@@ -3,6 +3,7 @@
 import type { ProfileApplicationAnswer, ProfileEducationEntry } from "@ai-job-apply/api-contracts";
 import { useCallback, useEffect, useState } from "react";
 import { type MissingBasic, missingBasics } from "../lib/application-basics";
+import { savedSalary } from "../lib/salary-expectation";
 import { type ScreeningFieldKey, screeningAnswers } from "../lib/screening-questions";
 import { loadEntries, loadPersonal } from "./profile-sections/api";
 import { PROFILE_SECTIONS } from "./profile-sections/sections";
@@ -19,6 +20,8 @@ export interface ApplicationBasics {
   missing: readonly MissingBasic[];
   /** The candidate's screening answers, as the entries an application is prepared with. */
   answers: Partial<Record<ScreeningFieldKey, boolean>>;
+  /** The annual salary the candidate set, which an application carries for salary questions. */
+  salary: number | undefined;
   retry(): void;
 }
 
@@ -32,6 +35,7 @@ export function useApplicationBasics(enabled: boolean): ApplicationBasics {
     status: "loading",
     missing: [],
     answers: {},
+    salary: undefined,
   });
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((current) => current + 1), []);
@@ -49,18 +53,22 @@ export function useApplicationBasics(enabled: boolean): ApplicationBasics {
           ]);
           if (!current) return;
           const answers = screeningAnswers(saved as ProfileApplicationAnswer[]);
+          const salary = savedSalary(saved as ProfileApplicationAnswer[]);
           setState({
             status: "ready",
             answers,
+            salary,
             missing: missingBasics({
               personal,
               education: entries as ProfileEducationEntry[],
               screening: answers,
               requireScreening: screeningRequired(),
+              salary,
             }),
           });
         } catch {
-          if (current) setState({ status: "unavailable", missing: [], answers: {} });
+          if (current)
+            setState({ status: "unavailable", missing: [], answers: {}, salary: undefined });
         }
       })();
     };

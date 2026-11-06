@@ -23,6 +23,7 @@ const basics = (extra: Partial<ApplicationBasics> = {}): ApplicationBasics => ({
   status: "ready",
   missing: [],
   answers: {},
+  salary: undefined,
   retry: vi.fn(),
   ...extra,
 });

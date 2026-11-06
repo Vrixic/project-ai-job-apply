@@ -38,6 +38,7 @@ const complete = {
   education: [education()],
   screening: answered,
   requireScreening: true,
+  salary: 120_000,
 };
 
 describe("missingBasics", () => {
@@ -51,12 +52,14 @@ describe("missingBasics", () => {
         education: [],
         screening: {},
         requireScreening: true,
+        salary: undefined,
       }).map((m) => [m.key, m.section]),
     ).toEqual([
       ["name", "personal"],
       ["email", "personal"],
       ["phone", "personal"],
       ["education", "education"],
+      ["salary", "salary"],
       ["authorization.us_authorized", "screening"],
       ["authorization.sponsorship_required", "screening"],
     ]);
@@ -85,8 +88,22 @@ describe("missingBasics", () => {
   });
   it("does not ask for the screening answers until they are required", () => {
     expect(
-      missingBasics({ personal: personal(), education: [education()], screening: {} }),
+      missingBasics({
+        personal: personal(),
+        education: [education()],
+        screening: {},
+        salary: 120_000,
+      }),
     ).toEqual([]);
+  });
+  it("needs the desired salary, which every salary question is answered from", () => {
+    expect(missingBasics({ ...complete, salary: undefined })).toEqual([
+      { key: "salary", label: "Your desired annual salary", section: "salary" },
+    ]);
+    // Asked even while the screening answers are not yet required.
+    expect(
+      missingBasics({ ...complete, requireScreening: false, salary: undefined }).map((m) => m.key),
+    ).toEqual(["salary"]);
   });
   it("counts a No as an answer, and an unanswered question as missing", () => {
     expect(

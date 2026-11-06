@@ -3,3 +3,4 @@ export * from "./form-model.js";
 export * from "./mapping.js";
 export * from "./plan.js";
 export * from "./registry.js";
+export * from "./salary.js";

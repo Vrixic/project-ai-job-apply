@@ -150,6 +150,7 @@ describe("manual handoff UI", () => {
             result: "challenge_required",
             notes: [
               "other:education.school",
+              "near:job.salary_expectation",
               "empty:education.degree",
               "needs:3",
               "other:unknown.key",
@@ -164,6 +165,9 @@ describe("manual handoff UI", () => {
     const text = control("[data-handoff-status]").textContent ?? "";
     expect(text).toContain("School was not in the board's list, so Other was chosen: check it.");
     expect(text).toContain("Degree has no saved value: add it in your ApplyDash profile.");
+    expect(text).toContain(
+      "Salary: none of the ranges held your salary, so the closest one was chosen: check it.",
+    );
     expect(text).toContain("3 required questions still need you.");
     expect(text).not.toContain("unknown.key");
     expect(text).not.toContain("needs:x");

@@ -43,6 +43,7 @@ import {
   NATIVE_MATERIAL_SIGN_OUT_CHANNEL,
 } from "../lib/native-material-sign-out-signal";
 import { resumeFileName } from "../lib/resume-file-name";
+import { SALARY_FIELD_KEY } from "../lib/salary-expectation";
 import { ApplicationBasicsDialog } from "./application-basics-gate";
 import { ApplicationPreparationProgress } from "./application-preparation-progress";
 import { type ApplicationReviewActions, ApplicationReviewPanel } from "./application-review-panel";
@@ -148,9 +149,13 @@ function JobApplicationWorkspace({
       setBasicsOpen(true);
     }
   }, [requireBasics, basics.status, basicsBlocked]);
-  // The candidate's screening answers, kept where the asynchronous prepare steps can read them.
-  const screening = useRef(basics.answers);
-  screening.current = basics.answers;
+  // What the candidate set in their Profile (screening answers, desired salary), kept where the
+  // asynchronous prepare steps can read it. An application carries it as the candidate's own entries.
+  const screening = useRef<Record<string, boolean | number>>({});
+  screening.current = {
+    ...basics.answers,
+    ...(basics.salary === undefined ? {} : { [SALARY_FIELD_KEY]: basics.salary }),
+  };
   const candidateName = useCandidateName();
   const resumeFileNameFor = (current: Application) =>
     resumeFileName({ candidateName, jobTitle, applicationId: current.id });

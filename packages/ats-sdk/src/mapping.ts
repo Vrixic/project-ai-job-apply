@@ -72,8 +72,10 @@ const SYNONYMS: readonly Synonym[] = [
   {
     key: "job.salary_expectation",
     patterns: [
-      /^(?!.*\b(?:meet|match|acceptable|within)\b).*\b(?:salary|compensation|pay)\s+(?:expectation|requirement)s?\b/u,
-      /\bdesired\s+(?:salary|pay)\b/u,
+      /^(?!.*\b(?:meet|match|acceptable|within|current|previous|present|last|history)\b).*\b(?:salary|compensation|pay)\s+(?:expectation|requirement)s?\b/u,
+      // "Desired salary", "desired annual salary", "target total compensation", "expected base salary".
+      /^(?!.*\b(?:current|previous|present|last|history)\b).*\b(?:desired|target|expected)\s+(?:\w+\s+){0,2}(?:salary|compensation|pay)\b/u,
+      /\b(?:what|which)\s+(?:salary|compensation)\b.*\b(?:looking\s+for|seeking|expect\w*)\b/u,
     ],
   },
   {

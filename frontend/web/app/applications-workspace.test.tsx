@@ -6,6 +6,7 @@ import axe from "axe-core";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SALARY_QUESTION } from "../lib/salary-expectation";
 import { ApplicationsWorkspace } from "./applications-workspace";
 import { CandidateNameProvider } from "./candidate-name-context";
 
@@ -855,6 +856,93 @@ describe("ApplicationsWorkspace: Apply", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  describe("the candidate's profile on the application", () => {
+    const NOW = "2026-11-06T12:00:00.000Z";
+    const profile = (answers: Array<{ question: string; answer: string }>) =>
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string) => {
+          const url = String(input);
+          const body = url.endsWith("/personal")
+            ? {
+                version: 1,
+                origin: "entered",
+                createdAt: NOW,
+                updatedAt: NOW,
+                fullName: "Pat Candidate",
+                email: "pat@example.test",
+                phone: "+1 415 555 0100",
+              }
+            : url.includes("education-entries")
+              ? {
+                  entries: [
+                    {
+                      id: "00000000-0000-7000-8000-000000000031",
+                      school: "Synthetic University",
+                      degree: "Bachelor's Degree",
+                      fieldOfStudy: "Computer Science",
+                      version: 1,
+                      origin: "entered",
+                      createdAt: NOW,
+                      updatedAt: NOW,
+                      displayOrder: 0,
+                    },
+                  ],
+                }
+              : {
+                  answers: answers.map((item, index) => ({
+                    id: `00000000-0000-7000-8000-00000000004${index}`,
+                    ...item,
+                    version: 1,
+                    origin: "entered",
+                    createdAt: NOW,
+                    updatedAt: NOW,
+                    questionKey: item.question.toLowerCase(),
+                  })),
+                };
+          return new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }),
+      );
+
+    it("carries the desired salary into the packet, for the extension to answer salary questions", async () => {
+      const bff = new FakeBff();
+      profile([{ question: SALARY_QUESTION, answer: "125000" }]);
+      try {
+        await mount(bff, { requireBasics: true });
+        expect(container.querySelector("dialog")?.hasAttribute("open")).toBe(false);
+        await click("Apply");
+        expect(bff.packetRequests().at(-1)).toMatchObject({
+          userEntries: expect.arrayContaining([
+            { fieldKey: "job.salary_expectation", value: 125_000 },
+          ]),
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("holds Apply back until a salary is set, and sends the candidate to the Salary tab", async () => {
+      const bff = new FakeBff();
+      profile([]);
+      try {
+        await mount(bff, { requireBasics: true });
+        const dialog = container.querySelector("dialog");
+        expect(dialog?.hasAttribute("open")).toBe(true);
+        expect(dialog?.textContent).toContain("Your desired annual salary");
+        expect(dialog?.querySelector("a")?.getAttribute("href")).toBe(
+          "/profile?tab=salary&from=apply",
+        );
+        await click("Apply");
+        expect(bff.approvals()).toEqual([]);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
   });
 
   it("opens an already approved application at the employer step", async () => {

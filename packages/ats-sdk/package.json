@@ -27,6 +27,10 @@
     "./mapping": {
       "types": "./dist/mapping.d.ts",
       "default": "./dist/mapping.js"
+    },
+    "./salary": {
+      "types": "./dist/salary.d.ts",
+      "default": "./dist/salary.js"
     }
   },
   "scripts": {
