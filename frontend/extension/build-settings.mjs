@@ -49,6 +49,26 @@ export function applicationExecutionForBuild(environment, fileEnvironment, hando
 const executionProviderNames = ["greenhouse", "ashby"];
 
 /**
+ * The exact sites each switched-on provider fills (ADR-045, amendment 2026-11-06). Only an
+ * unpacked execution build holds them as host permissions, so the extension can see and fill the
+ * employer page the candidate was just sent to without an icon click. No wildcard, no other site;
+ * the default-dark and store builds never get them (the release archive refuses any host
+ * permission).
+ */
+const executionProviderHosts = Object.freeze({
+  greenhouse: Object.freeze(["boards.greenhouse.io", "job-boards.greenhouse.io"]),
+  ashby: Object.freeze(["jobs.ashbyhq.com"]),
+});
+
+export function applicationExecutionHostPermissions(providers) {
+  return Object.freeze(
+    providers.flatMap((provider) =>
+      (executionProviderHosts[provider] ?? []).map((host) => `https://${host}/*`),
+    ),
+  );
+}
+
+/**
  * Which providers a build switches on (ADR-053). Absent means none: the execution entry is built
  * but every kill switch stays off. Naming one requires the execution build and is exact.
  */

@@ -105,6 +105,8 @@ owns the decision rationale; this is engineering behavior, not new release appro
 
 - **Over-permission or browsing surveillance:** no `history`, `cookies`, broad `webRequest`, or
   `<all_urls>` permission; use explicit `activeTab` or narrow optional hosts and disclose each use.
+  The unpacked application-execution build also holds the exact HTTPS sites of its switched-on
+  providers (owner decision 2026-11-06, ADR-045); the default-dark and store builds never do.
 - **Token theft:** public-client PKCE, short-lived access tokens, rotating refresh tokens confined to
   trusted extension session storage, exact sender validation, logout/revocation, and no token logs.
 - **Malicious page/UGC:** strict structured extraction, local and server validation, no executable

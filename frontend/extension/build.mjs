@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { build, context } from "esbuild";
 import {
   applicationExecutionForBuild,
+  applicationExecutionHostPermissions,
   applicationExecutionProvidersForBuild,
   applicationHandoffOriginForBuild,
   applicationImplementationHash,
@@ -201,6 +202,14 @@ const buildOptions = {
   target: "chrome120",
 };
 
+// Identity and API origins, plus (execution builds only) the exact sites of the switched-on
+// providers. Nothing else: provider pages otherwise open only through the toolbar icon (activeTab).
+const hostPermissions = [
+  ...(configured ? [`https://${domain}/*`] : []),
+  ...(apiOrigin ? [`${apiOrigin}/*`] : []),
+  ...applicationExecutionHostPermissions(applicationExecutionProviders),
+];
+
 const manifest = {
   manifest_version: 3,
   name: developmentContributions
@@ -231,14 +240,7 @@ const manifest = {
   ...(applicationExecution
     ? { externally_connectable: { matches: [`${handoffWebOrigin}/*`] } }
     : {}),
-  ...(configured || apiOrigin
-    ? {
-        host_permissions: [
-          ...(configured ? [`https://${domain}/*`] : []),
-          ...(apiOrigin ? [`${apiOrigin}/*`] : []),
-        ],
-      }
-    : {}),
+  ...(hostPermissions.length > 0 ? { host_permissions: hostPermissions } : {}),
   background: {
     service_worker: "background.js",
     type: "module",

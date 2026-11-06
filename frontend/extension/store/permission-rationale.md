@@ -12,6 +12,11 @@ pending.
 | `alarms` | Resume bounded retry after Manifest V3 worker suspension. | Schedules only the next pending delivery attempt; it does not inspect pages or run periodic browsing collection. |
 | `sidePanel` | Show the review and approval interface docked beside the page; it is the extension's only surface. | No additional data access. |
 
+The unpacked application-execution build (never store-packaged) additionally holds the exact HTTPS
+sites of its switched-on providers so the employer page can be filled without an icon click
+(ADR-045, amendment 2026-11-06). The release packager refuses any host permission, so none of this
+reaches the store archive.
+
 The generated default-dark archive must contain no host permission. A future configured candidate
 would need only the exact reviewed HTTPS Auth0 tenant and API origin. Any such candidate is a new
 release artifact and must repeat review; wildcard providers, `<all_urls>`, `history`, `cookies`,

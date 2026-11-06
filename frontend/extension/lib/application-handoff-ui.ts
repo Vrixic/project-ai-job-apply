@@ -62,7 +62,12 @@ export function mountApplicationHandoff() {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       return tab?.id === undefined
         ? undefined
-        : { key: `${tab.id}|${tab.url ?? ""}`, visible: tab.url !== undefined };
+        : {
+            key: `${tab.id}|${tab.url ?? ""}`,
+            visible: tab.url !== undefined,
+            // A tab still opening (blank, or a browser page) is not an employer page yet.
+            blank: tab.url !== undefined && !/^https?:/u.test(tab.url),
+          };
     } catch {
       return undefined;
     }
@@ -150,12 +155,13 @@ export function mountApplicationHandoff() {
       })) as { ok?: boolean; reviewLink?: unknown } | undefined;
       if (!response?.ok || typeof response.reviewLink !== "string") return;
       const page = await activeTabKey();
-      if (page && page.key === preparedFor) return;
+      if (page && (page.key === preparedFor || page.blank)) return;
       // Without access to this page the extension cannot tell whether it is the employer's page.
-      // Opening the extension on the page gives that access; nothing is selected or cleared yet.
+      // The extension holds the supported employer sites; any other page is opened to it by the
+      // toolbar icon. Nothing is selected or cleared yet.
       if (page && !page.visible) {
         status.textContent =
-          "Your application is ready. On the employer page, click the ApplyDash icon once so ApplyDash can fill it.";
+          "Your application is ready. Open the employer page; if nothing happens, click the ApplyDash icon on it.";
         return;
       }
       if (input.value && input.value !== response.reviewLink) return;
