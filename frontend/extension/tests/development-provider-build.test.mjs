@@ -93,7 +93,7 @@ describe("isolated real extension provider builds", () => {
       if (mode === undefined) delete candidate.environment.EXTENSION_DEVELOPMENT_CONTRIBUTIONS;
       else candidate.environment.EXTENSION_DEVELOPMENT_CONTRIBUTIONS = mode;
       candidate.build();
-      for (const file of ["popup.html", "sidepanel.html"]) {
+      for (const file of ["sidepanel.html"]) {
         const html = await readFile(join(candidate.root, "dist", file), "utf8");
         for (const marker of [
           'id="queue-panel"',
@@ -107,9 +107,7 @@ describe("isolated real extension provider builds", () => {
         }
         expect(html).toContain('id="inspect"');
         expect(html).toContain('id="contribute"');
-        expect(html).toContain(
-          `data-extension-surface="${file === "popup.html" ? "popup" : "side-panel"}"`,
-        );
+        expect(html).toContain('data-extension-surface="side-panel"');
       }
     },
     35_000,

@@ -61,3 +61,22 @@ path keeps its exact-URL binding.
 [ADR-050](050-generate-then-apply-flow.md) adds an identifiers-only `application-apply-intent.v1`
 message so the popup can offer the matching application without a pasted link. The packet is still
 read with the extension's own session; the review link remains the identity of the website page.
+
+## Amendment: the extension is a side panel (2026-11-05)
+
+Owner direction after the Greenhouse fill test: the extension is pinned to the right of the window,
+top to bottom, like other job-application assistants, instead of a toolbar popup that closes when
+the candidate clicks the employer page. The toolbar icon opens the browser's side panel
+(`chrome.sidePanel.open` in the click's own turn); there is no `default_popup`, and the popup
+surface and `popup.html` are removed. The panel's width is set and remembered by the browser; the
+candidate can drag it.
+
+No permission or host access changes: the same `activeTab` grant is given by clicking the icon on
+a page, and nothing else is granted. A panel that stays open across tabs must not act on a page it
+cannot see, so it follows the active tab (tab switch, finished load, address change, window focus)
+and the background tells an open panel when the icon was clicked on a page. On a page the extension
+cannot see the panel selects nothing and asks the candidate to click the icon there; it never
+clears an earlier selection because of a tab it cannot see. A preview belongs to the page it was
+made from and is dropped when the candidate moves to another page. The message that tells the
+panel is accepted only from the extension's own background. Trust, approval, binding and
+fill-only/submit rules are unchanged.

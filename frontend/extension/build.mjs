@@ -243,10 +243,10 @@ const manifest = {
     service_worker: "background.js",
     type: "module",
   },
+  // No popup: the icon opens the side panel (see lib/side-panel.ts).
   action: {
     default_icon: iconPaths,
-    default_popup: "popup.html",
-    default_title: "Save or contribute this job",
+    default_title: "Open ApplyDash",
   },
   content_security_policy: {
     extension_pages: "script-src 'self'; object-src 'self'",
@@ -256,15 +256,10 @@ const manifest = {
 };
 
 await writeFile(join(outputDirectory, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-const sidePanelHtml = popupHtml.replace(
-  'data-extension-surface="popup"',
-  'data-extension-surface="side-panel"',
-);
-if (sidePanelHtml === popupHtml) {
-  throw new Error("The popup surface marker is missing");
+if (!popupHtml.includes('data-extension-surface="side-panel"')) {
+  throw new Error("The side-panel surface marker is missing");
 }
-await writeFile(join(outputDirectory, "popup.html"), popupHtml);
-await writeFile(join(outputDirectory, "sidepanel.html"), sidePanelHtml);
+await writeFile(join(outputDirectory, "sidepanel.html"), popupHtml);
 await copyFile(join(extensionRoot, "static", "popup.css"), join(outputDirectory, "popup.css"));
 await Promise.all(
   Object.entries(iconPaths).map(([, fileName]) =>

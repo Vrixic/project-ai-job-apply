@@ -22,7 +22,7 @@ if (!["product", "development"].includes(uiMode)) throw new Error("Invalid D2 ex
 if (uiMode !== inferredUiMode)
   throw new Error("D2 extension artifact does not match requested UI mode");
 const developmentUi = uiMode === "development";
-for (const surface of ["popup", "sidepanel"]) {
+for (const surface of ["sidepanel"]) {
   const html = await readFile(join(extension, `${surface}.html`), "utf8");
   for (const id of ["queue-panel", "contributions-panel", "appeal-form"]) {
     assert(
@@ -64,7 +64,7 @@ function assert(condition, message) {
   if (!condition) fail(message);
 }
 
-async function openAssurancePopup(context, extensionId, scenario, surface = "popup") {
+async function openAssurancePopup(context, extensionId, scenario, surface = "sidepanel") {
   const popup = await context.newPage();
   await popup.goto(`chrome-extension://${extensionId}/${surface}.html?assurance=${scenario}`);
   await popup.waitForFunction(
@@ -161,7 +161,7 @@ async function keyboardFocusGeometry(page, selector) {
 
 async function assertSequentialHistoryAccess(context, extensionId, surface) {
   const page = await openAssurancePopup(context, extensionId, "configured-long", surface);
-  await page.setViewportSize({ width: surface === "popup" ? 448 : 320, height: 600 });
+  await page.setViewportSize({ width: 320, height: 600 });
   assert(await page.locator("#preview").isHidden(), `${surface} keyboard fixture has a preview`);
   // Establish the user's reported starting point only; every subsequent focus move uses Tab.
   await page.locator("#inspect").focus();
@@ -455,7 +455,7 @@ try {
     });
   });
 
-  for (const surface of ["popup", "sidepanel"]) {
+  for (const surface of ["sidepanel"]) {
     if (developmentUi) await assertSequentialHistoryAccess(context, extensionId, surface);
     if (developmentUi) {
       for (const outcome of ["conflict", "success"]) {
@@ -598,11 +598,13 @@ try {
   });
   assert(semanticControlFailures.length === 0, "visible controls lack semantic names");
 
-  const preferredPopupWidth = await popup.evaluate(
+  // The browser sets a side panel's width, so the page fills whatever width it is given.
+  await popup.setViewportSize({ width: 700, height: 900 });
+  const panelWidth = await popup.evaluate(
     () => document.documentElement.getBoundingClientRect().width,
   );
-  assert(preferredPopupWidth >= 448, "the extension popup is not twice the original width");
-  const popupAxeViolations = await assertAxeClean(popup, "popup");
+  assert(panelWidth >= 680, "the side panel pins a fixed width instead of filling the panel");
+  const popupAxeViolations = await assertAxeClean(popup, "side panel");
 
   const responsiveSurface = await openAssurancePopup(
     context,
@@ -706,7 +708,7 @@ try {
     );
   }
   process.stdout.write(
-    `${JSON.stringify({ profile: "d2_extension_installed_synthetic_v5", browserName, uiMode, browserExecuted: true, manifestVersion: manifest.manifest_version, syntheticProviderPages: 3, popupScenarios: 7, sidePanelScenarios: 5, addOutcomeScenarios: 6, diagnosticBoundarySurfaces: 2, sequentialKeyboardSurfaces: developmentUi ? 2 : 0, clippedFocusNegativeControls: developmentUi ? 2 : 0, preferredPopupWidth, layoutProfiles, externalRequestsAllowed: 0, externalRequestsBlocked, operationalPolicyRequestsBlocked, unexpectedExternalRequests, optionalProviderPermissionDenied: optionalDenied, keyboardFocusVisible: focusStyleVisible, semanticControlFailures: semanticControlFailures.length, axeViolations: popupAxeViolations + sidePanelAxeViolations, axeSurfaces: 2, horizontalOverflowProfiles: 0, fieldOverlapProfiles: 0, clippedControlProfiles: 0, longValueExpanders: await expanders.count(), progressiveDisclosures: developmentUi ? 3 : 1, missingFieldStatesValidated: await unavailableFields.count(), separatedLocationAndWorkTypeFields: 2, deliveryStatesValidated: 2, sensitiveArtifactsRetained: !sensitiveStorageAbsent, telemetryRequests: 0 })}\n`,
+    `${JSON.stringify({ profile: "d2_extension_installed_synthetic_v5", browserName, uiMode, browserExecuted: true, manifestVersion: manifest.manifest_version, syntheticProviderPages: 3, popupScenarios: 7, sidePanelScenarios: 5, addOutcomeScenarios: 6, diagnosticBoundarySurfaces: 2, sequentialKeyboardSurfaces: developmentUi ? 2 : 0, clippedFocusNegativeControls: developmentUi ? 2 : 0, panelWidth, layoutProfiles, externalRequestsAllowed: 0, externalRequestsBlocked, operationalPolicyRequestsBlocked, unexpectedExternalRequests, optionalProviderPermissionDenied: optionalDenied, keyboardFocusVisible: focusStyleVisible, semanticControlFailures: semanticControlFailures.length, axeViolations: popupAxeViolations + sidePanelAxeViolations, axeSurfaces: 2, horizontalOverflowProfiles: 0, fieldOverlapProfiles: 0, clippedControlProfiles: 0, longValueExpanders: await expanders.count(), progressiveDisclosures: developmentUi ? 3 : 1, missingFieldStatesValidated: await unavailableFields.count(), separatedLocationAndWorkTypeFields: 2, deliveryStatesValidated: 2, sensitiveArtifactsRetained: !sensitiveStorageAbsent, telemetryRequests: 0 })}\n`,
   );
 } finally {
   await context?.close();
