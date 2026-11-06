@@ -920,6 +920,31 @@ describe("ApplicationsWorkspace: extension hand-off", () => {
     await settle();
   });
 
+  it("asks for the panel before it opens the employer page, which would use up the click", async () => {
+    currentBff = new FakeBff();
+    const order: string[] = [];
+    extension([]);
+    const send = (window as unknown as { chrome: { runtime: { sendMessage: unknown } } }).chrome
+      .runtime.sendMessage as (...args: unknown[]) => void;
+    (
+      window as unknown as { chrome: { runtime: { sendMessage: unknown } } }
+    ).chrome.runtime.sendMessage = (...args: unknown[]) => {
+      order.push(`message:${String((args[1] as { schema?: string }).schema)}`);
+      send(...args);
+    };
+    const open = vi.spyOn(window, "open").mockImplementation(() => {
+      order.push("window.open");
+      return null;
+    });
+    await mount(currentBff);
+    const apply = button("Apply");
+    if (!apply) throw new Error("No Apply button");
+    act(() => apply.click());
+    expect(order.slice(0, 2)).toEqual(["message:application-open-panel.v1", "window.open"]);
+    open.mockRestore();
+    await settle();
+  });
+
   it("does not ask for the panel when no extension is configured", async () => {
     vi.stubEnv("NEXT_PUBLIC_APPLICATION_EXTENSION_TRANSFER_ENABLED", "false");
     currentBff = new FakeBff();

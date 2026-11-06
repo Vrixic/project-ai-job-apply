@@ -19,14 +19,18 @@ interface FollowApi {
 
 /**
  * A side panel stays open while the candidate switches tabs and pages load, so it has to notice
- * which page is in front of them now. `onChange` runs once the browser settles after any of: another
- * tab becoming active, the active tab finishing a load or changing address, another window taking
- * focus, or the extension being opened on the page (which grants access to it). Returns a stop.
+ * which page is in front of them now. `onChange` runs once the browser settles (a quiet moment
+ * after the last event) after any of: another tab becoming active, the active tab starting or
+ * finishing a load or changing address, another window taking focus, or the extension being opened
+ * on the page (which grants access to it). `onLoading` runs at once when the active tab starts
+ * loading: a reload makes a new document, so anything chosen for the old one no longer holds.
+ * Returns a stop.
  */
 export function followActiveTab(
   onChange: () => void,
   api: FollowApi = chrome as unknown as FollowApi,
   settleMs = 250,
+  onLoading?: () => void,
 ): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const changed = () => {
@@ -38,7 +42,9 @@ export function followActiveTab(
     change: { status?: string; url?: string },
     tab: { active?: boolean },
   ) => {
-    if (tab.active === true && (change.status === "complete" || change.url !== undefined))
+    if (tab.active !== true) return;
+    if (change.status === "loading") onLoading?.();
+    if (change.status === "loading" || change.status === "complete" || change.url !== undefined)
       changed();
   };
   const message = (value: unknown, sender: { id?: string; tab?: unknown }) => {

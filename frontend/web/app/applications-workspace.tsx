@@ -625,6 +625,10 @@ function JobApplicationWorkspace({
     // A second click while one is running must not open another employer tab.
     if (starting.current) return;
     const displayedHash = packet?.packetHash;
+    // The extension's side panel opens beside the employer page, in the turn of this click. This
+    // must come before window.open: opening a window uses up the click's permission to open a
+    // panel (Chrome then refuses it: "may only be called in response to a user gesture").
+    if (href) requestExtensionPanel(nativeExtensionId(), nativeExtensionMessenger());
     // Open the employer page now, on the candidate's click, so no popup blocker applies; it is
     // pointed at the page only after the application is ready. The link back to this page is
     // severed first, and it carries no data.
@@ -635,8 +639,6 @@ function JobApplicationWorkspace({
     } catch {
       employerTab = null;
     }
-    // The extension's side panel opens beside the employer page now, in the turn of this click.
-    if (href) requestExtensionPanel(nativeExtensionId(), nativeExtensionMessenger());
     void run(async () => {
       try {
         let current = await ensureApplication();

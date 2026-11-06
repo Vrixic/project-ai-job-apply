@@ -65,8 +65,10 @@ export function mountApplicationHandoff() {
         : {
             key: `${tab.id}|${tab.url ?? ""}`,
             visible: tab.url !== undefined,
-            // A tab still opening (blank, or a browser page) is not an employer page yet.
+            // A tab still opening (blank, or a browser page) is not an employer page yet, and a
+            // page still loading may load again: the extension holds a selection to one document.
             blank: tab.url !== undefined && !/^https?:/u.test(tab.url),
+            loading: tab.status !== undefined && tab.status !== "complete",
           };
     } catch {
       return undefined;
@@ -86,6 +88,13 @@ export function mountApplicationHandoff() {
       button.disabled = true;
       try {
         const preparing = action === "select" ? await activeTabKey() : undefined;
+        // The fill takes several seconds: say so, instead of leaving the last message up.
+        if (action === "fill")
+          status.textContent =
+            "Filling in your application. Watch the employer page; nothing is submitted.";
+        if (action === "apply")
+          status.textContent =
+            "Filling in and submitting your application. Watch the employer page.";
         const response = await chrome.runtime.sendMessage(
           action === "select"
             ? { action: "application_native_select", reviewLink: input.value }
@@ -132,12 +141,19 @@ export function mountApplicationHandoff() {
           error.stage
             ? ` (stopped at: ${String(error.stage)})`
             : "";
+        const signedOut =
+          action === "select" &&
+          error instanceof Error &&
+          "stage" in error &&
+          error.stage === "sign-in";
         status.textContent =
           action === "apply"
             ? `Apply could not complete. Review the application workspace before trying any further submission.${step}`
             : action === "fill"
               ? `The page could not be filled. Nothing was submitted. Select the employer page again and retry.${step}`
-              : `The file transfer could not be selected. Check the employer tab, current approval and extension sign-in.${step}`;
+              : signedOut
+                ? "Sign in to ApplyDash in this panel first, then press Apply on the website again."
+                : `The file transfer could not be selected. Check the employer tab, current approval and extension sign-in.${step}`;
       } finally {
         if (ownsBusy) busy = false;
         button.disabled = false;
@@ -155,7 +171,7 @@ export function mountApplicationHandoff() {
       })) as { ok?: boolean; reviewLink?: unknown } | undefined;
       if (!response?.ok || typeof response.reviewLink !== "string") return;
       const page = await activeTabKey();
-      if (page && (page.key === preparedFor || page.blank)) return;
+      if (page && (page.key === preparedFor || page.blank || page.loading)) return;
       // Without access to this page the extension cannot tell whether it is the employer's page.
       // The extension holds the supported employer sites; any other page is opened to it by the
       // toolbar icon. Nothing is selected or cleared yet.
@@ -173,7 +189,16 @@ export function mountApplicationHandoff() {
     }
   };
   void offerPendingIntent();
-  followActiveTab(() => void offerPendingIntent());
+  // A reload is a new document: the extension drops what it selected, so prepare it again once the
+  // page has settled.
+  followActiveTab(
+    () => void offerPendingIntent(),
+    undefined,
+    undefined,
+    () => {
+      preparedFor = undefined;
+    },
+  );
   function discard(message = "") {
     generation++;
     clearTimeout(timer);

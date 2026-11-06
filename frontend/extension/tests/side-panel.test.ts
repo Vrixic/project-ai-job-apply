@@ -157,7 +157,7 @@ describe("the panel follows the page in front of the candidate", () => {
     const onChange = vi.fn();
     followActiveTab(onChange, api());
     fire("updated", 4, { status: "complete" }, { active: false });
-    fire("updated", 4, { status: "loading" }, { active: true });
+    fire("updated", 4, { status: "loading" }, { active: false });
     fire("updated", 4, { title: "x" }, { active: true });
     vi.advanceTimersByTime(300);
     expect(onChange).not.toHaveBeenCalled();
@@ -167,6 +167,27 @@ describe("the panel follows the page in front of the candidate", () => {
     fire("updated", 4, { url: "https://example.invalid/next" }, { active: true });
     vi.advanceTimersByTime(300);
     expect(onChange).toHaveBeenCalledTimes(2);
+  });
+
+  it("says at once when the active tab starts loading, and waits for the load to settle", () => {
+    const onChange = vi.fn();
+    const onLoading = vi.fn();
+    followActiveTab(onChange, api(), 250, onLoading);
+    fire("updated", 4, { status: "loading" }, { active: false });
+    expect(onLoading).not.toHaveBeenCalled();
+    fire("updated", 4, { status: "loading" }, { active: true });
+    expect(onLoading).toHaveBeenCalledTimes(1);
+    expect(onChange).not.toHaveBeenCalled();
+    // A second load right after the first keeps pushing the quiet moment back.
+    vi.advanceTimersByTime(100);
+    fire("updated", 4, { status: "complete" }, { active: true });
+    vi.advanceTimersByTime(100);
+    fire("updated", 4, { status: "loading" }, { active: true });
+    fire("updated", 4, { status: "complete" }, { active: true });
+    vi.advanceTimersByTime(200);
+    expect(onChange).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(100);
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 
   it("reacts when another window takes focus", () => {

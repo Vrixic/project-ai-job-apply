@@ -91,8 +91,11 @@ arms the extension, so the website sends a separate request in the click's own t
 for the sender's window, and answers `application-open-panel-receipt.v1` with whether the browser
 agreed. It is accepted under the same sender rules as the apply intent: the website's own origin,
 its top document, active, a normal (not private) window, and no extension sender. Nothing waits for
-the answer; without the extension or its panel Apply is unchanged. Checked in Edge: the browser
-accepts the open from this message after a real click.
+the answer; without the extension or its panel Apply is unchanged. The request must be sent
+before the website opens the employer tab: `window.open` uses up the click, and Chrome then refuses
+the panel ("may only be called in response to a user gesture"). Edge does not enforce this, so it
+is not a test of it; Chrome 157 accepts the open from this message when it is sent first and
+refuses it when sent after `window.open`.
 
 Opening the panel does not give the extension the employer page: that access is still the
 `activeTab` grant, which only the toolbar icon click gives (checked: with the panel open and no
@@ -121,6 +124,11 @@ kill switches. Access to a site means the extension can read and script a page t
 only on the one page selected for the application. A panel that sees a page still opening waits
 quietly; one that cannot see the page says the application is ready and that the icon click opens it.
 
-Checked in Edge: after the Apply click opens the panel and the employer tab loads, the extension sees
-its address and can script it with no icon click, while the website tab and other tabs stay refused.
-The host list derives from the providers named in the build, with tests.
+Checked in Chrome 157 and Edge: after the Apply click opens the panel and the employer tab loads,
+the extension sees its address and can script it with no icon click, while the website tab and other
+tabs stay refused. The host list derives from the providers named in the build, with tests.
+
+The panel prepares the page only once it has finished loading and gone quiet, and prepares it again
+whenever the page reloads: a reload is a new document, so the extension drops what it selected for
+the old one (Greenhouse's page loads twice in a row, which made the first selection vanish before the
+candidate pressed Fill). The panel says "Filling in your application" while a fill runs.
