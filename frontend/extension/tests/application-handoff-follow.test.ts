@@ -17,6 +17,7 @@ let tab: Tab;
 let pending: boolean;
 let send: ReturnType<typeof vi.fn>;
 let tabChanged: () => void;
+let preparingUntil = 0;
 let tabUpdated: (
   id: number,
   change: { status?: string; url?: string },
@@ -108,6 +109,64 @@ describe("the side panel follows the page in front of the candidate", () => {
     await settle();
     expect(selects()).toHaveLength(0);
     expect(status()).toContain("click the ApplyDash icon");
+  });
+
+  describe("while the website is still preparing the application", () => {
+    const preparing = () => document.documentElement.dataset.applicationState;
+    afterEach(() => {
+      delete document.documentElement.dataset.applicationState;
+    });
+
+    it("shows only that it is preparing, with no review link set, and selects nothing", async () => {
+      send.mockImplementation(async (message) =>
+        message.action === "application_pending_intent"
+          ? { ok: true, preparingUntilMs: Date.now() + 60_000 }
+          : { ok: true },
+      );
+      mountApplicationHandoff();
+      await settle();
+      expect(preparing()).toBe("preparing");
+      expect(status()).toContain("Preparing your application");
+      expect(document.querySelector<HTMLInputElement>("input")?.value).toBe("");
+      expect(selects()).toHaveLength(0);
+    });
+
+    it("fills in by itself when the review link is set, and shows the ordinary panel", async () => {
+      let armed = false;
+      send.mockImplementation(async (message) =>
+        message.action === "application_pending_intent"
+          ? armed
+            ? { ok: true, reviewLink: LINK }
+            : { ok: true, preparingUntilMs: Date.now() + 60_000 }
+          : { ok: true, resume: "uploaded" },
+      );
+      mountApplicationHandoff();
+      await settle();
+      expect(preparing()).toBe("preparing");
+      armed = true;
+      tabChanged();
+      await settle();
+      expect(preparing()).toBeUndefined();
+      expect(document.querySelector<HTMLInputElement>("input")?.value).toBe(LINK);
+      expect(selects()).toHaveLength(1);
+    });
+
+    it("goes back to the ordinary panel when the website never finishes", async () => {
+      send.mockImplementation(async (message) =>
+        message.action === "application_pending_intent"
+          ? Date.now() < preparingUntil
+            ? { ok: true, preparingUntilMs: preparingUntil }
+            : { ok: true }
+          : { ok: true },
+      );
+      preparingUntil = Date.now() + 5_000;
+      mountApplicationHandoff();
+      await settle();
+      expect(preparing()).toBe("preparing");
+      await vi.advanceTimersByTimeAsync(6_000);
+      expect(preparing()).toBeUndefined();
+      expect(status()).toBe("");
+    });
   });
 
   it("waits for a page that is still loading, and prepares it once it has settled", async () => {

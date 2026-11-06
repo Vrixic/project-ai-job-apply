@@ -41,6 +41,10 @@ describe("popup and side-panel source assurance", () => {
     // Docked to the right at the window's full height; the browser decides the width.
     expect(css).toContain('html[data-extension-surface="side-panel"]');
     expect(css).toContain("min-height: 100vh");
+    // Until the application is ready the panel shows only that it is preparing.
+    expect(css).toContain(
+      'html[data-application-state="preparing"] main > :not(#application-handoff)',
+    );
     expect(css).not.toContain("28rem");
     expect(css).not.toContain("37.5rem");
     expect(css).not.toContain(".field-selection");

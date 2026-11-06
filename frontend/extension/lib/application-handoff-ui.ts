@@ -163,12 +163,40 @@ export function mountApplicationHandoff() {
   // After Apply on the website the extension already holds the application's identifiers. Opening
   // it on the employer page selects that tab with no pasted link; the candidate then confirms. The
   // side panel stays open across tabs, so this is offered again for each page the candidate opens.
+  //
+  // The panel opens at the Apply click (the only moment the browser allows it), long before the
+  // application is ready and the review link exists. Until then it shows only that it is preparing,
+  // never an empty review link, and it fills in by itself when the link is set.
+  const PREPARING = "Preparing your application. This panel fills in by itself when it is ready.";
+  let preparingTimer: ReturnType<typeof setTimeout> | undefined;
+  const showPreparing = (untilMs: number | undefined) => {
+    clearTimeout(preparingTimer);
+    const root = document.documentElement;
+    if (untilMs !== undefined) {
+      root.dataset.applicationState = "preparing";
+      status.textContent = PREPARING;
+      // If nothing arrives (the website could not finish), go back to the ordinary panel.
+      preparingTimer = setTimeout(
+        () => void offerPendingIntent(),
+        Math.max(0, untilMs - Date.now()) + 200,
+      );
+    } else if (root.dataset.applicationState === "preparing") {
+      delete root.dataset.applicationState;
+      if (status.textContent === PREPARING) status.textContent = "";
+    }
+  };
   const offerPendingIntent = async () => {
     if (!extensionConfiguration.applicationExecutionEnabled || busy) return;
     try {
       const response = (await chrome.runtime.sendMessage({
         action: "application_pending_intent",
-      })) as { ok?: boolean; reviewLink?: unknown } | undefined;
+      })) as { ok?: boolean; reviewLink?: unknown; preparingUntilMs?: unknown } | undefined;
+      const waiting =
+        response?.ok === true &&
+        typeof response.reviewLink !== "string" &&
+        typeof response.preparingUntilMs === "number" &&
+        response.preparingUntilMs > Date.now();
+      showPreparing(waiting ? (response.preparingUntilMs as number) : undefined);
       if (!response?.ok || typeof response.reviewLink !== "string") return;
       const page = await activeTabKey();
       if (page && (page.key === preparedFor || page.blank || page.loading)) return;
@@ -202,6 +230,8 @@ export function mountApplicationHandoff() {
   function discard(message = "") {
     generation++;
     clearTimeout(timer);
+    clearTimeout(preparingTimer);
+    delete document.documentElement.dataset.applicationState;
     snapshot = undefined;
     snapshotId = undefined;
     content?.replaceChildren();

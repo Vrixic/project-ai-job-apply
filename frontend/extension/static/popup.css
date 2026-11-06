@@ -39,6 +39,15 @@ html[data-extension-surface="side-panel"] body {
   min-height: 100vh;
 }
 
+/*
+ * The panel opens at the Apply click, before the application is ready. Until the review link is
+ * set it shows only that it is preparing: no empty review link, no unrelated cards.
+ */
+html[data-application-state="preparing"] main > :not(#application-handoff),
+html[data-application-state="preparing"] #application-handoff > :not([data-handoff-status]) {
+  display: none;
+}
+
 .skip-link {
   background: var(--surface);
   color: var(--accent);
