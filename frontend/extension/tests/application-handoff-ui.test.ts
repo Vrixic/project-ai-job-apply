@@ -201,6 +201,7 @@ describe("manual handoff UI", () => {
     "shows confirmed copy only for a positive owning acknowledgement (%s)",
     async (ok) => {
       send.mockResolvedValue({ ok, outcome: "confirmed" });
+      control<HTMLInputElement>("input").value = LINK;
       control<HTMLButtonElement>("[data-native-apply]").click();
       await flush();
       expect(
@@ -208,6 +209,16 @@ describe("manual handoff UI", () => {
       ).toBe(ok);
     },
   );
+  it("does not select, fill or submit until Apply has set the review link", async () => {
+    for (const selector of ["[data-native-fill]", "[data-native-apply]"]) {
+      control<HTMLButtonElement>(selector).click();
+      await flush();
+    }
+    expect(send).not.toHaveBeenCalledWith(
+      expect.objectContaining({ action: "application_native_apply" }),
+    );
+    expect(control("[data-handoff-status]").textContent).toContain("Press Apply on the website");
+  });
   it("copies explicit structure only and suppresses a late result after clear", async () => {
     mountApplicationHandoff();
     control<HTMLInputElement>("input").value = LINK;

@@ -87,6 +87,12 @@ export function mountApplicationHandoff() {
       if (ownsBusy) busy = true;
       button.disabled = true;
       try {
+        // Nothing to select, fill or submit until Apply has set the review link on this panel.
+        if (!input.value && action !== "clear") {
+          status.textContent =
+            "Press Apply on the website first. The review link fills in by itself.";
+          return;
+        }
         const preparing = action === "select" ? await activeTabKey() : undefined;
         // The fill takes several seconds: say so, instead of leaving the last message up.
         if (action === "fill")
@@ -185,21 +191,47 @@ export function mountApplicationHandoff() {
       if (status.textContent === PREPARING) status.textContent = "";
     }
   };
+  const READY_WAITING =
+    "Your application is ready. Waiting for the employer page to finish opening...";
+  // A page that never settles is tried anyway (a reload prepares it again); a tab that stays blank
+  // stops being polled, and the next tab event brings it back.
+  const LOADING_WAIT_MS = 6_000;
+  const BLANK_WAIT_MS = 30_000;
+  let waitingSince: number | undefined;
+  let recheckTimer: ReturnType<typeof setTimeout> | undefined;
   const offerPendingIntent = async () => {
     if (!extensionConfiguration.applicationExecutionEnabled || busy) return;
+    clearTimeout(recheckTimer);
     try {
       const response = (await chrome.runtime.sendMessage({
         action: "application_pending_intent",
       })) as { ok?: boolean; reviewLink?: unknown; preparingUntilMs?: unknown } | undefined;
-      const waiting =
-        response?.ok === true &&
-        typeof response.reviewLink !== "string" &&
-        typeof response.preparingUntilMs === "number" &&
-        response.preparingUntilMs > Date.now();
-      showPreparing(waiting ? (response.preparingUntilMs as number) : undefined);
-      if (!response?.ok || typeof response.reviewLink !== "string") return;
+      if (!response?.ok || typeof response.reviewLink !== "string") {
+        const waiting =
+          response?.ok === true &&
+          typeof response.preparingUntilMs === "number" &&
+          response.preparingUntilMs > Date.now();
+        showPreparing(waiting ? (response.preparingUntilMs as number) : undefined);
+        return;
+      }
+      // The application is ready, so its review link is known: set it now, whatever the employer
+      // page is doing, and show the panel only with the link in place. A link the candidate pasted
+      // themselves is left alone.
+      if (!input.value || input.value === response.reviewLink) input.value = response.reviewLink;
+      showPreparing(undefined);
       const page = await activeTabKey();
-      if (page && (page.key === preparedFor || page.blank || page.loading)) return;
+      if (page?.key === preparedFor) return;
+      if (page?.blank || page?.loading) {
+        waitingSince ??= Date.now();
+        const waited = Date.now() - waitingSince;
+        if (waited < (page.blank ? BLANK_WAIT_MS : LOADING_WAIT_MS)) {
+          status.textContent = READY_WAITING;
+          recheckTimer = setTimeout(() => void offerPendingIntent(), 1_000);
+          return;
+        }
+        if (page.blank) return;
+      }
+      waitingSince = undefined;
       // Without access to this page the extension cannot tell whether it is the employer's page.
       // The extension holds the supported employer sites; any other page is opened to it by the
       // toolbar icon. Nothing is selected or cleared yet.
@@ -208,8 +240,7 @@ export function mountApplicationHandoff() {
           "Your application is ready. Open the employer page; if nothing happens, click the ApplyDash icon on it.";
         return;
       }
-      if (input.value && input.value !== response.reviewLink) return;
-      input.value = response.reviewLink;
+      if (input.value !== response.reviewLink) return;
       status.textContent = "Preparing your application for this page...";
       section.querySelector<HTMLButtonElement>("[data-native-select]")?.click();
     } catch {
@@ -225,12 +256,14 @@ export function mountApplicationHandoff() {
     undefined,
     () => {
       preparedFor = undefined;
+      waitingSince = undefined;
     },
   );
   function discard(message = "") {
     generation++;
     clearTimeout(timer);
     clearTimeout(preparingTimer);
+    clearTimeout(recheckTimer);
     delete document.documentElement.dataset.applicationState;
     snapshot = undefined;
     snapshotId = undefined;
