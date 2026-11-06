@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { followActiveTab } from "../lib/active-tab-follow";
-import { isPanelAccessGranted, PANEL_ACCESS_GRANTED, registerSidePanel } from "../lib/side-panel";
+import {
+  isOpenPanelRequest,
+  isPanelNotice,
+  notifyPanel,
+  OPEN_PANEL_REQUEST,
+  openSidePanel,
+  PANEL_NOTICE,
+  registerSidePanel,
+} from "../lib/side-panel";
 
 describe("the toolbar icon opens the side panel", () => {
   function install(open = vi.fn(async () => undefined)) {
@@ -33,7 +41,7 @@ describe("the toolbar icon opens the side panel", () => {
   it("tells an open panel that the extension may now use the page", () => {
     const { click, sendMessage } = install();
     click({ id: 5, windowId: 9 });
-    expect(sendMessage).toHaveBeenCalledWith({ panel: PANEL_ACCESS_GRANTED });
+    expect(sendMessage).toHaveBeenCalledWith({ panel: PANEL_NOTICE });
   });
 
   it("does not open a panel for a window it cannot name", () => {
@@ -61,13 +69,57 @@ describe("the toolbar icon opens the side panel", () => {
   });
 
   it("accepts the access notice only from the extension's own background", () => {
-    const notice = { panel: PANEL_ACCESS_GRANTED };
-    expect(isPanelAccessGranted(notice, { id: "me" }, "me")).toBe(true);
-    expect(isPanelAccessGranted(notice, { id: "other" }, "me")).toBe(false);
-    expect(isPanelAccessGranted(notice, { id: "me", tab: { id: 1 } }, "me")).toBe(false);
-    expect(isPanelAccessGranted({ panel: "something_else" }, { id: "me" }, "me")).toBe(false);
-    expect(isPanelAccessGranted("panel_access_granted", { id: "me" }, "me")).toBe(false);
-    expect(isPanelAccessGranted(null, { id: "me" }, "me")).toBe(false);
+    const notice = { panel: PANEL_NOTICE };
+    expect(isPanelNotice(notice, { id: "me" }, "me")).toBe(true);
+    expect(isPanelNotice(notice, { id: "other" }, "me")).toBe(false);
+    expect(isPanelNotice(notice, { id: "me", tab: { id: 1 } }, "me")).toBe(false);
+    expect(isPanelNotice({ panel: "something_else" }, { id: "me" }, "me")).toBe(false);
+    expect(isPanelNotice("panel_access_granted", { id: "me" }, "me")).toBe(false);
+    expect(isPanelNotice(null, { id: "me" }, "me")).toBe(false);
+  });
+});
+
+describe("opening the panel for the Apply click", () => {
+  it("opens it for the window and reports whether the browser agreed", async () => {
+    const open = vi.fn(async () => undefined);
+    await expect(
+      openSidePanel(4, { runtime: { sendMessage: vi.fn() }, sidePanel: { open } }),
+    ).resolves.toBe(true);
+    expect(open).toHaveBeenCalledWith({ windowId: 4 });
+    const refuse = vi.fn(async () => Promise.reject(new Error("user gesture")));
+    await expect(
+      openSidePanel(4, { runtime: { sendMessage: vi.fn() }, sidePanel: { open: refuse } }),
+    ).resolves.toBe(false);
+    const throws = vi.fn(() => {
+      throw new Error("no panel");
+    });
+    await expect(
+      openSidePanel(4, { runtime: { sendMessage: vi.fn() }, sidePanel: { open: throws } }),
+    ).resolves.toBe(false);
+    await expect(openSidePanel(4, { runtime: { sendMessage: vi.fn() } })).resolves.toBe(false);
+  });
+
+  it("tells the panel to look again, and stays quiet when nobody listens", async () => {
+    const sendMessage = vi.fn(async (_message: unknown) => undefined);
+    notifyPanel({ runtime: { sendMessage } });
+    expect(sendMessage).toHaveBeenCalledWith({ panel: PANEL_NOTICE });
+    expect(() =>
+      notifyPanel({
+        runtime: { sendMessage: vi.fn(async () => Promise.reject(new Error("no receiver"))) },
+      }),
+    ).not.toThrow();
+    expect(() => notifyPanel({ runtime: {} as never })).not.toThrow();
+    await Promise.resolve();
+  });
+
+  it("accepts a request that is exactly its schema, and nothing else", () => {
+    expect(isOpenPanelRequest({ schema: OPEN_PANEL_REQUEST })).toBe(true);
+    expect(isOpenPanelRequest({ schema: OPEN_PANEL_REQUEST, applicationId: "x" })).toBe(false);
+    expect(isOpenPanelRequest({ schema: "application-open-panel.v2" })).toBe(false);
+    expect(isOpenPanelRequest({})).toBe(false);
+    expect(isOpenPanelRequest([OPEN_PANEL_REQUEST])).toBe(false);
+    expect(isOpenPanelRequest(null)).toBe(false);
+    expect(isOpenPanelRequest(OPEN_PANEL_REQUEST)).toBe(false);
   });
 });
 
@@ -129,11 +181,11 @@ describe("the panel follows the page in front of the candidate", () => {
     const onChange = vi.fn();
     followActiveTab(onChange, api());
     fire("message", { panel: "something_else" }, { id: "me" });
-    fire("message", { panel: PANEL_ACCESS_GRANTED }, { id: "another-extension" });
-    fire("message", { panel: PANEL_ACCESS_GRANTED }, { id: "me", tab: { id: 1 } });
+    fire("message", { panel: PANEL_NOTICE }, { id: "another-extension" });
+    fire("message", { panel: PANEL_NOTICE }, { id: "me", tab: { id: 1 } });
     vi.advanceTimersByTime(300);
     expect(onChange).not.toHaveBeenCalled();
-    fire("message", { panel: PANEL_ACCESS_GRANTED }, { id: "me" });
+    fire("message", { panel: PANEL_NOTICE }, { id: "me" });
     vi.advanceTimersByTime(300);
     expect(onChange).toHaveBeenCalledTimes(1);
   });

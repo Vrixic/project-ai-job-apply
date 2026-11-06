@@ -73,6 +73,26 @@ function send(
 }
 
 /**
+ * Asks the extension to open its side panel beside this page. It is sent in the turn of the
+ * candidate's Apply click, because the browser opens a panel only in answer to a click. It carries
+ * no data, nothing waits for the answer, and without the extension (or its panel) Apply is unchanged.
+ */
+export function requestExtensionPanel(
+  extensionId: string | undefined,
+  messenger: NativeExtensionMessenger | undefined,
+): void {
+  if (!extensionId || !messenger || !EXTENSION_ID.test(extensionId)) return;
+  try {
+    messenger.sendMessage(extensionId, { schema: "application-open-panel.v1" }, () => {
+      // Reading the error marks it handled; the answer is not needed.
+      if (messenger.lastError) return;
+    });
+  } catch {
+    // No extension answered.
+  }
+}
+
+/**
  * Arms the extension when the candidate presses Apply. Identifiers only: no credential, file,
  * answer or URL. The extension reads the packet itself with its own session. Returns the deadline
  * until which it holds the identifiers, or nothing when no extension answered.

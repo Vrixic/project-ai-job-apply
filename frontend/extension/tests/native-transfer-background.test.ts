@@ -29,12 +29,14 @@ function setup(dark = false, session = new Map<string, unknown>()) {
   let storage: Parameters<typeof chrome.storage.onChanged.addListener>[0];
   const browser = {
     runtime: {
+      sendMessage: vi.fn(async (_message: unknown) => undefined),
       onMessageExternal: {
         addListener: vi.fn((callback: typeof listener) => {
           listener = callback;
         }),
       },
     },
+    sidePanel: { open: vi.fn(async (_options: { windowId: number }) => undefined) },
     tabs: {
       get: vi.fn(async () => ({ id: 7, url: EMPLOYER, incognito: false })),
       query: vi.fn(async () => [{ id: 7, url: EMPLOYER, incognito: false }]),
@@ -111,7 +113,7 @@ function setup(dark = false, session = new Map<string, unknown>()) {
     frameId: 0,
     documentId: SOURCE_DOCUMENT,
     documentLifecycle: "active",
-    tab: { id: 9, incognito: false } as chrome.tabs.Tab,
+    tab: { id: 9, windowId: 3, incognito: false } as chrome.tabs.Tab,
   };
   const begin = {
     schema: "application-native-transfer-begin.v1",
@@ -457,6 +459,63 @@ describe("the apply intent from the website", () => {
     const f = setup();
     await expect(f.message(value)).resolves.toEqual({ error: "ApplicationApplyIntentUnavailable" });
     expect(await f.composition.pendingIntent()).toEqual({ ok: true });
+  });
+
+  it("tells an open side panel when an application is armed", async () => {
+    const f = setup();
+    await f.message(INTENT);
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ panel: "panel_notice" });
+  });
+
+  describe("the Apply click asks for the side panel", () => {
+    const OPEN = { schema: "application-open-panel.v1" };
+    const ask = (value: unknown, sender: chrome.runtime.MessageSender) =>
+      new Promise((resolve) => {
+        const listener = (chrome.runtime.onMessageExternal.addListener as ReturnType<typeof vi.fn>)
+          .mock.calls[0]?.[0] as (m: unknown, s: unknown, r: (v: unknown) => void) => boolean;
+        listener(value, sender, resolve);
+      });
+
+    it("opens the panel for the window the website is in", async () => {
+      const f = setup();
+      await expect(ask(OPEN, f.sender)).resolves.toEqual({
+        schema: "application-open-panel-receipt.v1",
+        opened: true,
+      });
+      expect(chrome.sidePanel.open).toHaveBeenCalledWith({ windowId: 3 });
+    });
+
+    it("says so when the browser refuses to open it", async () => {
+      const f = setup();
+      vi.mocked(chrome.sidePanel.open).mockRejectedValueOnce(new Error("user gesture"));
+      await expect(ask(OPEN, f.sender)).resolves.toEqual({
+        schema: "application-open-panel-receipt.v1",
+        opened: false,
+      });
+    });
+
+    it.each([
+      ["another website origin", { origin: "https://evil.example" }],
+      ["an extension sender", { id: "other-extension-id" }],
+      ["a subframe", { frameId: 3 }],
+      ["an inactive document", { documentLifecycle: "prerender" as const }],
+      ["a private window", { tab: { id: 9, windowId: 3, incognito: true } as chrome.tabs.Tab }],
+      ["a sender with no window", { tab: { id: 9, incognito: false } as chrome.tabs.Tab }],
+    ])("refuses a request from %s", async (_name, change) => {
+      const f = setup();
+      await expect(ask(OPEN, { ...f.sender, ...change })).resolves.toEqual({
+        error: "ApplicationOpenPanelUnavailable",
+      });
+      expect(chrome.sidePanel.open).not.toHaveBeenCalled();
+    });
+
+    it("refuses a request that carries anything besides its schema", async () => {
+      const f = setup();
+      await expect(ask({ ...OPEN, applicationId: APP }, f.sender)).resolves.toEqual({
+        error: "ApplicationOpenPanelUnavailable",
+      });
+      expect(chrome.sidePanel.open).not.toHaveBeenCalled();
+    });
   });
 
   it("does not handle another schema version at all", () => {
