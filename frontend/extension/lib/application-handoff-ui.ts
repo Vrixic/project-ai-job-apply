@@ -9,6 +9,7 @@ const NOTE_FIELDS: Readonly<Record<string, string>> = {
   "education.degree": "Degree",
   "education.field": "Discipline",
   "authorization.us_authorized": "Work authorization",
+  "job.salary_expectation": "Salary",
 };
 
 /** What the fill left to the candidate, in words. The codes carry no page text and no value. */
@@ -24,6 +25,10 @@ function fillNotes(notes: unknown): string {
       );
     else if (kind === "empty" && NOTE_FIELDS[rest])
       parts.push(`${NOTE_FIELDS[rest]} has no saved value: add it in your ApplyDash profile.`);
+    else if (kind === "near" && NOTE_FIELDS[rest])
+      parts.push(
+        `${NOTE_FIELDS[rest]}: none of the ranges held your salary, so the closest one was chosen: check it.`,
+      );
     else if (kind === "check" && NOTE_FIELDS[rest])
       parts.push(
         `${NOTE_FIELDS[rest]}: your United States answer does not settle a question that names another country, so it is left to you.`,

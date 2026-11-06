@@ -2,7 +2,7 @@ import type { ProfileEducationEntry, ProfilePersonal } from "@ai-job-apply/api-c
 import { SCREENING_QUESTIONS, type ScreeningFieldKey } from "./screening-questions";
 
 /** The Profile tab where the candidate completes a missing basic. */
-export type BasicsSection = "personal" | "education" | "screening";
+export type BasicsSection = "personal" | "education" | "screening" | "salary";
 
 export interface MissingBasic {
   key: string;
@@ -23,6 +23,8 @@ export function missingBasics(input: {
   screening: Partial<Record<ScreeningFieldKey, boolean>>;
   /** Off until the Profile service accepts the screening questions as saved answers. */
   requireScreening?: boolean;
+  /** The annual salary the candidate set, or undefined when none is saved. */
+  salary: number | undefined;
 }): MissingBasic[] {
   const missing: MissingBasic[] = [];
   const words = (input.personal?.fullName ?? "").trim().split(/\s+/u).filter(Boolean);
@@ -39,6 +41,9 @@ export function missingBasics(input: {
       label: "Your first education entry with its school, degree and field of study",
       section: "education",
     });
+  // Every salary question is answered from it, so an application waits for it.
+  if (input.salary === undefined)
+    missing.push({ key: "salary", label: "Your desired annual salary", section: "salary" });
   for (const item of SCREENING_QUESTIONS) {
     if (input.requireScreening === true && input.screening[item.fieldKey] === undefined)
       missing.push({ key: item.fieldKey, label: item.question, section: "screening" });

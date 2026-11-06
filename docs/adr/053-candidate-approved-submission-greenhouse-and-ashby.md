@@ -130,3 +130,24 @@ had fired, so the attempt stayed `dispatched` and the application `submitting` u
 - The job page shows an interrupted attempt ("has not reported back", nothing was submitted) with a
   Check again button and a light poll, instead of an empty section.
 
+## Amendment: salary questions (2026-11-06)
+
+The planner and the Greenhouse custom-dropdown fill answer the three shapes of salary question from
+the candidate's one desired annual salary (`packages/ats-sdk/src/salary.ts`):
+
+- an input box (text or number) gets the number as written;
+- a dropdown or radio list of ranges gets the range that holds it, and when none does the closest:
+  the highest range when the salary is above all of them, the lowest when below all, the nearer one
+  between two. A salary on the boundary of two ranges belongs to the one it starts. This is the one
+  place a nearest option is chosen; the fill reports it ("none of the ranges held your salary, so the
+  closest one was chosen: check it"). Options that are not ranges ("Prefer not to say") are ignored;
+  with no range at all nothing is chosen;
+- "does the posted salary meet your expectations?" (`job.salary_acceptable`, derived from the
+  salary and the range the question itself posts) is Yes when the posted range can pay the salary
+  (the salary is at or below the top of the range) and No when it tops out below it. A range posted
+  above the salary meets it, so that is Yes. A question that posts no range is left to the candidate.
+
+Only annual dollar amounts are understood: a question or option that says hourly, monthly, weekly,
+or names another currency is left to the candidate, and a number is never converted or guessed.
+Verified in real Chrome on the real Prompt.io form (posted $100,000-$150,000): 120,000 and 90,000
+answer Yes, 200,000 answers No.

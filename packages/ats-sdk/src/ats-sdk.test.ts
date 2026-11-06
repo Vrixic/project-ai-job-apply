@@ -223,6 +223,150 @@ describe("field mapping", () => {
   });
 });
 
+describe("salary question wordings", () => {
+  const key = (label: string) =>
+    mapFormFields(
+      extractGenericForm(page(`<label for="s">${label}</label><input id="s" name="s">`)),
+    )[0]?.fieldKey;
+
+  it.each([
+    "Salary expectations",
+    "What are your salary expectations?",
+    "Desired salary",
+    "Desired annual salary",
+    "Expected salary",
+    "Expected base salary",
+    "Target total compensation",
+    "What salary are you looking for?",
+  ])("reads %j as the salary expectation", (label) => {
+    expect(key(label)).toBe("job.salary_expectation");
+  });
+
+  it.each([
+    "Current salary",
+    "Previous compensation",
+    "Salary history",
+    "What is your current annual salary?",
+  ])("does not read %j as the salary expectation", (label) => {
+    expect(key(label)).not.toBe("job.salary_expectation");
+  });
+
+  it("reads the posted-salary question as the Yes/No one", () => {
+    expect(
+      key("Does our posted annual salary of $100,000-$150,000 meet your salary expectations?"),
+    ).toBe("job.salary_acceptable");
+  });
+});
+
+describe("salary questions", () => {
+  const salary = (value: number | null = 120_000): PacketValue[] => [
+    { fieldKey: "job.salary_expectation", value, needsUserAction: value === null },
+  ];
+  const plan = (html: string, packet = salary()) =>
+    buildFillPlan(extractGenericForm(page(html)), packet, { resume: false, coverLetter: false });
+
+  it("puts the salary as written into an input box", () => {
+    expect(
+      plan('<label for="s">Desired salary *</label><input id="s" name="salary" required>').actions,
+    ).toEqual([{ kind: "fill", ref: "f0", fieldKey: "job.salary_expectation", value: 120_000 }]);
+    expect(
+      plan('<label for="s">Salary expectations</label><input id="s" type="number" name="s">')
+        .actions,
+    ).toEqual([{ kind: "fill", ref: "f0", fieldKey: "job.salary_expectation", value: 120_000 }]);
+  });
+
+  it("chooses the range that holds the salary in a dropdown or radio list", () => {
+    const options = [
+      "$80,000 - $100,000",
+      "$100,000 - $120,000",
+      "$120,000 - $140,000",
+      "$140,000+",
+    ];
+    const dropdown = `<label for="s">Salary expectations</label><select id="s">${options.map((o) => `<option>${o}</option>`).join("")}</select>`;
+    expect(plan(dropdown).actions).toEqual([
+      {
+        kind: "select",
+        ref: "f0",
+        fieldKey: "job.salary_expectation",
+        option: "$120,000 - $140,000",
+      },
+    ]);
+    const radios = `<fieldset><legend>Desired salary</legend>${options.map((o) => `<label><input type="radio" name="r" value="${o}"> ${o}</label>`).join("")}</fieldset>`;
+    expect(plan(radios, salary(90_000)).actions).toEqual([
+      {
+        kind: "select",
+        ref: "f0",
+        fieldKey: "job.salary_expectation",
+        option: "$80,000 - $100,000",
+      },
+    ]);
+  });
+
+  it("picks the highest or lowest range when none holds the salary, and says it was approximate", () => {
+    const closed = ["$50,000 - $75,000", "$75,000 - $100,000"];
+    const dropdown = `<label for="s">Desired salary</label><select id="s">${closed.map((o) => `<option>${o}</option>`).join("")}</select>`;
+    expect(plan(dropdown, salary(180_000)).actions).toEqual([
+      {
+        kind: "select",
+        ref: "f0",
+        fieldKey: "job.salary_expectation",
+        option: "$75,000 - $100,000",
+        approximate: true,
+      },
+    ]);
+    expect(plan(dropdown, salary(30_000)).actions[0]).toMatchObject({
+      option: "$50,000 - $75,000",
+      approximate: true,
+    });
+  });
+
+  it("answers the posted-salary question Yes when it fits and No when it does not", () => {
+    const question = (range: string) =>
+      `<label for="q">Does our posted annual salary of ${range} meet your salary expectations?</label><select id="q"><option>Yes</option><option>No</option></select>`;
+    expect(plan(question("$100,000-$150,000"), salary(120_000)).actions).toEqual([
+      { kind: "select", ref: "f0", fieldKey: "job.salary_acceptable", option: "Yes" },
+    ]);
+    expect(plan(question("$100,000-$150,000"), salary(200_000)).actions).toEqual([
+      { kind: "select", ref: "f0", fieldKey: "job.salary_acceptable", option: "No" },
+    ]);
+  });
+
+  it("leaves a question it cannot judge, or a salary not in annual dollars, to the candidate", () => {
+    // No posted range in the question: nothing to compare.
+    expect(
+      plan(
+        '<label for="q">Does the salary meet your expectations?</label><select id="q"><option>Yes</option><option>No</option></select>',
+      ).actions[0],
+    ).toMatchObject({ kind: "require_user", reason: "no_packet_value" });
+    // Hourly and other-currency questions.
+    expect(
+      plan('<label for="s">Desired salary (hourly rate)</label><input id="s" name="s">').actions[0],
+    ).toMatchObject({ kind: "require_user", reason: "needs_user_action" });
+    expect(
+      plan('<label for="s">Desired salary (GBP)</label><input id="s" name="s">').actions[0],
+    ).toMatchObject({ kind: "require_user", reason: "needs_user_action" });
+    // A range list with no annual dollar range at all.
+    expect(
+      plan(
+        '<label for="s">Desired salary</label><select id="s"><option>Negotiable</option><option>Prefer not to say</option></select>',
+      ).actions[0],
+    ).toMatchObject({ kind: "require_user", reason: "option_not_found" });
+  });
+
+  it("does nothing for salary questions when the candidate has set no salary", () => {
+    const empty: PacketValue[] = [];
+    expect(
+      plan('<label for="s">Desired salary</label><input id="s" name="s">', empty).actions[0],
+    ).toMatchObject({ kind: "require_user", reason: "no_packet_value" });
+    expect(
+      plan(
+        '<label for="q">Does our posted salary of $100,000-$150,000 meet your salary expectations?</label><select id="q"><option>Yes</option><option>No</option></select>',
+        empty,
+      ).actions[0],
+    ).toMatchObject({ kind: "require_user", reason: "no_packet_value" });
+  });
+});
+
 describe("fill plan", () => {
   const form = extractGenericForm(page(BASIC));
   const packet: PacketValue[] = [

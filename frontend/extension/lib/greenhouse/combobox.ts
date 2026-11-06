@@ -80,13 +80,8 @@ export interface ComboboxHooks {
  * label, or undefined when there is no single exact option (the dropdown is then left empty for
  * the candidate).
  */
-export async function selectExactOption(
-  control: HTMLInputElement,
-  view: Window & typeof globalThis,
-  fieldKey: string,
-  value: string,
-  hooks: ComboboxHooks,
-): Promise<{ label: string; fallback: boolean } | undefined> {
+/** What it takes to drive one dropdown the way a person does: press, type, key, wait, back out. */
+function driver(control: HTMLInputElement, view: Window & typeof globalThis, hooks: ComboboxHooks) {
   const setInput = (text: string) => {
     Object.getOwnPropertyDescriptor(view.HTMLInputElement.prototype, "value")?.set?.call(
       control,
@@ -118,6 +113,23 @@ export async function selectExactOption(
     while (!done() && Date.now() < end && hooks.current()) await hooks.wait(100);
     return done();
   };
+  const giveUp = async () => {
+    if (control.value) setInput("");
+    key("Escape");
+    control.blur();
+    return undefined;
+  };
+  return { setInput, press, key, until, giveUp };
+}
+
+export async function selectExactOption(
+  control: HTMLInputElement,
+  view: Window & typeof globalThis,
+  fieldKey: string,
+  value: string,
+  hooks: ComboboxHooks,
+): Promise<{ label: string; fallback: boolean } | undefined> {
+  const { setInput, press, until, giveUp } = driver(control, view, hooks);
   // A list the board cuts off at a page (a searched list) must be searched; a shorter one is complete.
   const searchable = () =>
     optionsOf(control).length >= 100 ||
@@ -140,12 +152,6 @@ export async function selectExactOption(
       } else otherSince = 0;
       await hooks.wait(100);
     }
-  };
-  const giveUp = async () => {
-    if (control.value) setInput("");
-    key("Escape");
-    control.blur();
-    return undefined;
   };
   if (shownValue(control) !== "") return undefined;
   await press(control.closest(".select__control") ?? control);
@@ -180,4 +186,38 @@ export async function selectExactOption(
 /** Whether the dropdown shows exactly this label as its chosen value. */
 export function showsOption(control: HTMLInputElement, label: string): boolean {
   return shownValue(control) === normalize(label);
+}
+
+/**
+ * Opens the dropdown, hands the listed labels to `choose`, and selects the one it names. For a list
+ * the candidate's own data picks from (salary ranges), where `choose` is a fixed rule over the
+ * labels. Nothing is typed into the search; a list the board loads on demand is not handled.
+ * Returns the chosen label, or undefined when `choose` names none (the dropdown is left as found).
+ */
+export async function selectChosenOption(
+  control: HTMLInputElement,
+  view: Window & typeof globalThis,
+  choose: (labels: readonly string[]) => { option: string; within: boolean } | undefined,
+  hooks: ComboboxHooks,
+): Promise<{ label: string; within: boolean } | undefined> {
+  const { press, until, giveUp } = driver(control, view, hooks);
+  if (shownValue(control) !== "") return undefined;
+  await press(control.closest(".select__control") ?? control);
+  if (!(await until(() => control.getAttribute("aria-expanded") === "true", 1_500)))
+    return giveUp();
+  await until(() => optionsOf(control).length > 0, 800);
+  const options = optionsOf(control);
+  const labels = options.map((option) => option.textContent?.replace(/\s+/gu, " ").trim() ?? "");
+  const choice = choose(labels);
+  if (!choice || !hooks.current()) return giveUp();
+  const matches = options.filter(
+    (option) => normalize(option.textContent) === normalize(choice.option),
+  );
+  const option = matches.length === 1 ? matches[0] : undefined;
+  if (!option) return giveUp();
+  await press(option);
+  (option as HTMLElement).click();
+  if (!(await until(() => shownValue(control) === normalize(choice.option), 1_500)))
+    return giveUp();
+  return { label: choice.option, within: choice.within };
 }

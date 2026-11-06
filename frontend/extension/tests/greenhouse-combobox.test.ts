@@ -273,3 +273,111 @@ describe("a Yes/No question the candidate answered", () => {
     expect(result.selected).toEqual(["f0"]);
   });
 });
+
+describe("a salary question the candidate's desired salary answers", () => {
+  const RANGES = ["$80,000 - $100,000", "$100,000 - $120,000", "$120,000 - $140,000", "$140,000+"];
+  const salary = (value: number | null) => [
+    { fieldKey: "job.salary_expectation", value, needsUserAction: value === null },
+  ];
+  const run = (labels: string[], question: string, value: number | null) => {
+    const page = dropdownPage(labels, "question_9", question);
+    return fillGreenhouseFields(
+      inspectGreenhouseApplication(document, URL),
+      salary(value),
+      authority(),
+    ).then((result) => ({ result, page }));
+  };
+  const shown = (page: { control: HTMLElement }) =>
+    page.control.querySelector(".select__single-value")?.textContent;
+
+  it("chooses the range that holds the salary", async () => {
+    const { result, page } = await run(RANGES, "Salary expectations", 130_000);
+    expect(shown(page)).toBe("$120,000 - $140,000");
+    expect(result.selected).toEqual(["f0"]);
+    expect(result.notes).toBeUndefined();
+  });
+
+  it("chooses the highest range, and says it was the closest, when none holds it", async () => {
+    const closed = ["$50,000 - $75,000", "$75,000 - $100,000"];
+    const { result, page } = await run(closed, "Desired salary", 180_000);
+    expect(shown(page)).toBe("$75,000 - $100,000");
+    expect(result.notes).toEqual(["near:job.salary_expectation"]);
+  });
+
+  it("chooses the lowest range when the salary is below them all", async () => {
+    const closed = ["$50,000 - $75,000", "$75,000 - $100,000"];
+    const { result, page } = await run(closed, "Desired salary", 30_000);
+    expect(shown(page)).toBe("$50,000 - $75,000");
+    expect(result.notes).toEqual(["near:job.salary_expectation"]);
+  });
+
+  it("leaves a list that holds no annual dollar range to the candidate", async () => {
+    const { result, page } = await run(
+      ["Negotiable", "Prefer not to say"],
+      "Salary expectations",
+      120_000,
+    );
+    expect(result.selected).toEqual([]);
+    expect(shown(page)).toBeUndefined();
+  });
+
+  it("leaves an hourly question and a missing salary to the candidate", async () => {
+    expect(
+      (await run(["$20/hour", "$30/hour"], "Desired hourly salary", 120_000)).result.selected,
+    ).toEqual([]);
+    document.body.innerHTML = "";
+    expect((await run(RANGES, "Salary expectations", null)).result.selected).toEqual([]);
+  });
+
+  it("fills a plain dropdown of ranges too, with the closest-range note when none holds it", async () => {
+    window.history.replaceState(null, "", URL);
+    const list = (labels: string[]) =>
+      `<form id="application_form"><label for="s">Salary expectations</label><select id="s" name="s">${labels.map((l) => `<option>${l}</option>`).join("")}</select></form>`;
+    document.body.innerHTML = list([
+      "$50,000 - $75,000",
+      "$75,000 - $100,000",
+      "$100,000 - $125,000",
+    ]);
+    const held = await fillGreenhouseFields(
+      inspectGreenhouseApplication(document, URL),
+      salary(90_000),
+      authority(),
+    );
+    expect((document.querySelector("#s") as HTMLSelectElement).value).toBe("$75,000 - $100,000");
+    expect(held.filled).toEqual(["f0"]);
+    expect(held.notes).toBeUndefined();
+    document.body.innerHTML = list(["$50,000 - $75,000", "$75,000 - $100,000"]);
+    const closest = await fillGreenhouseFields(
+      inspectGreenhouseApplication(document, URL),
+      salary(250_000),
+      authority(),
+    );
+    expect((document.querySelector("#s") as HTMLSelectElement).value).toBe("$75,000 - $100,000");
+    expect(closest.notes).toEqual(["near:job.salary_expectation"]);
+  });
+
+  it("answers Yes when the posted range can pay the salary, No when it cannot", async () => {
+    const ask = "Does our posted annual salary of $100,000-$150,000 meet your salary expectations?";
+    const yes = await run(["Yes", "No"], ask, 120_000);
+    expect(shown(yes.page)).toBe("Yes");
+    document.body.innerHTML = "";
+    const no = await run(["Yes", "No"], ask, 200_000);
+    expect(shown(no.page)).toBe("No");
+    document.body.innerHTML = "";
+    // Above what the employer posts is a no; below it is still a yes: the range meets it.
+    const below = await run(["Yes", "No"], ask, 90_000);
+    expect(shown(below.page)).toBe("Yes");
+  });
+
+  it("does not answer the posted-salary question when it posts no range or no salary is set", async () => {
+    const noRange = await run(["Yes", "No"], "Does the salary meet your expectations?", 120_000);
+    expect(noRange.result.selected).toEqual([]);
+    document.body.innerHTML = "";
+    const noSalary = await run(
+      ["Yes", "No"],
+      "Does our posted salary of $100,000-$150,000 meet your salary expectations?",
+      null,
+    );
+    expect(noSalary.result.selected).toEqual([]);
+  });
+});

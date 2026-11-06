@@ -129,6 +129,7 @@ describe("ProfileArea", () => {
       "Personal",
       "Education",
       "Screening questions",
+      "Salary",
       "Work experience",
       "Skills",
       "Application answers",
@@ -143,6 +144,19 @@ describe("ProfileArea", () => {
     );
     await click("Job preferences");
     expect(container.textContent).toContain("Preferences panel");
+  });
+
+  it("opens the Salary tab the apply popup links to", async () => {
+    window.history.replaceState(null, "", "/profile?tab=salary&from=apply");
+    try {
+      await render();
+      expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
+        "Salary",
+      );
+      expect(container.textContent).toContain("Desired annual salary (US dollars)");
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
   });
 
   it("opens the tab the apply popup links to", async () => {

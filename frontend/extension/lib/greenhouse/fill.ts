@@ -1,8 +1,9 @@
 import { buildFillPlan, type PacketValue } from "@ai-job-apply/ats-sdk/plan";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
+import { chooseSalaryOption, salaryAnswer } from "@ai-job-apply/ats-sdk/salary";
 import { RUN_BUDGET_MS } from "../execution-budget";
 import { writtenValueMatches } from "../field-value";
-import { selectExactOption } from "./combobox";
+import { selectChosenOption, selectExactOption } from "./combobox";
 import type { GreenhouseInspection } from "./inspect";
 
 function requireActionable(control: Element, view: Window) {
@@ -146,6 +147,8 @@ export async function fillGreenhouseFields(
       // A synchronous employer event handler can replace a control or introduce a challenge.
       // Revalidate before each subsequent effect, including the next event on this field.
       filled.push(action.ref);
+      // A salary range list with no range holding the salary: the closest was chosen. Say so.
+      if (action.kind === "select" && action.approximate) notes.push(`near:${action.fieldKey}`);
       const requireWritten = () => {
         if (!matchesApproved()) throw new Error("GreenhouseFillUnavailable");
         if (
@@ -170,23 +173,53 @@ export async function fillGreenhouseFields(
       requireWritten();
     }
     // Custom dropdowns the plan cannot fill as plain values: choose the one option that is exactly
-    // the approved value. No exact option, or any doubt, leaves the dropdown to the candidate.
+    // the approved value. No exact option, or any doubt, leaves the dropdown to the candidate. The
+    // two salary questions are the exception: they are answered from the candidate's desired salary
+    // (a range list takes the range that holds it, else the closest; Yes/No takes whether the range
+    // the question posts can pay it).
     const approved = new Map(packet.map((entry) => [entry.fieldKey, entry]));
+    const salary = approved.get("job.salary_expectation");
+    const hooks = {
+      current,
+      wait: (ms: number) =>
+        Promise.race([new Promise<void>((resolve) => setTimeout(resolve, ms)), stopped]),
+    };
     for (const action of plan.actions) {
       if (action.kind !== "require_user" || action.reason !== "unsupported_control") continue;
-      const entry = action.fieldKey ? approved.get(action.fieldKey) : undefined;
+      if (!action.fieldKey) continue;
+      const entry = approved.get(action.fieldKey);
+      const label = inspection.form.fields.find((field) => field.ref === action.ref)?.label ?? "";
+      const answer = salaryAnswer(
+        action.fieldKey,
+        label,
+        salary && !salary.needsUserAction ? salary.value : undefined,
+      );
+      const range =
+        action.fieldKey === "job.salary_expectation" && typeof answer === "number"
+          ? answer
+          : undefined;
       // A Yes/No answer is a boolean in the packet and the words Yes and No in the dropdown.
+      const packetWanted =
+        !entry || entry.needsUserAction
+          ? ""
+          : typeof entry.value === "boolean"
+            ? entry.value
+              ? "Yes"
+              : "No"
+            : typeof entry.value === "string"
+              ? entry.value.trim()
+              : "";
       const wanted =
-        typeof entry?.value === "boolean"
-          ? entry.value
+        typeof answer === "boolean"
+          ? answer
             ? "Yes"
             : "No"
-          : typeof entry?.value === "string"
-            ? entry.value.trim()
-            : "";
-      if (!action.fieldKey || !entry || entry.needsUserAction || !wanted) {
+          : action.fieldKey === "job.salary_expectation"
+            ? ""
+            : packetWanted;
+      if (!wanted && range === undefined) {
         // An education dropdown with nothing saved for it: the candidate adds it to their profile.
-        if (action.fieldKey?.startsWith("education.")) notes.push(`empty:${action.fieldKey}`);
+        if (action.fieldKey.startsWith("education.")) notes.push(`empty:${action.fieldKey}`);
         continue;
       }
       authority.onField?.(action.fieldKey);
@@ -211,21 +244,30 @@ export async function fillGreenhouseFields(
         inspection.resolve(action.ref);
         requireActionable(control, view);
       }
+      if (range !== undefined) {
+        const chosen = await selectChosenOption(
+          control,
+          view,
+          (labels) => chooseSalaryOption(labels, range),
+          hooks,
+        );
+        inspection.resolve(action.ref);
+        if (chosen) {
+          selected.push(action.ref);
+          if (!chosen.within) notes.push(`near:${action.fieldKey}`);
+        }
+        continue;
+      }
       // "No" to a United States question says nothing about the other country it also names.
-      const label = inspection.form.fields.find((field) => field.ref === action.ref)?.label ?? "";
       if (
         action.fieldKey === "authorization.us_authorized" &&
-        entry.value === false &&
+        entry?.value === false &&
         /\b(?:canada|united kingdom|u\.?k\.?|europe\w*|e\.?u\.?|mexico|australia)\b/iu.test(label)
       ) {
         notes.push(`check:${action.fieldKey}`);
         continue;
       }
-      const chosen = await selectExactOption(control, view, action.fieldKey, wanted, {
-        current,
-        wait: (ms) =>
-          Promise.race([new Promise<void>((resolve) => setTimeout(resolve, ms)), stopped]),
-      });
+      const chosen = await selectExactOption(control, view, action.fieldKey, wanted, hooks);
       inspection.resolve(action.ref);
       if (chosen) {
         selected.push(action.ref);

@@ -1,5 +1,6 @@
 import type { ApplicationFormModel, FormField } from "./form-model.js";
 import { type FieldMapping, mapFormFields } from "./mapping.js";
+import { chooseSalaryOption, isAnnualDollarText, salaryAnswer } from "./salary.js";
 
 export type PlannedValue =
   | string
@@ -18,7 +19,14 @@ export interface PacketValue {
 
 export type PlanAction =
   | { kind: "fill"; ref: string; fieldKey: string; value: string | number | boolean }
-  | { kind: "select"; ref: string; fieldKey: string; option: string }
+  | {
+      kind: "select";
+      ref: string;
+      fieldKey: string;
+      option: string;
+      /** Salary ranges only: no range held the salary, so this is the closest one. */
+      approximate?: true;
+    }
   | {
       kind: "attach_artifact";
       ref: string;
@@ -133,7 +141,21 @@ export function buildFillPlan(
       requireUser("unsupported_control", fieldKey);
       continue;
     }
-    const entry = values.get(fieldKey);
+    let entry = values.get(fieldKey);
+    if (fieldKey === "job.salary_acceptable") {
+      // "Does the posted salary meet your expectations?" is answered from the candidate's desired
+      // salary and the range the question itself posts; the packet holds only the salary.
+      const desired = values.get("job.salary_expectation");
+      const answer = salaryAnswer(
+        fieldKey,
+        field.label,
+        desired?.needsUserAction ? undefined : desired?.value,
+      );
+      entry =
+        typeof answer === "boolean"
+          ? { fieldKey, value: answer, needsUserAction: false }
+          : undefined;
+    }
     if (!entry) {
       requireUser("no_packet_value", fieldKey);
       continue;
@@ -143,6 +165,28 @@ export function buildFillPlan(
       continue;
     }
     const value = entry.value;
+    if (fieldKey === "job.salary_expectation") {
+      // Only annual dollars are understood; an hourly or other-currency question is the candidate's.
+      if (typeof value !== "number" || !isAnnualDollarText(field.label)) {
+        requireUser("needs_user_action", fieldKey);
+        continue;
+      }
+      if (field.type === "select" || field.type === "radio") {
+        // The range that holds the salary, else the closest one: the explicit exception to "never
+        // coerced to a nearest option" (owner direction 2026-11-06).
+        const choice = chooseSalaryOption(field.options, value);
+        if (!choice) requireUser("option_not_found", fieldKey);
+        else
+          actions.push({
+            kind: "select",
+            ref: field.ref,
+            fieldKey,
+            option: choice.option,
+            ...(choice.within ? {} : { approximate: true as const }),
+          });
+        continue;
+      }
+    }
     if (field.type === "select" || field.type === "radio") {
       // A Yes/No answer is a boolean in the packet and the words Yes and No on the page.
       const wanted = typeof value === "boolean" ? (value ? "Yes" : "No") : value;

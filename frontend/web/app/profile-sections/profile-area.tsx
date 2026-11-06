@@ -14,10 +14,11 @@ import { useApplicationBasics } from "../use-application-basics";
 import { loadDrafts } from "./api";
 import { EntrySection } from "./entry-section";
 import { PersonalSection } from "./personal-section";
+import { SalarySection } from "./salary-section";
 import { ScreeningSection } from "./screening-section";
 import { PROFILE_SECTIONS, type SectionKey } from "./sections";
 
-type TabId = "personal" | SectionKey | "screening" | "resume" | "preferences";
+type TabId = "personal" | SectionKey | "screening" | "salary" | "resume" | "preferences";
 
 interface Tab {
   id: TabId;
@@ -28,6 +29,7 @@ const BASE_TABS: readonly Tab[] = [
   { id: "personal", label: "Personal" },
   { id: "education", label: "Education" },
   { id: "screening", label: "Screening questions" },
+  { id: "salary", label: "Salary" },
   { id: "workExperience", label: "Work experience" },
   { id: "skill", label: "Skills" },
   { id: "applicationAnswer", label: "Application answers" },
@@ -212,6 +214,9 @@ export function ProfileArea({
               )}
               {tab.id === "screening" && (
                 <ScreeningSection authenticated={authenticated} onSaved={refreshBasics} />
+              )}
+              {tab.id === "salary" && (
+                <SalarySection authenticated={authenticated} onSaved={refreshBasics} />
               )}
               {tab.id === "preferences" && preferences}
             </>
