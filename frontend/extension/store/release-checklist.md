@@ -17,7 +17,7 @@ Every box applies independently to Chrome and Edge unless the evidence explicitl
 
 ## Product, privacy, and operations
 
-- [ ] End-user popup/side-panel artifacts omit development-only Your shared jobs, Delivery queue
+- [ ] End-user side-panel artifacts omit development-only Your shared jobs, Delivery queue
   and their diagnostic dialogs/controls. Automated package and product-flow tests verify the
   boundary; no additional manual diagnostic-panel acceptance is required under D2-073.
 - [ ] Listing screenshots and hosted help show only the actual shipped inspect/preview/add flow

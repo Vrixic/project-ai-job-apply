@@ -21,9 +21,9 @@ html {
   width: 100%;
 }
 
-html[data-extension-surface="popup"] {
-  min-width: 28rem;
-  width: 28rem;
+/* The side panel is docked to the right and as tall as the window; the browser sets its width. */
+html[data-extension-surface="side-panel"] {
+  height: 100%;
 }
 
 body {
@@ -35,8 +35,8 @@ body {
   width: 100%;
 }
 
-html[data-extension-surface="popup"] body {
-  min-height: 37.5rem;
+html[data-extension-surface="side-panel"] body {
+  min-height: 100vh;
 }
 
 .skip-link {

@@ -115,7 +115,6 @@ const allowedNames = new Set([
   "icon-48.png",
   "manifest.json",
   "popup.css",
-  "popup.html",
   "popup.js",
   "sidepanel.html",
 ]);
@@ -132,17 +131,14 @@ for (const name of allowedNames) {
   }
 }
 
-const popupHtml = await readFile(join(output, "popup.html"), "utf8");
 const sidePanelHtml = await readFile(join(output, "sidepanel.html"), "utf8");
-if (!popupHtml.includes('data-extension-surface="popup"')) {
-  fail("popup output is missing its fixed-width surface marker");
-}
 if (
   !sidePanelHtml.includes('data-extension-surface="side-panel"') ||
   sidePanelHtml.includes('data-extension-surface="popup"')
 ) {
   fail("side-panel output is missing its responsive surface marker");
 }
+if (manifest.action?.default_popup !== undefined) fail("the toolbar icon must open the side panel");
 
 const textOutputs = await Promise.all(
   outputFiles

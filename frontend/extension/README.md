@@ -26,7 +26,7 @@ browser-store distribution are not approved. See the current
 ## Implemented source boundary
 
 Product scope: **Your shared jobs** and **Delivery queue** are development-only diagnostics,
-not end-user features. D2-073 removes their HTML from nondevelopment popup and side-panel
+not end-user features. D2-073 removes their HTML from nondevelopment side-panel
 builds; only explicit development mode retains them. Packaging rejects diagnostic HTML in a
 store archive. End-user add feedback reports the exact intent's delivery result, not queue totals.
 Stop additional human-loop tests of those panels.
@@ -83,7 +83,8 @@ for rationale and acceptance; retain automated underlying security/reliability t
   complete payload exceeds the wire limit cannot be added, even if within the character limit.
   No API shape, SQL, provider or runtime authority changes.
 
-- A popup and side-panel product shell with one explicit **Add job to shared database** action
+- A side-panel product shell (the toolbar icon opens it, docked to the right at the window's full
+  height, and it stays open across tabs) with one explicit **Add job to shared database** action
   after a field-level preview. The extension does not present a separate private-save action or a
   redundant approval checkbox.
 - Auth0 public-client authorization code + PKCE, rotating refresh, revocation, and tokens confined
@@ -109,7 +110,7 @@ for rationale and acceptance; retain automated underlying security/reliability t
   incomplete policies, received-invalid updates, future policies, and policies older than their
   signed expiry deny contribution. A verified cache can bridge a service-worker restart or network
   outage only until its signed expiry; it never enables contribution after expiry or executes
-  remote code. Opening the popup or explicitly inspecting a page rechecks delivery readiness in a
+  remote code. Opening the side panel or explicitly inspecting a page rechecks delivery readiness in a
   warm worker: policy requests share one in-flight fetch, readiness requests have a 15-second
   cooldown, and each fetch has a 10-second deadline. No timer polls readiness or contribution
   status. This can recognize a renewed server policy without reloading the extension, signing in
@@ -176,7 +177,9 @@ headers, form values, authentication material, or private notes. No telemetry pr
 - `identity` — launches the Auth0 system-browser flow.
 - `storage` — session credentials and the sanitized pending queue.
 - `alarms` — resumes bounded pending delivery after worker suspension.
-- `sidePanel` — exposes the same review surface as the popup.
+- `sidePanel` — the extension's only surface: the toolbar icon opens it for the window, and it
+  follows the active tab. Clicking the icon is also the `activeTab` grant for that page, so the
+  panel is told when the candidate opens it on a page.
 
 The generated manifest contains no `history`, `cookies`, `webRequest`, `<all_urls>`, provider host,
 or remote-code permission. Its only optional generated hosts are the exact configured Auth0 tenant
@@ -201,7 +204,7 @@ The signed policy is read only from `/v1/extension/contribution-capability-polic
 HTTPS API origin. A received envelope may live for at most 24 hours; source selects no policy,
 signing key, background polling interval, or activation value. The local 15-second readiness
 cooldown limits user-initiated requests; it does not extend signed validity. After renewal, wait
-at least 15 seconds since the last check and press **Inspect current tab**, or reopen the popup.
+at least 15 seconds since the last check and press **Inspect current tab**, or open the side panel on another page.
 Existing builds need one rebuild/reload to receive this readiness fix; subsequent policy renewals
 do not require an extension reload.
 
@@ -347,7 +350,7 @@ extension on the employer tab; the click happens once.
 The web native workspace separately requires `NEXT_PUBLIC_APPLICATION_EXTENSION_TRANSFER_ENABLED=true`
 and `NEXT_PUBLIC_APPLICATION_EXTENSION_ID` set to one exact installed Chrome extension ID. Pressing
 **Apply** in the website opens the employer page and sends an identifiers-only apply intent
-(`application-apply-intent.v1`); the popup then offers that application and the candidate confirms
+(`application-apply-intent.v1`); the side panel then offers that application and the candidate confirms
 on the employer tab (no manifest or permission change). The generated resume is PDF only and is
 pushed by the website; when none is valid the extension pulls the candidate's uploaded resume
 (original format, at most 2 MiB) with its own session. An expired or mismatched file is never

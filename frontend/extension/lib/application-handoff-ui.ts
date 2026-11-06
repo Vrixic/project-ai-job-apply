@@ -1,3 +1,4 @@
+import { followActiveTab } from "./active-tab-follow";
 import type { ApprovedHandoff } from "./application-handoff";
 import { FORM_CAPTURE_FAILURE, HANDOFF_FAILURE } from "./application-handoff";
 import { extensionConfiguration } from "./config";
@@ -54,6 +55,18 @@ export function mountApplicationHandoff() {
   let snapshot: ApprovedHandoff | undefined;
   let snapshotId: string | undefined;
   let busy = false;
+  /** The page the application was last prepared for: the tab, and its address once visible. */
+  let preparedFor: string | undefined;
+  const activeTabKey = async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      return tab?.id === undefined
+        ? undefined
+        : { key: `${tab.id}|${tab.url ?? ""}`, visible: tab.url !== undefined };
+    } catch {
+      return undefined;
+    }
+  };
   const nativeInstructions = section.querySelector<HTMLElement>("[data-native-instructions]");
   if (nativeInstructions && extensionConfiguration.applicationExecutionEnabled)
     nativeInstructions.hidden = false;
@@ -67,6 +80,7 @@ export function mountApplicationHandoff() {
       if (ownsBusy) busy = true;
       button.disabled = true;
       try {
+        const preparing = action === "select" ? await activeTabKey() : undefined;
         const response = await chrome.runtime.sendMessage(
           action === "select"
             ? { action: "application_native_select", reviewLink: input.value }
@@ -97,6 +111,8 @@ export function mountApplicationHandoff() {
           return;
         }
         if (!response.ok) throw Object.assign(Error(), { stage: response.stage });
+        if (action === "select") preparedFor = preparing?.key;
+        else preparedFor = undefined;
         status.textContent =
           action === "select"
             ? response.resume === "uploaded"
@@ -124,18 +140,34 @@ export function mountApplicationHandoff() {
     });
   }
   // After Apply on the website the extension already holds the application's identifiers. Opening
-  // it on the employer page selects that tab with no pasted link; the candidate then confirms.
-  if (extensionConfiguration.applicationExecutionEnabled) {
-    void chrome.runtime
-      .sendMessage({ action: "application_pending_intent" })
-      .then((response: { ok?: boolean; reviewLink?: unknown } | undefined) => {
-        if (!response?.ok || typeof response.reviewLink !== "string" || input.value) return;
-        input.value = response.reviewLink;
-        status.textContent = "Preparing your application for this page...";
-        section.querySelector<HTMLButtonElement>("[data-native-select]")?.click();
-      })
-      .catch(() => undefined);
-  }
+  // it on the employer page selects that tab with no pasted link; the candidate then confirms. The
+  // side panel stays open across tabs, so this is offered again for each page the candidate opens.
+  const offerPendingIntent = async () => {
+    if (!extensionConfiguration.applicationExecutionEnabled || busy) return;
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        action: "application_pending_intent",
+      })) as { ok?: boolean; reviewLink?: unknown } | undefined;
+      if (!response?.ok || typeof response.reviewLink !== "string") return;
+      const page = await activeTabKey();
+      if (page && page.key === preparedFor) return;
+      // Without access to this page the extension cannot tell whether it is the employer's page.
+      // Opening the extension on the page gives that access; nothing is selected or cleared yet.
+      if (page && !page.visible) {
+        status.textContent =
+          "Go to the employer page, then click the ApplyDash icon there so ApplyDash can fill it.";
+        return;
+      }
+      if (input.value && input.value !== response.reviewLink) return;
+      input.value = response.reviewLink;
+      status.textContent = "Preparing your application for this page...";
+      section.querySelector<HTMLButtonElement>("[data-native-select]")?.click();
+    } catch {
+      // No pending application, or the extension did not answer: the candidate can still select.
+    }
+  };
+  void offerPendingIntent();
+  followActiveTab(() => void offerPendingIntent());
   function discard(message = "") {
     generation++;
     clearTimeout(timer);

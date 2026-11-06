@@ -1,3 +1,4 @@
+import { followActiveTab } from "../lib/active-tab-follow";
 import { mountApplicationHandoff } from "../lib/application-handoff-ui";
 import { extensionConfiguration } from "../lib/config";
 import { appealEvidenceDigest } from "../lib/contribution-owner-api";
@@ -144,6 +145,8 @@ let appealOutcome: string | undefined;
 let busy = false;
 let authenticated = false;
 let fieldSequence = 0;
+let currentTabKey = "";
+let previewTabKey = "";
 
 function controls(): HTMLButtonElement[] {
   return [
@@ -616,12 +619,27 @@ function successMessage(action: string, response: ExtensionResponse): string | u
   return undefined;
 }
 
+/** Which page is in front of the candidate: the tab and, once the extension may see it, its address. */
+async function activeTabKey(): Promise<string> {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    return tab?.id === undefined ? "" : `${tab.id}|${tab.url ?? ""}`;
+  } catch {
+    return "";
+  }
+}
+
 async function invoke(message: Record<string, unknown>): Promise<ExtensionResponse> {
   const action = String(message.action ?? "status");
   const busyAction = action === "enqueue" ? String(message.intent ?? action) : action;
   setBusy(true, busyAction);
   try {
+    const inspected = action === "capture" ? await activeTabKey() : undefined;
     const response = (await chrome.runtime.sendMessage(message)) as ExtensionResponse;
+    if (inspected !== undefined && response.capture) {
+      previewTabKey = inspected;
+      currentTabKey = inspected;
+    }
     renderStatus(response);
     if (
       action === "shared_jobs_refresh" &&
@@ -760,3 +778,20 @@ appealForm?.addEventListener("submit", async (event) => {
 renderDeliveryReadiness();
 mountApplicationHandoff();
 void invoke({ action: "status" });
+
+// The side panel stays open while the candidate changes tabs, so it follows the page in front of
+// them: a preview belongs to the page it was made from, and readiness is read again on a new page.
+void activeTabKey().then((key) => {
+  currentTabKey = key;
+});
+followActiveTab(async () => {
+  const key = await activeTabKey();
+  if (key === currentTabKey) return;
+  currentTabKey = key;
+  if (currentCapture && key !== previewTabKey) {
+    currentCapture = undefined;
+    preview.hidden = true;
+    updateControlState();
+  }
+  if (!busy) void invoke({ action: "status" });
+});

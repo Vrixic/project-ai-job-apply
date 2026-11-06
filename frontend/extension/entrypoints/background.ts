@@ -69,6 +69,7 @@ import {
   refresh,
 } from "../lib/protocol";
 import { applicationExecutionRegistry } from "../lib/providers";
+import { registerSidePanel } from "../lib/side-panel";
 import {
   CONTRIBUTION_CAPABILITY_POLICY_CACHE_KEY,
   ExtensionContributionPolicyRuntime,
@@ -1003,6 +1004,7 @@ async function enqueue(
   });
 }
 
+registerSidePanel();
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === RETRY_ALARM) void dispatchPending().catch(() => undefined);
 });

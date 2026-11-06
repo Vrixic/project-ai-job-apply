@@ -37,7 +37,6 @@ const policy = {
     "icon-48.png",
     "manifest.json",
     "popup.css",
-    "popup.html",
     "popup.js",
     "sidepanel.html",
   ],
@@ -65,7 +64,7 @@ async function fixture() {
     description: "Synthetic-only current-tab job capture and explicit contribution preview.",
     permissions: policy.manifest.requiredPermissions,
     background: { service_worker: "background.js", type: "module" },
-    action: { default_icon: icons, default_popup: "popup.html" },
+    action: { default_icon: icons },
     content_security_policy: { extension_pages: policy.manifest.contentSecurityPolicy },
     icons,
     side_panel: { default_path: "sidepanel.html" },
@@ -75,7 +74,6 @@ async function fixture() {
     writeFile(join(dist, "background.js"), "export const background = true;\n"),
     writeFile(join(dist, "popup.js"), "export const popup = true;\n"),
     writeFile(join(dist, "popup.css"), "body { color: #111; }\n"),
-    writeFile(join(dist, "popup.html"), '<script type="module" src="popup.js"></script>\n'),
     writeFile(join(dist, "sidepanel.html"), '<script type="module" src="popup.js"></script>\n'),
     ...Object.values(icons).map(async (fileName) =>
       writeFile(join(dist, fileName), await readFile(join(iconRoot, fileName))),
@@ -90,7 +88,7 @@ afterEach(async () => {
 
 describe("extension release packaging", () => {
   it.each(
-    ["popup.html", "sidepanel.html"].flatMap((file) =>
+    ["sidepanel.html"].flatMap((file) =>
       ["queue-panel", "contributions-panel", "appeal-dialog"].map((id) => ({ file, id })),
     ),
   )("rejects diagnostic $id in $file even when hidden", async ({ file, id }) => {
