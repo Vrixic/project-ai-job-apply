@@ -146,3 +146,10 @@ it fills in by itself, with the link set and the employer page selected, when th
 extension. If nothing arrives it returns to the ordinary panel at the end of the window. The
 request carries nothing, so a page that sends it can only make the panel say it is preparing.
 
+The review link is set on the panel the moment the website arms the extension, not when the employer
+page has finished loading: the panel is shown only with the link in place, and then says it is
+waiting for the page. It prepares a page that is still loading after six seconds anyway (a reload
+prepares it again), polls a blank tab for at most thirty, and leaves a link the candidate pasted
+themselves alone. Select, Fill and Apply do nothing, and say to press Apply on the website, while the
+link is empty (an empty link made "Use this employer page" stop at its first step, `employer-tab`).
+

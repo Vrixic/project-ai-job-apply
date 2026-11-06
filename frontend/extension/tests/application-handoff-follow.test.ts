@@ -215,9 +215,63 @@ describe("the side panel follows the page in front of the candidate", () => {
     mountApplicationHandoff();
     await settle();
     expect(selects()).toHaveLength(0);
-    expect(status()).toBe("");
+    expect(status()).toContain("Waiting for the employer page");
     await switchTo({ id: 9, url: EMPLOYER });
     expect(selects()).toHaveLength(1);
+  });
+
+  describe("the review link", () => {
+    const link = () => document.querySelector<HTMLInputElement>("input")?.value;
+
+    it("is set as soon as the application is armed, even while the page is still loading", async () => {
+      tab = { id: 7, url: EMPLOYER, status: "loading" };
+      mountApplicationHandoff();
+      await settle();
+      expect(link()).toBe(LINK);
+      expect(selects()).toHaveLength(0);
+      expect(status()).toContain("Your application is ready");
+    });
+
+    it("is set on a tab that is still blank, and on a page the extension cannot see", async () => {
+      tab = { id: 7, url: "about:blank", status: "loading" };
+      mountApplicationHandoff();
+      await settle();
+      expect(link()).toBe(LINK);
+    });
+
+    it("is set when the page cannot be seen, with the icon-click hint", async () => {
+      tab = { id: 9 };
+      mountApplicationHandoff();
+      await settle();
+      expect(link()).toBe(LINK);
+      expect(status()).toContain("click the ApplyDash icon");
+    });
+
+    it("is not replaced when the candidate pasted a different one", async () => {
+      mountApplicationHandoff();
+      const input = document.querySelector<HTMLInputElement>("input");
+      if (input) input.value = `${LINK}&pasted=1`;
+      await settle();
+      expect(link()).toBe(`${LINK}&pasted=1`);
+    });
+
+    it("prepares a page that never finishes loading after a few seconds, not never", async () => {
+      tab = { id: 7, url: EMPLOYER, status: "loading" };
+      mountApplicationHandoff();
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(selects()).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(selects()).toHaveLength(1);
+    });
+
+    it("stops polling a tab that stays blank, and does not flood the extension", async () => {
+      tab = { id: 7, url: "about:blank", status: "loading" };
+      mountApplicationHandoff();
+      await vi.advanceTimersByTimeAsync(60_000);
+      const asked = send.mock.calls.filter(([m]) => m.action === "application_pending_intent");
+      expect(asked.length).toBeLessThan(40);
+      expect(selects()).toHaveLength(0);
+    });
   });
 
   it("tells a signed-out candidate to sign in, instead of a generic failure", async () => {
