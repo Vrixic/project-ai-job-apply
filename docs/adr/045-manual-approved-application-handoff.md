@@ -99,4 +99,28 @@ Opening the panel does not give the extension the employer page: that access is 
 click, script access to the new tab is refused and its address stays hidden). So the panel opens
 beside the employer page, tells the candidate their application is ready and to click the icon once,
 and the armed application notifies an open panel so it can say so. Standing access to the provider
-sites would remove that click but is a permission change for the owner to decide; none is made.
+sites would remove that click but is a permission change for the owner to decide; none was made
+here (see the next amendment).
+
+## Amendment: provider sites held by the unpacked execution build (2026-11-06)
+
+Owner decision (asked, then approved with "yes"): so the extension appears and can fill the employer
+page right after Apply with no icon click, the unpacked application-execution build holds the exact
+HTTPS sites of the providers it switches on as `host_permissions`: Greenhouse
+(`boards.greenhouse.io`, `job-boards.greenhouse.io`) and Ashby (`jobs.ashbyhq.com`). Lever has no
+fill adapter and no host. There is no wildcard, no `<all_urls>`, no optional host, no persistent
+content script, and `activeTab` stays for any other page.
+
+This reverses the earlier rule that provider pages open only through an icon click, and only for the
+unpacked build the owner loads: the default-dark and store builds get no provider host (the release
+packager refuses any host permission, and the D2 assurance check refuses provider hosts and external
+messaging in the product build). Everything that decides what is filled is unchanged: the website's
+explicit Apply with approval of the exact packet, the extension's own session and packet re-read, the
+exact employer-URL binding, document and tab proof before any write, fill-only versus submit, and the
+kill switches. Access to a site means the extension can read and script a page there; it still acts
+only on the one page selected for the application. A panel that sees a page still opening waits
+quietly; one that cannot see the page says the application is ready and that the icon click opens it.
+
+Checked in Edge: after the Apply click opens the panel and the employer tab loads, the extension sees
+its address and can script it with no icon click, while the website tab and other tabs stay refused.
+The host list derives from the providers named in the build, with tests.

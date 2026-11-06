@@ -86,6 +86,43 @@ describe("isolated real extension provider builds", () => {
     expect(manifest.externally_connectable).toBeUndefined();
     expect(manifest.content_scripts).toBeUndefined();
   });
+  it.each([
+    ["greenhouse", ["https://boards.greenhouse.io/*", "https://job-boards.greenhouse.io/*"]],
+    ["ashby", ["https://jobs.ashbyhq.com/*"]],
+  ])(
+    "gives an execution build the exact %s sites and an unpacked build with none gets no provider site",
+    async (provider, hosts) => {
+      const candidate = await fixture();
+      Object.assign(candidate.environment, {
+        EXTENSION_APPLICATION_HANDOFF_ENABLED: "true",
+        EXTENSION_APPLICATION_HANDOFF_WEB_ORIGIN: "https://candidate.example",
+        EXTENSION_APPLICATION_EXECUTION_ENABLED: "true",
+        EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON: JSON.stringify([provider]),
+      });
+      candidate.build();
+      const manifest = JSON.parse(
+        await readFile(join(candidate.root, "dist/manifest.json"), "utf8"),
+      );
+      expect(manifest.host_permissions).toEqual([
+        "https://tenant.example.test/*",
+        "https://api.example.test/*",
+        ...hosts,
+      ]);
+      expect(manifest.permissions).toContain("activeTab");
+      expect(manifest.content_scripts).toBeUndefined();
+      expect(manifest.optional_host_permissions).toBeUndefined();
+
+      delete candidate.environment.EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON;
+      candidate.build();
+      const none = JSON.parse(await readFile(join(candidate.root, "dist/manifest.json"), "utf8"));
+      expect(none.host_permissions).toEqual([
+        "https://tenant.example.test/*",
+        "https://api.example.test/*",
+      ]);
+    },
+    60_000,
+  );
+
   it.each([undefined, "false", "true"])(
     "includes diagnostic HTML only for explicit development mode %s",
     async (mode) => {

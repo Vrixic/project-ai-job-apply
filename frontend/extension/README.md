@@ -98,7 +98,11 @@ for rationale and acceptance; retain automated underlying security/reliability t
   enables contribution delivery until authentication succeeds. Failures expose fixed messages,
   not token/provider bodies.
 - Explicit `activeTab` inspection through `chrome.scripting.executeScript`; there are no persistent
-  content scripts or provider host grants.
+  content scripts. The default-dark and store builds have no provider host grants. The unpacked
+  application-execution build holds only the exact HTTPS sites of the providers it switches on
+  (Greenhouse: `boards.greenhouse.io`, `job-boards.greenhouse.io`; Ashby: `jobs.ashbyhq.com`) as host
+  permissions, so the employer page the candidate is sent to can be read and filled without an icon
+  click (ADR-045, amendment 2026-11-06). The release archive still refuses any host permission.
 - Exact provider-domain adapters for Greenhouse, Lever, and Ashby behind a separate reviewed
   build-time detector policy. It requires the exact extension version plus complete provider,
   page-variant, and domain maps; absence, malformed/extra fields, or any disabled dimension denies
@@ -181,9 +185,10 @@ headers, form values, authentication material, or private notes. No telemetry pr
   follows the active tab. Clicking the icon is also the `activeTab` grant for that page, so the
   panel is told when the candidate opens it on a page.
 
-The generated manifest contains no `history`, `cookies`, `webRequest`, `<all_urls>`, provider host,
-or remote-code permission. Its only optional generated hosts are the exact configured Auth0 tenant
-and API origin.
+The generated manifest contains no `history`, `cookies`, `webRequest`, `<all_urls>`, or remote-code
+permission. Its generated hosts are the exact configured Auth0 tenant and API origin and, in an
+unpacked application-execution build only, the exact sites of its switched-on providers (above);
+the default-dark build has no provider host.
 
 ## Development
 

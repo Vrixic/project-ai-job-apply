@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   applicationExecutionForBuild,
+  applicationExecutionHostPermissions,
   applicationExecutionProvidersForBuild,
   applicationHandoffOriginForBuild,
   applicationImplementationHash,
@@ -247,6 +248,27 @@ describe("development contribution build and store boundary", () => {
     expect(() =>
       assertStoreContributionMode({ EXTENSION_DEVELOPMENT_CONTRIBUTIONS: "yes" }, {}),
     ).toThrow();
+  });
+});
+
+describe("execution host permissions (ADR-045 amendment 2026-11-06)", () => {
+  it("is empty unless a provider is switched on", () => {
+    expect(applicationExecutionHostPermissions([])).toEqual([]);
+  });
+  it("lists exactly the sites of the switched-on providers, over HTTPS, with no wildcard host", () => {
+    expect(applicationExecutionHostPermissions(["greenhouse"])).toEqual([
+      "https://boards.greenhouse.io/*",
+      "https://job-boards.greenhouse.io/*",
+    ]);
+    expect(applicationExecutionHostPermissions(["ashby"])).toEqual(["https://jobs.ashbyhq.com/*"]);
+    expect(applicationExecutionHostPermissions(["greenhouse", "ashby"])).toHaveLength(3);
+  });
+  it("never produces a broad pattern, and ignores a name it does not know", () => {
+    for (const pattern of applicationExecutionHostPermissions(["greenhouse", "ashby", "lever"])) {
+      expect(pattern).toMatch(/^https:\/\/[a-z.-]+\/\*$/u);
+      expect(pattern).not.toContain("*.");
+    }
+    expect(applicationExecutionHostPermissions(["lever"])).toEqual([]);
   });
 });
 

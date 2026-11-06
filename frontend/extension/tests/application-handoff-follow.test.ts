@@ -101,6 +101,16 @@ describe("the side panel follows the page in front of the candidate", () => {
     expect(status()).toContain("click the ApplyDash icon");
   });
 
+  it("waits quietly while the employer page is still opening", async () => {
+    tab = { id: 9, url: "about:blank" };
+    mountApplicationHandoff();
+    await settle();
+    expect(selects()).toHaveLength(0);
+    expect(status()).toBe("");
+    await switchTo({ id: 9, url: EMPLOYER });
+    expect(selects()).toHaveLength(1);
+  });
+
   it("selects once the candidate has opened the extension on that page", async () => {
     tab = { id: 9 };
     mountApplicationHandoff();
