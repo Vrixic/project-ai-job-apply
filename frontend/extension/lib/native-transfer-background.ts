@@ -24,6 +24,9 @@ import {
 
 const unavailable = () => Error("NativeMaterialTransferUnavailable");
 
+/** How long the panel waits for the website to arm the extension before it stops saying so. */
+const PREPARING_MS = 90_000;
+
 /** Composition is installed only in the separate execution build. No provider or token transport. */
 export function installNativeTransferBackground(options: {
   webOrigin: string;
@@ -33,6 +36,9 @@ export function installNativeTransferBackground(options: {
 }) {
   let generation = 0;
   let selecting: AbortController | undefined;
+  // The website asked for the panel when Apply was pressed, and has not armed the extension yet.
+  // The panel shows that it is preparing instead of an empty review link. In memory only.
+  let preparingUntil = 0;
   // Which step of a selection last ran, so a refusal can say where it stopped. Never any content.
   let stage = "";
   // Identifiers only, in memory only. The packet itself is always re-read with the extension's own
@@ -105,6 +111,7 @@ export function installNativeTransferBackground(options: {
     transfer.clear();
   }
   function clear() {
+    preparingUntil = 0;
     clearIntent();
     clearSelection();
   }
@@ -292,9 +299,11 @@ export function installNativeTransferBackground(options: {
         respond({ error: "ApplicationOpenPanelUnavailable" });
         return false;
       }
-      void openSidePanel(windowId).then((opened) =>
-        respond({ schema: OPEN_PANEL_RECEIPT, opened }),
-      );
+      preparingUntil = Date.now() + PREPARING_MS;
+      const opened = openSidePanel(windowId);
+      // A panel that is already open learns that an Apply started; a new one asks when it loads.
+      notifyPanel();
+      void opened.then((value) => respond({ schema: OPEN_PANEL_RECEIPT, opened: value }));
       return true;
     }
     if (schema === "application-apply-intent.v1") {
@@ -334,6 +343,7 @@ export function installNativeTransferBackground(options: {
           timer: setTimeout(clearIntent, 10 * 60_000),
         };
         rememberIntent(link.href, deadline);
+        preparingUntil = 0;
         notifyPanel();
         return { schema: "application-apply-intent-receipt.v1", expiresAtMs: deadline };
       })().then(respond, () => respond({ error: "ApplicationApplyIntentUnavailable" }));
@@ -427,7 +437,9 @@ export function installNativeTransferBackground(options: {
           : await restoredIntent();
       return pending
         ? { ok: true, reviewLink: pending.reviewLink, expiresAtMs: pending.deadline }
-        : { ok: true };
+        : Date.now() < preparingUntil
+          ? { ok: true, preparingUntilMs: preparingUntil }
+          : { ok: true };
     },
     // Private executor composition only. No content in popup snapshots or external responses.
     consume: transfer.consume,

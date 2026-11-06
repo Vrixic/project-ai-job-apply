@@ -132,3 +132,17 @@ The panel prepares the page only once it has finished loading and gone quiet, an
 whenever the page reloads: a reload is a new document, so the extension drops what it selected for
 the old one (Greenhouse's page loads twice in a row, which made the first selection vanish before the
 candidate pressed Fill). The panel says "Filling in your application" while a fill runs.
+
+## Amendment: the panel shows "preparing" until the review link is set (2026-11-06)
+
+Owner direction: the panel opened at the Apply click with an empty "Application review link", because
+the website prepares and approves the application, and arms the extension, seconds later. The panel
+cannot simply open later: the browser opens it only in the turn of a click, and re-enabling a
+disabled panel does not bring it back (checked in Chrome 157). So it still opens at the click, but
+the background remembers for 90 seconds that the website asked for it and has not armed the
+extension (memory only; `application_pending_intent` answers `preparingUntilMs`). While that holds
+the panel shows only "Preparing your application", with no review link and none of its other cards;
+it fills in by itself, with the link set and the employer page selected, when the website arms the
+extension. If nothing arrives it returns to the ordinary panel at the end of the window. The
+request carries nothing, so a page that sends it can only make the panel say it is preparing.
+

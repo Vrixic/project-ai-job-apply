@@ -509,6 +509,41 @@ describe("the apply intent from the website", () => {
       expect(chrome.sidePanel.open).not.toHaveBeenCalled();
     });
 
+    it("says the application is being prepared until the website arms the extension", async () => {
+      const f = setup();
+      expect(await f.composition.pendingIntent()).toEqual({ ok: true });
+      await ask(OPEN, f.sender);
+      expect(await f.composition.pendingIntent()).toEqual({
+        ok: true,
+        preparingUntilMs: expect.any(Number),
+      });
+      // An open panel is told; a panel that is still opening asks when it loads.
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ panel: "panel_notice" });
+      await f.message(INTENT);
+      const armed = await f.composition.pendingIntent();
+      expect(armed).toMatchObject({ ok: true, reviewLink: LINK });
+      expect(armed).not.toHaveProperty("preparingUntilMs");
+    });
+
+    it("stops saying it is preparing when the website never arms the extension", async () => {
+      vi.useFakeTimers();
+      try {
+        const f = setup();
+        await ask(OPEN, f.sender);
+        expect(await f.composition.pendingIntent()).toHaveProperty("preparingUntilMs");
+        vi.advanceTimersByTime(91_000);
+        expect(await f.composition.pendingIntent()).toEqual({ ok: true });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("does not say it is preparing for a refused request", async () => {
+      const f = setup();
+      await ask(OPEN, { ...f.sender, origin: "https://evil.example" });
+      expect(await f.composition.pendingIntent()).toEqual({ ok: true });
+    });
+
     it("refuses a request that carries anything besides its schema", async () => {
       const f = setup();
       await expect(ask({ ...OPEN, applicationId: APP }, f.sender)).resolves.toEqual({
