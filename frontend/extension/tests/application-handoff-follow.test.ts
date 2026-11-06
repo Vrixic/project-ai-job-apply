@@ -12,11 +12,16 @@ vi.mock("../lib/config", () => ({
 import { mountApplicationHandoff } from "../lib/application-handoff-ui";
 
 const EMPLOYER = "https://job-boards.greenhouse.io/example/jobs/1";
-type Tab = { id: number; url?: string };
+type Tab = { id: number; url?: string; status?: string };
 let tab: Tab;
 let pending: boolean;
 let send: ReturnType<typeof vi.fn>;
 let tabChanged: () => void;
+let tabUpdated: (
+  id: number,
+  change: { status?: string; url?: string },
+  tab: Tab & { active: boolean },
+) => void;
 
 const status = () => document.querySelector("[data-handoff-status]")?.textContent ?? "";
 const selects = () => send.mock.calls.filter(([m]) => m.action === "application_native_select");
@@ -31,7 +36,7 @@ async function switchTo(next: Tab) {
 
 beforeEach(async () => {
   vi.useFakeTimers();
-  tab = { id: 7, url: EMPLOYER };
+  tab = { id: 7, url: EMPLOYER, status: "complete" };
   pending = true;
   send = vi.fn(async (message) =>
     message.action === "application_pending_intent"
@@ -50,7 +55,11 @@ beforeEach(async () => {
           tabChanged = listener;
         },
       },
-      onUpdated: { addListener: vi.fn() },
+      onUpdated: {
+        addListener: (listener: typeof tabUpdated) => {
+          tabUpdated = listener;
+        },
+      },
     },
     windows: { onFocusChanged: { addListener: vi.fn() } },
   });
@@ -101,6 +110,47 @@ describe("the side panel follows the page in front of the candidate", () => {
     expect(status()).toContain("click the ApplyDash icon");
   });
 
+  it("waits for a page that is still loading, and prepares it once it has settled", async () => {
+    tab = { id: 7, url: EMPLOYER, status: "loading" };
+    mountApplicationHandoff();
+    await settle();
+    expect(selects()).toHaveLength(0);
+    tab = { id: 7, url: EMPLOYER, status: "complete" };
+    tabUpdated(7, { status: "complete" }, { ...tab, active: true });
+    await settle();
+    expect(selects()).toHaveLength(1);
+  });
+
+  it("prepares the page again after it reloads, since a reload is a new document", async () => {
+    mountApplicationHandoff();
+    await settle();
+    expect(selects()).toHaveLength(1);
+    // Greenhouse loads twice in a row; the second load drops what was selected for the first.
+    tab = { id: 7, url: EMPLOYER, status: "loading" };
+    tabUpdated(7, { status: "loading" }, { ...tab, active: true });
+    tab = { id: 7, url: EMPLOYER, status: "complete" };
+    tabUpdated(7, { status: "complete" }, { ...tab, active: true });
+    await settle();
+    expect(selects()).toHaveLength(2);
+  });
+
+  it("does not react to a page loading in a tab nobody is looking at", async () => {
+    mountApplicationHandoff();
+    await settle();
+    tabUpdated(
+      8,
+      { status: "loading" },
+      { id: 8, url: EMPLOYER, status: "loading", active: false },
+    );
+    tabUpdated(
+      8,
+      { status: "complete" },
+      { id: 8, url: EMPLOYER, status: "complete", active: false },
+    );
+    await settle();
+    expect(selects()).toHaveLength(1);
+  });
+
   it("waits quietly while the employer page is still opening", async () => {
     tab = { id: 9, url: "about:blank" };
     mountApplicationHandoff();
@@ -109,6 +159,18 @@ describe("the side panel follows the page in front of the candidate", () => {
     expect(status()).toBe("");
     await switchTo({ id: 9, url: EMPLOYER });
     expect(selects()).toHaveLength(1);
+  });
+
+  it("tells a signed-out candidate to sign in, instead of a generic failure", async () => {
+    send.mockImplementation(async (message) =>
+      message.action === "application_pending_intent"
+        ? { ok: true, reviewLink: LINK }
+        : { ok: false, stage: "sign-in" },
+    );
+    mountApplicationHandoff();
+    await settle();
+    expect(status()).toContain("Sign in to ApplyDash in this panel");
+    expect(status()).not.toContain("stopped at");
   });
 
   it("selects once the candidate has opened the extension on that page", async () => {

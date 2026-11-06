@@ -123,6 +123,24 @@ describe("manual handoff UI", () => {
     expect(control("[data-handoff-status]").textContent).toContain("Filled for your review");
   });
 
+  it("says it is filling while the fill runs, and then how it ended", async () => {
+    let finish: (value: unknown) => void = () => undefined;
+    send.mockImplementation(async (message) =>
+      message.action === "application_native_apply"
+        ? new Promise((resolve) => {
+            finish = resolve;
+          })
+        : { ok: true },
+    );
+    control<HTMLInputElement>("input").value = LINK;
+    control<HTMLButtonElement>("[data-native-fill]").click();
+    await flush();
+    expect(control("[data-handoff-status]").textContent).toContain("Filling in your application");
+    finish({ ok: true, outcome: "review_required", result: "challenge_required" });
+    await flush();
+    expect(control("[data-handoff-status]").textContent).toContain("Filled for your review");
+  });
+
   it("says what the fill left to the candidate", async () => {
     send.mockImplementation(async (message) =>
       message.action === "application_native_apply"
