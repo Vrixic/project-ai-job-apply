@@ -136,3 +136,32 @@ describe("editing the candidate's own PDF in place", () => {
     ).rejects.toBeInstanceOf(OriginalEditUnsupported);
   });
 });
+
+describe.each([
+  ["one block per text run", { columns: true }],
+  ["inside a clip wrapper with marked-content glue", { columns: true, wrapped: true }],
+])("a page with a second column, %s", (_name, options) => {
+  it("edits the left column and leaves the right column exactly where it was", async () => {
+    const original = await resumePdf(options);
+    const document = await parse(original);
+    // The parser records the second column as its own reading zone.
+    expect(document.blocks.some((block) => block.layout?.zone === 1)).toBe(true);
+
+    const { ast, blocks } = await tailored(original, 2);
+    const result = await renderTailoredPdf(blocks, ast.page, {
+      bytes: original,
+      sourceLines: sourceLinesOf(ast),
+    });
+    expect(result.method).toBe("original_page");
+    expect((await verifyRenderedResume(result, blocks)).ok).toBe(true);
+
+    const before = await runsByText(original);
+    const after = await runsByText(result.bytes);
+    for (const text of ["Skills", "C++, Unity, Vulkan", "Scrum and Jira"])
+      expect(after.get(text), text).toEqual(before.get(text));
+    expect([...after.keys()].some((key) => key.includes("Mentored"))).toBe(false);
+    expect((await linksOf(result.bytes)).map((link) => link.uri)).toEqual([
+      "https://example.com/renderer",
+    ]);
+  });
+});

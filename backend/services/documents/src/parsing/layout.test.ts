@@ -87,3 +87,20 @@ describe("layout of a normalized document", () => {
     expect(blocks[0]?.layout?.y).toBe(10);
   });
 });
+
+describe("reading zones in a layout", () => {
+  const withZone = (zone: unknown) => {
+    const value = structuredClone(document());
+    const layout = value.blocks[1]?.layout as Record<string, unknown> | undefined;
+    if (layout) layout.zone = zone;
+    return value;
+  };
+
+  it.each([1, 2, 32])("accepts zone %s", (zone) => {
+    expect(parseNormalizedResumeDocument(withZone(zone)).blocks[1]?.layout?.zone).toBe(zone);
+  });
+
+  it.each([0, -1, 33, 1.5, "1", null])("refuses zone %s", (zone) => {
+    expect(() => parseNormalizedResumeDocument(withZone(zone))).toThrow(InvalidDocumentError);
+  });
+});

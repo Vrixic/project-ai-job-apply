@@ -1,4 +1,11 @@
-import { type Group, nameOf, numberOf, type Operation, topLevelGroups } from "./content-stream.js";
+import {
+  expandWrappers,
+  type Group,
+  nameOf,
+  numberOf,
+  type Operation,
+  topLevelGroups,
+} from "./content-stream.js";
 import { OriginalEditUnsupported } from "./errors.js";
 
 /** Where something sits on the page, in the page's own coordinates (origin bottom left). */
@@ -54,8 +61,14 @@ function apply(matrix: Matrix, x: number, y: number): [number, number] {
 const PAINT_OPERATORS = new Set(["f", "F", "f*", "B", "B*", "b", "b*", "S", "s"]);
 const END_PATH = new Set(["n"]);
 const PATH_OPERATORS = new Set(["m", "l", "c", "v", "y", "h", "re"]);
-/** Operations that may stand outside every `q ... Q` without changing where anything is. */
+/** Operations that may stand outside every unit without changing where anything is. */
 const HARMLESS_LOOSE = new Set([
+  "q",
+  "Q",
+  "re",
+  "W",
+  "W*",
+  "n",
   "gs",
   "cs",
   "CS",
@@ -209,12 +222,11 @@ function measure(bytes: Uint8Array, group: Group): GroupInfo {
 
 /** Splits a page's operations into their top-level blocks and says where each one draws. */
 export function pageUnits(bytes: Uint8Array, all: readonly Operation[]): PageUnits {
-  const groups = topLevelGroups(all);
+  const groups = expandWrappers(bytes, topLevelGroups(all));
   const info = groups.map((group) => {
     if (group.loose) {
-      // Text, a path or an image outside every q ... Q cannot be moved with its line.
-      const operation = group.ops[0];
-      if (!operation || !HARMLESS_LOOSE.has(operation.op))
+      // Text, a path or an image outside every unit cannot be moved with its line.
+      if (!group.ops.every((operation) => HARMLESS_LOOSE.has(operation.op)))
         throw new OriginalEditUnsupported("AMBIGUOUS_GRAPHIC");
       return { texts: [], paints: [], xobjects: [] } satisfies GroupInfo;
     }

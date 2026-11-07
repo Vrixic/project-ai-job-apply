@@ -56,15 +56,26 @@ still holds: tailoring keeps, moves or omits the candidate's own lines and adds 
    recorded metadata, size, digest) and leaves the field out on any doubt; generation never fails
    because the original could not be used. The reader is off unless
    `NATIVE_RESUME_ORIGINAL_PDF_ENABLED=true` is set on the source Lambda.
-7. **One flow at a time.** A page whose reading order jumps back up (a sidebar or true columns) is
-   not edited yet, because the parser's layout record is all-or-nothing and single-flow. A follow-up
-   records reading zones in the parser (additive, parser version bump) so each zone is edited on its
-   own.
+7. **Columns and sidebars are reading zones.** Where a page's reading order jumps back up, the parser
+   starts a new zone and records it on the line (`layout.zone`, from 1; the first zone carries none, so
+   a single-flow page is unchanged). Zones are laid out one at a time: a kept line keeps its gap after
+   the line before it in its own zone, the first kept line of a zone keeps the zone's first baseline,
+   and a tailoring that would move text from one zone to another is unsupported. A page with a zone is
+   never redrawn from layout (the redraw would tangle the columns); it is edited in place or drawn
+   plain. A page that jumps back up more than 32 times is drawn without layout.
+8. **Wrappers are opened, and state is respected.** Some exporters put a whole page or column in one
+   `q ... Q` that only sets a clip, with a self-contained `q ... Q` per text run inside, and small
+   filled shapes drawn by the wrapper itself. Such a wrapper's head, glue and tail stay where they
+   are and each child and shape becomes a unit. A wrapper that changes the matrix or shows text
+   itself is not opened. Every unit records the colors and clip it inherits where it stands; a unit of
+   text may be written into another place in the stream only where that state is identical, and
+   otherwise the edit is unsupported. Text that belongs to no line is blank space (the parser reads
+   every visible character as part of a line), so it keeps its place in the stream.
 
 ## Consequences
 
-- Candidates whose resume is a single-flow Word-style PDF get their own typography back. Sidebar and
-  column designs still use the ADR-051 redraw until zones land.
+- Candidates whose resume is a Word-style PDF, single flow or with columns and a sidebar, get their own
+  typography, icons, images and layout back. Other exports fall back to the ADR-051 redraw.
 - **Security-gate change, approved by the owner 2026-11-07.** The source Lambda today may read only
   `normalized/*/*/*/resume.json` and denies every other object read. Using the original needs an
   exact allow entry for `quarantine/*/source` (`s3:GetObjectVersion`, `s3:GetObjectVersionTagging`),
@@ -75,7 +86,10 @@ still holds: tailoring keeps, moves or omits the candidate's own lines and adds 
 - The original PDF, which holds the same personal data as its text plus fonts, images and metadata,
   is read once per generation, held in the memory-only native process with the resume, cleared with it,
   and never written anywhere or logged. No new data leaves the Documents boundary.
-- Release order after approval: Terraform (IAM and flag), then a governed Lambda artifact and native
-  image release (editor, reader, source validator, session); the parser is unchanged.
+- Release order: Terraform (IAM and flag, merged), then a governed document parser and processor release
+  (zones are recorded at parse time, from one receipt) and a native Lambda and image release (editor,
+  reader, source validator, session). Resumes uploaded before the parser release carry no zones; the
+  candidate uploads again to get them. The parser version string is unchanged, as for ADR-051: a new
+  upload is a new document id and therefore a new normalized object key.
 - The Lambda tailoring service keeps producing the ADR-051 redraw; it is not used when native
   preparation is on.

@@ -329,6 +329,12 @@ async function editOriginal(input: {
     const takes = new Map(
       textSlots.map((at, position) => [at, inReadingOrder[position] as number]),
     );
+    for (const [slot, taken] of takes) {
+      // A unit that moves to another place in the stream inherits that place's colors and clip, so it
+      // may only go where they are the same as where it was.
+      if (taken !== slot && unit.groups[taken]?.state !== unit.groups[slot]?.state)
+        throw new OriginalEditUnsupported("STATE_DIFFERS");
+    }
     for (const slot of kept) {
       const groupIndex = takes.get(slot) ?? slot;
       const group = unit.groups[groupIndex];

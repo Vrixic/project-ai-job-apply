@@ -5,6 +5,7 @@ import { buildResumeAst } from "../resume-ast/build.js";
 import { laidOutDocument, type SyntheticLine } from "../resume-ast/test-support.js";
 import { materializeTailoredResume, tailorResume } from "../tailoring/tailor.js";
 import { RenderError, renderPdf } from "./render.js";
+import { canRenderStyled, hasSourceLines } from "./styled.js";
 import { verifyRenderedResume } from "./verify.js";
 
 const RED = "#cc0000";
@@ -148,5 +149,22 @@ describe("styled PDF rendering", () => {
     // Stretch the spacing of every line so the same content needs more than the page allows.
     for (const block of blocks) for (const line of block.lines ?? []) if (line.dy) line.dy *= 12;
     expect(renderPdf(blocks, ast.page).pageCount).toBeGreaterThan(1);
+  });
+});
+
+describe("pages with reading zones", () => {
+  it("are not redrawn from layout, only edited in place", () => {
+    const document = laidOutDocument([
+      { text: "Projects", y: 100, size: 18 },
+      bullet("Built a renderer", 130),
+      { text: "Skills", y: 100, size: 18, zone: 1 },
+    ]);
+    const ast = buildResumeAst(document);
+    const blocks = materializeTailoredResume(
+      ast,
+      tailorResume(ast, { title: "x", description: "y" }),
+    );
+    expect(canRenderStyled(blocks, ast.page)).toBe(false);
+    expect(hasSourceLines(blocks)).toBe(true);
   });
 });

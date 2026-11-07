@@ -21,6 +21,21 @@ export function canRenderStyled(
   return (
     page !== undefined &&
     blocks.length > 0 &&
+    blocks.every(
+      (block) =>
+        block.lines !== undefined &&
+        block.lines.length > 0 &&
+        // Lines of a second column or sidebar read in an order that cannot be redrawn top to bottom;
+        // they can only be edited in place on the candidate's own page.
+        block.lines.every((line) => line.zone === undefined),
+    )
+  );
+}
+
+/** Whether every block still knows the source lines it came from, which an in-place edit needs. */
+export function hasSourceLines(blocks: readonly RenderBlock[]): boolean {
+  return (
+    blocks.length > 0 &&
     blocks.every((block) => block.lines !== undefined && block.lines.length > 0)
   );
 }

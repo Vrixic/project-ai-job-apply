@@ -34,6 +34,25 @@ const lines: Line[] = [
   { text: "\\225 Mentored two engineers", x: 36, top: 196, size: 12 },
 ];
 
+/** A page with a second column: the left column reads first, then the reading order jumps back up. */
+const columnLines: Line[] = [
+  { text: "Alex Example", x: 36, top: 60, size: 24, bold: true },
+  { text: "Projects", x: 36, top: 110, size: 18, bold: true, color: RED },
+  { text: "Liberator - Programmer", x: 36, top: 140, size: 12, bold: true },
+  { text: "\\225 Wrote tools for the art team", x: 36, top: 160, size: 12 },
+  {
+    text: "\\225 Built a Vulkan renderer with shader reloading",
+    x: 36,
+    top: 178,
+    size: 12,
+    link: "https://example.com/renderer",
+  },
+  { text: "\\225 Mentored two engineers", x: 36, top: 196, size: 12 },
+  { text: "Skills", x: 360, top: 110, size: 18, bold: true, color: RED },
+  { text: "C++, Unity, Vulkan", x: 360, top: 140, size: 12 },
+  { text: "Scrum and Jira", x: 360, top: 158, size: 12 },
+];
+
 const pdfEscape = (value: string) => value.replaceAll("(", "\\(").replaceAll(")", "\\)");
 
 /**
@@ -41,23 +60,36 @@ const pdfEscape = (value: string) => value.replaceAll("(", "\\(").replaceAll(")"
  * the heading in its own block and a second rule drawn loose, real fonts and one link.
  */
 export async function resumePdf(
-  options: { compress?: boolean; formXObjectText?: boolean; scriptLink?: boolean } = {},
+  options: {
+    compress?: boolean;
+    formXObjectText?: boolean;
+    scriptLink?: boolean;
+    /** Two columns instead of one flow. */
+    columns?: boolean;
+    /** Every text block inside one outer `q` that only sets a clip, with marked-content glue. */
+    wrapped?: boolean;
+  } = {},
 ): Promise<Uint8Array> {
   const document = await PDFDocument.create({ updateMetadata: false });
   const regular = await document.embedFont(StandardFonts.Helvetica);
   const bold = await document.embedFont(StandardFonts.HelveticaBold);
   const page = document.addPage([PAGE.width, PAGE.height]);
+  const source = options.columns ? columnLines : lines;
   const body: string[] = [];
-  for (const line of lines) {
+  source.forEach((line, index) => {
     const y = PAGE.height - line.top;
     const color = line.color ? `${line.color.join(" ")} rg\n` : "0 g\n";
-    body.push(
-      `q\nBT\n/${line.bold ? "F2" : "F1"} ${line.size} Tf\n${color}1 0 0 1 ${line.x} ${y} Tm\n(${line.text.startsWith("\\225") ? line.text : pdfEscape(line.text)}) Tj\nET\nQ`,
-    );
-    if (line.text === "Projects") body.push(`q\n0.6 w\n36 ${y - 6} m\n576 ${y - 6} l\nS\nQ`);
-  }
+    const block = `q\nBT\n/${line.bold ? "F2" : "F1"} ${line.size} Tf\n${color}1 0 0 1 ${line.x} ${y} Tm\n(${line.text.startsWith("\\225") ? line.text : pdfEscape(line.text)}) Tj\nET\nQ`;
+    body.push(options.wrapped ? `/P <</MCID ${index}>> BDC\n${block}\nEMC` : block);
+    if (line.text === "Projects" && !options.columns)
+      body.push(`q\n0.6 w\n36 ${y - 6} m\n576 ${y - 6} l\nS\nQ`);
+  });
   // A thin rule drawn outside any q ... Q, as some exporters do.
-  body.push(`0.5 g\n36 ${PAGE.height - 80} 540 0.8 re\nf*`);
+  if (!options.columns) body.push(`0.5 g\n36 ${PAGE.height - 80} 540 0.8 re\nf*`);
+  if (options.wrapped) {
+    body.unshift("q\n20 40 580 720 re\nW* n");
+    body.push("Q");
+  }
   if (options.formXObjectText) {
     const form = document.context.stream("BT /F1 12 Tf 1 0 0 1 36 300 Tm (hidden) Tj ET", {
       Type: "XObject",
@@ -88,7 +120,7 @@ export async function resumePdf(
         : document.context.flateStream(stream),
     ),
   );
-  const annotations = lines.flatMap((line) =>
+  const annotations = source.flatMap((line) =>
     line.link
       ? [
           document.context.register(

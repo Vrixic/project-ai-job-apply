@@ -120,15 +120,41 @@ describe("PDF layout extraction", () => {
     expect(rule?.dy).toBeGreaterThan(0);
   });
 
-  it("gives no layout for text that is not read top to bottom, but still returns the text", async () => {
+  it("marks a new reading zone where the text jumps back up the page", async () => {
     const parsed = await parse(
       pdf(
-        [text("F1", 12, 36, 600, "Lower first"), text("F1", 12, 36, 700, "Higher second")].join(
-          "\n",
-        ),
+        [
+          text("F1", 12, 36, 700, "Left one"),
+          text("F1", 12, 36, 680, "Left two"),
+          text("F1", 12, 330, 700, "Right one"),
+          text("F1", 12, 330, 680, "Right two"),
+        ].join("\n"),
       ),
     );
-    expect(parsed.blocks.map((block) => block.text)).toEqual(["Lower first", "Higher second"]);
+    expect(parsed.blocks.map((block) => block.text)).toEqual([
+      "Left one",
+      "Left two",
+      "Right one",
+      "Right two",
+    ]);
+    expect(parsed.page).toEqual({ width: 612, height: 792 });
+    // The first zone carries no marker, so a page that reads top to bottom is unchanged.
+    expect(parsed.blocks.map((block) => block.layout?.zone)).toEqual([undefined, undefined, 1, 1]);
+  });
+
+  it("carries no zone on a page that reads top to bottom", async () => {
+    const parsed = await parse(
+      pdf([text("F1", 12, 36, 700, "Higher"), text("F1", 12, 36, 680, "Lower")].join("\n")),
+    );
+    expect(parsed.blocks.every((block) => block.layout && !("zone" in block.layout))).toBe(true);
+  });
+
+  it("gives no layout to a page that jumps back up more often than it may", async () => {
+    const lines = Array.from({ length: 90 }, (_, index) =>
+      text("F1", 12, 36, 300 + (index % 2) * 40, `Line ${index}`),
+    );
+    const parsed = await parse(pdf(lines.join("\n")));
+    expect(parsed.blocks.length).toBeGreaterThan(0);
     expect(parsed.page).toBeUndefined();
     expect(parsed.blocks.every((block) => block.layout === undefined)).toBe(true);
   });

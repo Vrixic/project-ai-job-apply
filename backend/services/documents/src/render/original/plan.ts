@@ -30,45 +30,58 @@ export interface PagePlan {
   ownerOf(rect: Rect): { kept: boolean; move: number } | undefined;
 }
 
-const keyOf = (line: { page: number; y: number; runs: ReadonlyArray<{ x: number }> }) =>
-  `${line.page}:${line.y.toFixed(2)}:${(line.runs[0]?.x ?? 0).toFixed(1)}`;
+const keyOf = (line: {
+  page: number;
+  zone?: number;
+  y: number;
+  runs: ReadonlyArray<{ x: number }>;
+}) => `${line.page}:${line.zone ?? 0}:${line.y.toFixed(2)}:${(line.runs[0]?.x ?? 0).toFixed(1)}`;
+
+/** A page's reading zones (a second column, a sidebar) are laid out one at a time. */
+const zoneKey = (line: { page: number; zone?: number }) => `${line.page}:${line.zone ?? 0}`;
 
 const sizeOf = (line: AstLine) => Math.max(...line.runs.map((run) => run.size));
 const minX = (line: AstLine) => Math.min(...line.runs.map((run) => run.x));
 const maxX = (line: AstLine) => Math.max(...line.runs.map((run) => run.x + run.w));
 
 /**
- * Where each kept source line goes. A kept line keeps the gap it had after the line before it in the
- * source; the first kept line of a page takes the page's first source baseline. Lines that were left
- * out simply close up. Every line stays on its own page: an edit that would need text on another page
- * is not an in-place edit.
+ * Where each kept source line goes. A kept line keeps the gap it had after the line before it in its
+ * zone of the page; the first kept line of a zone takes the zone's first source baseline. Lines that
+ * were left out simply close up. Every line stays on its own page and in its own zone: an edit that
+ * would need text on another page, or would move text from one column to another, is not an in-place
+ * edit.
  */
 function newBaselines(
   blocks: readonly RenderBlock[],
   sourceLines: readonly AstLine[],
 ): { baselines: Map<string, number>; rank: Map<string, number> } {
-  const firstOfPage = new Map<number, number>();
+  const firstOfZone = new Map<string, number>();
   for (const line of sourceLines)
-    firstOfPage.set(
-      line.page,
-      Math.min(firstOfPage.get(line.page) ?? Number.POSITIVE_INFINITY, line.y),
+    firstOfZone.set(
+      zoneKey(line),
+      Math.min(firstOfZone.get(zoneKey(line)) ?? Number.POSITIVE_INFINITY, line.y),
     );
   const result = new Map<string, number>();
   const rank = new Map<string, number>();
-  const previous = new Map<number, number>();
+  const previous = new Map<string, number>();
+  const lastZone = new Map<number, number>();
   let lastPage = -1;
   for (const block of blocks) {
     for (const line of block.lines ?? []) {
       if (line.page < lastPage) throw new OriginalEditUnsupported("MOVES_BETWEEN_PAGES");
       lastPage = line.page;
-      const before = previous.get(line.page);
+      // Zones read in order; a tailoring that comes back to an earlier one has moved text across.
+      if ((line.zone ?? 0) < (lastZone.get(line.page) ?? 0))
+        throw new OriginalEditUnsupported("MOVES_BETWEEN_ZONES");
+      lastZone.set(line.page, line.zone ?? 0);
+      const before = previous.get(zoneKey(line));
       const y =
         before === undefined
-          ? (firstOfPage.get(line.page) ?? line.y)
+          ? (firstOfZone.get(zoneKey(line)) ?? line.y)
           : before + (line.dy ?? sizeOf(line) * 1.3);
       result.set(keyOf(line), y);
       rank.set(keyOf(line), rank.size);
-      previous.set(line.page, y);
+      previous.set(zoneKey(line), y);
     }
   }
   return { baselines: result, rank };
@@ -88,16 +101,18 @@ export function planEdits(input: {
 }): PagePlan[] {
   const { blocks, sourceLines, page, pages } = input;
   const { baselines, rank } = newBaselines(blocks, sourceLines);
-  const bottomOf = new Map<number, number>();
+  // No zone may end lower than it did, beyond a small allowance: that would need another page.
+  const bottomOf = new Map<string, number>();
   for (const line of sourceLines)
-    bottomOf.set(line.page, Math.max(bottomOf.get(line.page) ?? 0, line.y));
-  const newBottom = new Map<number, number>();
+    bottomOf.set(zoneKey(line), Math.max(bottomOf.get(zoneKey(line)) ?? 0, line.y));
+  const newBottom = new Map<string, number>();
   for (const line of sourceLines) {
     const y = baselines.get(keyOf(line));
-    if (y !== undefined) newBottom.set(line.page, Math.max(newBottom.get(line.page) ?? 0, y));
+    if (y !== undefined)
+      newBottom.set(zoneKey(line), Math.max(newBottom.get(zoneKey(line)) ?? 0, y));
   }
-  for (const [pageNumber, bottom] of newBottom) {
-    if (bottom > (bottomOf.get(pageNumber) ?? 0) + BOTTOM_ALLOWANCE)
+  for (const [zone, bottom] of newBottom) {
+    if (bottom > (bottomOf.get(zone) ?? 0) + BOTTOM_ALLOWANCE)
       throw new OriginalEditUnsupported("MOVES_BETWEEN_PAGES");
   }
 
@@ -194,7 +209,14 @@ export function planEdits(input: {
           // keeps its gap below the line above it, so it moves with that line.
           const anchor = info.texts[0];
           const above = anchor ? linesAbove(anchor, anchor.size)[0] : undefined;
-          if (!anchor || !above) throw new OriginalEditUnsupported("TEXT_NOT_MATCHED");
+          if (!above) {
+            // Nothing to follow: the parser reads every visible character as part of a line, so text
+            // that belongs to none is blank space. It stays where it is.
+            keep.push(true);
+            move.push(0);
+            order.push(undefined);
+            return;
+          }
           candidates = [above];
         }
         const [first, ...rest] = candidates.map(shiftOf);
@@ -204,11 +226,9 @@ export function planEdits(input: {
         const shift = first;
         keep.push(shift.kept);
         move.push(shift.move);
-        // Right after the line it travels with, when it is not itself that line's text.
-        const ranks = candidates
-          .map(rankOf)
-          .filter((value): value is number => value !== undefined);
-        order.push(owner ? rankOf(owner) : ranks.length > 0 ? Math.min(...ranks) + 0.5 : undefined);
+        // Only real text has a reading position. Blank space that follows a line stays where it is in
+        // the stream, so it can never pull other text out of its place.
+        order.push(owner ? rankOf(owner) : undefined);
         return;
       }
       // A graphic. Big ones (backgrounds, sidebars) belong to the page and stay.

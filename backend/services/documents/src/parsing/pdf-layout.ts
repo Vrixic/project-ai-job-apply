@@ -463,12 +463,16 @@ export function layoutPdfPage(input: PdfPageLayoutInput): PdfPageLayout | undefi
     blocks.push({ y: round(result.baseline), runs: result.runs });
   }
   const placed = blocks.flatMap((block, index) => (block ? [{ block, index }] : []));
-  // Lines that read top to bottom can be reflowed; a page whose reading order jumps back up (columns,
-  // sidebars) cannot, and is drawn without layout instead of with its columns tangled.
+  // Where the reading order jumps back up the page (a second column, a sidebar) a new zone starts. A
+  // page that reads top to bottom has one zone and carries none, so existing output is unchanged; a
+  // page with zones can be edited in place but never redrawn from layout, which would tangle them.
+  let zone = 0;
   for (let index = 1; index < placed.length; index += 1) {
     const before = placed[index - 1]?.block;
     const after = placed[index]?.block;
-    if (before && after && after.y < before.y - 1) return undefined;
+    if (before && after && after.y < before.y - 1) zone += 1;
+    if (zone >= LAYOUT_LIMITS.zonesPerPage) return undefined;
+    if (zone > 0 && after) after.zone = zone;
   }
   for (const rule of scan.rules) {
     let best: { block: BlockLayout; gap: number } | undefined;

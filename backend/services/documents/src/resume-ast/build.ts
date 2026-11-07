@@ -66,7 +66,8 @@ function lineOf(
   if (!block.layout) return undefined;
   const page = block.page ?? 1;
   const before = document.blocks[block.index - 1];
-  const sameLine = before?.layout && (before.page ?? 1) === page;
+  const zone = block.layout.zone;
+  const sameLine = before?.layout && (before.page ?? 1) === page && before.layout.zone === zone;
   return {
     page,
     y: block.layout.y,
@@ -75,6 +76,7 @@ function lineOf(
       : {}),
     runs: block.layout.runs,
     ...(block.layout.rules ? { rules: block.layout.rules } : {}),
+    ...(zone === undefined ? {} : { zone }),
   };
 }
 

@@ -39,7 +39,7 @@ The owner answered the open questions in chat. Recorded decisions:
 
 2026-11-07 owner direction: free-text employer questions get an AI-draft icon in the extension, using OpenAI `gpt-6-luna` with the Terms of Service as consent ([ADR-057](../../adr/057-narrative-answers-drafted-in-the-candidates-browser.md), D3.2-009). The Gateway route, grounding checks and kill switch are built and dark; the extension icon and the live test follow.
 
-2026-11-07 owner direction: the generated resume PDF must never change the look of the candidate's own PDF; only the values change ([ADR-058](../../adr/058-edit-the-candidates-own-pdf-in-place.md), D3-154). The editor, the original-source reader and the session wiring are built and dark; single-flow Word-style PDFs verify end to end locally. Needs the owner's approval of the source-read IAM entry and then a governed release; sidebar and column resumes need parser reading zones.
+2026-11-07 owner direction: the generated resume PDF must never change the look of the candidate's own PDF; only the values change ([ADR-058](../../adr/058-edit-the-candidates-own-pdf-in-place.md), D3-154). The editor, the original-source reader and the session wiring are merged dark and the source-read IAM entry is approved and flagged off (#810, #811); columns and sidebars are recorded as parser reading zones, so all four of the owner's resumes edit in place locally. A governed parser, processor and native release remains.
 
 Still needing the owner: an AWS sign-in for the deployment, the Stripe account values (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRETS`, `STRIPE_PRO_PRICE_ID`, `BILLING_APP_BASE_URL`), counsel, the independent assessor, and staging and production accounts and Auth0 tenants (D6-013, D6-014, D6-021).
 

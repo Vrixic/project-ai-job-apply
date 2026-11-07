@@ -195,8 +195,16 @@ export interface Group {
   ops: Operation[];
   start: number;
   end: number;
-  /** True for a single operation that sits outside every `q ... Q` and draws nothing. */
+  /**
+   * True for operations that sit outside every unit and draw nothing: a color or marker, or the head,
+   * glue and tail of a wrapper (`q`, a clip, `Q`) whose children are the units.
+   */
   loose: boolean;
+  /**
+   * The colors and clip a unit inherits from the glue before it (set by expandWrappers). Text moves
+   * only between places with the same state.
+   */
+  state?: string;
 }
 
 const PATH_BUILDERS = new Set(["m", "l", "c", "v", "y", "h", "re"]);
@@ -253,4 +261,154 @@ export function topLevelGroups(all: readonly Operation[]): Group[] {
   if (depth !== 0 || current || path.length > 0)
     throw new OriginalEditUnsupported("CONTENT_MALFORMED");
   return groups;
+}
+
+/** Operations a wrapper may carry itself besides state: markers that group children but draw nothing. */
+const WRAPPER_OWN = new Set(["BDC", "BMC", "EMC", "MP", "DP"]);
+/** Graphics state an inheriting child depends on. */
+const STATE_OPS = new Set([
+  "g",
+  "G",
+  "rg",
+  "RG",
+  "k",
+  "K",
+  "cs",
+  "CS",
+  "sc",
+  "SC",
+  "scn",
+  "SCN",
+  "gs",
+  "w",
+  "J",
+  "j",
+  "M",
+  "d",
+  "i",
+  "ri",
+]);
+const PATH_BUILD = new Set(["m", "l", "c", "v", "y", "h", "re", "W", "W*"]);
+const PAINT_END = new Set(["f", "F", "f*", "B", "B*", "b", "b*", "S", "s"]);
+
+type State = Map<string, string>;
+const stateKey = (state: State): string => JSON.stringify([...state.entries()].sort());
+
+function piece(ops: Operation[]): Group | undefined {
+  const first = ops[0];
+  const last = ops.at(-1);
+  if (!first || !last) return undefined;
+  return { ops, start: first.start, end: last.end, loose: true };
+}
+
+/**
+ * Opens a wrapper: a `q ... Q` that sets state (a clip, colors) and holds self-contained `q ... Q`
+ * children and small filled shapes of its own. The wrapper's head, the glue between its parts and its
+ * tail stay exactly where they are; each child and each shape becomes a unit that can be dropped or
+ * moved alone. A wrapper that changes the matrix, shows text itself or does anything else is not
+ * opened (it stays one unit).
+ */
+function openWrapper(bytes: Uint8Array, group: Group, inherited: State): Group[] | undefined {
+  if (group.ops[0]?.op !== "q" || group.ops.at(-1)?.op !== "Q") return undefined;
+  const state: State = new Map(inherited);
+  const out: Group[] = [];
+  let depth = 0;
+  let glueFrom = 0;
+  let childFrom = -1;
+  let pathFrom = -1;
+  let clip = state.get("clip") ?? "";
+  let units = 0;
+  const flushGlue = (upTo: number) => {
+    const glue = piece(group.ops.slice(glueFrom, upTo));
+    if (glue) out.push(glue);
+  };
+  for (let index = 0; index < group.ops.length; index += 1) {
+    const operation = group.ops[index];
+    if (!operation) return undefined;
+    const name = operation.op;
+    if (name === "q") {
+      if (depth === 1) {
+        if (pathFrom >= 0) return undefined;
+        childFrom = index;
+      }
+      depth += 1;
+      continue;
+    }
+    if (name === "Q") {
+      depth -= 1;
+      if (depth === 1 && childFrom >= 0) {
+        flushGlue(childFrom);
+        const ops = group.ops.slice(childFrom, index + 1);
+        const first = ops[0];
+        const last = ops.at(-1);
+        if (!first || !last) return undefined;
+        const child: Group = { ops, start: first.start, end: last.end, loose: false };
+        out.push(...(openWrapper(bytes, child, state) ?? [{ ...child, state: stateKey(state) }]));
+        units += 1;
+        glueFrom = index + 1;
+        childFrom = -1;
+      }
+      continue;
+    }
+    if (depth !== 1) continue;
+    if (PATH_BUILD.has(name)) {
+      if (pathFrom < 0) pathFrom = index;
+      continue;
+    }
+    if (name === "n" && pathFrom >= 0) {
+      const from = group.ops[pathFrom];
+      if (!from) return undefined;
+      clip += `${ascii(bytes, from.start, operation.end)};`;
+      state.set("clip", clip);
+      pathFrom = -1;
+      continue;
+    }
+    if (PAINT_END.has(name) && pathFrom >= 0) {
+      flushGlue(pathFrom);
+      const ops = group.ops.slice(pathFrom, index + 1);
+      const first = ops[0];
+      if (!first) return undefined;
+      out.push({
+        ops,
+        start: first.start,
+        end: operation.end,
+        loose: false,
+        state: stateKey(state),
+      });
+      units += 1;
+      glueFrom = index + 1;
+      pathFrom = -1;
+      continue;
+    }
+    if (STATE_OPS.has(name)) {
+      state.set(name, ascii(bytes, operation.start, operation.end));
+      continue;
+    }
+    if (WRAPPER_OWN.has(name)) continue;
+    return undefined;
+  }
+  if (units === 0 || pathFrom >= 0 || depth !== 0) return undefined;
+  flushGlue(group.ops.length);
+  return out;
+}
+
+/**
+ * Splits every top-level group that is a wrapper into its parts, and records for each unit the
+ * graphics state (colors, clip) it inherits where it stands. Text may later be moved to another
+ * place in the stream only where that state is the same, so reordering never changes how it paints.
+ */
+export function expandWrappers(bytes: Uint8Array, groups: readonly Group[]): Group[] {
+  const result: Group[] = [];
+  const top: State = new Map();
+  for (const group of groups) {
+    const only = group.ops[0];
+    if (group.loose) {
+      if (group.ops.length === 1 && only && STATE_OPS.has(only.op))
+        top.set(only.op, ascii(bytes, only.start, only.end));
+      result.push(group);
+      continue;
+    }
+    result.push(...(openWrapper(bytes, group, top) ?? [{ ...group, state: stateKey(top) }]));
+  }
+  return result;
 }
