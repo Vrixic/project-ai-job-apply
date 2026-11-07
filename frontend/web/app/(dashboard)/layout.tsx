@@ -2,6 +2,7 @@ import { resolveProductBrand } from "@ai-job-apply/config/brand";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { getAuth0Client, isAuth0Configured } from "../../lib/auth0";
+import { SessionExpiryGuard } from "../session-expiry-guard";
 import { DashboardShell } from "./dashboard-shell";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
 
   return (
     <DashboardShell brandName={productBrand.name} displayName={displayName}>
+      <SessionExpiryGuard />
       {children}
     </DashboardShell>
   );
