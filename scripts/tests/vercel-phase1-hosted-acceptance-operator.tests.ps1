@@ -173,7 +173,7 @@ try {
   [IO.File]::WriteAllText($vercelIgnorePath, $nonRecursiveIgnore)
   Assert-Rejected { Assert-ExactVercelIgnoreBoundary $vercelIgnorePath } "non-recursive Vercel frontend allowlist"
   $canonicalIgnore = Get-Content -LiteralPath (Join-Path $originalRepositoryRoot ".vercelignore") -Raw
-  foreach ($patchRule in @("!patches/node-forge@1.4.0.patch", "!patches/braces@3.0.3.patch", "!packages/ats-sdk", "!packages/ats-sdk/**")) {
+  foreach ($patchRule in @("!patches/deepmerge@4.3.1.patch", "!patches/braces@3.0.3.patch", "!packages/ats-sdk", "!packages/ats-sdk/**")) {
     [IO.File]::WriteAllText($vercelIgnorePath, $canonicalIgnore.Replace($patchRule, ""))
     Assert-Rejected { Assert-ExactVercelIgnoreBoundary $vercelIgnorePath } "missing required frozen-install or frontend dependency upload rule"
   }
@@ -195,7 +195,7 @@ try {
   $manifestPath = Join-Path $temporaryRoot "package.json"
   $lockPath = Join-Path $temporaryRoot "pnpm-lock.yaml"
   $null = New-Item -ItemType Directory -Path $patchDirectory
-  $approvedPatchPaths = @("patches/image-size@1.2.1.patch", "patches/node-forge@1.4.0.patch", "patches/braces@3.0.3.patch")
+  $approvedPatchPaths = @("patches/image-size@1.2.1.patch", "patches/deepmerge@4.3.1.patch", "patches/braces@3.0.3.patch")
   foreach ($relative in $approvedPatchPaths) {
     Copy-Item -LiteralPath (Join-Path $originalRepositoryRoot $relative) -Destination (Join-Path $temporaryRoot $relative)
   }

@@ -18,7 +18,7 @@ authority.
 Both source roots contain `vercel.json` with the Next.js framework, monorepo-aware frozen install
 and dependency build commands, and single `iad1` Function region. The repository `.vercelignore`
 allowlist includes the root pnpm/Turbo configuration, the exact tracked
-`image-size@1.2.1`, `node-forge@1.4.0` and `braces@3.0.3` patches under `patches/`,
+`image-size@1.2.1`, `deepmerge@4.3.1` and `braces@3.0.3` patches under `patches/`,
 and the required `frontend` and `packages` source, then
 re-excludes credentials, dependencies, generated output, caches, mobile, and extension source,
 including the directory entries themselves. No other patch-directory file is uploaded.
