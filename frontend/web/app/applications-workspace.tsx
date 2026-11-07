@@ -27,6 +27,7 @@ import {
   GENERATION_POLL_LIMIT_MS,
   type GenerationView,
   generationView,
+  packetCarries,
   packetResumeSource,
 } from "../lib/apply-flow";
 import {
@@ -609,7 +610,7 @@ function JobApplicationWorkspace({
   }
 
   /** The resume the Apply button will use, shown beside it so the choice is never hidden. */
-  const plan = applyPlan(application, view);
+  const plan = applyPlan(application, view, screening.current);
   const resumeShown =
     plan.resume === "uploaded" ||
     (packet?.artifactHashes.resume !== undefined &&
@@ -654,9 +655,15 @@ function JobApplicationWorkspace({
         const chosen = forceUploaded
           ? {
               resume: "uploaded" as const,
-              needsNewPacket: packetResumeSource(current.currentPacket) !== "uploaded",
+              needsNewPacket:
+                packetResumeSource(current.currentPacket) !== "uploaded" ||
+                !packetCarries(current.currentPacket, screening.current),
             }
-          : applyPlan(current, generationView(current, nativeMaterials, Date.now()));
+          : applyPlan(
+              current,
+              generationView(current, nativeMaterials, Date.now()),
+              screening.current,
+            );
         if (chosen.needsNewPacket) {
           current = await ensureEditable(current);
           const next = await prepare(current, { resume: "uploaded" });
@@ -1033,6 +1040,12 @@ function JobApplicationWorkspace({
                 Check again
               </button>
             </section>
+          ) : null}
+          {approvedReady && !packetCarries(packet, screening.current) ? (
+            <p role="status">
+              Your Profile has answers this application was approved without, such as your desired
+              salary, so the employer's form will not get them. Choose Start over, then press Apply.
+            </p>
           ) : null}
           {application && (approvedReady || awaitingOutcome) ? (
             <ApplyPanel
