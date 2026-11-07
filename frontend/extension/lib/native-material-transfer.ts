@@ -468,6 +468,12 @@ export function createNativeMaterialTransfer(options: {
         return undefined;
       return {
         resume: state.selection.uploadedResume ? ("uploaded" as const) : ("generated" as const),
+        page: {
+          tabId: state.selection.tabId,
+          documentId: state.selection.documentId,
+          applicationId: state.selection.applicationId,
+          employerUrl: state.selection.employerUrl,
+        },
       };
     },
     /** The step the current selection is in, for a refusal message. Never any content. */

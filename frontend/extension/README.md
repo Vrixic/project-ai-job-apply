@@ -103,6 +103,15 @@ for rationale and acceptance; retain automated underlying security/reliability t
   (Greenhouse: `boards.greenhouse.io`, `job-boards.greenhouse.io`; Ashby: `jobs.ashbyhq.com`) as host
   permissions, so the employer page the candidate is sent to can be read and filled without an icon
   click (ADR-045, amendment 2026-11-06). The release archive still refuses any host permission.
+- Answer icon on free-text questions (ADR-057, execution build only). When the candidate's page is
+  prepared for an application, the background injects `narrative-answer.js` into that exact
+  document (`documentIds`), which adds a small "Generate answer" icon at the bottom left of each
+  open question in a closed shadow root. A click sends only the question text and the employer's
+  help text to the background, which asks the Gateway route for a draft with the extension's own
+  session and fills the box. The background answers only the bound tab, document, top frame and
+  employer origin, one request at a time, for 30 minutes, and never stores or logs the text.
+  Undo restores what was in the box. Fields that map to a Profile answer and cover letter or resume
+  fields get no icon, and the Gateway declines sensitive questions itself.
 - Exact provider-domain adapters for Greenhouse, Lever, and Ashby behind a separate reviewed
   build-time detector policy. It requires the exact extension version plus complete provider,
   page-variant, and domain maps; absence, malformed/extra fields, or any disabled dimension denies

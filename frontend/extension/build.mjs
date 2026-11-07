@@ -191,7 +191,10 @@ const buildOptions = {
     background: join(extensionRoot, "entrypoints", "background.ts"),
     popup: join(extensionRoot, "entrypoints", "popup.ts"),
     ...(applicationExecution
-      ? { "application-execution": join(extensionRoot, "entrypoints", "application-execution.ts") }
+      ? {
+          "application-execution": join(extensionRoot, "entrypoints", "application-execution.ts"),
+          "narrative-answer": join(extensionRoot, "entrypoints", "narrative-answer.ts"),
+        }
       : {}),
   },
   format: "esm",

@@ -23,6 +23,7 @@ import {
   extensionDetectorActivationPolicy,
 } from "../lib/capability-policy";
 import { extensionConfiguration } from "../lib/config";
+import { isNarrativeAnswerMessage } from "../lib/narrative-answer-protocol";
 import {
   cancelContribution,
   fileContributionAppeal,
@@ -1020,6 +1021,8 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
   // The private executor owns this channel and verifies the exact employer document/attempt.
   if (validateApplicationExecutionProof(rawMessage)) return false;
+  // The answer icon's requests belong to the answer session, which checks its own sender.
+  if (isNarrativeAnswerMessage(rawMessage)) return false;
   const message = parseExtensionMessage(rawMessage);
   if (!message || !trustedSender(sender)) {
     sendResponse({ error: "Invalid extension request.", ok: false });

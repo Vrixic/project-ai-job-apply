@@ -72,6 +72,15 @@ Terms of Service, not a prompt at each use.
     Terraform creates empty and never reads. The Gateway reads it through the Lambda extension over
     the private endpoint, caches it for ten minutes and keeps a recent key through a brief outage.
 
+11. **Extension.** The unpacked execution build injects `narrative-answer.js` on demand into the
+    exact document of the page the candidate prepared (the same moment the application is selected),
+    never as a persistent content script. The icon is in a closed shadow root, appears only on open
+    textareas that no Profile answer maps to, and is not offered on cover letter or resume fields. The
+    background answers only the bound tab, document, top frame and employer origin for 30 minutes, one
+    request at a time, using the extension's own session. A draft fills the box only if the candidate
+    typed nothing meanwhile, and Undo restores the previous text. The store build has no provider
+    host access and therefore no icon.
+
 ## Consequences
 
 - A hallucinated employer, fabricated metric or instruction-following injection cannot reach the
