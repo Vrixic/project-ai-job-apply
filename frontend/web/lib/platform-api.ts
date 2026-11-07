@@ -1,3 +1,4 @@
+import { logAccessTokenUnavailable } from "./access-token-failure";
 interface PlatformAuthSession {
   getAccessToken(): Promise<{ token: string }>;
   getSession(): Promise<unknown | null>;
@@ -426,7 +427,8 @@ export async function forwardPlatformRequest(
   let token: string;
   try {
     ({ token } = await dependencies.auth0.getAccessToken());
-  } catch {
+  } catch (error) {
+    logAccessTokenUnavailable(error);
     return problem(401, "session_expired", "The session has expired");
   }
 

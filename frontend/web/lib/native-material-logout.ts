@@ -151,6 +151,9 @@ export async function nativeMaterialLogout(
   }
   const target = new URL("/signed-out", appOrigin);
   target.searchParams.set("cleanup", cleanup);
+  // Only this one fixed reason is carried on; anything else in the query is dropped.
+  if (request.nextUrl.searchParams.get("reason") === "session_expired")
+    target.searchParams.set("reason", "session_expired");
   const logout = new URL("/auth/logout", appOrigin);
   logout.searchParams.set("returnTo", target.href);
   try {

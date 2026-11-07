@@ -21,3 +21,18 @@ it("shows uncertainty for missing or unexpected status without reflecting query 
   expect(html).toContain("could not confirm cleanup");
   expect(html).not.toContain("secret-query-value");
 });
+it("says the session expired, and nothing else a query could put there", async () => {
+  vi.stubGlobal("React", React);
+  const expired = renderToStaticMarkup(
+    await SignedOutPage({
+      searchParams: Promise.resolve({ cleanup: "requested", reason: "session_expired" }),
+    }),
+  );
+  expect(expired).toContain("Your session expired, so you were signed out");
+  expect(expired).toContain('href="/auth/login"');
+  const other = renderToStaticMarkup(
+    await SignedOutPage({ searchParams: Promise.resolve({ reason: "<b>secret-reason</b>" }) }),
+  );
+  expect(other).not.toContain("session expired");
+  expect(other).not.toContain("secret-reason");
+});

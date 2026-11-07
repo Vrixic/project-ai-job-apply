@@ -81,3 +81,16 @@ performed; it does not relax any mobile identity or release control.
   would create more vendor coupling than ADR-002 permits.
 - **WorkOS AuthKit:** Attractive pricing and hosted authentication. Not selected because its
   current Expo/extension path and token/JWKS shape are a weaker match for the repository contract.
+
+## Amendment: a session that cannot get an access token is ended (2026-11-07)
+
+Owner report: the header showed the candidate signed in while job details failed with "Sign in
+again", and only a manual sign-out fixed it. The web session is a cookie; the platform calls need
+an access token (10 minutes in development) that the SDK refreshes with a rotating refresh token.
+When that refresh fails, the cookie outlives the token, so the page is neither signed in nor signed
+out. The BFF already answers `session_expired` for this case and only this case. The signed-in pages
+now answer it by signing the candidate out through the existing sign-out (cleanup of temporary
+application documents included), which lands on the signed-out page with a one-line reason. A plain
+`authentication_required` is left to the page, because the account-deletion flow uses it to ask for
+a recent sign-in. The BFF logs the SDK's short error code (never a token or a user) when a token
+cannot be had, so the trigger (a lapsed or reused refresh token) can be told apart next time.

@@ -111,6 +111,26 @@ describe("native material sign-out cleanup", () => {
     expect(cleanupResult(client)).toBe("requested");
   });
 
+  it("carries only the exact session-expired reason on to the signed-out page", async () => {
+    for (const [query, expected] of [
+      ["?reason=session_expired", "session_expired"],
+      ["?reason=<script>", null],
+      ["?reason=Session_Expired", null],
+      ["?reason=", null],
+      ["", null],
+    ] as const) {
+      const { client, invoke } = fixture();
+      await invoke(
+        new NextRequest(`https://app.example.test/auth/logout${query}`, {
+          headers: { "sec-fetch-site": "same-origin", cookie: "synthetic-session=cookie" },
+        }),
+      );
+      const delegated = client.middleware.mock.calls[0]?.[0] as NextRequest;
+      const destination = new URL(delegated.nextUrl.searchParams.get("returnTo") ?? "");
+      expect(destination.searchParams.get("reason")).toBe(expected);
+    }
+  });
+
   for (const [name, response] of [
     ["upstream rejection", () => Response.json({ secret: "raw-error" }, { status: 503 })],
     ["wrong success status", () => Response.json({}, { status: 200 })],

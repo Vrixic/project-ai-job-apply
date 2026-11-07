@@ -1,3 +1,4 @@
+import { logAccessTokenUnavailable } from "./access-token-failure";
 import {
   type ApplicationCoverLetterFile,
   type ApplicationCoverLetterPreview,
@@ -194,7 +195,8 @@ export async function nativeMaterialContentRoute(
     let token: string;
     try {
       ({ token } = await auth0.getAccessToken());
-    } catch {
+    } catch (error) {
+      logAccessTokenUnavailable(error);
       return problem(401, "session_expired", "The session has expired");
     }
 

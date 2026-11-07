@@ -57,6 +57,59 @@ describe("platform BFF", () => {
     expect(platformFetch).not.toHaveBeenCalled();
   });
 
+  it("ends in session_expired, and says why, when the session cannot get an access token", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const platformFetch = vi.fn<typeof fetch>();
+    const failure = Object.assign(new Error("secret refresh token detail"), {
+      code: "failed_to_refresh_token",
+    });
+    const response = await forwardPlatformRequest(
+      "/v1/me",
+      { method: "GET" },
+      {
+        auth0: {
+          getSession: authenticated.getSession,
+          getAccessToken: async () => {
+            throw failure;
+          },
+        },
+        baseUrl: "http://localhost:4000",
+        fetch: platformFetch,
+      },
+    );
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ code: "session_expired" });
+    expect(platformFetch).not.toHaveBeenCalled();
+    // Only the SDK's own short error code is logged: never the message, a token or a user.
+    expect(warn).toHaveBeenCalledWith(
+      JSON.stringify({ event: "auth_access_token_unavailable", code: "failed_to_refresh_token" }),
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("secret");
+    warn.mockRestore();
+  });
+
+  it("logs an unknown code for a failure that carries none", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await forwardPlatformRequest(
+      "/v1/me",
+      { method: "GET" },
+      {
+        auth0: {
+          getSession: authenticated.getSession,
+          getAccessToken: async () => {
+            throw new Error("secret");
+          },
+        },
+        baseUrl: "http://localhost:4000",
+        fetch: vi.fn<typeof fetch>(),
+      },
+    );
+    expect(warn).toHaveBeenCalledWith(
+      JSON.stringify({ event: "auth_access_token_unavailable", code: "unknown" }),
+    );
+    warn.mockRestore();
+  });
+
   it("rejects missing sessions without contacting the platform API", async () => {
     const platformFetch = vi.fn<typeof fetch>();
     const response = await forwardPlatformRequest(
