@@ -123,7 +123,11 @@ artifacts, then build the image against their original numeric versions, then su
 image/task and preparation receipts. Image/task/source/preparation bindings must agree; these
 maps do not automatically retarget a previously built image or refresh original recipients.
 Keep source and runtime stages separate and retain all original instances while work is
-unresolved. A populated map is deployment configuration, not authorization or release acceptance.
+unresolved. A revision whose work is drained can be retired by
+removing it from the three release maps and, in bootstrap, from `native_resume_control_releases`
+(the combined deployment boundary is capped at 6144 characters). Its failure-retention queue has
+`prevent_destroy` by design and stays: list it in `native_resume_retired_observation_releases`
+(revision to queue and platform key) so only the queue, its policy and its alarms remain. A populated map is deployment configuration, not authorization or release acceptance.
 
 The current environment locks use AWS provider 6.58.0, matching the native modules. Both roots
 validate and each has three mocked tests for default absence, separate source publication and

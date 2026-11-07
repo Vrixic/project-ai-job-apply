@@ -148,3 +148,10 @@ output "native_resume_release_bindings" {
     } }
   }
 }
+
+variable "native_resume_retired_observation_releases" {
+  description = "Retired original resume revisions (ADR-058 cutover). Only the failure-retention queue, its policy and alarms stay (the queue has prevent_destroy by design); the revision's runtime is gone. Keyed by the original task definition revision."
+  type        = map(object({ queue_arn = string, kms_key_arn = string }))
+  default     = {}
+  nullable    = false
+}
