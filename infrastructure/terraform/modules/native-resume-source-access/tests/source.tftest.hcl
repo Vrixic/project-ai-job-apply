@@ -95,3 +95,47 @@ run "activation_without_release_refused" {
   }
   expect_failures = [var.release]
 }
+run "original_pdf_read_is_off_by_default" {
+  command = apply
+  assert {
+    condition = (
+      length(jsondecode(aws_iam_role_policy.rpc["source"].policy).Statement) == 7 &&
+      !strcontains(aws_iam_role_policy.rpc["source"].policy, "quarantine") &&
+      jsondecode(aws_iam_role_policy.rpc["source"].policy).Statement[6].NotResource == "arn:aws:s3:::synthetic-documents/normalized/*/*/*/resume.json" &&
+      !contains(keys(aws_lambda_function.rpc["source"].environment[0].variables), "NATIVE_RESUME_ORIGINAL_PDF_ENABLED")
+    )
+    error_message = "Without the explicit flag the source RPC may read only retained normalized versions."
+  }
+}
+run "original_pdf_read_is_one_exact_version_bound_pattern" {
+  command = apply
+  variables { original_pdf_enabled = true }
+  assert {
+    condition = (
+      length(jsondecode(aws_iam_role_policy.rpc["source"].policy).Statement) == 8 &&
+      jsondecode(aws_iam_role_policy.rpc["source"].policy).Statement[7].Effect == "Allow" &&
+      jsondecode(aws_iam_role_policy.rpc["source"].policy).Statement[7].Action == ["s3:GetObjectVersion", "s3:GetObjectVersionTagging"] &&
+      jsondecode(aws_iam_role_policy.rpc["source"].policy).Statement[7].Resource == "arn:aws:s3:::synthetic-documents/quarantine/*/source" &&
+      jsondecode(aws_iam_role_policy.rpc["source"].policy).Statement[6].Effect == "Deny" &&
+      jsondecode(aws_iam_role_policy.rpc["source"].policy).Statement[6].NotResource == ["arn:aws:s3:::synthetic-documents/normalized/*/*/*/resume.json", "arn:aws:s3:::synthetic-documents/quarantine/*/source"] &&
+      aws_lambda_function.rpc["source"].environment[0].variables.NATIVE_RESUME_ORIGINAL_PDF_ENABLED == "true"
+    )
+    error_message = "Reading the original adds exactly one version-bound allow, never an unversioned read or another pattern."
+  }
+  assert {
+    condition = (
+      !strcontains(aws_iam_role_policy.rpc["owner"].policy, "quarantine") &&
+      jsondecode(aws_iam_role_policy.rpc["owner"].policy).Statement[5].Action == ["s3:*"] &&
+      !contains(keys(aws_lambda_function.rpc["owner"].environment[0].variables), "NATIVE_RESUME_ORIGINAL_PDF_ENABLED")
+    )
+    error_message = "The owner RPC must never gain any object read."
+  }
+}
+run "original_pdf_without_release_refused" {
+  command = plan
+  variables {
+    release              = null
+    original_pdf_enabled = true
+  }
+  expect_failures = [var.original_pdf_enabled]
+}

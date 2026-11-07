@@ -18,6 +18,8 @@ variable "native_resume_source_access_releases" {
       security_group_ids   = list(string)
     })
     enabled = optional(bool, false)
+    # ADR-058: also let the source RPC read the candidate's own retained PDF (off unless approved).
+    original_pdf_enabled = optional(bool, false)
   }))
   default  = {}
   nullable = false
@@ -30,13 +32,14 @@ variable "native_resume_source_access_releases" {
 
 }
 module "native_resume_source_access" {
-  depends_on  = [module.platform]
-  source      = "../../modules/native-resume-source-access"
-  for_each    = var.native_resume_source_access_releases
-  account_id  = module.platform.account_id
-  environment = "development"
-  release     = each.value.release
-  enabled     = each.value.enabled
+  depends_on           = [module.platform]
+  source               = "../../modules/native-resume-source-access"
+  for_each             = var.native_resume_source_access_releases
+  account_id           = module.platform.account_id
+  environment          = "development"
+  release              = each.value.release
+  enabled              = each.value.enabled
+  original_pdf_enabled = each.value.original_pdf_enabled
 }
 
 variable "native_resume_task_releases" {

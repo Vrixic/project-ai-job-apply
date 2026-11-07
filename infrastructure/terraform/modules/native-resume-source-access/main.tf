@@ -24,6 +24,16 @@ variable "enabled" {
   default     = false
   nullable    = false
 }
+variable "original_pdf_enabled" {
+  description = "ADR-058: also let the source RPC read the candidate's own retained PDF (quarantine/<documentId>/source) so the generated resume can keep its design. Off by default; the read stays one exact, version-bound object pattern."
+  type        = bool
+  default     = false
+  nullable    = false
+  validation {
+    condition     = !var.original_pdf_enabled || var.release != null
+    error_message = "Reading the original PDF requires a reviewed release."
+  }
+}
 variable "release" {
   description = "Reviewed immutable artifacts and existing private infrastructure identifiers. No secret values."
   type = object({
@@ -70,6 +80,8 @@ locals {
   names     = { for kind in ["owner", "source"] : kind => "ai-job-apply-${var.environment}-resume-${kind}-r${local.revision}" }
   boundary  = "arn:aws:iam::${var.account_id}:policy/ai-job-apply-${var.environment}-workload-boundary"
   log_group = "/ai-job-apply/${var.environment}/application"
+  # The retained original upload, one exact key shape per document; versions are bound by the caller.
+  original_pdf_resource = local.deployed ? "arn:aws:s3:::${var.release.normalized_bucket}/quarantine/*/source" : ""
   deployment = local.deployed ? {
     clusterArn        = var.release.cluster_arn
     taskDefinitionArn = var.release.task_definition_arn
@@ -97,8 +109,12 @@ resource "aws_iam_role_policy" "rpc" {
     { Sid = "NoLaunchProviderOrObjectWrites", Effect = "Deny", Action = ["ecs:*", "iam:PassRole", "lambda:InvokeFunction", "s3:PutObject", "s3:DeleteObject", "s3:DeleteObjectVersion", "secretsmanager:PutSecretValue"], Resource = "*" }
     ], each.key == "source" ? [
     { Sid = "RetainedNormalizedVersionsOnly", Effect = "Allow", Action = ["s3:GetObjectVersion"], Resource = "arn:aws:s3:::${var.release.normalized_bucket}/normalized/*/*/*/resume.json" }
-    ] : [], each.key == "source" ? [
+    ] : [], each.key == "source" && !var.original_pdf_enabled ? [
     { Sid = "NoOtherObjectReads", Effect = "Deny", Action = ["s3:GetObject", "s3:GetObjectVersion"], NotResource = "arn:aws:s3:::${var.release.normalized_bucket}/normalized/*/*/*/resume.json" }
+    ] : [], each.key == "source" && var.original_pdf_enabled ? [
+    { Sid = "NoOtherObjectReads", Effect = "Deny", Action = ["s3:GetObject", "s3:GetObjectVersion"], NotResource = ["arn:aws:s3:::${var.release.normalized_bucket}/normalized/*/*/*/resume.json", local.original_pdf_resource] }
+    ] : [], each.key == "source" && var.original_pdf_enabled ? [
+    { Sid = "RetainedOriginalPdfVersionsOnly", Effect = "Allow", Action = ["s3:GetObjectVersion", "s3:GetObjectVersionTagging"], Resource = local.original_pdf_resource }
     ] : [], each.key == "owner" ? [
     { Sid = "NoObjectCapability", Effect = "Deny", Action = ["s3:*"], Resource = "*" }
   ] : []) })
@@ -135,7 +151,9 @@ resource "aws_lambda_function" "rpc" {
       NATIVE_RESUME_SOURCE_RPC_DEPLOYMENT_JSON = jsonencode(local.deployment)
       NATIVE_RESUME_SOURCE_BUCKET              = var.release.normalized_bucket
       NATIVE_RESUME_SOURCE_KMS_KEY_ARN         = var.release.platform_kms_key_arn
-    })
+      }, each.key == "source" && var.original_pdf_enabled ? {
+      NATIVE_RESUME_ORIGINAL_PDF_ENABLED = "true"
+    } : {})
   }
   vpc_config {
     subnet_ids         = var.release.subnet_ids
