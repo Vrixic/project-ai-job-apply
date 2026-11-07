@@ -1,7 +1,7 @@
 # ADR-058: Edit the candidate's own PDF in place
 
-Status: Proposed (owner-directed 2026-11-07); local code and tests only, source-read IAM entry,
-governed native release and live acceptance pending the owner's approval
+Status: Proposed (owner-directed 2026-11-07); code merged dark (#810), source-read IAM entry approved by
+the owner 2026-11-07 and written as a flagged Terraform change, governed release and live acceptance pending
 Date: 2026-11-07
 
 Amends [ADR-051](051-style-preserving-generated-resume.md) decision 3 ("the original file is never
@@ -65,11 +65,13 @@ still holds: tailoring keeps, moves or omits the candidate's own lines and adds 
 
 - Candidates whose resume is a single-flow Word-style PDF get their own typography back. Sidebar and
   column designs still use the ADR-051 redraw until zones land.
-- **Security-gate change, owner approval needed.** The source Lambda today may read only
+- **Security-gate change, approved by the owner 2026-11-07.** The source Lambda today may read only
   `normalized/*/*/*/resume.json` and denies every other object read. Using the original needs an
   exact allow entry for `quarantine/*/source` (`s3:GetObjectVersion`, `s3:GetObjectVersionTagging`),
   the same prefix added to the `NoOtherObjectReads` deny's allow-list, and the flag above. Without it
-  nothing changes. This is a separate Terraform change after approval.
+  nothing changes. It is the module variable `original_pdf_enabled` (default off, per release in the
+  development environment); with it off the policy and environment are unchanged and the owner handler
+  never gains an object read.
 - The original PDF, which holds the same personal data as its text plus fonts, images and metadata,
   is read once per generation, held in the memory-only native process with the resume, cleared with it,
   and never written anywhere or logged. No new data leaves the Documents boundary.

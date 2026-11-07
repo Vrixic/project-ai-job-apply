@@ -8,9 +8,9 @@ PDFs the page content stream is edited (dropped and moved text blocks, rules and
 written in the new reading order) and written as a new whitelisted file, verified by re-parsing, with the
 ADR-051 redraw as the fallback. Built and tested locally on the owner's four resumes (two edit in place,
 the two with a sidebar or columns still fall back); the original is passed to the native process only
-through the source RPC, bound to the document's hash, and the source reader is off by default. Needs the
-owner: approval of the source-read IAM entry (`quarantine/*/source`), then a governed Lambda and native
-image release. Sidebar and column resumes need reading zones in the parser (next).
+through the source RPC, bound to the document's hash, and the source reader is off by default. The owner approved the
+source-read IAM entry (`quarantine/*/source`) on 2026-11-07; it is a flagged Terraform change, off by default.
+A governed Lambda and native image release and a live test remain. Sidebar and column resumes need reading zones in the parser (next).
 
 2026-10-21: D3-152 web preview as the rendered PDF with a User_Job_Name_ID download and attachment name
 (merged, #705); D3-153 style-preserving generation ([ADR-051](../../adr/051-style-preserving-generated-resume.md);
