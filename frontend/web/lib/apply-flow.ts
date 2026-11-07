@@ -68,11 +68,38 @@ export interface ApplyPlan {
   needsNewPacket: boolean;
 }
 
-/** Generated when a valid generated resume exists; otherwise the candidate's own uploaded resume. */
-export function applyPlan(application: Application | undefined, view: GenerationView): ApplyPlan {
+/** What the candidate saved in their Profile that an application carries: field key to value. */
+export type ProfileEntries = Readonly<Record<string, boolean | number>>;
+
+/**
+ * True when the packet holds every one of these Profile answers, with the value saved now, as the
+ * candidate's own entry. A packet prepared before an answer was saved (or before it changed) does
+ * not, and the employer form would then be filled without it.
+ */
+export function packetCarries(packet: Packet | undefined, entries: ProfileEntries): boolean {
+  return Object.entries(entries).every(([fieldKey, value]) =>
+    packet?.fields.some(
+      (field) =>
+        field.fieldKey === fieldKey && field.origin === "user_entered" && field.value === value,
+    ),
+  );
+}
+
+/**
+ * Generated when a valid generated resume exists; otherwise the candidate's own uploaded resume.
+ * A reused uploaded-resume packet is prepared again when it lacks the Profile's saved answers.
+ */
+export function applyPlan(
+  application: Application | undefined,
+  view: GenerationView,
+  profile: ProfileEntries = {},
+): ApplyPlan {
   const source = packetResumeSource(application?.currentPacket);
   if (view.kind === "ready") return { resume: "generated", needsNewPacket: false };
-  return { resume: "uploaded", needsNewPacket: source !== "uploaded" };
+  return {
+    resume: "uploaded",
+    needsNewPacket: source !== "uploaded" || !packetCarries(application?.currentPacket, profile),
+  };
 }
 
 export function expiresInMinutes(material: ApplicationTemporaryMaterial, nowMs: number): number {

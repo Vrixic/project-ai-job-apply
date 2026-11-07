@@ -163,3 +163,15 @@ named "Your desired annual salary" in the popup, which links to `/profile?tab=sa
 application carries it as the candidate's own `job.salary_expectation` entry, a number, as the
 screening answers are carried. It is not the "salary minimum" in Job preferences, which only
 informs job matching.
+
+## Amendment: a reused packet is prepared again when the Profile has newer answers (2026-11-07)
+
+Owner test: auto apply left the salary question unfilled. The application had been prepared and
+approved before the salary was saved, and Apply reused that packet, which is immutable and bound to
+the approval, so the salary (and any screening answer saved since) never reached the employer form.
+Apply now compares the Profile's saved answers (screening answers and the desired salary) with the
+candidate's own (user entered) fields of the packet it would reuse. When one is missing or has a
+different value, the packet is prepared again with the current answers, which needs the candidate's
+approval again, and Apply is that approval as before. An approved application in that state says
+so and points to Start over. A packet bound to a generated resume is not rebuilt this way, since
+that would generate the resume again.

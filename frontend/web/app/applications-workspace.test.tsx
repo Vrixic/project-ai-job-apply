@@ -50,7 +50,10 @@ class FakeBff {
   material: ApplicationTemporaryMaterial | undefined;
   failPreview = false;
 
-  private packet(resume: "generate" | "uploaded") {
+  private packet(
+    resume: "generate" | "uploaded",
+    userEntries: ReadonlyArray<{ fieldKey: string; value: unknown }> = [],
+  ) {
     this.packetCounter += 1;
     const hash = (this.packetCounter.toString(16).padStart(2, "0") + "e".repeat(62)).slice(0, 64);
     const fields: Record<string, unknown>[] = [
@@ -65,7 +68,22 @@ class FakeBff {
         requiresReview: false,
       },
     ];
-    if (this.sensitive)
+    // The service carries each entry the candidate sent as their own (user entered) field.
+    for (const entry of userEntries)
+      fields.push({
+        fieldKey: entry.fieldKey,
+        value: entry.value,
+        origin: "user_entered",
+        sourceFactIds: [],
+        confidence: 1,
+        disposition: "review",
+        reasons: ["explicit_each_time"],
+        requiresReview: true,
+      });
+    if (
+      this.sensitive &&
+      !userEntries.some((entry) => entry.fieldKey === "authorization.work_in_country")
+    )
       fields.push({
         fieldKey: "authorization.work_in_country",
         value: true,
@@ -211,7 +229,10 @@ class FakeBff {
     if (rest === "/packets" && method === "POST") {
       if (this.app.status === "approved") return json({ code: "application_state_conflict" }, 409);
       const resume = body?.resume === "uploaded" ? "uploaded" : "generate";
-      const packet = this.packet(resume);
+      const packet = this.packet(
+        resume,
+        (body?.userEntries ?? []) as Array<{ fieldKey: string; value: unknown }>,
+      );
       this.polls = 0;
       this.app = this.base("review_required", {
         currentPacket: packet,
@@ -921,6 +942,40 @@ describe("ApplicationsWorkspace: Apply", () => {
             { fieldKey: "job.salary_expectation", value: 125_000 },
           ]),
         });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("carries the salary into an application approved before it was set, once the candidate starts over", async () => {
+      const bff = new FakeBff();
+      // The application was prepared and approved while the Profile had no salary.
+      await mount(bff);
+      await click("Apply");
+      expect(bff.packetRequests()).toHaveLength(1);
+      expect(bff.app?.status).toBe("approved");
+      act(() => root.unmount());
+      root = createRoot(container);
+      profile([{ question: SALARY_QUESTION, answer: "125000" }]);
+      try {
+        await mount(bff, { requireBasics: true });
+        expect(container.textContent).toContain(
+          "Your Profile has answers this application was approved without",
+        );
+        await click("Start over");
+        await click("Apply");
+        const requests = bff.packetRequests();
+        expect(requests).toHaveLength(2);
+        expect(requests.at(-1)).toMatchObject({
+          userEntries: expect.arrayContaining([
+            { fieldKey: "job.salary_expectation", value: 125_000 },
+          ]),
+        });
+        expect(bff.app?.currentPacket?.fields).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ fieldKey: "job.salary_expectation", value: 125_000 }),
+          ]),
+        );
       } finally {
         vi.unstubAllGlobals();
       }

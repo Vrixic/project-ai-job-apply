@@ -160,6 +160,59 @@ describe("apply plan", () => {
     });
   });
 
+  describe("the candidate's saved Profile answers", () => {
+    const salary = { "job.salary_expectation": 125_000 };
+    const entered = (fieldKey: string, value: string | number | boolean) => ({
+      fieldKey,
+      value,
+      origin: "user_entered",
+      sourceFactIds: [],
+      confidence: 1,
+      disposition: "review",
+      reasons: ["explicit_each_time"],
+      requiresReview: true,
+    });
+    const reused = (...fields: Array<Record<string, unknown>>) =>
+      application({}, { artifactHashes: { resume: HASH }, fields: [uploadedField, ...fields] });
+
+    it("prepares the packet again when it was made before the answer was saved", () => {
+      const app = reused();
+      expect(applyPlan(app, generationView(app, true, now), salary)).toEqual({
+        resume: "uploaded",
+        needsNewPacket: true,
+      });
+    });
+
+    it("prepares it again when a saved answer changed since", () => {
+      const app = reused(entered("job.salary_expectation", 90_000));
+      expect(applyPlan(app, generationView(app, true, now), salary).needsNewPacket).toBe(true);
+    });
+
+    it("reuses it once the packet carries every answer as the candidate's own entry", () => {
+      const app = reused(
+        entered("job.salary_expectation", 125_000),
+        entered("authorization.us_authorized", true),
+      );
+      const view = generationView(app, true, now);
+      expect(
+        applyPlan(app, view, { ...salary, "authorization.us_authorized": true }).needsNewPacket,
+      ).toBe(false);
+    });
+
+    it("does not take another origin's value for the candidate's own entry", () => {
+      const app = reused({
+        ...entered("job.salary_expectation", 125_000),
+        origin: "confirmed_fact",
+      });
+      expect(applyPlan(app, generationView(app, true, now), salary).needsNewPacket).toBe(true);
+    });
+
+    it("does nothing when the Profile holds none", () => {
+      const app = reused();
+      expect(applyPlan(app, generationView(app, true, now), {}).needsNewPacket).toBe(false);
+    });
+  });
+
   it("needs a packet before applying directly", () => {
     expect(applyPlan(undefined, { kind: "idle" })).toEqual({
       resume: "uploaded",
