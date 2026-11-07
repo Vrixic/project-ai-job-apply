@@ -124,7 +124,7 @@ function Assert-ExactVercelIgnoreBoundary {
     "!patches",
     "patches/*",
     "!patches/image-size@1.2.1.patch",
-    "!patches/node-forge@1.4.0.patch",
+    "!patches/deepmerge@4.3.1.patch",
     "!patches/braces@3.0.3.patch",
     "!frontend",
     "!frontend/**",
@@ -169,8 +169,8 @@ function Assert-DependencyPatchBoundary {
   # Keep only these exact reviewed security patches, never a wildcard of local files.
   $patches = @(
     @{ Dependency = "braces@3.0.3"; Path = "patches/braces@3.0.3.patch"; Sha256 = "816530fe94f297f2ae23f1d98d9c4795b4898b9720e81fa900f0a89b84a1d707" },
-    @{ Dependency = "image-size@1.2.1"; Path = "patches/image-size@1.2.1.patch"; Sha256 = "37a40e9556d8c610cb8627de7b5a141d10ae9a78b768915aefda1809f9aed608" },
-    @{ Dependency = "node-forge@1.4.0"; Path = "patches/node-forge@1.4.0.patch"; Sha256 = "4fa957cddb4b4601a48b535053d0fec7ed013f9d075660a38365f285fc830fe0" }
+    @{ Dependency = "deepmerge@4.3.1"; Path = "patches/deepmerge@4.3.1.patch"; Sha256 = "13b2e96c286a41d7b4259bfdb34d125622736e7dfd6271a2d64d541caef621e6" },
+    @{ Dependency = "image-size@1.2.1"; Path = "patches/image-size@1.2.1.patch"; Sha256 = "37a40e9556d8c610cb8627de7b5a141d10ae9a78b768915aefda1809f9aed608" }
   )
   $package = ConvertFrom-BoundedFile (Join-Path $repositoryRoot "package.json") "The root package manifest" 65536
   Assert-ExactProperties $package.pnpm.patchedDependencies @($patches | ForEach-Object { $_.Dependency }) "The approved dependency patches" | Out-Null
