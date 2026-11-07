@@ -212,6 +212,10 @@
       "types": "./dist/src/normalized-document-reader.d.ts",
       "default": "./dist/src/normalized-document-reader.js"
     },
+    "./source-document-reader": {
+      "types": "./dist/src/source-document-reader.d.ts",
+      "default": "./dist/src/source-document-reader.js"
+    },
     "./native-resume-transport": {
       "types": "./dist/src/native-resume-transport.d.ts",
       "default": "./dist/src/native-resume-transport.js"
@@ -285,6 +289,7 @@
     "@aws-sdk/client-sts": "3.1133.0",
     "@aws-sdk/s3-presigned-post": "3.1133.0",
     "@thednp/dommatrix": "3.1.2",
+    "pdf-lib": "1.17.1",
     "pdfjs-dist": "6.3.289",
     "postgres": "3.4.9",
     "saxes": "6.0.0",

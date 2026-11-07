@@ -8,6 +8,7 @@ import { createNativeResumeOwnerControls } from "./native-resume-owner-controls.
 import { createNativeResumeSource, nativeResumeSourceUnavailable } from "./native-resume-source.js";
 import type { NormalizedDocumentReader } from "./normalized-document-reader.js";
 import { PostgresParsedResumeSource } from "./parsed-resume-source.js";
+import type { SourceDocumentReader } from "./source-document-reader.js";
 
 /** Documents owns both pools. Only the candidate lease spans retained object I/O; normal owner
  * admission and Jobs source transactions have ended before the S3 read starts. */
@@ -19,6 +20,8 @@ export function createNativeResumeSourceStore(options: {
     query: NativeResumeOwnerQuery,
   ): Promise<{ title: string; description: string }>;
   reader: NormalizedDocumentReader;
+  /** Reads the candidate's own PDF so the generated resume can keep its design. */
+  original?: SourceDocumentReader;
   enabled: () => boolean;
 }) {
   const enabled = options.enabled,
@@ -42,6 +45,7 @@ export function createNativeResumeSourceStore(options: {
     store,
     parsed: new PostgresParsedResumeSource(controls),
     reader: options.reader,
+    ...(options.original ? { original: options.original } : {}),
     job: (scope) =>
       controls.begin((tx) => job(scope, tx as unknown as NativeResumeOwnerQuery)) as Promise<{
         title: string;

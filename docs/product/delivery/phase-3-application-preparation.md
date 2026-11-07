@@ -2,6 +2,16 @@
 
 2026-10-26 owner decisions on closing D3: (1) the accountable legal and security review is carried to D6-015 (independent assessment) and D6-016 (counsel review), as D1's was, so D3 closes on its engineering criteria. (2) Live AI generation is the product's main feature but cannot meet ADR-038's 30-minute all-copy retention with any provider or account the owner has today, so it moves to the new [D3.2 Live AI generation](phase-3-2-live-ai-generation.md); D3 closes with live AI off and deterministic tailoring. (3) Greenhouse is the live submission proof for D3; Ashby's live submission proof moves to D3.2. (4) One working session with the owner will run the live Greenhouse submission and the canonical export and deletion run (the D4 nine-owner policy) with a disposable MFA user; before it, the failing step of the 2026-10-17 run is diagnosed and fixed locally. D3 stays In progress until that session passes.
 
+2026-11-07: D3-154 edit the candidate's own PDF in place ([ADR-058](../../adr/058-edit-the-candidates-own-pdf-in-place.md)):
+the owner asked that the generated PDF never change the look of their own PDF. For single-flow Word-style
+PDFs the page content stream is edited (dropped and moved text blocks, rules and links with their line, text
+written in the new reading order) and written as a new whitelisted file, verified by re-parsing, with the
+ADR-051 redraw as the fallback. Built and tested locally on the owner's four resumes (two edit in place,
+the two with a sidebar or columns still fall back); the original is passed to the native process only
+through the source RPC, bound to the document's hash, and the source reader is off by default. Needs the
+owner: approval of the source-read IAM entry (`quarantine/*/source`), then a governed Lambda and native
+image release. Sidebar and column resumes need reading zones in the parser (next).
+
 2026-10-21: D3-152 web preview as the rendered PDF with a User_Job_Name_ID download and attachment name
 (merged, #705); D3-153 style-preserving generation ([ADR-051](../../adr/051-style-preserving-generated-resume.md);
 [evidence](evidence/d3-style-preserving-resume-2026-10-21.md)): PDF layout capture in the parser, wrapped

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import type { PostgresNativeResumeGenerationStore } from "./native-resume-generation-store.js";
 import { nativeOwnerClosed, nativeOwnerJson } from "./native-owner-rpc-contract.js";
+import type { PostgresNativeResumeGenerationStore } from "./native-resume-generation-store.js";
 import {
   type NativeResumeBootstrap,
   validateNativeResumeBootstrap,
@@ -11,16 +11,23 @@ import {
   nativeResumeTaskBinding,
 } from "./native-resume-task-binding.js";
 import type { NormalizedDocumentReader } from "./normalized-document-reader.js";
+import { decodeOriginalPdf } from "./original-pdf.js";
 import type { ParsedResumeSource } from "./parsed-resume-source.js";
 import {
   type NormalizedResumeDocument,
   parseNormalizedResumeDocument,
 } from "./parsing/normalize.js";
+import type { SourceDocumentReader } from "./source-document-reader.js";
 
 export const nativeResumeSourceUnavailable = () => Error("NativeResumeSourceUnavailable");
 export interface NativeResumeSourceValue {
   document: NormalizedResumeDocument;
   job: { title: string; description: string };
+  /**
+   * The candidate's own PDF, base64, when it is small enough to be edited in place. It is bound to
+   * the base document by its SHA-256, so it can only ever be the file the document was parsed from.
+   */
+  originalPdfBase64?: string;
 }
 
 /** Retained original source only. This validator has no tailoring or rendering capability. */
@@ -30,7 +37,13 @@ export function validateNativeResumeSource(
 ): value is NativeResumeSourceValue {
   try {
     if (
-      !nativeOwnerClosed(value, ["document", "job"]) ||
+      !nativeOwnerClosed(value, [
+        "document",
+        "job",
+        ...(typeof value === "object" && value !== null && Object.hasOwn(value, "originalPdfBase64")
+          ? ["originalPdfBase64"]
+          : []),
+      ]) ||
       !nativeOwnerClosed(value.job, ["title", "description"]) ||
       typeof value.job.title !== "string" ||
       value.job.title.length < 1 ||
@@ -55,6 +68,14 @@ export function validateNativeResumeSource(
     )
       return false;
     const document = parseNormalizedResumeDocument(value.document);
+    if (
+      Object.hasOwn(value, "originalPdfBase64") &&
+      !decodeOriginalPdf(
+        (value as unknown as NativeResumeSourceValue).originalPdfBase64,
+        document.sourceSha256,
+      )
+    )
+      return false;
     if (
       !document.blocks.every((b) =>
         nativeOwnerClosed(b, [
@@ -95,6 +116,8 @@ export function createNativeResumeSource(options: {
     jobContextSha256: string;
   }): Promise<{ title: string; description: string }>;
   candidateLease: { withGenerationLease<T>(owner: string, run: () => Promise<T>): Promise<T> };
+  /** Reads the candidate's own PDF so it can be edited in place; absent, only the text is loaded. */
+  original?: SourceDocumentReader;
   enabled?: () => boolean;
 }) {
   const enabled = options.enabled ?? (() => false),
@@ -186,14 +209,42 @@ export function createNativeResumeSource(options: {
             ),
           );
           await admit();
-          const value = { document, job: context };
+          // The original is a refinement: the resume is generated without it when it cannot be read,
+          // is too large, or does not validate. Nothing about it can fail the generation.
+          let originalPdfBase64: string | undefined;
+          if (options.original && source.mediaType === "application/pdf") {
+            try {
+              const bytes = await options.original.read({
+                documentId: source.id,
+                objectKey: source.sourceObjectKey,
+                objectVersion: source.sourceObjectVersion ?? "",
+                sha256: source.sha256,
+                sizeBytes: source.sizeBytes,
+                mediaType: source.mediaType,
+              });
+              if (bytes) {
+                originalPdfBase64 = Buffer.from(bytes).toString("base64");
+                bytes.fill(0);
+              }
+            } catch {
+              originalPdfBase64 = undefined;
+            }
+            await admit();
+          }
           if (
             document.parserVersion !== source.parserVersion ||
-            document.mediaType !== source.mediaType ||
-            !validateNativeResumeSource(value, fixed)
+            document.mediaType !== source.mediaType
           )
             throw nativeResumeSourceUnavailable();
-          return value;
+          const value: NativeResumeSourceValue = {
+            document,
+            job: context,
+            ...(originalPdfBase64 ? { originalPdfBase64 } : {}),
+          };
+          if (validateNativeResumeSource(value, fixed)) return value;
+          const textOnly: NativeResumeSourceValue = { document, job: context };
+          if (!validateNativeResumeSource(textOnly, fixed)) throw nativeResumeSourceUnavailable();
+          return textOnly;
         });
         if (!enabled()) throw nativeResumeSourceUnavailable();
         return result;

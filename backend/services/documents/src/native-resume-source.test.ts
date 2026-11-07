@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import type { InvokeCommand } from "@aws-sdk/client-lambda";
+import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import { describe, expect, it, vi } from "vitest";
 import { nativeOwnerJson } from "./native-owner-rpc-contract.js";
 import type { NativeResumeGenerationRecord } from "./native-resume-generation-store.js";
@@ -8,14 +8,16 @@ import { nativeResumeOwnerRequestDigest } from "./native-resume-owner-rpc-contra
 import { createNativeResumeSource, validateNativeResumeSource } from "./native-resume-source.js";
 import { createNativeResumeSourceRpcClient } from "./native-resume-source-rpc-client.js";
 import {
-  nativeResumeSourceRequestDigest,
   type NativeResumeSourceInput,
+  nativeResumeSourceRequestDigest,
 } from "./native-resume-source-rpc-contract.js";
 import { createNativeResumeSourceRpcHandler } from "./native-resume-source-rpc-handler.js";
 import type { NativeResumeTaskBinding } from "./native-resume-task-binding.js";
 import { createNativeResumeTaskCallerClient } from "./native-resume-task-caller-client.js";
 import { S3NormalizedDocumentReader } from "./normalized-document-reader.js";
+import { decodeOriginalPdf } from "./original-pdf.js";
 import { type NormalizedResumeDocument, normalizeBlocks } from "./parsing/normalize.js";
+import type { SourceDocumentReader } from "./source-document-reader.js";
 
 const id = (n: number) => `019a4000-0000-7000-8000-${String(n).padStart(12, "0")}`;
 const target = "arn:aws:lambda:us-east-2:123456789012:function:native-resume-source:7";
@@ -25,7 +27,7 @@ const credentials = {
   sessionToken: "synthetic-local-signing-token-only",
 };
 const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
-function fixture() {
+function fixture(extra: { sourceSha256?: string; original?: SourceDocumentReader } = {}) {
   const binding: NativeResumeTaskBinding = {
     schemaVersion: 1,
     kind: "tailored_resume",
@@ -54,7 +56,7 @@ function fixture() {
     version: 1,
     parserVersion: "parser-1",
     mediaType: "application/pdf" as const,
-    sourceSha256: "a".repeat(64),
+    sourceSha256: extra.sourceSha256 ?? "a".repeat(64),
     blocks: normalizeBlocks([{ text: "Synthetic TypeScript experience" }]),
     createdAt: "2026-10-07T00:00:00.000Z",
   };
@@ -140,6 +142,7 @@ function fixture() {
     reader: { read },
     job: readJob,
     candidateLease,
+    ...(extra.original ? { original: extra.original } : {}),
     enabled,
   };
   const source = createNativeResumeSource(options);
@@ -239,6 +242,75 @@ describe("original native resume source", () => {
       Array.from(f.send.mock.calls[0]?.[0].input.Payload as Uint8Array).every((v) => v === 0),
     ).toBe(true);
     expect(Object.keys(f.load.mock.calls[0]?.[0] ?? {})).not.toContain("proof");
+  });
+  describe("the candidate's own PDF", () => {
+    const pdf = new TextEncoder().encode("%PDF-1.4 1 0 obj <<>> endobj %%EOF");
+    const pdfSha = createHash("sha256").update(pdf).digest("hex");
+    const encoded = Buffer.from(pdf).toString("base64");
+
+    it("is carried to the generation process when it is exactly the parsed file", async () => {
+      const read = vi.fn(async () => Uint8Array.from(pdf));
+      const f = fixture({ sourceSha256: pdfSha, original: { read } });
+      expect(await f.client.load(f.bootstrap.identity)).toEqual({
+        document: f.document,
+        job: f.job,
+        originalPdfBase64: encoded,
+      });
+      expect(read).toHaveBeenCalledWith({
+        documentId: id(6),
+        objectKey: "synthetic-source",
+        objectVersion: "source-v1",
+        sha256: pdfSha,
+        sizeBytes: 100,
+        mediaType: "application/pdf",
+      });
+    });
+    it("is left out, and the resume still generated, when it cannot be read", async () => {
+      const read = vi.fn(async () => {
+        throw new Error("SourceObjectNotScanned");
+      });
+      const f = fixture({ sourceSha256: pdfSha, original: { read } });
+      expect(await f.client.load(f.bootstrap.identity)).toEqual({
+        document: f.document,
+        job: f.job,
+      });
+    });
+    it("is left out when it is not the file the document was parsed from", async () => {
+      const read = vi.fn(async () => Uint8Array.from(pdf));
+      const f = fixture({ original: { read } }); // the document records a different hash
+      expect(await f.client.load(f.bootstrap.identity)).toEqual({
+        document: f.document,
+        job: f.job,
+      });
+    });
+    it("is accepted by the source contract only when its hash is the document's", () => {
+      const f = fixture({ sourceSha256: pdfSha });
+      const value = { document: f.document, job: f.job, originalPdfBase64: encoded };
+      expect(validateNativeResumeSource(value, f.bootstrap)).toBe(true);
+      const other = Buffer.from("%PDF-1.4 other").toString("base64");
+      expect(validateNativeResumeSource({ ...value, originalPdfBase64: other }, f.bootstrap)).toBe(
+        false,
+      );
+    });
+    it.each([
+      ["not base64", "%%%not base64%%%"],
+      ["empty", ""],
+      ["a number", 7],
+    ])("decodes nothing from a field that is %s", (_name, field) => {
+      expect(decodeOriginalPdf(field, pdfSha)).toBeUndefined();
+    });
+    it("decodes nothing that does not start like a PDF, even with a matching hash", () => {
+      const text = new TextEncoder().encode("MZ-not-a-pdf-at-all");
+      const sha = createHash("sha256").update(text).digest("hex");
+      expect(decodeOriginalPdf(Buffer.from(text).toString("base64"), sha)).toBeUndefined();
+      expect(decodeOriginalPdf(encoded, pdfSha)).toEqual(pdf);
+    });
+    it("decodes nothing larger than the editor accepts", () => {
+      const big = new Uint8Array(600_001);
+      big.set(new TextEncoder().encode("%PDF-1.4 "));
+      const sha = createHash("sha256").update(big).digest("hex");
+      expect(decodeOriginalPdf(Buffer.from(big).toString("base64"), sha)).toBeUndefined();
+    });
   });
   it("defaults off before source, lease or SQL work", async () => {
     const f = fixture();

@@ -1,8 +1,11 @@
 import { ZipFile } from "yazl";
 import type { PageGeometry } from "../parsing/layout.js";
+import type { AstLine } from "../resume-ast/types.js";
 import type { RenderBlock } from "../tailoring/tailor.js";
+import { editOriginalPdf } from "./original/index.js";
 import { digest, pdfString, RenderError, type RenderedDocument } from "./pdf-text.js";
 import { canRenderStyled, renderStyledPdf } from "./styled.js";
+import { verifyRenderedResume } from "./verify.js";
 
 export { RenderError, type RenderedDocument } from "./pdf-text.js";
 
@@ -94,7 +97,7 @@ function wrap(text: string): string[] {
  * resume's layout is known the tailored copy is set the way it was; otherwise it is plain text.
  */
 export function renderPdf(blocks: readonly RenderBlock[], page?: PageGeometry): RenderedDocument {
-  if (canRenderStyled(blocks, page)) return renderStyledPdf(blocks, page);
+  if (canRenderStyled(blocks, page)) return { ...renderStyledPdf(blocks, page), method: "styled" };
   if (blocks.length === 0) throw new RenderError("EMPTY_DOCUMENT");
   if (blocks.length > MAX_BLOCKS) throw new RenderError("TOO_LONG");
   const lines = blocks.flatMap((block) =>
@@ -148,5 +151,44 @@ export function renderPdf(blocks: readonly RenderBlock[], page?: PageGeometry): 
     .join("")}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   // A standalone copy: pooled Buffer slices confuse PDF.js, which reads the whole backing store.
   const bytes = Uint8Array.from(Buffer.from(source, "latin1"));
-  return { mediaType: "application/pdf", bytes, sha256: digest(bytes), pageCount: pages.length };
+  return {
+    mediaType: "application/pdf",
+    bytes,
+    sha256: digest(bytes),
+    pageCount: pages.length,
+    method: "plain",
+  };
+}
+
+/**
+ * The tailored resume as a PDF. When the candidate's own PDF is at hand it is edited in place, so the
+ * fonts, colors, backgrounds, icons, rules and links are exactly theirs and only the text blocks the
+ * tailoring left out or moved differ. When that is not possible (a structure the editor does not
+ * follow, or an edit that would need text on another page) the resume is drawn from its recorded
+ * layout, and failing that as plain text. Which way it was made is only ever reported as a word.
+ */
+export async function renderTailoredPdf(
+  blocks: readonly RenderBlock[],
+  page: PageGeometry | undefined,
+  original?: { bytes: Uint8Array; sourceLines: readonly AstLine[]; maximumBytes?: number },
+): Promise<RenderedDocument> {
+  if (original && page && canRenderStyled(blocks, page)) {
+    try {
+      const edited: RenderedDocument = {
+        ...(await editOriginalPdf({
+          original: original.bytes,
+          blocks,
+          sourceLines: original.sourceLines,
+          page,
+        })),
+        method: "original_page",
+      };
+      // The edit is only used when the file reads back as exactly the intended text, in order.
+      const fits = edited.bytes.byteLength <= (original.maximumBytes ?? Number.POSITIVE_INFINITY);
+      if (fits && (await verifyRenderedResume(edited, blocks)).ok) return edited;
+    } catch {
+      // Not editable in place: draw it from the recorded layout instead.
+    }
+  }
+  return renderPdf(blocks, page);
 }

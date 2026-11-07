@@ -1,5 +1,13 @@
 # Data Flow and Classification
 
+2026-11-07 original PDF for in-place editing (ADR-058, source-only/default-off): the native resume source
+RPC may carry the candidate's own PDF (at most 600 KB) as one optional field, bound by SHA-256 to the base
+document and read by the source Lambda with the parser's checks (clean scan tag, exact version, key, metadata,
+digest). The isolated native process edits it into a new whitelisted file (no metadata, scripts, forms or
+unused objects) that is verified by re-parsing. The bytes stay in the memory-only process, are cleared with
+the held resume and are never written or logged. The source Lambda's object read allow-list needs one more
+exact entry (`quarantine/*/source`); until the owner approves and applies it, nothing reads the original.
+
 2026-10-10 default-off application execution source: trusted extension Apply → protected owner
 start/write-ahead dispatch → exact isolated employer document → one bounded ordinary-field/file
 command → accepted-profile confirmation → owning result/history. Tokens remain background-only.

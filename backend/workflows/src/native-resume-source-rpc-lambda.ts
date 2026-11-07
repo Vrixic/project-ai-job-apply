@@ -1,7 +1,7 @@
 import { nativeLaunchControlVersion } from "@ai-job-apply/documents-service/native-launch-control";
 import {
-  nativeOwnerClosed,
   type NativeOwnerRpcOutput,
+  nativeOwnerClosed,
 } from "@ai-job-apply/documents-service/native-owner-rpc-contract";
 import { nativeResumeSourceUnavailable } from "@ai-job-apply/documents-service/native-resume-source";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@ai-job-apply/documents-service/native-resume-source-rpc-handler";
 import { createNativeResumeSourceStore } from "@ai-job-apply/documents-service/native-resume-source-store";
 import { S3NormalizedDocumentReader } from "@ai-job-apply/documents-service/normalized-document-reader";
+import { S3SourceDocumentReader } from "@ai-job-apply/documents-service/source-document-reader";
 import { readNativeResumeJobSource } from "@ai-job-apply/jobs-service/native-resume-admission";
 import { resolveLambdaDatabaseUrl } from "@ai-job-apply/profile-service";
 import { S3Client } from "@aws-sdk/client-s3";
@@ -21,6 +22,8 @@ interface Configuration {
   bucket: string;
   kmsKeyArn: string;
   secretId: string;
+  /** Also read the candidate's own PDF so the generated resume keeps its design (default off). */
+  originalPdf: boolean;
   taskRoleArn: string;
   deployment: { clusterArn: string; taskDefinitionArn: string; containerName: string };
 }
@@ -93,6 +96,7 @@ function configuration(env: Environment): Configuration | undefined {
     bucket,
     kmsKeyArn,
     secretId,
+    originalPdf: env.NATIVE_RESUME_ORIGINAL_PDF_ENABLED === "true",
     taskRoleArn: config.taskRoleArn,
     deployment: {
       clusterArn: config.clusterArn,
@@ -108,23 +112,23 @@ export function createNativeResumeSourceRpcRuntime(
   config: Configuration,
   enabled: () => boolean,
 ): NativeResumeSourceOwners & { close(): Promise<void> } {
+  const s3 = new S3Client({
+    region: "us-east-2",
+    endpoint: "https://s3.us-east-2.amazonaws.com",
+    ignoreConfiguredEndpointUrls: true,
+    maxAttempts: 1,
+    requestHandler: { connectionTimeout: 3000, requestTimeout: 8000 },
+    logger: { debug() {}, info() {}, warn() {}, error() {} },
+  });
   return createNativeResumeSourceStore({
     url,
     enabled,
     ports: createNativeResumeGenerationOwnerPorts(enabled),
     job: (scope, query) => readNativeResumeJobSource(scope, query, enabled),
-    reader: new S3NormalizedDocumentReader(
-      config.bucket,
-      config.kmsKeyArn,
-      new S3Client({
-        region: "us-east-2",
-        endpoint: "https://s3.us-east-2.amazonaws.com",
-        ignoreConfiguredEndpointUrls: true,
-        maxAttempts: 1,
-        requestHandler: { connectionTimeout: 3000, requestTimeout: 8000 },
-        logger: { debug() {}, info() {}, warn() {}, error() {} },
-      }),
-    ),
+    reader: new S3NormalizedDocumentReader(config.bucket, config.kmsKeyArn, s3),
+    ...(config.originalPdf
+      ? { original: new S3SourceDocumentReader(config.bucket, config.kmsKeyArn, s3) }
+      : {}),
   });
 }
 
