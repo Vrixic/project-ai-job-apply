@@ -37,6 +37,12 @@ export interface BlockLayout {
   y: number;
   runs: LayoutRun[];
   rules?: LayoutRule[];
+  /**
+   * Which reading zone of its page the line is in, counted from 1; absent means the first. A new zone
+   * starts where the reading order jumps back up the page (a second column, a sidebar). A document
+   * with a zone cannot be redrawn from layout, only edited in place (ADR-058).
+   */
+  zone?: number;
 }
 
 /** One page's size in points. Every page of a laid-out document has this size. */
@@ -50,6 +56,8 @@ export const LAYOUT_LIMITS = {
   blocks: 700,
   runsPerBlock: 120,
   rulesPerBlock: 24,
+  /** Reading zones per page; a page that jumps back up more often is drawn without layout. */
+  zonesPerPage: 32,
   /** Keeps the stored normalized object far below its reader's ceiling. */
   bytes: 600_000,
   minSize: 2,
@@ -113,10 +121,14 @@ function isRule(value: unknown): value is LayoutRule {
 export function isBlockLayout(value: unknown, textLimit: number): value is BlockLayout {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const layout = value as Partial<BlockLayout>;
-  const allowed = new Set(["y", "runs", "rules"]);
+  const allowed = new Set(["y", "runs", "rules", "zone"]);
   return (
     Object.keys(layout).every((key) => allowed.has(key)) &&
     finite(layout.y, -50, 5000) &&
+    (layout.zone === undefined ||
+      (Number.isInteger(layout.zone) &&
+        (layout.zone as number) >= 1 &&
+        (layout.zone as number) <= LAYOUT_LIMITS.zonesPerPage)) &&
     Array.isArray(layout.runs) &&
     layout.runs.length >= 1 &&
     layout.runs.length <= LAYOUT_LIMITS.runsPerBlock &&

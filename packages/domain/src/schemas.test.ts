@@ -1433,11 +1433,24 @@ describe("resume document layout", () => {
     ["a run without text", { ...layout, runs: [{ x: 1, w: 2, size: 12 }] }],
     ["no runs", { ...layout, runs: [] }],
     ["a rule below the allowed height", { ...layout, rules: [{ x0: 0, x1: 9, dy: 1, h: 40 }] }],
+    ["a zone below 1", { ...layout, zone: 0 }],
+    ["a zone above 32", { ...layout, zone: 33 }],
+    ["a fractional zone", { ...layout, zone: 1.5 }],
   ])("refuses %s", async (_name, value) => {
     const validate = await validator();
     expect(
       validate(document([block({ layout: value })], { page: { width: 612, height: 792 } })),
     ).toBe(false);
+  });
+
+  it("accepts a reading zone from 1 to 32", async () => {
+    const validate = await validator();
+    for (const zone of [1, 2, 32])
+      expect(
+        validate(
+          document([block({ layout: { ...layout, zone } })], { page: { width: 612, height: 792 } }),
+        ),
+      ).toBe(true);
   });
 
   it("refuses an absurd page size", async () => {

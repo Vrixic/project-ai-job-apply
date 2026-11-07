@@ -19,10 +19,12 @@ export interface AstLine {
   page: number;
   /** Baseline from the top of the page, in points. */
   y: number;
-  /** Baseline distance from the line before it in the source; absent for the first line of a page. */
+  /** Baseline distance from the line before it in its zone; absent for the first line of a zone. */
   dy?: number;
   runs: LayoutRun[];
   rules?: LayoutRule[];
+  /** Reading zone of its page, from 1; absent means the first (a second column or sidebar is a zone). */
+  zone?: number;
 }
 
 /**

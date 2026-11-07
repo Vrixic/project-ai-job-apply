@@ -4,7 +4,7 @@ import type { AstLine } from "../resume-ast/types.js";
 import type { RenderBlock } from "../tailoring/tailor.js";
 import { editOriginalPdf } from "./original/index.js";
 import { digest, pdfString, RenderError, type RenderedDocument } from "./pdf-text.js";
-import { canRenderStyled, renderStyledPdf } from "./styled.js";
+import { canRenderStyled, hasSourceLines, renderStyledPdf } from "./styled.js";
 import { verifyRenderedResume } from "./verify.js";
 
 export { RenderError, type RenderedDocument } from "./pdf-text.js";
@@ -172,7 +172,7 @@ export async function renderTailoredPdf(
   page: PageGeometry | undefined,
   original?: { bytes: Uint8Array; sourceLines: readonly AstLine[]; maximumBytes?: number },
 ): Promise<RenderedDocument> {
-  if (original && page && canRenderStyled(blocks, page)) {
+  if (original && page && hasSourceLines(blocks)) {
     try {
       const edited: RenderedDocument = {
         ...(await editOriginalPdf({

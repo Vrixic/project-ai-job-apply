@@ -148,3 +148,27 @@ describe("section structure", () => {
     expect(isBulletText("- Designed")).toBe(true);
   });
 });
+
+describe("reading zones in the tree", () => {
+  it("measures a line's distance from the line before it in its own zone only", () => {
+    const document = laidOutDocument([
+      { text: "Experience", y: 100, size: 20 },
+      bullet("One", 130),
+      bullet("Two", 148),
+      { text: "Skills", y: 100, size: 20, zone: 1 },
+      { text: "C++", y: 130, zone: 1 },
+    ]);
+    const lines = buildResumeAst(document)
+      .sections.flatMap((section) => [
+        ...(section.heading ? [section.heading] : []),
+        ...section.entries.flatMap((entry) => [...entry.lines, ...entry.bullets]),
+      ])
+      .flatMap((node) => node.lines ?? []);
+    const skills = lines.find((line) => line.zone === 1 && line.y === 100);
+    // The first line of the second zone has no distance from the last line of the first.
+    expect(skills?.dy).toBeUndefined();
+    expect(skills?.zone).toBe(1);
+    expect(lines.find((line) => line.zone === 1 && line.y === 130)?.dy).toBe(30);
+    expect(lines.find((line) => line.y === 148)?.zone).toBeUndefined();
+  });
+});

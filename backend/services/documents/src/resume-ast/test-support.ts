@@ -45,6 +45,8 @@ export interface SyntheticLine {
   /** Explicit runs; otherwise one run spans the text. */
   runs?: Array<{ x: number; w: number; text: string; bold?: true; color?: string }>;
   rules?: Array<{ x0: number; x1: number; dy: number; h: number }>;
+  /** Reading zone of its page, from 1; absent means the first. */
+  zone?: number;
 }
 
 /** A document whose every line carries layout, as a PDF parsed with PDF.js would. */
@@ -69,6 +71,7 @@ export function laidOutDocument(
             line.runs ?? [{ x, w: Math.round(line.text.length * size * 0.5), text: line.text }]
           ).map((run) => ({ ...run, size })),
           ...(line.rules ? { rules: line.rules } : {}),
+          ...(line.zone === undefined ? {} : { zone: line.zone }),
         },
       };
     }),

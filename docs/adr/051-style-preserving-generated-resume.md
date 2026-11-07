@@ -39,7 +39,9 @@ rule that nothing is added or reworded).
    or copied: no source bytes, images, links, scripts or metadata reach the new PDF.
 4. **Fallback is the previous plain rendering** for DOCX, documents parsed before this change, pages
    that are rotated, and text that does not read top to bottom (columns whose reading order jumps
-   back up the page). A page that mixes columns row by row (name left, contact right) is reproduced.
+   back up the page; [ADR-058](058-edit-the-candidates-own-pdf-in-place.md) now records these as
+   reading zones, which are edited in place and never redrawn here). A page that mixes columns row by
+   row (name left, contact right) is reproduced.
 5. **Verification compares characters, not spacing.** The rendered PDF is re-parsed by the hardened
    parser and its characters must equal the intended blocks in order; where one run ends and the next
    begins PDF.js may or may not report a space, so spacing is ignored. The content hash that binds a
