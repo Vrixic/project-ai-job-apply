@@ -189,6 +189,9 @@ export type PrepareApplicationPacketRequest =
   components["schemas"]["PrepareApplicationPacketRequest"];
 export type ApproveApplicationPacketRequest =
   components["schemas"]["ApproveApplicationPacketRequest"];
+export type GenerateNarrativeAnswerRequest =
+  components["schemas"]["GenerateNarrativeAnswerRequest"];
+export type NarrativeAnswer = components["schemas"]["NarrativeAnswer"];
 export type ApplicationRevisionRequest = components["schemas"]["ApplicationRevisionRequest"];
 export type StartApplicationSubmissionRequest =
   components["schemas"]["StartApplicationSubmissionRequest"];

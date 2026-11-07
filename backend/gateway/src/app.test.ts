@@ -9,6 +9,9 @@ import {
   ApplicationsUnavailableError,
   ApprovalRefusedError,
   AttemptRefusedError,
+  NarrativeAnswerLimitError,
+  NarrativeAnswersUnavailableError,
+  NarrativeAnswerStateError,
   PreparationNotFoundError,
   RestrictedPacketStoreUnavailableError,
   StalePacketError,
@@ -3738,6 +3741,11 @@ describe("Applications routes", () => {
     }),
     recordResult: record("recordResult", application),
     reconcile: record("reconcile", application),
+    narrativeAnswer: record("narrativeAnswer", {
+      status: "ready",
+      text: "I build reliable TypeScript services.",
+      promptVersion: "1.1.0",
+    } as const),
   } as unknown as ApplicationsApi;
 
   let app: Awaited<ReturnType<typeof createApp>>["app"];
@@ -3785,6 +3793,84 @@ describe("Applications routes", () => {
     expect(calls[0]).toMatchObject({
       method: "preparePacket",
       args: [expect.any(String), applicationId, payload, key],
+    });
+  });
+
+  describe("narrative answers", () => {
+    const url = `/v1/applications/${applicationId}/narrative-answers`;
+    const payload = { question: "What interests you about this role?" };
+
+    it("drafts under the authenticated owner, with no-store, and never trusts a body owner", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url,
+        headers: { authorization: `Bearer ${await token("applications:write")}` },
+        payload,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["cache-control"]).toBe("no-store");
+      expect(response.json()).toMatchObject({ status: "ready", promptVersion: "1.1.0" });
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toMatchObject({
+        method: "narrativeAnswer",
+        args: [expect.any(String), applicationId, payload],
+      });
+      const rejected = await app.inject({
+        method: "POST",
+        url,
+        headers: { authorization: `Bearer ${await token("applications:write")}` },
+        payload: { ...payload, ownerUserId: "someone-else" },
+      });
+      expect(rejected.statusCode).toBe(400);
+      expect(calls).toHaveLength(1);
+    });
+
+    it.each([
+      ["no token", undefined],
+      ["a read-only token", "applications:read"],
+    ])("refuses %s", async (_name, scope) => {
+      const response = await app.inject({
+        method: "POST",
+        url,
+        headers: scope ? { authorization: `Bearer ${await token(scope)}` } : {},
+        payload,
+      });
+      expect([401, 403]).toContain(response.statusCode);
+      expect(calls).toHaveLength(0);
+    });
+
+    it.each([
+      ["a missing question", {}],
+      ["a too short question", { question: "ab" }],
+      ["an oversized question", { question: "q".repeat(1001) }],
+      ["an oversized guidance", { question: "What interests you?", guidance: "g".repeat(1001) }],
+    ])("rejects %s before the service", async (_name, body) => {
+      const response = await app.inject({
+        method: "POST",
+        url,
+        headers: { authorization: `Bearer ${await token("applications:write")}` },
+        payload: body,
+      });
+      expect(response.statusCode).toBe(400);
+      expect(calls).toHaveLength(0);
+    });
+
+    it.each([
+      [new NarrativeAnswerLimitError(30), 429, "narrative_answer_limit"],
+      [new NarrativeAnswersUnavailableError(), 503, "narrative_answers_unavailable"],
+      [new NarrativeAnswerStateError(), 409, "application_state_conflict"],
+    ])("maps %o to fixed, value-free problem details", async (error, status, code) => {
+      error.message = "synthetic-private-provider-text";
+      failure = error;
+      const response = await app.inject({
+        method: "POST",
+        url,
+        headers: { authorization: `Bearer ${await token("applications:write")}` },
+        payload,
+      });
+      expect(response.statusCode).toBe(status);
+      expect(response.json()).toMatchObject({ code });
+      expect(response.body).not.toContain("synthetic-private-provider-text");
     });
   });
 

@@ -37,6 +37,7 @@ related is tracked here so it is handled next and is not lost.
 | D3.2-006 | Connected journey with live AI on: generate, review, approve, Apply, confirmed-submission history, through the deployed web app and installed extension. | Ready | Claude; owner | D3.2-003, D3.2-004 | Carries the live candidate-output quality check the owner chooses to do. |
 | D3.2-007 | Ashby live submission proof: fill, attach and submit once on a posting the owner picks, after the candidate's approval. | Ready | Claude; owner | None | Carried from D3 (owner decision 2026-10-26: Greenhouse is the D3 proof). The adapter is built and tested on synthetic pages (ADR-053). |
 | D3.2-008 | Security review of the provider data path, folded into the independent assessment D6-015. | Ready | Independent assessor | D3.2-005 | Not a gate for building; a gate for public launch. |
+| D3.2-009 | Narrative answers in the browser ([ADR-057](../../adr/057-narrative-answers-drafted-in-the-candidates-browser.md)): Gateway route and model call (built, dark), extension icon on free-text questions, key secret and kill switch in Terraform, live test on the owner's account. | In progress | Claude; owner | None | Owner chose OpenAI `gpt-6-luna`, the Terms of Service as consent, and the icon even when the employer asks for no AI (2026-11-07). The owner puts the OpenAI key in the secret and sets a spending cap on the OpenAI project. A durable plan-driven quota is a launch prerequisite. |
 
 ## Exit criteria
 
@@ -52,6 +53,12 @@ related is tracked here so it is handled next and is not lost.
 related work to a later phase. The owner stressed that live AI generation is the main feature of the
 product, so this phase is the next one to schedule. AI-evaluation and accessibility acceptance stay
 removed (owner decision 2026-10-21); security criteria remain.
+
+2026-11-07: The owner asked for an icon on free-text employer questions that drafts an answer from the
+candidate's Profile, chose OpenAI GPT for it, set up for scalability and price, and chose the Terms of
+Service as consent ([ADR-057](../../adr/057-narrative-answers-drafted-in-the-candidates-browser.md)). This
+is D3.2-009. It uses the development-scope OpenAI decision of 2026-10-02 and does not settle D3.2-001 for
+cover letters and resumes, which keep the ADR-038 30-minute rule.
 
 ## Risks and blockers
 

@@ -73,6 +73,7 @@ async function run(
   render: (facts: readonly PromptFact[]) => { system: string; user: string },
   promptId: string,
   promptVersion: string,
+  cacheKey?: string,
 ): Promise<GenerationResult> {
   const graph = FactGraph.build(dependencies.facts, dependencies.now);
   const promptFacts = selectPromptFacts(graph, dependencies.facts);
@@ -99,6 +100,7 @@ async function run(
         categories: ["profile_facts", "job_posting"],
         system: prompt.system,
         user: prompt.user,
+        ...(cacheKey ? { cacheKey } : {}),
       },
       dependencies.disclosure,
     );
@@ -200,6 +202,10 @@ export function generateCoverLetter(
 export interface NarrativeQuestion {
   fieldKey: string;
   text: string;
+  /** The employer's own help text under the question (length, style); untrusted. */
+  guidance?: string;
+  /** Opaque key for provider prompt caching; the same for every question of one application. */
+  cacheKey?: string;
   sensitivity: "standard" | "confidential" | "restricted";
   answerPolicy: "deterministic" | "confirmed_fact" | "explicit_each_time" | "never_infer";
 }
@@ -235,9 +241,10 @@ export function generateNarrativeAnswer(
   return run(
     "narrative_answer",
     dependencies,
-    (facts) => renderNarrativePrompt(facts, dependencies.job, question.text),
+    (facts) => renderNarrativePrompt(facts, dependencies.job, question.text, question.guidance),
     "narrative_answer",
     PROMPT_VERSIONS.narrativeAnswer,
+    question.cacheKey,
   );
 }
 

@@ -557,3 +557,10 @@ variable "notifications_email_from" {
   type    = string
   default = ""
 }
+
+variable "narrative_answers_enabled" {
+  description = "Turn on model-drafted free-text answers in the Gateway (ADR-057); false switches drafting off without a code release."
+  type        = bool
+  default     = false
+  nullable    = false
+}

@@ -184,7 +184,7 @@ describe("Applications OpenAPI contract", () => {
     const applicationPaths = Object.entries(contract.paths).filter(([path]) =>
       path.startsWith("/applications"),
     );
-    expect(applicationPaths.length).toBe(23);
+    expect(applicationPaths.length).toBe(24);
     for (const [, item] of applicationPaths) {
       for (const operation of Object.values(item) as Array<{
         security: Array<{ oidc: string[] }>;
@@ -212,7 +212,8 @@ describe("Applications OpenAPI contract", () => {
       .filter(({ operation }) => !operation.parameters?.some((p) => p.name === "Idempotency-Key"))
       .map(({ method, path }) => `${method.toUpperCase()} ${path}`)
       .sort();
-    // Reads and the once-only write-ahead dispatch (which the store makes exactly-once itself).
+    // Reads, the once-only write-ahead dispatch (which the store makes exactly-once itself), and
+    // narrative answers, which store nothing so there is no result to replay (ADR-057).
     expect(withoutKey).toEqual([
       "GET /applications/{applicationId}",
       "GET /applications/{applicationId}/cover-letter",
@@ -228,6 +229,7 @@ describe("Applications OpenAPI contract", () => {
       "GET /applications/{applicationId}/resume/uploaded",
       "POST /applications/search",
       "POST /applications/{applicationId}/attempts/{attemptId}/dispatch",
+      "POST /applications/{applicationId}/narrative-answers",
     ]);
   });
 

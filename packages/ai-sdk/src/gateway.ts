@@ -41,6 +41,8 @@ export interface ProviderRequest {
   user: string;
   maxOutputChars: number;
   signal: AbortSignal;
+  /** Opaque, content-free key that lets a provider reuse its cache of a shared prompt prefix. */
+  cacheKey?: string;
 }
 
 export interface ModelProvider {
@@ -103,6 +105,8 @@ export interface GatewayOptions {
 export interface GatewayRequest {
   promptId: string;
   promptVersion: string;
+  /** Opaque, content-free key for provider prompt caching (never derived from candidate content). */
+  cacheKey?: string;
   purpose: GenerationPurpose;
   /** Data categories this request will place in the prompt. */
   categories: readonly ("profile_facts" | "job_posting")[];
@@ -360,6 +364,7 @@ export class ModelGateway {
         user: request.user,
         maxOutputChars: this.maxOutputChars,
         signal: controller.signal,
+        ...(request.cacheKey ? { cacheKey: request.cacheKey } : {}),
       };
       const dispatch = () => {
         if (backgroundCapture) {

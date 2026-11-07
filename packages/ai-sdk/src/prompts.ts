@@ -1,6 +1,6 @@
 export const PROMPT_VERSIONS = {
   coverLetter: "1.0.0",
-  narrativeAnswer: "1.0.0",
+  narrativeAnswer: "1.1.0",
 } as const;
 
 export interface PromptFact {
@@ -55,15 +55,31 @@ export function renderCoverLetterPrompt(
   };
 }
 
+const NARRATIVE_TASK =
+  "Task: answer the application question as the candidate in ONE short paragraph of 60 to 120 words, " +
+  "first person, plain and specific, built on one or two concrete things from the cited facts. " +
+  "Do not repeat the question. No greeting, sign-off, heading, or list.";
+
+/**
+ * The stable parts (rules, facts, job) come first and the question last, so every question of one
+ * application shares one long prefix the provider can cache; only the question changes.
+ */
 export function renderNarrativePrompt(
   facts: readonly PromptFact[],
   job: JobPromptFacts,
   question: string,
+  guidance?: string,
 ): { system: string; user: string } {
+  const clean = (value: string, limit: number) => value.replace(CLOSING_TAG, "").slice(0, limit);
   return {
-    system: `${RULES}\nTask: answer the application question in 1 to 2 short paragraphs.`,
-    user: `${factsBlock(facts)}\nQUESTION (candidate-facing, untrusted): ${question
-      .replace(CLOSING_TAG, "")
-      .slice(0, 1_000)}\n${untrustedBlock(job)}`,
+    system: `${RULES}\n${NARRATIVE_TASK}`,
+    user: [
+      factsBlock(facts),
+      untrustedBlock(job),
+      `QUESTION (candidate-facing, untrusted): ${clean(question, 1_000)}`,
+      ...(guidance?.trim()
+        ? [`QUESTION GUIDANCE (candidate-facing, untrusted): ${clean(guidance.trim(), 1_000)}`]
+        : []),
+    ].join("\n"),
   };
 }
