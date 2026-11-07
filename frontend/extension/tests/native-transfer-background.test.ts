@@ -29,7 +29,10 @@ function setup(dark = false, session = new Map<string, unknown>()) {
   let storage: Parameters<typeof chrome.storage.onChanged.addListener>[0];
   const browser = {
     runtime: {
+      id: "extension-id",
       sendMessage: vi.fn(async (_message: unknown) => undefined),
+      // The answer icon's own message listener (ADR-057).
+      onMessage: { addListener: vi.fn() },
       onMessageExternal: {
         addListener: vi.fn((callback: typeof listener) => {
           listener = callback;
@@ -176,7 +179,13 @@ it("uses protected owner/job/material reads and binds the exact current top-fram
   const { inventory } = await f.commit();
   expect(inventory.files).toHaveLength(1);
   expect(f.send.mock.calls.some(([url]) => String(url).includes("/authorization?"))).toBe(true);
-  expect(f.browser.scripting.executeScript).toHaveBeenCalledTimes(4);
+  // Four reads and checks, plus the answer icon (ADR-057) put into exactly the selected document.
+  expect(f.browser.scripting.executeScript).toHaveBeenCalledTimes(5);
+  expect(f.browser.scripting.executeScript).toHaveBeenCalledWith({
+    target: { tabId: 7, documentIds: [DOCUMENT] },
+    files: ["narrative-answer.js"],
+    world: "ISOLATED",
+  });
   expect(inventory.selection.documentId).toBe(DOCUMENT);
   inventory.dispose();
 });

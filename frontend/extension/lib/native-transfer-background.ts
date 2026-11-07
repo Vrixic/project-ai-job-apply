@@ -12,6 +12,7 @@ import {
   type TransferredNativeFile,
   UPLOADED_RESUME_MAXIMUM_BYTES,
 } from "./native-material-transfer";
+import { createNarrativeAnswerSession } from "./narrative-answer-session";
 import { sameNativeTransferBinding } from "./native-transfer-binding";
 import { providerForUrl } from "./providers";
 import {
@@ -103,6 +104,25 @@ export function installNativeTransferBackground(options: {
     },
   });
 
+  // The answer icon (ADR-057) follows the page the candidate prepared and nothing else.
+  const answers = createNarrativeAnswerSession({
+    apiOrigin: options.apiOrigin,
+    identity: options.identity,
+    async inject({ tabId, documentId }) {
+      await chrome.scripting.executeScript({
+        target: { tabId, documentIds: [documentId] },
+        files: ["narrative-answer.js"],
+        world: "ISOLATED",
+      });
+    },
+  });
+  chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {
+    const reply = answers.handle(message, sender);
+    if (!reply) return false;
+    void reply.then(respond, () => respond({ status: "error", reason: "failed" }));
+    return true;
+  });
+
   // Selecting the page again keeps the pending Apply: only identity changes and Clear end it.
   function clearSelection() {
     generation++;
@@ -114,6 +134,7 @@ export function installNativeTransferBackground(options: {
     preparingUntil = 0;
     clearIntent();
     clearSelection();
+    answers.clear();
   }
 
   /** Pulls the candidate's own original with the extension's session and verifies it exactly. */
@@ -271,9 +292,15 @@ export function installNativeTransferBackground(options: {
   }
 
   chrome.tabs.onUpdated.addListener((tabId, change) => {
-    if (change.url !== undefined || change.status === "loading") transfer.documentChanged(tabId);
+    if (change.url !== undefined || change.status === "loading") {
+      transfer.documentChanged(tabId);
+      answers.clear(tabId);
+    }
   });
-  chrome.tabs.onRemoved.addListener((tabId) => transfer.documentChanged(tabId));
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    transfer.documentChanged(tabId);
+    answers.clear(tabId);
+  });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === "session" && Object.hasOwn(changes, "auth0Session")) clear();
   });
@@ -391,7 +418,10 @@ export function installNativeTransferBackground(options: {
       const open = await chrome.tabs.query({ active: true, currentWindow: true });
       const openTab = open.length === 1 ? open[0]?.id : undefined;
       const kept = link && openTab !== undefined ? transfer.holds(link.href, openTab) : undefined;
-      if (kept) return { ok: true, resume: kept.resume };
+      if (kept) {
+        void answers.arm(kept.page);
+        return { ok: true, resume: kept.resume };
+      }
       clearSelection();
       stage = "";
       const fence = generation;
@@ -409,6 +439,12 @@ export function installNativeTransferBackground(options: {
           stage = "transfer";
           if (fence !== generation || controller.signal.aborted) throw unavailable();
           transfer.select(selected);
+          void answers.arm({
+            tabId: selected.tabId,
+            documentId: selected.documentId,
+            applicationId: selected.applicationId,
+            employerUrl: selected.employerUrl,
+          });
           if (selected.uploadedResume) {
             const file = await pullUploadedResume(selected, controller.signal);
             try {

@@ -969,3 +969,27 @@ preserves saved-version/material/approval invalidation. This remains untrusted c
 not provider proof. Identical accepted commands replay; changed proofs cannot silently replace the
 original idempotent action. Compatible readers precede default-off client activation. No accountable
 review or live acceptance is inferred from local tests; see proposed ADR-046.
+
+## Narrative answers in the candidate's browser (ADR-057, 2026-11-07)
+
+Purpose: draft a short free-text answer for the candidate to read, edit and keep or discard.
+
+Path: employer page (the candidate's own browser) -> extension page script (question text and the
+employer's help text) -> extension background -> Gateway route `POST /v1/applications/{id}/narrative-answers`
+-> Profile facts (confirmed, non-restricted) and the application's active job -> model provider (OpenAI
+`gpt-6-luna`) -> draft back along the same path -> the form field.
+
+| Data | Class | Where it goes | Kept |
+|---|---|---|---|
+| The question and help text | Untrusted employer text | Gateway, then the model prompt inside a delimiter the text cannot close | Not stored or logged by the platform |
+| Confirmed career facts (employment, education, project, skill, certification) | Confidential candidate data | The model prompt; restricted facts are never sent | Not stored with the draft |
+| The active job's title, company and description | Public job facts | The model prompt | The catalog keeps the job as before |
+| The draft | Candidate-bound generated text | Returned once with `Cache-Control: no-store`; written into the form field by the extension | Not stored or logged by the platform; the candidate's own form field and clipboard are theirs |
+| Provider-side copy | Subprocessor handling | OpenAI, `store: false` | Abuse monitoring may keep prompts up to 30 days (see [d3-012](d3-012-accountable-disposition.md) and the Terms) |
+
+Controls: the Gateway route is owner-scoped (`applications:write`); the extension answers only the
+tab, document, top frame and employer origin it prepared, one request at a time; sensitive, restricted
+and Profile-answered questions are declined before any model call; drafts pass the grounding checks;
+the kill switch (`narrative_answers_enabled`) is off by default; a per-candidate burst and daily limit
+and the provider key's own spending cap bound cost. Consent is the Terms of Service, which must name
+the provider and the data above before any real candidate uses it (D6 launch gate).
