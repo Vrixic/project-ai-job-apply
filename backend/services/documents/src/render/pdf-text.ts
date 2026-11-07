@@ -14,6 +14,8 @@ export interface RenderedDocument {
   bytes: Uint8Array;
   sha256: string;
   pageCount?: number;
+  /** How the PDF was made, for measuring only: the candidate's own page edited, drawn from layout, or plain. */
+  method?: "original_page" | "styled" | "plain";
 }
 
 export function digest(bytes: Uint8Array): string {

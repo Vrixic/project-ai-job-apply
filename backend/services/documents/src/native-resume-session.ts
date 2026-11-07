@@ -1,14 +1,17 @@
 import { createHash } from "node:crypto";
 import { claimNativeMaterialProcess } from "./native-material-process.js";
 import type { KernelMemoryDeadline } from "./native-memory-session.js";
+import { decodeOriginalPdf } from "./original-pdf.js";
 import type { PageGeometry } from "./parsing/layout.js";
 import {
   type NormalizedResumeDocument,
   parseNormalizedResumeDocument,
 } from "./parsing/normalize.js";
-import { renderPdf } from "./render/render.js";
+import { sourceLinesOf } from "./render/original/index.js";
+import { type RenderedDocument, renderTailoredPdf } from "./render/render.js";
 import { verifyRenderedResume } from "./render/verify.js";
 import { buildResumeAst } from "./resume-ast/build.js";
+import type { AstLine } from "./resume-ast/types.js";
 import { buildTailoredView, tailoredContentSha256 } from "./resume-tailoring.js";
 import type { TailoredSectionView } from "./resume-tailoring-contract.js";
 import {
@@ -42,10 +45,16 @@ export function nativeResumeJobHash(job: { title: string; description: string })
     .update(JSON.stringify({ title: job.title, description: job.description }))
     .digest("hex");
 }
+/** The most a generated resume file may weigh: the API contract's ceiling for a resume file. */
+const MAXIMUM_ARTIFACT_BYTES = 300_000;
 interface HeldResume {
   blocks: RenderBlock[];
   /** Page size of the source resume, when its layout is known. */
   page?: PageGeometry;
+  /** The candidate's own PDF, base64, when it can be edited in place (already bound to the base hash). */
+  original?: string;
+  /** Where every source line sits, with its words removed: all the in-place edit needs. */
+  sourceLines?: AstLine[];
   sections: TailoredSectionView[];
   matchedTerms: string[];
 }
@@ -55,6 +64,7 @@ export interface NativeResumeSessionOptions {
     load(identity: Readonly<NativeResumeIdentity>): Promise<{
       document: NormalizedResumeDocument;
       job: { title: string; description: string };
+      originalPdfBase64?: string;
     }>;
   };
   /** Authenticated owner admission must cover current packet/base/job and original generation. */
@@ -104,7 +114,32 @@ function captureIdentity(input: NativeResumeIdentity): Readonly<NativeResumeIden
     throw unavailable();
   return fixed;
 }
+/** Renders what is held: the candidate's own PDF edited in place when it is held, else the redraw. */
+async function renderHeld(value: HeldResume): Promise<RenderedDocument> {
+  const original = value.original
+    ? Uint8Array.from(Buffer.from(value.original, "base64"))
+    : undefined;
+  try {
+    return await renderTailoredPdf(
+      value.blocks,
+      value.page,
+      original && value.sourceLines
+        ? {
+            bytes: original,
+            sourceLines: value.sourceLines,
+            maximumBytes: MAXIMUM_ARTIFACT_BYTES,
+          }
+        : undefined,
+    );
+  } finally {
+    original?.fill(0);
+  }
+}
 function clear(value: HeldResume): void {
+  delete value.original;
+  for (const line of value.sourceLines ?? []) for (const run of line.runs) run.text = "";
+  value.sourceLines?.splice(0);
+  delete value.sourceLines;
   for (const block of value.blocks) {
     block.text = "";
     // The source lines carry the same words, run by run.
@@ -200,9 +235,24 @@ export function createNativeResumeSession(options: NativeResumeSessionOptions) {
         const ast = buildResumeAst(document),
           tailored = tailorResume(ast, loaded.job);
         if (verifyTailoredFactuality(ast, tailored).length) throw unavailable();
+        // The candidate's own PDF is used only when it is exactly the file the base document was
+        // parsed from and the page layout is known; otherwise the resume is drawn from its layout.
+        const ownPdf = ast.page
+          ? decodeOriginalPdf(loaded.originalPdfBase64, document.sourceSha256)
+          : undefined;
+        ownPdf?.fill(0);
         held = {
           blocks: materializeTailoredResume(ast, tailored),
           ...(ast.page ? { page: ast.page } : {}),
+          ...(ownPdf && loaded.originalPdfBase64
+            ? {
+                original: loaded.originalPdfBase64,
+                sourceLines: sourceLinesOf(ast).map((line) => ({
+                  ...line,
+                  runs: line.runs.map((run) => ({ ...run, text: "" })),
+                })),
+              }
+            : {}),
           sections: buildTailoredView(ast, tailored),
           matchedTerms: [...tailored.matchedTerms],
         };
@@ -237,10 +287,10 @@ export function createNativeResumeSession(options: NativeResumeSessionOptions) {
             const value = JSON.parse(new TextDecoder().decode(borrowed)) as HeldResume;
             try {
               // Generated resumes are delivered only as PDF, so only the PDF is verified.
-              const artifact = renderPdf(value.blocks, value.page);
+              const artifact = await renderHeld(value);
               try {
                 if (
-                  artifact.bytes.byteLength > 300_000 ||
+                  artifact.bytes.byteLength > MAXIMUM_ARTIFACT_BYTES ||
                   !(await verifyRenderedResume(artifact, value.blocks)).ok
                 )
                   throw unavailable();
@@ -294,10 +344,10 @@ export function createNativeResumeSession(options: NativeResumeSessionOptions) {
           format === "preview"
             ? { sections: held.sections, matchedTerms: held.matchedTerms }
             : await (async () => {
-                const artifact = renderPdf(captured.blocks, captured.page);
+                const artifact = await renderHeld(captured);
                 artifactBytes = artifact.bytes;
                 if (
-                  artifactBytes.byteLength > 300_000 ||
+                  artifactBytes.byteLength > MAXIMUM_ARTIFACT_BYTES ||
                   !(await verifyRenderedResume(artifact, captured.blocks)).ok
                 )
                   throw unavailable();

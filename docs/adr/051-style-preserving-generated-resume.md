@@ -4,6 +4,9 @@ Status: Proposed (owner-directed 2026-10-21); locally verified source; parser an
 releases and live acceptance pending
 Date: 2026-10-21
 
+Decision 3's rule that the original file is never edited is amended for the original PDF by
+[ADR-058](058-edit-the-candidates-own-pdf-in-place.md); this redraw stays the fallback.
+
 ## Context
 
 A generated resume was a plain-text PDF: one standard font, fixed spacing and 88-character wrapping,
