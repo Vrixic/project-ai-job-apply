@@ -14,6 +14,8 @@ import type {
   ApplicationTemporaryMaterialAuthorization,
   ApplicationTemporaryMaterialLocation,
   ApplicationUploadedResumeFile,
+  GenerateNarrativeAnswerRequest,
+  NarrativeAnswer,
   ReconcileApplicationAttemptRequest,
   StartManualApplicationSubmissionRequest,
 } from "@ai-job-apply/api-contracts";
@@ -33,6 +35,11 @@ import {
   versionToken,
 } from "./metrics.js";
 import { authorizeNativeMaterialRead, authorizeNativeResumeRead } from "./native-material-read.js";
+import {
+  type ApplicationNarrativeAnswers,
+  NarrativeAnswerStateError,
+  NarrativeAnswersUnavailableError,
+} from "./narrative-answer.js";
 import {
   type ArtifactHashes,
   type CurrentBindings,
@@ -234,6 +241,12 @@ export interface ApplicationsApi {
     format: "pdf" | "docx",
     signal?: AbortSignal,
   ): Promise<ApplicationCoverLetterFile>;
+  /** A grounded draft answer to one free-text employer question; never stored (ADR-057). */
+  narrativeAnswer(
+    ownerUserId: string,
+    applicationId: string,
+    request: GenerateNarrativeAnswerRequest,
+  ): Promise<NarrativeAnswer>;
   /** The resume tailored for this application's job and whether the packet already carries it. */
   resumePreview(ownerUserId: string, applicationId: string): Promise<ApplicationResumePreview>;
   /** The tailored resume file the current packet carries; refused if it no longer matches. */
@@ -339,6 +352,8 @@ export interface ApplicationsServiceDependencies {
   /** Absent until preparation persistence and owned Documents context/read boundaries are wired. */
   preparations?: ApplicationPreparations;
   coverLetters?: ApplicationCoverLetters;
+  /** Drafts short free-text answers. Absent or switched off: the route reports unavailable. */
+  narrativeAnswers?: ApplicationNarrativeAnswers;
   /** Context-only intake; does not grant generated-content read capabilities. */
   preparationContext?: ApplicationCoverLetters["context"];
   temporaryMaterials?: ApplicationTemporaryMaterials;
@@ -537,6 +552,25 @@ export class ApplicationsService implements ApplicationsApi {
       ownerUserId,
       await this.dependencies.store.getApplication(ownerUserId, applicationId),
     );
+  }
+
+  async narrativeAnswer(
+    ownerUserId: string,
+    applicationId: string,
+    request: GenerateNarrativeAnswerRequest,
+  ): Promise<NarrativeAnswer> {
+    // Ownership first: an application that is not the caller's is a 404, with no quota used.
+    const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    const answers = this.dependencies.narrativeAnswers;
+    if (!answers) throw new NarrativeAnswersUnavailableError();
+    if (["applied", "cancelled"].includes(view.application.status))
+      throw new NarrativeAnswerStateError();
+    return answers.generate({
+      ownerUserId,
+      applicationId,
+      canonicalJobId: view.application.canonicalJobId,
+      request: structuredClone(request),
+    });
   }
 
   async resumePreview(

@@ -42,6 +42,7 @@ function requestBody(request: ProviderRequest, background: boolean) {
     store: false,
     stream: false,
     background,
+    ...(request.cacheKey ? { prompt_cache_key: request.cacheKey } : {}),
     reasoning: { effort: "low" },
     max_output_tokens: Math.min(4_096, request.maxOutputChars),
     text: {

@@ -12,6 +12,9 @@ import {
   AttemptRefusedError,
   IllegalTransitionError,
   InvalidApplicationCursorError,
+  NarrativeAnswerLimitError,
+  NarrativeAnswersUnavailableError,
+  NarrativeAnswerStateError,
   PacketInvariantError,
   PreparationNotFoundError,
   RestrictedPacketStoreUnavailableError,
@@ -89,6 +92,29 @@ export function projectApplicationsFailure(exception: unknown): ApplicationsFail
       "Application already exists",
       "A live application already exists for this job",
     );
+  }
+  if (exception instanceof NarrativeAnswerStateError) {
+    return conflict(
+      "application_state_conflict",
+      "Application is finished",
+      "The application is not open for answers",
+    );
+  }
+  if (exception instanceof NarrativeAnswerLimitError) {
+    return {
+      status: HttpStatus.TOO_MANY_REQUESTS,
+      code: "narrative_answer_limit",
+      title: "Too many drafts",
+      detail: "Too many answer drafts were requested; try again shortly",
+    };
+  }
+  if (exception instanceof NarrativeAnswersUnavailableError) {
+    return {
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      code: "narrative_answers_unavailable",
+      title: "Answer drafting is unavailable",
+      detail: "Answer drafting is temporarily unavailable",
+    };
   }
   if (exception instanceof ApplicationLimitError) {
     return conflict(

@@ -81,6 +81,7 @@ import type {
 } from "aws-lambda";
 import { createGatewayApplication } from "./application.js";
 import { createApplicationsRuntime } from "./applications-runtime.js";
+import { narrativeAnswersFromEnvironment } from "./narrative-answers.js";
 import { S3CandidateDataExportDownloadSigner } from "./candidate-data-export-download-signer.js";
 import { S3CandidateDeletionConfirmationJournal } from "./candidate-deletion-confirmation-journal.js";
 import { createConfiguredD2TrustRuntime } from "./d2-trust-runtime.js";
@@ -317,7 +318,7 @@ const APPLICATION_PREPARATION_PATH_PATTERN = new RegExp(
   "u",
 );
 const APPLICATION_COMMAND_PATH_PATTERN = new RegExp(
-  `^/v1/applications/${APPLICATION_ID}/(?:packets|approval|reopen|cancel|submissions|manual-submissions)$`,
+  `^/v1/applications/${APPLICATION_ID}/(?:packets|approval|reopen|cancel|submissions|manual-submissions|narrative-answers)$`,
   "u",
 );
 const APPLICATION_DISPATCH_PATH_PATTERN = new RegExp(
@@ -1337,9 +1338,15 @@ async function createConfiguredApplication(
     () => packetProtection?.enabled() === true,
   );
   const nativeMaterialDisposal = nativeMaterialDisposalFromEnvironment(databaseUrl, process.env);
+  // Off unless NARRATIVE_ANSWERS_ENABLED=true and a provider key is configured (ADR-057).
+  const narrativeAnswers = narrativeAnswersFromEnvironment(process.env, {
+    catalog,
+    profile: profileSections,
+  });
   const applications = createApplicationsRuntime({
     client: createApplicationsDatabase(databaseUrl, { maxConnections: 2 }),
     profile: profileSections,
+    ...(narrativeAnswers ? { narrativeAnswers } : {}),
     ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
     ...(legacyReceipts ? { legacyReceipts } : {}),
     ...(nativeMaterialLocations ? { nativeMaterialLocations } : {}),

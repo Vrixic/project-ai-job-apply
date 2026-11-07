@@ -37,6 +37,8 @@ The owner answered the open questions in chat. Recorded decisions:
 
 2026-10-26 owner answers on closing D3: legal and security review is carried to D6-015 and D6-016; live AI generation (the main product feature) moves to the new [D3.2](phase-3-2-live-ai-generation.md) because no provider or account meets ADR-038's 30-minute retention yet, and D3 closes with live AI off; Greenhouse is the live submission proof and Ashby's moves to D3.2; one working session will run the live Greenhouse submission and the canonical export and deletion run. Email notifications (D5-002) were verified live the same day; the development runtime is dormant (final snapshot `shutdown-20261026144736`).
 
+2026-11-07 owner direction: free-text employer questions get an AI-draft icon in the extension, using OpenAI `gpt-6-luna` with the Terms of Service as consent ([ADR-057](../../adr/057-narrative-answers-drafted-in-the-candidates-browser.md), D3.2-009). The Gateway route, grounding checks and kill switch are built and dark; the extension icon and the live test follow.
+
 Still needing the owner: an AWS sign-in for the deployment, the Stripe account values (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRETS`, `STRIPE_PRO_PRICE_ID`, `BILLING_APP_BASE_URL`), counsel, the independent assessor, and staging and production accounts and Auth0 tenants (D6-013, D6-014, D6-021).
 
 ## D3 — High-quality application preparation

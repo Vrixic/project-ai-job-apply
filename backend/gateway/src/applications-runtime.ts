@@ -4,6 +4,7 @@ import { activeJobRevisionDigestInput } from "@ai-job-apply/api-contracts/job-re
 import {
   type ApplicationCoverLetters,
   type ApplicationJobGate,
+  type ApplicationNarrativeAnswers,
   type ApplicationRecord,
   type ApplicationStoreOptions,
   type ApplicationsApi,
@@ -44,6 +45,8 @@ export interface ApplicationsRuntimeOptions {
   legacyReceipts?: ApplicationStoreOptions["legacyReceipts"];
   /** The candidate's saved Profile records as grounding evidence (ADR-052). */
   profile: { listGroundingFacts(userId: string): Promise<readonly GraphFact[]> };
+  /** Drafts short free-text answers (ADR-057). Absent: the route reports unavailable. */
+  narrativeAnswers?: ApplicationNarrativeAnswers;
   /** The Documents runtime; without it packets carry no resume and the preview is unavailable. */
   tailoring?: ResumeTailoringClient;
   /** The candidate's own uploaded resume, read from its Documents owner. Absent: fallback off. */
@@ -383,6 +386,7 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
     resumes,
     ...(options.uploadedResumes ? { uploadedResumes: options.uploadedResumes } : {}),
     ...(options.coverLetters ? { coverLetters: options.coverLetters } : {}),
+    ...(options.narrativeAnswers ? { narrativeAnswers: options.narrativeAnswers } : {}),
     ...(options.temporaryMaterials || options.nativeMaterialDisposal
       ? {
           temporaryMaterials: {

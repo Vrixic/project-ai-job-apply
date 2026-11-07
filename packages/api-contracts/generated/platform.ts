@@ -1180,6 +1180,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/applications/{applicationId}/narrative-answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Drafts a short answer to one free-text employer question from the candidate's confirmed Profile facts and this application's job. The draft is returned once and never stored (ADR-057); the candidate reads and edits it before anything is submitted. Restricted, attestation, signature and challenge questions are declined before any model call. */
+        post: operations["generateNarrativeAnswer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/applications/{applicationId}/reopen": {
         parameters: {
             query?: never;
@@ -3268,6 +3285,23 @@ export interface components {
             expectedRevision: number;
             packetHash: string;
             acknowledgedFieldKeys: string[];
+        };
+        GenerateNarrativeAnswerRequest: {
+            /** @description The employer's question exactly as the form shows it. Untrusted text. */
+            question: string;
+            /** @description The employer's help text under the question (length, style). Untrusted text. */
+            guidance?: string;
+        };
+        NarrativeAnswer: {
+            /** @constant */
+            status: "ready";
+            text: string;
+            promptVersion: string;
+        } | {
+            /** @constant */
+            status: "declined";
+            /** @enum {string} */
+            reason: "no_profile_evidence" | "sensitive_question" | "answered_from_profile" | "not_grounded";
         };
         ApplicationRevisionRequest: {
             expectedRevision: number;
@@ -6408,6 +6442,42 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    generateNarrativeAnswer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateNarrativeAnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description A grounded draft, or the reason none was written */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NarrativeAnswer"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["TooManyRequests"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };

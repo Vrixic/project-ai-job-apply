@@ -18,6 +18,8 @@ import type {
   ApplicationTemporaryMaterialLocation,
   ApplicationUploadedResumeFile,
   ApproveApplicationPacketRequest,
+  GenerateNarrativeAnswerRequest,
+  NarrativeAnswer,
   CandidateDataExport,
   CandidateDataExportAccess,
   CandidateDataExportDownloadGrant,
@@ -1274,6 +1276,7 @@ const validatePrepareApplicationPacket = compileComponentValidator(
 const validateApproveApplicationPacket = compileComponentValidator(
   "ApproveApplicationPacketRequest",
 );
+const validateGenerateNarrativeAnswer = compileComponentValidator("GenerateNarrativeAnswerRequest");
 const validateApplicationRevision = compileComponentValidator("ApplicationRevisionRequest");
 const validateStartApplicationSubmission = compileComponentValidator(
   "StartApplicationSubmissionRequest",
@@ -3553,6 +3556,23 @@ class ApplicationsController {
       },
       commandKey,
     );
+  }
+
+  /** A grounded draft for one free-text question. Never stored; see ADR-057. */
+  @Post("/:applicationId/narrative-answers")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async narrativeAnswer(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+  ): Promise<NarrativeAnswer> {
+    const user = await this.identity.resolve(request, "applications:write");
+    requireApplicationPath(applicationId);
+    const body = applicationsBody<GenerateNarrativeAnswerRequest>(
+      request,
+      validateGenerateNarrativeAnswer,
+    );
+    return this.applications.narrativeAnswer(user.id, applicationId, body);
   }
 
   @Post("/:applicationId/approval")

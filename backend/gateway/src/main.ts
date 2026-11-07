@@ -62,6 +62,7 @@ import { createPrivilegedModerationAuditRuntime } from "@ai-job-apply/profile-se
 import { FastifyAdapter } from "@nestjs/platform-fastify";
 import { createGatewayApplication } from "./application.js";
 import { createApplicationsRuntime } from "./applications-runtime.js";
+import { narrativeAnswersFromEnvironment } from "./narrative-answers.js";
 import { S3CandidateDataExportDownloadSigner } from "./candidate-data-export-download-signer.js";
 import { S3CandidateDeletionConfirmationJournal } from "./candidate-deletion-confirmation-journal.js";
 import {
@@ -236,11 +237,16 @@ const nativeMaterialDisposal = nativeMaterialDisposalFromEnvironment(
   config.DATABASE_URL,
   process.env,
 );
+const narrativeAnswers = narrativeAnswersFromEnvironment(process.env, {
+  catalog,
+  profile: profileSections,
+});
 const applications =
   process.env.APPLICATIONS_ENABLED === "true"
     ? createApplicationsRuntime({
         client: createApplicationsDatabase(config.DATABASE_URL, { maxConnections: 2 }),
         profile: profileSections,
+        ...(narrativeAnswers ? { narrativeAnswers } : {}),
         ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
         ...(legacyReceipts ? { legacyReceipts } : {}),
         ...(nativeMaterialLocations ? { nativeMaterialLocations } : {}),

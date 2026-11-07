@@ -10,6 +10,7 @@ export {
   lockNativeMaterialApplicationAdmission,
   lockNativePreparationLaunchAdmission,
 } from "./native-material-admission.js";
+export * from "./narrative-answer.js";
 export * from "./native-material-read.js";
 export * from "./packet.js";
 export * from "./packet-source.js";

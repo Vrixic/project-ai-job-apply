@@ -5608,6 +5608,86 @@
         }
       }
     },
+    "/applications/{applicationId}/narrative-answers": {
+      "post": {
+        "operationId": "generateNarrativeAnswer",
+        "security": [
+          {
+            "oidc": ["applications:write"]
+          }
+        ],
+        "description": "Drafts a short answer to one free-text employer question from the candidate's confirmed Profile facts and this application's job. The draft is returned once and never stored (ADR-057); the candidate reads and edits it before anything is submitted. Restricted, attestation, signature and challenge questions are declined before any model call.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "applicationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateNarrativeAnswerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A grounded draft, or the reason none was written",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NarrativeAnswer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/applications/{applicationId}/reopen": {
       "post": {
         "operationId": "reopenApplicationForEdit",
@@ -13668,6 +13748,50 @@
           }
         },
         "additionalProperties": false
+      },
+      "GenerateNarrativeAnswerRequest": {
+        "type": "object",
+        "required": ["question"],
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 1000,
+            "description": "The employer's question exactly as the form shows it. Untrusted text."
+          },
+          "guidance": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "The employer's help text under the question (length, style). Untrusted text."
+          }
+        },
+        "additionalProperties": false
+      },
+      "NarrativeAnswer": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["status", "text", "promptVersion"],
+            "properties": {
+              "status": { "const": "ready" },
+              "text": { "type": "string", "minLength": 1, "maxLength": 4000 },
+              "promptVersion": { "type": "string", "pattern": "^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$" }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["status", "reason"],
+            "properties": {
+              "status": { "const": "declined" },
+              "reason": {
+                "type": "string",
+                "enum": ["no_profile_evidence", "sensitive_question", "answered_from_profile", "not_grounded"]
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
       },
       "ApplicationRevisionRequest": {
         "type": "object",

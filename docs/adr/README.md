@@ -79,3 +79,4 @@ ADRs are immutable historical records after acceptance. A new ADR supersedes an 
 - [ADR-054: Automated vetting of contributed job sources](054-automated-source-vetting.md) (accepted 2026-10-22; owner-directed, code in progress, no deployment)
 - [ADR-055: Notifications-owned inbox and delivery preferences](055-notifications-inbox-and-preferences.md) (accepted 2026-10-22; owner-approved schema, service built, not deployed)
 - [ADR-056: Email and push delivery for notifications](056-notification-email-and-push-delivery.md) (accepted 2026-10-23; SES email to the verified account address; browser push removed 2026-10-24)
+- [ADR-057: Narrative answers drafted in the candidate's browser](057-narrative-answers-drafted-in-the-candidates-browser.md) (accepted 2026-11-07; OpenAI gpt-6-luna, consent through the Terms of Service, no persistence, kill switch default off)

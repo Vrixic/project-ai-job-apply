@@ -34,6 +34,8 @@ const names = [
   "ApplicationNativeTransferReceipt",
   "ApplicationNativeTransferDiscard",
   "ApplicationNativeTransferCancel",
+  "GenerateNarrativeAnswerRequest",
+  "NarrativeAnswer",
 ];
 const ajv = new Ajv2020({ strict: true, allErrors: false, code: { source: true } });
 addFormats(ajv);
