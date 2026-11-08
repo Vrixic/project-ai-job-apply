@@ -2,7 +2,7 @@
 
 Local, default-off composition for one original tailored resume. The path is:
 ECS self metadata → signed original owner/bootstrap → pinned TLS secret → native kernel →
-signed retained-source read → deterministic tailoring and PDF/DOCX verification → scalar ready
+signed retained-source read → deterministic tailoring and PDF verification → scalar ready
 receipt → authenticated direct HTTPS preview/download. Gateway authorizes only current packet
 metadata at `GET /v1/applications/{applicationId}/resume/authorization?generationId=...`.
 Generated content does not travel through that Gateway route.
@@ -44,7 +44,7 @@ node scripts/verify-native-resume-image.mjs --enable-local-image-test --image sh
 
 It verifies image manifest hashes, uses UID 65532, init, read-only root, dropped capabilities,
 no-new-privileges, a memory limit and disabled networking. Synthetic source/identity/AWS ports
-exercise actual PDF/DOCX rendering, TLS 1.3, authenticated current-packet preview/download,
+exercise actual PDF rendering, TLS 1.3, authenticated current-packet preview/download,
 revocation and native expiry. The receipt requires exit 137 before any host fallback, zero
 unexpected diagnostics, and Docker `OOMKilled=false`. Only the owned container/staging files are
 removed; shared images and volumes remain. Stop Docker/WSL after the last needed container step.
