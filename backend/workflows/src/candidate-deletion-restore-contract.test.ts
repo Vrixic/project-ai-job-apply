@@ -165,7 +165,7 @@ describe("cross-runtime restore contract fixture", () => {
     ).toEqual(fixture.replay);
   });
 
-  it("binds primary recovery to current 87-migration source while retaining the isolated fixture", () => {
+  it("binds primary recovery to current 88-migration source while retaining the isolated fixture", () => {
     const bytes = readFileSync(
       new URL("../../services/database-migrations/restore-manifest.v1.json", import.meta.url),
     );
@@ -175,12 +175,12 @@ describe("cross-runtime restore contract fixture", () => {
     const manifest = JSON.parse(bytes.toString("utf8"));
     expect(
       manifest.contributors.flatMap((owner: { migrations: unknown[] }) => owner.migrations),
-    ).toHaveLength(87);
+    ).toHaveLength(88);
     expect(
       manifest.contributors
         .find((owner: { owner: string }) => owner.owner === "documents")
         .migrations.at(-1).version,
-    ).toBe("0018_native_resume_legacy_launch_rejection");
+    ).toBe("0019_native_resume_purge_seals_epoch");
     expect(fixture.configuration.restoreManifestSha256).toBe(CURRENT_RESTORE_MANIFEST_SHA256);
   });
 

@@ -2147,8 +2147,10 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
     await s.cancelBeforeLaunch(scope(r));
     await expect(s.claimLaunch(scope(r), config)).rejects.toThrow();
     await sql`DELETE FROM documents.native_resume_generations WHERE id=${input.identity.generationId}`;
+    // Removing the terminal generation seals its epoch, so a fresh one names it explicitly.
     const next = await s.reserve({
       ...input,
+      previousEpochId: r.epochId,
       identity: { ...input.identity, generationId: uuidv7(), version: 2 },
     });
     await s.claimLaunch(scope(next), config);
@@ -2678,6 +2680,26 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
       }),
     ).rejects.toThrow();
     expect(await s.reserveRequest(request)).toEqual(fresh);
+  });
+  it("keeps the application open for a fresh request after a resume replacement purges its retired generation", async () => {
+    const { s, r } = await bound();
+    await retireOriginal(s, r);
+    // The candidate replaces the resume. The guarded purge cascades the retired generation away.
+    await sql`UPDATE documents.resume_documents SET deleted_at=clock_timestamp() WHERE id=${input.identity.baseDocumentId}`;
+    const [purged] =
+      await sql`SELECT documents.complete_resume_purge(${input.identity.ownerUserId}::uuid,${input.identity.baseDocumentId}::uuid,true) AS result`;
+    expect(purged?.result.purged).toBe(true);
+    expect(
+      await sql`SELECT id FROM documents.native_resume_generations WHERE id=${input.identity.generationId}`,
+    ).toHaveLength(0);
+    const replacement = uuidv7();
+    await sql`INSERT INTO documents.resume_documents(id,user_id,file_name,media_type,size_bytes,sha256,source_object_key,status,parser_version,normalized_object_key,normalized_object_version,normalized_sha256,page_count,character_count)
+      VALUES (${replacement},${input.identity.ownerUserId},'replacement.pdf','application/pdf',625,${"c".repeat(64)},${`quarantine/${replacement}/source`},'parsed','parser-1',${`normalized/${replacement}/source/parser-1/resume.json`},'synthetic-v1',${"d".repeat(64)},1,100)`;
+    const request = await queuedReplacement();
+    const fresh = await s.reserveRequest(request);
+    expect(fresh?.reservation.identity.baseDocumentId).toBe(replacement);
+    expect(fresh?.epochId).not.toBe(r.epochId);
+    expect(fresh?.reservation.previousEpochId).toBe(r.epochId);
   });
   it.each(["bound", "pending", "unknown"] as const)(
     "refuses replacement of an unsealed %s epoch without a positive settled generation",

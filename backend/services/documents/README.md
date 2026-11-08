@@ -824,3 +824,14 @@ RunTask digest or cryptographically signed CloudTrail log. Normal SDK rejection 
 recovery remain unchanged. Apply the migration before the compatible private owner tool; no public
 API, launch, task-death receipt or automatic retry is added. Existing disposal and deletion can
 proceed after this terminal settlement, and new work still requires an explicit fresh epoch.
+
+Migration `0019_native_resume_purge_seals_epoch` closes a gap between resume replacement and the
+admission head. The guarded purge of a replaced resume cascades its terminal generations away
+(`ON DELETE CASCADE`), which left the application's unsealed epoch with no generation to prove it
+settled, so every later request for that application was refused and its delivery failed after
+five attempts. An after-delete trigger now seals the removed generation's epoch, as the next
+admitted request would, only when no non-terminal generation or allocation remains for the
+application. The same migration seals heads already left with no generation and no allocation. A
+head with any generation or allocation is untouched, an unsealed head without evidence is still
+refused (the fail-closed `unknown` case), and nothing is reopened or created. Apply it before
+the next resume request for an affected application; it needs no code change in the owners.
