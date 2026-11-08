@@ -10,8 +10,9 @@ ADR-051 redraw as the fallback. Reading zones (columns, sidebars) and clip wrapp
 four of the owner's resumes edit in place locally; the original is passed to the native process only
 through the source RPC, bound to the document's hash, and the source reader is off by default. The owner approved the
 source-read IAM entry (`quarantine/*/source`) on 2026-11-07; it is a flagged Terraform change, off by default.
-Merged dark (#810, #811). Zones need a parser and processor release from one receipt plus the native
-Lambda and image release, then the owner uploads the resumes again and a live test.
+Released to development 2026-11-08 (#810 to #813): native resume r3 live (r1 retired, r2 stopped), parser v11 and
+processor v17 from one receipt, Gateway v148, all verified with zero drift. Remaining: the owner uploads the resumes
+again (zones are recorded at parse time) and a live test; the image's Alpine `zlib` and `musl` findings have no fix yet.
 
 2026-10-21: D3-152 web preview as the rendered PDF with a User_Job_Name_ID download and attachment name
 (merged, #705); D3-153 style-preserving generation ([ADR-051](../../adr/051-style-preserving-generated-resume.md);

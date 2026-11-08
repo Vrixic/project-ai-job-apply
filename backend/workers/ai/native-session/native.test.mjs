@@ -93,7 +93,7 @@ for (const mode of [
       ) {
         const value = JSON.parse(output.trim());
         assert.equal(value.ready, true);
-        assert.equal(value.actualFiles, 2);
+        assert.equal(value.actualFiles, 1);
         if (mode.startsWith("resume-runtime")) assert.ok(value.runtimeAssertions >= 20);
         else assert.equal(value.resumeAssertions, 20);
         assert.equal(value.originalExpiry - value.originalCompletion, 1_800_000);

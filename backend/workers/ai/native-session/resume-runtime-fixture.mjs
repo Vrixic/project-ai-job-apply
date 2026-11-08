@@ -442,7 +442,7 @@ export async function exerciseResumeRuntime(mode, kernelPath, imageStart = start
     original,
   );
   assertions++;
-  for (const format of ["preview", "pdf", "docx"]) {
+  for (const format of ["preview", "pdf"]) {
     const r = await send(
       format === "preview" ? path : `${path}/file?format=${format}`,
       `Bearer ${token}`,

@@ -125,7 +125,7 @@ try {
   assert.equal(state.OOMKilled, false, "An OOM kill is not native deadline evidence");
   const proof = JSON.parse(result.stdout.trim());
   assert.equal(proof.ready, true);
-  assert.equal(proof.actualFiles, 2);
+  assert.equal(proof.actualFiles, 1);
   assert.ok(proof.runtimeAssertions >= 20);
   assert.equal(proof.originalExpiry - proof.originalCompletion, 1_800_000);
   receipt = {

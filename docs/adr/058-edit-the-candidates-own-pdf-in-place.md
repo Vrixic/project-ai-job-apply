@@ -1,7 +1,8 @@
 # ADR-058: Edit the candidate's own PDF in place
 
-Status: Proposed (owner-directed 2026-11-07); code merged dark (#810), source-read IAM entry approved by
-the owner 2026-11-07 and written as a flagged Terraform change, governed release and live acceptance pending
+Status: Accepted by the owner's direction 2026-11-07; released to development 2026-11-08 (native resume
+r3 with the source-read IAM entry on, document parser v11 and processor v17 from one receipt, Gateway
+v148); live acceptance on the owner's account pending
 Date: 2026-11-07
 
 Amends [ADR-051](051-style-preserving-generated-resume.md) decision 3 ("the original file is never
@@ -91,5 +92,11 @@ still holds: tailoring keeps, moves or omits the candidate's own lines and adds 
   reader, source validator, session). Resumes uploaded before the parser release carry no zones; the
   candidate uploads again to get them. The parser version string is unchanged, as for ADR-051: a new
   upload is a new document id and therefore a new normalized object key.
+- Release record 2026-11-08: resume-r1 retired (its failure-retention queue stays), resume-r3 live for new
+  work and resume-r2 stopped taking new work (its dispatch schedule is off). The r3 image is the amd64
+  manifest `sha256:96d8f1a2224f4c5eaea63e174b6c3417904b45b2e7732fc8e0e8244c7e1b2e71` built from
+  `763c9911`. Its ECR scan reports one Critical (`zlib` CVE-2026-4738) and one High (`musl`
+  CVE-2026-107891) with no fixed version; the r2 image has the identical findings. The owner accepted
+  them for development; rebuild when Alpine ships fixes.
 - The Lambda tailoring service keeps producing the ADR-051 redraw; it is not used when native
   preparation is on.

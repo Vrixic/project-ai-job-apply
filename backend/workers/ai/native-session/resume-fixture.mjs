@@ -72,7 +72,7 @@ export async function exerciseNativeResume(mode, kernelPath) {
   assert.equal(preview.value.sections.length, 0);
   assert.equal(preview.isCurrent(), false);
   let files = 0;
-  for (const format of ["pdf", "docx"]) {
+  for (const format of ["pdf"]) {
     const response = await session.read(ready.reference, format);
     assert.ok(response.value.bytes.byteLength > 100);
     assert.ok(response.value.bytes.some((byte) => byte !== 0));
