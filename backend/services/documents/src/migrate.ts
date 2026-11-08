@@ -27,6 +27,7 @@ const migrationVersions = [
   "0016_native_application_disposal",
   "0017_native_resume_launch_rejection",
   "0018_native_resume_legacy_launch_rejection",
+  "0019_native_resume_purge_seals_epoch",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {
