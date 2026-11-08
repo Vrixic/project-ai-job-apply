@@ -343,7 +343,11 @@ async function editOriginal(input: {
       const info = unit.info[groupIndex];
       if (info && info.texts.length > 0) anyText = true;
       keptGroups.push(group);
-      const move = plan.move[groupIndex] ?? 0;
+      // The plan measures a move on the page, up being positive; the translation is written in the
+      // space the unit stands in, which a page-level flip (Google Docs) turns upside down.
+      const moveOnPage = plan.move[groupIndex] ?? 0;
+      const scaleY = group.matrix?.[3] ?? 1;
+      const move = moveOnPage / scaleY;
       body.push(
         Math.abs(move) > MOVE_EPSILON ? `q 1 0 0 1 0 ${move.toFixed(4)} cm\n${text}\nQ` : text,
       );

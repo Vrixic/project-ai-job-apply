@@ -190,8 +190,22 @@ export function planEdits(input: {
       if (info.texts.length > 0) {
         const matched = info.texts.map((anchor) => lineForText(anchor.x, anchor.y));
         const owners = new Set(matched.filter((line): line is AstLine => !!line));
-        if (owners.size > 1) throw new OriginalEditUnsupported("LINE_NOT_FOUND");
-        const owner = [...owners][0];
+        // An exporter may write several lines into one block (a two-line header). The block then moves or
+        // goes as a whole, so every line in it must be treated the same way.
+        const owned = [...owners].sort((a, b) => (rankOf(a) ?? 0) - (rankOf(b) ?? 0));
+        const firstShift = owned[0] ? shiftOf(owned[0]) : undefined;
+        if (
+          firstShift &&
+          owned.some((line) => {
+            const shift = shiftOf(line);
+            return (
+              shift.kept !== firstShift.kept ||
+              Math.abs(shift.move - firstShift.move) > MOVE_EPSILON
+            );
+          })
+        )
+          throw new OriginalEditUnsupported("LINE_NOT_FOUND");
+        const owner = owned[0];
         // Text the parser did not read as part of a line (a space the exporter placed past the margin)
         // travels with the lines on its baseline, as long as they all move the same way.
         const sameBaseline = (anchors: ReadonlyArray<{ y: number }>) =>
@@ -200,7 +214,10 @@ export function planEdits(input: {
           );
         if (owner) {
           const unread = info.texts.filter((_, at) => !matched[at]);
-          if (sameBaseline(unread).every((line) => line !== owner))
+          // Blank runs on a baseline no line has draw nothing and simply travel with the block. Text
+          // that lines up with a different line is not something this edit can place.
+          const onOtherLines = sameBaseline(unread);
+          if (onOtherLines.length > 0 && onOtherLines.every((line) => !owners.has(line)))
             throw new OriginalEditUnsupported("TEXT_NOT_MATCHED");
         }
         let candidates = owner ? [owner] : sameBaseline(info.texts);

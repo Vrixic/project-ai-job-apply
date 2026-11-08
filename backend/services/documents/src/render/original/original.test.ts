@@ -165,3 +165,40 @@ describe.each([
     ]);
   });
 });
+
+describe("a page written the way Google Docs (Skia) exports it", () => {
+  it("is edited in place through the page's flipped matrix, Td positioning and a two-line block", async () => {
+    const original = await resumePdf({ skia: true });
+    const document = await parse(original);
+    expect(document.page).toEqual({ width: 612, height: 792 });
+    expect(document.blocks.every((block) => block.layout)).toBe(true);
+
+    const { ast, blocks } = await tailored(original, 2);
+    const result = await renderTailoredPdf(blocks, ast.page, {
+      bytes: original,
+      sourceLines: sourceLinesOf(ast),
+    });
+    expect(result.method).toBe("original_page");
+    expect((await verifyRenderedResume(result, blocks)).ok).toBe(true);
+
+    const before = await runsByText(original);
+    const after = await runsByText(result.bytes);
+    // The header block, which holds two lines, did not move.
+    expect(after.get("Alex Example")).toEqual(before.get("Alex Example"));
+    expect(after.get("Springfield 555-0100")).toEqual(before.get("Springfield 555-0100"));
+    // What survived is drawn exactly as it was, and what was left out is gone.
+    for (const [text, style] of after) {
+      const was = before.get(text);
+      expect(was, text).toBeDefined();
+      expect({ ...style, y: undefined }).toEqual({ ...was, y: undefined });
+    }
+    expect([...after.keys()].some((key) => key.includes("Mentored"))).toBe(false);
+    // The link follows its line even though the page is drawn upside down underneath.
+    const links = await linksOf(result.bytes);
+    expect(links.map((link) => link.uri)).toEqual(["https://example.com/renderer"]);
+    const row = [...after.entries()].find(([text]) => text.includes("Vulkan renderer"));
+    const baseline = PAGE.height - (row?.[1].y ?? 0);
+    expect(links[0]?.rectY).toBeGreaterThan(baseline - 8);
+    expect(links[0]?.rectY).toBeLessThan(baseline);
+  });
+});

@@ -72,6 +72,17 @@ still holds: tailoring keeps, moves or omits the candidate's own lines and adds 
    text may be written into another place in the stream only where that state is identical, and
    otherwise the edit is unsupported. Text that belongs to no line is blank space (the parser reads
    every visible character as part of a line), so it keeps its place in the stream.
+9. **Google Docs (Skia) exports.** The most common source of a candidate's PDF writes one page-level
+   `cm` that flips the page, one scaled `q ... Q` per line (sometimes per block of lines) and positions text
+   with `Tm` plus `Td`. The editor folds the page-level matrix into every unit (positions are measured through
+   it; a move is written in that space, so up on the page is down in the flipped space), follows `Td` and
+   `TD` through the text line matrix and takes the position of shown text, treats a block that holds
+   several lines as one unit when every line in it is treated the same way (otherwise unsupported), and
+   ignores blank runs on a baseline no line has. A matrix that rotates or skews the page is not followed.
+   Found on the owner's own resumes, which fell back with `AMBIGUOUS_GRAPHIC` until this was added.
+10. **A document parsed before layout capture has no layout.** Parsed copies made by earlier parsers carry
+    no layout, so generation has nothing to edit or redraw and uses plain text; the candidate uploads
+    again. Existing uploads must not be assumed to carry layout.
 
 ## Consequences
 
