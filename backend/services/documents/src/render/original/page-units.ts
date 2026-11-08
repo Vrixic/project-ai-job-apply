@@ -1,6 +1,9 @@
 import {
   expandWrappers,
   type Group,
+  IDENTITY,
+  type Matrix,
+  multiply,
   nameOf,
   numberOf,
   type Operation,
@@ -37,23 +40,6 @@ export interface PageUnits {
   info: GroupInfo[];
 }
 
-type Matrix = [number, number, number, number, number, number];
-const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0];
-
-/** `next` applied first, then `current` (PDF's `cm`: the new matrix pre-multiplies the old one). */
-function multiply(next: Matrix, current: Matrix): Matrix {
-  const [a, b, c, d, e, f] = next;
-  const [a2, b2, c2, d2, e2, f2] = current;
-  return [
-    a * a2 + b * c2,
-    a * b2 + b * d2,
-    c * a2 + d * c2,
-    c * b2 + d * d2,
-    e * a2 + f * c2 + e2,
-    e * b2 + f * d2 + f2,
-  ];
-}
-
 function apply(matrix: Matrix, x: number, y: number): [number, number] {
   return [matrix[0] * x + matrix[2] * y + matrix[4], matrix[1] * x + matrix[3] * y + matrix[5]];
 }
@@ -63,6 +49,8 @@ const END_PATH = new Set(["n"]);
 const PATH_OPERATORS = new Set(["m", "l", "c", "v", "y", "h", "re"]);
 /** Operations that may stand outside every unit without changing where anything is. */
 const HARMLESS_LOOSE = new Set([
+  // A top-level matrix: expandWrappers has already folded it into every later unit's base matrix.
+  "cm",
   "q",
   "Q",
   "re",
@@ -95,8 +83,8 @@ const HARMLESS_LOOSE = new Set([
   "MP",
   "DP",
 ]);
-/** Text positioning that this editor does not follow (it moves text by whole text matrices only). */
-const UNFOLLOWED_TEXT = new Set(["Td", "TD", "T*", "'", '"']);
+/** Text positioning that this editor does not follow. `Td` and `TD` are followed (see `measure`). */
+const UNFOLLOWED_TEXT = new Set(["T*", "'", '"']);
 
 function numbers(bytes: Uint8Array, operation: Operation, count: number): number[] {
   if (operation.operands.length < count) throw new OriginalEditUnsupported("CONTENT_MALFORMED");
@@ -120,11 +108,15 @@ function unionRect(points: ReadonlyArray<readonly [number, number]>): Rect | und
 
 function measure(bytes: Uint8Array, group: Group): GroupInfo {
   const info: GroupInfo = { texts: [], paints: [], xobjects: [] };
+  const base: Matrix = group.matrix ?? IDENTITY;
   const stack: Matrix[] = [];
-  let ctm: Matrix = IDENTITY;
+  let ctm: Matrix = base;
   let path: Array<[number, number]> = [];
   let fontSize = 0;
   let inText = false;
+  // The text matrix and the start of the current text line, which `Td` moves relative to.
+  let tm: Matrix = IDENTITY;
+  let tlm: Matrix = IDENTITY;
   for (const operation of group.ops) {
     const op = operation.op;
     if (op === "q") {
@@ -132,7 +124,7 @@ function measure(bytes: Uint8Array, group: Group): GroupInfo {
       continue;
     }
     if (op === "Q") {
-      ctm = stack.pop() ?? IDENTITY;
+      ctm = stack.pop() ?? base;
       continue;
     }
     if (op === "cm") {
@@ -142,6 +134,8 @@ function measure(bytes: Uint8Array, group: Group): GroupInfo {
     }
     if (op === "BT") {
       inText = true;
+      tm = IDENTITY;
+      tlm = IDENTITY;
       continue;
     }
     if (op === "ET") {
@@ -154,9 +148,16 @@ function measure(bytes: Uint8Array, group: Group): GroupInfo {
         const size = operation.operands.at(-1);
         fontSize = Math.abs(numberOf(bytes, size));
       } else if (op === "Tm") {
-        const [a, b, , , e, f] = numbers(bytes, operation, 6) as Matrix;
-        const [x, y] = apply(ctm, e, f);
-        const scale = Math.hypot(a, b) * Math.hypot(ctm[0], ctm[1]);
+        tm = numbers(bytes, operation, 6) as Matrix;
+        tlm = tm;
+      } else if (op === "Td" || op === "TD") {
+        const [tx = 0, ty = 0] = numbers(bytes, operation, 2);
+        tlm = multiply([1, 0, 0, 1, tx, ty], tlm);
+        tm = tlm;
+      } else if (op === "Tj" || op === "TJ") {
+        // Where the shown text starts, through the text matrix and the page's own matrix.
+        const [x, y] = apply(ctm, tm[4], tm[5]);
+        const scale = Math.hypot(tm[0], tm[1]) * Math.hypot(ctm[0], ctm[1]);
         info.texts.push({ x, y, size: Math.max(fontSize * (scale || 1), 1) });
       }
       continue;

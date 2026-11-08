@@ -205,6 +205,29 @@ export interface Group {
    * only between places with the same state.
    */
   state?: string;
+  /**
+   * The page-level matrix in force where a unit stands (a top-level `cm`, as Google Docs and other
+   * Skia exports write once to flip the page). Positions are measured through it, and a move is
+   * expressed in its space. Absent means identity.
+   */
+  matrix?: Matrix;
+}
+
+export type Matrix = [number, number, number, number, number, number];
+export const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0];
+
+/** `next` applied first, then `current` (PDF's `cm`: the new matrix pre-multiplies the old one). */
+export function multiply(next: Matrix, current: Matrix): Matrix {
+  const [a, b, c, d, e, f] = next;
+  const [a2, b2, c2, d2, e2, f2] = current;
+  return [
+    a * a2 + b * c2,
+    a * b2 + b * d2,
+    c * a2 + d * c2,
+    c * b2 + d * d2,
+    e * a2 + f * c2 + e2,
+    e * b2 + f * d2 + f2,
+  ];
 }
 
 const PATH_BUILDERS = new Set(["m", "l", "c", "v", "y", "h", "re"]);
@@ -400,15 +423,28 @@ function openWrapper(bytes: Uint8Array, group: Group, inherited: State): Group[]
 export function expandWrappers(bytes: Uint8Array, groups: readonly Group[]): Group[] {
   const result: Group[] = [];
   const top: State = new Map();
+  let base: Matrix = IDENTITY;
   for (const group of groups) {
     const only = group.ops[0];
     if (group.loose) {
       if (group.ops.length === 1 && only && STATE_OPS.has(only.op))
         top.set(only.op, ascii(bytes, only.start, only.end));
+      if (group.ops.length === 1 && only?.op === "cm") {
+        // A page-level matrix that is only scale and translation keeps positions readable; anything
+        // that rotates or skews the page is not followed.
+        const values = only.operands.slice(-6).map((token) => numberOf(bytes, token));
+        if (values.length !== 6) throw new OriginalEditUnsupported("CONTENT_MALFORMED");
+        const [a = 1, b = 0, c = 0, d = 1, e = 0, f = 0] = values;
+        if (Math.abs(b) > 1e-9 || Math.abs(c) > 1e-9 || Math.abs(a) < 1e-9 || Math.abs(d) < 1e-9)
+          throw new OriginalEditUnsupported("ROTATED_OR_OFFSET_PAGE");
+        base = multiply([a, b, c, d, e, f], base);
+        top.set("ctm", JSON.stringify(base));
+      }
       result.push(group);
       continue;
     }
-    result.push(...(openWrapper(bytes, group, top) ?? [{ ...group, state: stateKey(top) }]));
+    const produced = openWrapper(bytes, group, top) ?? [{ ...group, state: stateKey(top) }];
+    for (const unit of produced) result.push(unit.loose ? unit : { ...unit, matrix: base });
   }
   return result;
 }

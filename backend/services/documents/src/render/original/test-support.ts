@@ -14,6 +14,8 @@ interface Line {
   /** Fill color, as the three components of `rg`. */
   color?: readonly [number, number, number];
   link?: string;
+  /** Lines with the same block are written into one `q ... Q`, as some exporters do. */
+  block?: string;
 }
 
 export const PAGE = { width: 612, height: 792 };
@@ -53,6 +55,23 @@ const columnLines: Line[] = [
   { text: "Scrum and Jira", x: 360, top: 158, size: 12 },
 ];
 
+/** The same resume as a Google Docs (Skia) export writes it: one flipped page, scaled blocks, `Td`. */
+const skiaLines: Line[] = [
+  { text: "Alex Example", x: 200, top: 60, size: 24, bold: true, block: "head" },
+  { text: "Springfield 555-0100", x: 200, top: 80, size: 11, block: "head" },
+  { text: "Projects", x: 36, top: 120, size: 18, bold: true, color: RED },
+  { text: "Liberator - Programmer", x: 36, top: 150, size: 12, bold: true },
+  { text: "\\225 Wrote tools for the art team", x: 36, top: 170, size: 12 },
+  {
+    text: "\\225 Built a Vulkan renderer with shader reloading",
+    x: 36,
+    top: 188,
+    size: 12,
+    link: "https://example.com/renderer",
+  },
+  { text: "\\225 Mentored two engineers", x: 36, top: 206, size: 12 },
+];
+
 const pdfEscape = (value: string) => value.replaceAll("(", "\\(").replaceAll(")", "\\)");
 
 /**
@@ -68,24 +87,44 @@ export async function resumePdf(
     columns?: boolean;
     /** Every text block inside one outer `q` that only sets a clip, with marked-content glue. */
     wrapped?: boolean;
+    /** A Google Docs (Skia) style page: a flipped page matrix, scaled blocks and `Td` positioning. */
+    skia?: boolean;
   } = {},
 ): Promise<Uint8Array> {
   const document = await PDFDocument.create({ updateMetadata: false });
   const regular = await document.embedFont(StandardFonts.Helvetica);
   const bold = await document.embedFont(StandardFonts.HelveticaBold);
   const page = document.addPage([PAGE.width, PAGE.height]);
-  const source = options.columns ? columnLines : lines;
+  const source = options.skia ? skiaLines : options.columns ? columnLines : lines;
   const body: string[] = [];
-  source.forEach((line, index) => {
-    const y = PAGE.height - line.top;
-    const color = line.color ? `${line.color.join(" ")} rg\n` : "0 g\n";
-    const block = `q\nBT\n/${line.bold ? "F2" : "F1"} ${line.size} Tf\n${color}1 0 0 1 ${line.x} ${y} Tm\n(${line.text.startsWith("\\225") ? line.text : pdfEscape(line.text)}) Tj\nET\nQ`;
-    body.push(options.wrapped ? `/P <</MCID ${index}>> BDC\n${block}\nEMC` : block);
-    if (line.text === "Projects" && !options.columns)
-      body.push(`q\n0.6 w\n36 ${y - 6} m\n576 ${y - 6} l\nS\nQ`);
-  });
+  if (options.skia) {
+    // One page-level flip, a page-sized background, then one scaled block per line (or per block).
+    body.push("1 0 0 -1 0 792 cm", "q\n0.75 0 0 0.75 0 0 cm\n1 g\n0 0 816 1056 re\nf\nQ");
+    const blocks = new Map<string, Line[]>();
+    for (const line of source)
+      blocks.set(line.block ?? line.text, [...(blocks.get(line.block ?? line.text) ?? []), line]);
+    for (const group of blocks.values()) {
+      const first = group[0] as Line;
+      const runs = group.map((line, at) => {
+        const down = (line.top - first.top) / 0.75;
+        const text = line.text.startsWith("\\225") ? line.text : pdfEscape(line.text);
+        const colour = line.color ? `${line.color.join(" ")} rg\n` : "0 g\n";
+        return `BT\n/${line.bold ? "F2" : "F1"} ${line.size / 0.75} Tf\n${colour}1 0 0 -1 0 0 Tm\n8 ${-down} Td\n(${text}) Tj\nET${at === 0 && group.length > 1 ? "\nBT\n/F1 8 Tf\n1 0 0 -1 0 0 Tm\n8 -60 Td\n( ) Tj\nET" : ""}`;
+      });
+      body.push(`q\n0.75 0 0 0.75 ${first.x - 6} ${first.top} cm\n${runs.join("\n")}\nQ`);
+    }
+  }
+  if (!options.skia)
+    source.forEach((line, index) => {
+      const y = PAGE.height - line.top;
+      const color = line.color ? `${line.color.join(" ")} rg\n` : "0 g\n";
+      const block = `q\nBT\n/${line.bold ? "F2" : "F1"} ${line.size} Tf\n${color}1 0 0 1 ${line.x} ${y} Tm\n(${line.text.startsWith("\\225") ? line.text : pdfEscape(line.text)}) Tj\nET\nQ`;
+      body.push(options.wrapped ? `/P <</MCID ${index}>> BDC\n${block}\nEMC` : block);
+      if (line.text === "Projects" && !options.columns)
+        body.push(`q\n0.6 w\n36 ${y - 6} m\n576 ${y - 6} l\nS\nQ`);
+    });
   // A thin rule drawn outside any q ... Q, as some exporters do.
-  if (!options.columns) body.push(`0.5 g\n36 ${PAGE.height - 80} 540 0.8 re\nf*`);
+  if (!options.columns && !options.skia) body.push(`0.5 g\n36 ${PAGE.height - 80} 540 0.8 re\nf*`);
   if (options.wrapped) {
     body.unshift("q\n20 40 580 720 re\nW* n");
     body.push("Q");
