@@ -778,6 +778,27 @@ data "aws_iam_policy_document" "candidate_documents_s3_endpoint" {
     }
   }
 
+  # The candidate's own retained PDF (ADR-058): the same exact grant the source role's IAM policy carries,
+  # because this endpoint allow-list would otherwise deny it. Versioned reads only, one key shape.
+  dynamic "statement" {
+    for_each = var.native_resume_original_pdf_buckets
+    content {
+      sid       = "OriginalResumeOriginalPdf${statement.key}"
+      effect    = "Allow"
+      actions   = ["s3:GetObjectVersion", "s3:GetObjectVersionTagging"]
+      resources = ["arn:aws:s3:::${statement.value}/quarantine/*/source"]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-resume-source-r${statement.key}"]
+      }
+    }
+  }
+
   dynamic "statement" {
     for_each = var.candidate_deletion_restore_role_enabled ? [1] : []
     content {

@@ -92,6 +92,12 @@ still holds: tailoring keeps, moves or omits the candidate's own lines and adds 
   reader, source validator, session). Resumes uploaded before the parser release carry no zones; the
   candidate uploads again to get them. The parser version string is unchanged, as for ADR-051: a new
   upload is a new document id and therefore a new normalized object key.
+- The source Lambda reaches the bucket through the private S3 gateway endpoint, whose policy is an exact
+  allow-list too. The IAM grant alone is not enough: the endpoint needs the same exact statement
+  (`s3:GetObjectVersion` and `s3:GetObjectVersionTagging` on `quarantine/*/source` for the source role),
+  added through `native_resume_original_pdf_buckets`. It was missed in the 2026-11-08 release, so the first
+  live generation fell back (the reader leaves the original out on any failure, by design); found by reading
+  the endpoint policy and fixed afterwards.
 - Release record 2026-11-08: resume-r1 retired (its failure-retention queue stays), resume-r3 live for new
   work and resume-r2 stopped taking new work (its dispatch schedule is off). The r3 image is the amd64
   manifest `sha256:96d8f1a2224f4c5eaea63e174b6c3417904b45b2e7732fc8e0e8244c7e1b2e71` built from
