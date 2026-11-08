@@ -109,6 +109,8 @@ module "platform" {
   native_resume_dispatch_revisions = toset([for item in values(var.native_resume_preparation_releases) : element(reverse(split(":", item.release.task_definition_arn)), 0)])
   native_resume_normalized_buckets = { for item in values(var.native_resume_source_access_releases) : element(reverse(split(":", item.release.task_definition_arn)), 0) => item.release.normalized_bucket }
 
+  native_resume_original_pdf_buckets = { for item in values(var.native_resume_source_access_releases) : element(reverse(split(":", item.release.task_definition_arn)), 0) => item.release.normalized_bucket if item.original_pdf_enabled }
+
   native_resume_secret_readers = merge(
     merge({}, [for item in values(var.native_resume_source_access_releases) : { for kind in ["owner", "source"] : "ai-job-apply-development-resume-${kind}-r${element(reverse(split(":", item.release.task_definition_arn)), 0)}" => { secret_arn = item.release.database_secret_arn } }]...),
     merge({}, [for item in values(var.native_resume_preparation_releases) : { for kind in ["control", "dispatch", "observer"] : "ai-job-apply-development-resume-${kind}-r${element(reverse(split(":", item.release.task_definition_arn)), 0)}" => { secret_arn = item.release.database_secret_arn } }]...),

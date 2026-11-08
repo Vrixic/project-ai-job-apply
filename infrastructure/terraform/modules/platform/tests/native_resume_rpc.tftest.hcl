@@ -79,6 +79,7 @@ run "original_rpc_and_normalized_reads" {
     native_resume_task_rpc_bindings            = { "7" = { owner_function_arn = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-resume-owner-r7:3", source_function_arn = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-resume-source-r7:4" } }
     native_resume_dispatch_revisions           = ["7"]
     native_resume_normalized_buckets           = { "7" = "synthetic-normalized" }
+    native_resume_original_pdf_buckets         = { "7" = "synthetic-normalized" }
     deploy_applications                        = true
     deploy_gateway_lambda                      = true
     gateway_lambda_artifact_s3_key             = "lambda/gateway.zip"
@@ -114,6 +115,22 @@ run "original_rpc_and_normalized_reads" {
     condition     = length([for statement in data.aws_iam_policy_document.candidate_documents_s3_endpoint[0].statement : statement if statement.sid == "OriginalResumeNormalizedVersion7" && statement.actions == toset(["s3:GetObjectVersion"]) && statement.resources == toset(["arn:aws:s3:::synthetic-normalized/normalized/*/*/*/resume.json"]) && contains(flatten([for condition in statement.condition : condition.values]), "arn:aws:iam::111122223333:role/ai-job-apply-development-resume-source-r7")]) == 1
     error_message = "Only the original source role gets retained normalized-version reads, without object writes or current-object fallback."
   }
+  assert {
+    condition = (
+      length([for statement in data.aws_iam_policy_document.candidate_documents_s3_endpoint[0].statement : statement if statement.sid == "OriginalResumeOriginalPdf7"]) == 1 &&
+      [for statement in data.aws_iam_policy_document.candidate_documents_s3_endpoint[0].statement : statement if statement.sid == "OriginalResumeOriginalPdf7"][0].actions == toset(["s3:GetObjectVersion", "s3:GetObjectVersionTagging"]) &&
+      [for statement in data.aws_iam_policy_document.candidate_documents_s3_endpoint[0].statement : statement if statement.sid == "OriginalResumeOriginalPdf7"][0].resources == toset(["arn:aws:s3:::synthetic-normalized/quarantine/*/source"]) &&
+      contains(flatten([for condition in [for statement in data.aws_iam_policy_document.candidate_documents_s3_endpoint[0].statement : statement if statement.sid == "OriginalResumeOriginalPdf7"][0].condition : condition.values]), "arn:aws:iam::111122223333:role/ai-job-apply-development-resume-source-r7")
+    )
+    error_message = "The original source role gets exactly versioned reads and tagging of the retained source key, never an unversioned read or another prefix."
+  }
+}
+run "original_pdf_buckets_use_numeric_revisions" {
+  command = plan
+  variables {
+    native_resume_original_pdf_buckets = { "latest" = "synthetic-normalized" }
+  }
+  expect_failures = [var.native_resume_original_pdf_buckets]
 }
 run "aliases_and_foreign_revision_refused" {
   command = plan
