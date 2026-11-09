@@ -148,7 +148,8 @@ cluster-wide database grants. Missing opt-ins are reported as skipped, not passi
   hardened runtime smoke against the exact six-owner, ten-schema, 68-relation, 46-migration Phase 2
   manifest, including the Trust runner and checksum-bound migration files. Publication separately
   resolves the Terraform-owned immutable KMS ECR
-  repository, publishes the exact commit tag, requires a completed zero-High/zero-Critical scan,
+  repository, publishes the exact commit tag, requires a completed zero-High/zero-Critical scan
+  (except the two exact accepted Alpine findings listed in `Get-AcceptedImageFindings`, ADR-058),
   and emits a checksum-reviewed ignored receipt without changing Terraform or executing a migration. See
   `infrastructure/runbooks/deployments/development-migration-image-publication.md`.
 - `operate-development-gateway-release.ps1` — Provides the source- and checksum-bound local gateway

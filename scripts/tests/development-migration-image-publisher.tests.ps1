@@ -16,7 +16,8 @@ foreach ($functionName in @(
     "Resolve-OperatorPath", "Resolve-DockerAuthDirectory", "Write-JsonFile",
     "Invoke-AwsScanJson",
     "Assert-RepositoryShape", "Resolve-OciBlobPath", "Get-OciLayoutIdentity",
-    "Assert-DeterministicOciIdentity", "Assert-RemoteOciImage", "Assert-PlatformHandoff",
+    "Assert-DeterministicOciIdentity", "Get-AcceptedImageFindings", "Get-UnacceptedFindingCounts",
+    "Assert-RemoteOciImage", "Assert-PlatformHandoff",
     "Assert-ExactPropertySet", "Test-CanonicalUtcTimestamp", "Get-CanonicalReceiptPropertyNames",
     "Assert-ResumablePublicationReceipt", "Resolve-PublicationResumeMode", "Assert-PublicationReceipt",
     "Invoke-LocalMigrationImageBuild"
@@ -158,6 +159,29 @@ try {
   if ($emptyCountsRemote.Critical -ne 0 -or $emptyCountsRemote.High -ne 0) {
     throw "an omitted zero-finding severity map was not accepted"
   }
+  # The two accepted Alpine findings (exact id and severity) are the only High/Critical results allowed.
+  $acceptedFindings = @(
+    [pscustomobject]@{ name = "CVE-2026-4738"; severity = "CRITICAL" },
+    [pscustomobject]@{ name = "CVE-2026-107891"; severity = "HIGH" }
+  )
+  function New-FindingsScan {
+    param([hashtable]$Counts, [object[]]$Findings, [switch]$OmitFindings, [switch]$Paginated)
+    $envelope = [pscustomobject]@{ findingSeverityCounts = [pscustomobject]$Counts }
+    if (-not $OmitFindings) { $envelope | Add-Member -NotePropertyName findings -NotePropertyValue @($Findings) }
+    $result = [pscustomobject]@{ imageScanStatus = [pscustomobject]@{ status = "COMPLETE" }; imageScanFindings = $envelope }
+    if ($Paginated) { $result | Add-Member -NotePropertyName nextToken -NotePropertyValue "more" }
+    return $result
+  }
+  $acceptedScan = New-FindingsScan -Counts @{ CRITICAL = 1; HIGH = 1 } -Findings $acceptedFindings
+  $acceptedRemote = Assert-RemoteOciImage -IndexDetail $indexDetail -IndexImage $indexImage `
+    -PlatformImage $platformImage -Scan $acceptedScan -ExpectedTag $sourceSha `
+    -ExpectedIndexDigest $identity.IndexDigest -ExpectedPlatformDigest $identity.PlatformDigest `
+    -ExpectedConfigDigest $identity.ConfigDigest `
+    -ExpectedCompressedLayerSetSha256 $identity.CompressedLayerSetSha256
+  if ($acceptedRemote.Critical -ne 0 -or $acceptedRemote.High -ne 0 -or
+      (@($acceptedRemote.AcceptedFindings) -join ",") -cne "CVE-2026-107891,CVE-2026-4738") {
+    throw "the two accepted findings were not set aside exactly"
+  }
   $null = Assert-PlatformHandoff -BatchImage $platformImage -Identity $identity
   foreach ($mutation in @(
       @{ name = "index-confusion"; index = "sha256:" + ("1" * 64); platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = $scan },
@@ -169,6 +193,13 @@ try {
       @{ name = "missing-scan-findings"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = [pscustomobject]@{ imageScanStatus = [pscustomobject]@{ status = "COMPLETE" } } },
       @{ name = "vulnerable-scan"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = [pscustomobject]@{ imageScanStatus = [pscustomobject]@{ status = "COMPLETE" }; imageScanFindings = [pscustomobject]@{ findingSeverityCounts = [pscustomobject]@{ HIGH = 1 } } } }
       @{ name = "critical-scan"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = [pscustomobject]@{ imageScanStatus = [pscustomobject]@{ status = "COMPLETE" }; imageScanFindings = [pscustomobject]@{ findingSeverityCounts = [pscustomobject]@{ CRITICAL = 1 } } } }
+      @{ name = "accepted-plus-new-high"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = (New-FindingsScan -Counts @{ CRITICAL = 1; HIGH = 2 } -Findings ($acceptedFindings + [pscustomobject]@{ name = "CVE-2026-9999"; severity = "HIGH" })) },
+      @{ name = "accepted-plus-new-critical"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = (New-FindingsScan -Counts @{ CRITICAL = 2; HIGH = 1 } -Findings ($acceptedFindings + [pscustomobject]@{ name = "CVE-2026-9998"; severity = "CRITICAL" })) },
+      @{ name = "accepted-id-wrong-severity"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = (New-FindingsScan -Counts @{ HIGH = 2 } -Findings @([pscustomobject]@{ name = "CVE-2026-4738"; severity = "HIGH" }, [pscustomobject]@{ name = "CVE-2026-107891"; severity = "HIGH" })) },
+      @{ name = "findings-list-incomplete"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = (New-FindingsScan -Counts @{ CRITICAL = 1; HIGH = 2 } -Findings $acceptedFindings) },
+      @{ name = "findings-list-missing"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = (New-FindingsScan -Counts @{ CRITICAL = 1; HIGH = 1 } -OmitFindings) },
+      @{ name = "findings-paginated"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = (New-FindingsScan -Counts @{ CRITICAL = 1; HIGH = 1 } -Findings $acceptedFindings -Paginated) },
+      @{ name = "only-one-accepted-listed"; index = $identity.IndexDigest; platform = $identity.PlatformDigest; config = $identity.ConfigDigest; layers = $identity.CompressedLayerSetSha256; scan = (New-FindingsScan -Counts @{ CRITICAL = 1; HIGH = 1 } -Findings @($acceptedFindings[1], [pscustomobject]@{ name = "CVE-2026-9997"; severity = "CRITICAL" })) }
     )) {
     try { $null = Assert-RemoteOciImage -IndexDetail $indexDetail -IndexImage $indexImage -PlatformImage $platformImage -Scan $mutation.scan -ExpectedTag $sourceSha -ExpectedIndexDigest $mutation.index -ExpectedPlatformDigest $mutation.platform -ExpectedConfigDigest $mutation.config -ExpectedCompressedLayerSetSha256 $mutation.layers; throw "$($mutation.name) accepted" } catch { if ($_.Exception.Message -eq "$($mutation.name) accepted") { throw } }
   }

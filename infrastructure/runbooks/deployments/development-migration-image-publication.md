@@ -116,7 +116,7 @@ SHA-256 out of band, and run:
 ```
 
 `Verify` rehashes the exact receipt, revalidates its environment and source bindings, resolves the
-exact digest and manifest again, and repeats the completed zero-High/zero-Critical scan check.
+exact digest and manifest again, and repeats the completed zero-High/zero-Critical scan check, which sets aside only the two exact accepted Alpine findings in `Get-AcceptedImageFindings` (ADR-058, owner decision 2026-11-09).
 Historical source verification attests the original image; it does not certify its compatibility
 with newer deployment source. Deployment-specific source and schema gates still apply. Pass
 only the verified digest URI to the separately reviewed migration task-definition plan. Do not use
