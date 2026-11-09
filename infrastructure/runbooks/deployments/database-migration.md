@@ -28,7 +28,7 @@ the failed test as required by the development lifecycle.
 - For the Phase 3 package, require the exact
   `d3-application-lifecycle-profile-jobs-documents-matching-billing-trust-applications-v1` manifest, the
   ordered Profile, Jobs, Documents, Matching, Billing, Trust, Applications, and Notifications runners, thirteen declared
-  schemas, 105 declared regular relations, and 87 checksum-bound migrations, including Jobs `0027`, Documents `0018`, Trust
+  schemas, 105 declared regular relations, and 88 checksum-bound migrations, including Jobs `0027`, Documents `0019`, Trust
   `0005`, Profile `0011`, Applications through `0015`, and Notifications `0003` before enabling the compatible Gateway or either D2 worker. Apply the
   Applications migration before releasing a Gateway that composes it. Reject older D1/D2 package and
   receipt boundaries; a prior six-owner release remains verifiable only against its own recorded boundary.
@@ -37,7 +37,8 @@ the failed test as required by the development lifecycle.
   existing false handler flags, both function reservations at zero, disabled EventBridge schedule,
   and Trust mapping state `Disabled`. Drain already-running work before applying SQL. Do not use
   `enabled = false`, which removes active resources/configuration instead of pausing them.
-- Require the exact platform digest to have a complete scan with zero High or Critical findings.
+- Require the exact platform digest to have a complete scan with zero High or Critical findings, except the two exact
+  accepted Alpine findings in `scripts/lib/migration-image-scan-gate.ps1` (ADR-058).
 - Review the SQL for transactional behavior, replay safety, bounded locks, data classification,
   downgrade/forward-recovery strategy, and aggregate-only observability.
 

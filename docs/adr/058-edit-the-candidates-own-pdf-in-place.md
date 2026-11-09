@@ -118,9 +118,10 @@ still holds: tailoring keeps, moves or omits the candidate's own lines and adds 
   `sha256:f89a16f1379ccdaf1e9dafb73bfe4ec93567293915c26c3c86825db19c8ac00e`) has the same two findings.
 - Migration image gate (owner decision 2026-11-09): the migration image shares the Alpine base, so its
   rescan shows the same two findings, which would have blocked migration 0019 (the purge of a replaced
-  resume left the application's admission head unsealed). `publish-development-migration-image.ps1` now
-  sets aside exactly these two id and severity pairs (`Get-AcceptedImageFindings`) and still fails on any
-  other High or Critical finding, an accepted id at a different severity, a findings list that does not
-  account for the counts, or a paginated scan. Remove an entry when a fixed package exists.
+  resume left the application's admission head unsealed). `publish-development-migration-image.ps1` and
+  `operate-development-document-migration.ps1` both use `scripts/lib/migration-image-scan-gate.ps1`, which
+  sets aside exactly these two id and severity pairs and still fails on any other High or Critical
+  finding, an accepted id at a different severity, a findings list that does not account for the counts,
+  or a paginated scan. Remove an entry when a fixed package exists.
 - The Lambda tailoring service keeps producing the ADR-051 redraw; it is not used when native
   preparation is on.

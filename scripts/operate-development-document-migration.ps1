@@ -49,6 +49,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\deployment-operator-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\terraform-toolchain.ps1")
+. (Join-Path $PSScriptRoot "lib\migration-image-scan-gate.ps1")
 . (Join-Path $PSScriptRoot "lib\development-document-dark-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-gateway-release-guards.ps1")
 . (Join-Path $PSScriptRoot "lib\development-current-document-baseline.ps1")
@@ -1732,9 +1733,12 @@ function Assert-Artifact {
   $high = Get-OptionalProperty -Object $counts -Name "HIGH"
   $criticalCount = if ($null -eq $critical) { 0 } else { [int]$critical }
   $highCount = if ($null -eq $high) { 0 } else { [int]$high }
+  $remainingFindings = Get-UnacceptedFindingCounts -Scan $scan `
+    -FindingsEnvelope (Get-OptionalProperty -Object $scan -Name "imageScanFindings") `
+    -Critical $criticalCount -High $highCount
   if ([string]$scan.imageScanStatus.status -cne "COMPLETE" -or
-      $criticalCount -ne 0 -or $highCount -ne 0) {
-    throw "The exact migration platform manifest has not passed the zero-High/zero-Critical scan gate."
+      $remainingFindings.Critical -ne 0 -or $remainingFindings.High -ne 0) {
+    throw "The exact migration platform manifest has not passed the zero-High/zero-Critical scan gate (beyond the accepted findings)."
   }
 
   $download = Invoke-AwsJson -Arguments @(
