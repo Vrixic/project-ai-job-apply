@@ -114,6 +114,13 @@ still holds: tailoring keeps, moves or omits the candidate's own lines and adds 
   manifest `sha256:96d8f1a2224f4c5eaea63e174b6c3417904b45b2e7732fc8e0e8244c7e1b2e71` built from
   `763c9911`. Its ECR scan reports one Critical (`zlib` CVE-2026-4738) and one High (`musl`
   CVE-2026-107891) with no fixed version; the r2 image has the identical findings. The owner accepted
-  them for development; rebuild when Alpine ships fixes.
+  them for development; rebuild when Alpine ships fixes. The r4 image (`fe0c1205`, amd64 manifest
+  `sha256:f89a16f1379ccdaf1e9dafb73bfe4ec93567293915c26c3c86825db19c8ac00e`) has the same two findings.
+- Migration image gate (owner decision 2026-11-09): the migration image shares the Alpine base, so its
+  rescan shows the same two findings, which would have blocked migration 0019 (the purge of a replaced
+  resume left the application's admission head unsealed). `publish-development-migration-image.ps1` now
+  sets aside exactly these two id and severity pairs (`Get-AcceptedImageFindings`) and still fails on any
+  other High or Critical finding, an accepted id at a different severity, a findings list that does not
+  account for the counts, or a paginated scan. Remove an entry when a fixed package exists.
 - The Lambda tailoring service keeps producing the ADR-051 redraw; it is not used when native
   preparation is on.

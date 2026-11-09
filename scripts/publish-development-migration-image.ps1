@@ -51,7 +51,8 @@ byte-identity proof, and hardened runtime smoke without contacting AWS or claimi
 scan. Status and Verify are read-only. Publish is the explicit GitHub Actions-budget fallback and
 is the only action that writes AWS state: one immutable ECR image tagged with the exact source
 commit. It repeats the complete LocalBuild gate, publishes the exact platform and source index,
-requires a COMPLETE platform ECR scan with zero Critical and High findings, and emits a
+requires a COMPLETE platform ECR scan with zero Critical and High findings (except the two exact
+accepted Alpine findings named in Get-AcceptedImageFindings), and emits a
 checksum-reviewed version-2 receipt whose imageUri uses the platform digest. It never runs a migration,
 registers a task definition, applies Terraform, or changes application traffic.
 
@@ -548,6 +549,44 @@ function Resolve-PublicationResumeMode {
   return "resume-push"
 }
 
+# Findings the owner accepted on 2026-11-09 (ADR-058): the pinned Alpine runtime base ships zlib and musl
+# releases that have no fixed version yet. Only these exact id and severity pairs are set aside; any other
+# High or Critical finding, an id with a different severity, an incomplete findings list or a paginated one
+# still fails the gate. Remove an entry when a fixed package exists and the base is rebuilt.
+function Get-AcceptedImageFindings {
+  return @{ "CVE-2026-4738" = "CRITICAL"; "CVE-2026-107891" = "HIGH" }
+}
+
+function Get-UnacceptedFindingCounts {
+  param(
+    [Parameter(Mandatory)][object]$Scan,
+    [Parameter(Mandatory)][object]$FindingsEnvelope,
+    [Parameter(Mandatory)][int]$Critical,
+    [Parameter(Mandatory)][int]$High
+  )
+  $result = [pscustomobject]@{ Critical = $Critical; High = $High; Accepted = @() }
+  if ($Critical -eq 0 -and $High -eq 0) { return $result }
+  # The severity counts must be fully explained by the listed findings, and the list must be complete.
+  if ($null -ne (Get-OptionalProperty -Object $Scan -Name "nextToken")) { return $result }
+  $listed = @(Get-OptionalProperty -Object $FindingsEnvelope -Name "findings")
+  $listedCritical = @($listed | Where-Object { [string]$_.severity -ceq "CRITICAL" })
+  $listedHigh = @($listed | Where-Object { [string]$_.severity -ceq "HIGH" })
+  if ($listedCritical.Count -ne $Critical -or $listedHigh.Count -ne $High) { return $result }
+  $allowed = Get-AcceptedImageFindings
+  $accepted = @()
+  $unaccepted = @{ CRITICAL = 0; HIGH = 0 }
+  foreach ($finding in @($listedCritical) + @($listedHigh)) {
+    $name = [string]$finding.name
+    $severity = [string]$finding.severity
+    if ($allowed.ContainsKey($name) -and $allowed[$name] -ceq $severity) {
+      $accepted += $name
+    } else {
+      $unaccepted[$severity]++
+    }
+  }
+  return [pscustomobject]@{ Critical = [int]$unaccepted["CRITICAL"]; High = [int]$unaccepted["HIGH"]; Accepted = @($accepted | Sort-Object) }
+}
+
 function Assert-RemoteOciImage {
   param(
     [Parameter(Mandatory)][object]$IndexDetail,
@@ -604,14 +643,16 @@ function Assert-RemoteOciImage {
   $highValue = Get-OptionalProperty -Object $counts -Name "HIGH"
   $critical = if ($null -eq $criticalValue) { 0 } else { [int]$criticalValue }
   $high = if ($null -eq $highValue) { 0 } else { [int]$highValue }
-  if ($scanStatus -cne "COMPLETE" -or $critical -ne 0 -or $high -ne 0) {
-    throw "The exact linux/amd64 image does not have a COMPLETE zero-Critical/zero-High ECR scan."
+  $remaining = Get-UnacceptedFindingCounts -Scan $Scan -FindingsEnvelope $findingsEnvelope -Critical $critical -High $high
+  if ($scanStatus -cne "COMPLETE" -or $remaining.Critical -ne 0 -or $remaining.High -ne 0) {
+    throw "The exact linux/amd64 image does not have a COMPLETE ECR scan free of Critical/High findings beyond the accepted ones."
   }
   return [pscustomobject]@{
-    IndexDigest    = $ExpectedIndexDigest
-    PlatformDigest = $ExpectedPlatformDigest
-    Critical       = $critical
-    High           = $high
+    IndexDigest      = $ExpectedIndexDigest
+    PlatformDigest   = $ExpectedPlatformDigest
+    Critical         = $remaining.Critical
+    High             = $remaining.High
+    AcceptedFindings = @($remaining.Accepted)
   }
 }
 
