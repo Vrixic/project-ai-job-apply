@@ -19,6 +19,11 @@ if ($source -notmatch 'if \(Test-Path -LiteralPath \$driftPlan -PathType Leaf\)\
     $source -match 'if \(\$driftExit -eq 0 -and \(Test-Path -LiteralPath \$driftPlan') {
   throw "Unexpected Terraform exit plans are not marked owned before exit validation and cleanup."
 }
+if ($source -notmatch 'lib\\migration-image-scan-gate\.ps1' -or
+    $source -notmatch 'Get-UnacceptedFindingCounts -Scan \$scan' -or
+    $source -match '\$criticalCount -ne 0 -or \$highCount -ne 0') {
+  throw "The migration image scan gate must use the shared accepted-findings check, not bare zero counts."
+}
 if ($source -notmatch 'Assert-RetainedMigrationBaselinePlan -Plan \$driftJson') {
   throw "Post-migration Verify does not route its retained plan through the shared provider-drift guard."
 }
@@ -51,7 +56,7 @@ if ($source -notmatch '\[string\]\$ReviewedBaselineToCurrentDeltaSha256 = ""' -o
 $currentSuccessMarkers = @(
   "Database migrations through 0014_retire_profile_facts applied and verified.",
   "Jobs migrations through 0027_candidate_report_export_status applied and verified.",
-  "Documents migrations through 0018_native_resume_legacy_launch_rejection applied and verified.",
+  "Documents migrations through 0019_native_resume_purge_seals_epoch applied and verified.",
   "Matching migrations through 0003_private_saved_page_captures applied and verified.",
   "Billing migrations through 0002_candidate_rights applied and verified.",
   "Trust migrations through 0005_development_test_removal applied and verified.",

@@ -2,6 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 . (Join-Path $repositoryRoot "scripts/lib/terraform-toolchain.ps1")
+. (Join-Path $repositoryRoot "scripts/lib/migration-image-scan-gate.ps1")
 $publisherPath = Join-Path $repositoryRoot "scripts\publish-development-migration-image.ps1"
 $source = Get-Content -LiteralPath $publisherPath -Raw
 $tokens = $null
@@ -16,8 +17,7 @@ foreach ($functionName in @(
     "Resolve-OperatorPath", "Resolve-DockerAuthDirectory", "Write-JsonFile",
     "Invoke-AwsScanJson",
     "Assert-RepositoryShape", "Resolve-OciBlobPath", "Get-OciLayoutIdentity",
-    "Assert-DeterministicOciIdentity", "Get-AcceptedImageFindings", "Get-UnacceptedFindingCounts",
-    "Assert-RemoteOciImage", "Assert-PlatformHandoff",
+    "Assert-DeterministicOciIdentity", "Assert-RemoteOciImage", "Assert-PlatformHandoff",
     "Assert-ExactPropertySet", "Test-CanonicalUtcTimestamp", "Get-CanonicalReceiptPropertyNames",
     "Assert-ResumablePublicationReceipt", "Resolve-PublicationResumeMode", "Assert-PublicationReceipt",
     "Invoke-LocalMigrationImageBuild"
