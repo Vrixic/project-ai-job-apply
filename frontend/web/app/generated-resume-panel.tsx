@@ -5,9 +5,13 @@ import type {
   ApplicationCoverLetterPreview,
   ApplicationTemporaryMaterial,
 } from "@ai-job-apply/api-contracts";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { materialDeadline } from "../lib/application-material-lifetime";
-import { fetchResumeFile, sha256OfBytes } from "../lib/applications-client";
+import {
+  fetchResumeFile,
+  fetchUploadedResumeFile,
+  sha256OfBytes,
+} from "../lib/applications-client";
 import {
   elapsedSeconds,
   expiresInMinutes,
@@ -19,6 +23,7 @@ import {
 } from "../lib/apply-flow";
 import { keyed } from "../lib/keyed";
 import { nativeMaterialReadFailureCopy, readNativeMaterial } from "../lib/native-material-client";
+import { ResumeDiffViewer } from "./resume-diff-viewer";
 import { ResumePdfViewer } from "./resume-pdf-viewer";
 import { useMaterialExpiry } from "./use-material-expiry";
 
@@ -160,6 +165,12 @@ type Loaded =
   | { phase: "error"; message: string }
   | { phase: "ready"; bytes: Uint8Array; contentSha256: string };
 
+type Comparison =
+  | { phase: "closed" }
+  | { phase: "loading" }
+  | { phase: "error"; message: string }
+  | { phase: "open"; original: Uint8Array };
+
 function ReadyResume({
   application,
   packet,
@@ -185,7 +196,15 @@ function ReadyResume({
   const [loaded, setLoaded] = useState<Loaded>({ phase: "loading" });
   const [displayFailed, setDisplayFailed] = useState(false);
   const [message, setMessage] = useState<string>();
+  const [comparison, setComparison] = useState<Comparison>({ phase: "closed" });
+  const comparedOriginal = useRef<Uint8Array | undefined>(undefined);
   const resumeHash = packet.artifactHashes.resume;
+
+  function closeComparison() {
+    comparedOriginal.current?.fill(0);
+    comparedOriginal.current = undefined;
+    setComparison({ phase: "closed" });
+  }
 
   // One verified read of the PDF per packet and retry. The same bytes are shown and downloaded, so
   // what the candidate reviews is exactly the file they get.
@@ -195,6 +214,9 @@ function ReadyResume({
     setLoaded({ phase: "loading" });
     setDisplayFailed(false);
     setMessage(undefined);
+    comparedOriginal.current?.fill(0);
+    comparedOriginal.current = undefined;
+    setComparison({ phase: "closed" });
     const options = {
       signal: controller.signal,
       ...(fetchImplementation ? { fetch: fetchImplementation } : {}),
@@ -250,8 +272,48 @@ function ReadyResume({
     return () => {
       controller.abort();
       held?.fill(0);
+      comparedOriginal.current?.fill(0);
+      comparedOriginal.current = undefined;
     };
   }, [application.id, packet.id, packet.packetHash, attempt]);
+
+  // The candidate's own file, read the same verified way, only when they ask to compare.
+  async function openComparison() {
+    if (loaded.phase !== "ready" || comparison.phase === "loading") return;
+    setComparison({ phase: "loading" });
+    const result = await fetchUploadedResumeFile(application.id, {
+      ...(fetchImplementation ? { fetch: fetchImplementation } : {}),
+    });
+    if (!result.ok) {
+      setComparison({ phase: "error", message: result.message });
+      return;
+    }
+    const { file } = result;
+    if (file.format !== "pdf") {
+      setComparison({
+        phase: "error",
+        message: "Comparing is available when your uploaded resume is a PDF.",
+      });
+      return;
+    }
+    let bytes: Uint8Array | undefined;
+    try {
+      bytes = Uint8Array.from(atob(file.contentBase64), (character) => character.charCodeAt(0));
+      if (
+        bytes.byteLength !== file.sizeBytes ||
+        new TextDecoder().decode(bytes.subarray(0, 5)) !== "%PDF-" ||
+        (await sha256OfBytes(bytes)) !== file.sha256
+      )
+        throw Error("UploadedResumeUnavailable");
+    } catch {
+      bytes?.fill(0);
+      setComparison({ phase: "error", message: "That did not go through. Try again." });
+      return;
+    }
+    comparedOriginal.current?.fill(0);
+    comparedOriginal.current = bytes;
+    setComparison({ phase: "open", original: bytes });
+  }
 
   const shown = useCallback(() => {
     if (loaded.phase === "ready") onPreviewShown(loaded.contentSha256);
@@ -319,8 +381,26 @@ function ReadyResume({
       <p>
         <button type="button" disabled={busy || loaded.phase !== "ready"} onClick={download}>
           Download PDF
-        </button>
+        </button>{" "}
+        {comparison.phase === "open" ? null : (
+          <button
+            type="button"
+            disabled={busy || loaded.phase !== "ready" || comparison.phase === "loading"}
+            onClick={() => void openComparison()}
+          >
+            See what changed
+          </button>
+        )}
       </p>
+      {comparison.phase === "loading" ? <p role="status">Loading your uploaded resume...</p> : null}
+      {comparison.phase === "error" ? <p role="alert">{comparison.message}</p> : null}
+      {comparison.phase === "open" && loaded.phase === "ready" ? (
+        <ResumeDiffViewer
+          originalBytes={comparison.original}
+          tailoredBytes={loaded.bytes}
+          onClose={closeComparison}
+        />
+      ) : null}
       <p role="status" aria-live="polite">
         {message}
       </p>

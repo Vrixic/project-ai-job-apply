@@ -3,6 +3,7 @@ import type {
   ApplicationResumeFile,
   ApplicationResumePreview,
   ApplicationSubmissionStart,
+  ApplicationUploadedResumeFile,
   StartManualApplicationSubmissionRequest,
 } from "@ai-job-apply/api-contracts";
 
@@ -317,6 +318,50 @@ export async function fetchResumeFile(
         typeof file.sizeBytes === "number"
       ) {
         return { ok: true, file: file as ApplicationResumeFile };
+      }
+      return { ok: false, message: "That did not go through. Try again." };
+    }
+    const code =
+      value && typeof value === "object" ? String((value as { code?: unknown }).code ?? "") : "";
+    return { ok: false, message: applicationsProblemCopy(code) };
+  } catch {
+    return { ok: false, message: "That did not go through. Try again." };
+  }
+}
+
+export type UploadedResumeFileResult =
+  | { ok: true; file: ApplicationUploadedResumeFile }
+  | { ok: false; message: string };
+
+/**
+ * Fetches the candidate's own uploaded resume, byte for byte, while the current packet is bound to it
+ * (the generated one is temporary material beside it). Used to compare the two; failures collapse to
+ * fixed copy.
+ */
+export async function fetchUploadedResumeFile(
+  applicationId: string,
+  options: ApplicationsCallOptions = {},
+): Promise<UploadedResumeFileResult> {
+  const send = options.fetch ?? fetch;
+  try {
+    const response = await send(`/api/platform/applications/${applicationId}/resume/uploaded`, {
+      method: "GET",
+      cache: "no-store",
+      credentials: "same-origin",
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+    const value: unknown = await response.json().catch(() => undefined);
+    if (response.ok && value && typeof value === "object") {
+      const file = value as Partial<ApplicationUploadedResumeFile>;
+      if (
+        (file.format === "pdf" || file.format === "docx") &&
+        typeof file.contentBase64 === "string" &&
+        typeof file.sha256 === "string" &&
+        typeof file.fileName === "string" &&
+        typeof file.mediaType === "string" &&
+        typeof file.sizeBytes === "number"
+      ) {
+        return { ok: true, file: file as ApplicationUploadedResumeFile };
       }
       return { ok: false, message: "That did not go through. Try again." };
     }
