@@ -7,6 +7,12 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SALARY_QUESTION } from "../lib/salary-expectation";
+import {
+  cachedUploadedResume,
+  dropUploadedResume,
+  holdUploadedResume,
+  uploadedResumeKey,
+} from "../lib/uploaded-resume-cache";
 import { ApplicationsWorkspace } from "./applications-workspace";
 import { CandidateNameProvider } from "./candidate-name-context";
 
@@ -359,6 +365,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.useRealTimers();
   Reflect.deleteProperty(window, "chrome");
+  dropUploadedResume();
 });
 
 async function mount(
@@ -445,6 +452,32 @@ describe("ApplicationsWorkspace: generate, then apply", () => {
     expect(
       (await axe.run(container, { rules: { "color-contrast": { enabled: false } } })).violations,
     ).toEqual([]);
+  });
+
+  it("forgets the candidate's own resume held for the comparison when the page is left", async () => {
+    const original = Uint8Array.from([1, 2, 3]);
+    holdUploadedResume(uploadedResumeKey(APP, "a".repeat(64)), original);
+    await mount(new FakeBff());
+    expect(cachedUploadedResume(uploadedResumeKey(APP, "a".repeat(64)))).toBe(original);
+    await act(async () => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    expect(cachedUploadedResume(uploadedResumeKey(APP, "a".repeat(64)))).toBeUndefined();
+    expect(Array.from(original)).toEqual([0, 0, 0]);
+  });
+
+  it("forgets it when the candidate signs out here", async () => {
+    const original = Uint8Array.from([4, 5, 6]);
+    holdUploadedResume(uploadedResumeKey(APP, "b".repeat(64)), original);
+    await mount(new FakeBff());
+    const logout = document.createElement("a");
+    logout.href = "/auth/logout";
+    logout.addEventListener("click", (event) => event.preventDefault());
+    document.body.append(logout);
+    await act(async () => logout.click());
+    logout.remove();
+    expect(cachedUploadedResume(uploadedResumeKey(APP, "b".repeat(64)))).toBeUndefined();
+    expect(Array.from(original)).toEqual([0, 0, 0]);
   });
 
   it("disables Apply when the job has no safe employer link", async () => {

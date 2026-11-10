@@ -23,6 +23,11 @@ import {
 } from "../lib/apply-flow";
 import { keyed } from "../lib/keyed";
 import { nativeMaterialReadFailureCopy, readNativeMaterial } from "../lib/native-material-client";
+import {
+  cachedUploadedResume,
+  holdUploadedResume,
+  uploadedResumeKey,
+} from "../lib/uploaded-resume-cache";
 import { ResumeDiffViewer } from "./resume-diff-viewer";
 import { ResumePdfViewer } from "./resume-pdf-viewer";
 import { useMaterialExpiry } from "./use-material-expiry";
@@ -197,12 +202,12 @@ function ReadyResume({
   const [displayFailed, setDisplayFailed] = useState(false);
   const [message, setMessage] = useState<string>();
   const [comparison, setComparison] = useState<Comparison>({ phase: "closed" });
-  const comparedOriginal = useRef<Uint8Array | undefined>(undefined);
+  // The candidate's own file once read: kept across hiding and showing the comparison. The bytes
+  // belong to lib/uploaded-resume-cache, which zeroes them; this only remembers where they are.
+  const originalHeld = useRef<Uint8Array | undefined>(undefined);
   const resumeHash = packet.artifactHashes.resume;
 
   function closeComparison() {
-    comparedOriginal.current?.fill(0);
-    comparedOriginal.current = undefined;
     setComparison({ phase: "closed" });
   }
 
@@ -214,8 +219,7 @@ function ReadyResume({
     setLoaded({ phase: "loading" });
     setDisplayFailed(false);
     setMessage(undefined);
-    comparedOriginal.current?.fill(0);
-    comparedOriginal.current = undefined;
+    originalHeld.current = undefined;
     setComparison({ phase: "closed" });
     const options = {
       signal: controller.signal,
@@ -272,14 +276,20 @@ function ReadyResume({
     return () => {
       controller.abort();
       held?.fill(0);
-      comparedOriginal.current?.fill(0);
-      comparedOriginal.current = undefined;
     };
   }, [application.id, packet.id, packet.packetHash, attempt]);
 
   // The candidate's own file, read the same verified way, only when they ask to compare.
   async function openComparison() {
     if (loaded.phase !== "ready" || comparison.phase === "loading") return;
+    // Already read in this browser session (this application or another with the same resume): no request.
+    const key = uploadedResumeKey(application.id, packet.packetHash);
+    const known = originalHeld.current ?? cachedUploadedResume(key);
+    if (known) {
+      originalHeld.current = known;
+      setComparison({ phase: "open", original: known });
+      return;
+    }
     setComparison({ phase: "loading" });
     const result = await fetchUploadedResumeFile(application.id, {
       ...(fetchImplementation ? { fetch: fetchImplementation } : {}),
@@ -310,8 +320,8 @@ function ReadyResume({
       setComparison({ phase: "error", message: "That did not go through. Try again." });
       return;
     }
-    comparedOriginal.current?.fill(0);
-    comparedOriginal.current = bytes;
+    holdUploadedResume(key, bytes);
+    originalHeld.current = bytes;
     setComparison({ phase: "open", original: bytes });
   }
 

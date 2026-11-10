@@ -45,6 +45,7 @@ import {
 } from "../lib/native-material-sign-out-signal";
 import { resumeFileName } from "../lib/resume-file-name";
 import { SALARY_FIELD_KEY } from "../lib/salary-expectation";
+import { dropUploadedResume } from "../lib/uploaded-resume-cache";
 import { ApplicationBasicsDialog } from "./application-basics-gate";
 import { ApplicationPreparationProgress } from "./application-preparation-progress";
 import { type ApplicationReviewActions, ApplicationReviewPanel } from "./application-review-panel";
@@ -267,6 +268,8 @@ function JobApplicationWorkspace({
     const leave = () => {
       withdrawTransfer();
       setHandoffState(undefined);
+      // The candidate's own resume, held for the comparison view, goes with everything else.
+      dropUploadedResume();
     };
     try {
       channel = new BroadcastChannel(NATIVE_MATERIAL_SIGN_OUT_CHANNEL);
