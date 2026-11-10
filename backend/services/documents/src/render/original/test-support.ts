@@ -19,6 +19,8 @@ interface Line {
 }
 
 export const PAGE = { width: 612, height: 792 };
+/** The fill colour of the `marker` rectangle. Only the candidate's own page content carries it. */
+export const ORIGINAL_MARKER_COLOUR = "0.12 0.34 0.56";
 const RED = [0.8, 0, 0] as const;
 
 const lines: Line[] = [
@@ -89,6 +91,8 @@ export async function resumePdf(
     wrapped?: boolean;
     /** A Google Docs (Skia) style page: a flipped page matrix, scaled blocks and `Td` positioning. */
     skia?: boolean;
+    /** A tiny loose rectangle in a colour no redraw uses, so a test can tell the edited original apart. */
+    marker?: boolean;
   } = {},
 ): Promise<Uint8Array> {
   const document = await PDFDocument.create({ updateMetadata: false });
@@ -125,6 +129,7 @@ export async function resumePdf(
     });
   // A thin rule drawn outside any q ... Q, as some exporters do.
   if (!options.columns && !options.skia) body.push(`0.5 g\n36 ${PAGE.height - 80} 540 0.8 re\nf*`);
+  if (options.marker) body.push(`${ORIGINAL_MARKER_COLOUR} rg\n600 780 3 3 re\nf`);
   if (options.wrapped) {
     body.unshift("q\n20 40 580 720 re\nW* n");
     body.push("Q");

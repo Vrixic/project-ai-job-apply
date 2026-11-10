@@ -21,10 +21,23 @@ import {
   syntheticDocument,
 } from "../../../services/documents/src/resume-ast/test-support.ts";
 
-export async function exerciseResumeRuntime(mode, kernelPath, imageStart = startNativeResumeImage) {
+/**
+ * `fixture` may replace the resume the source port returns, so the same runtime path can run on a real
+ * parsed PDF: `document`, `job` and `originalPdfBase64` (the exact file the document was parsed from),
+ * and `onPdf(bytes)` receives each delivered PDF before it is zeroed.
+ */
+export async function exerciseResumeRuntime(
+  mode,
+  kernelPath,
+  imageStart = startNativeResumeImage,
+  fixture = {},
+) {
   const id = (n) => `019d04cf-1f80-7000-8000-${String(n).padStart(12, "0")}`;
-  const job = { title: "Backend engineer", description: "TypeScript PostgreSQL APIs" };
-  const document = syntheticDocument(SYNTHETIC_RESUME);
+  const job = fixture.job ?? {
+    title: "Backend engineer",
+    description: "TypeScript PostgreSQL APIs",
+  };
+  const document = fixture.document ?? syntheticDocument(SYNTHETIC_RESUME);
   const deployment = {
     clusterArn: "arn:aws:ecs:us-east-2:123456789012:cluster/native",
     taskDefinitionArn: "arn:aws:ecs:us-east-2:123456789012:task-definition/native:3",
@@ -124,7 +137,9 @@ export async function exerciseResumeRuntime(mode, kernelPath, imageStart = start
         assert.equal(kernelLoaded, true);
         assert.deepEqual(expected, bootstrap);
         loads++;
-        return { document, job };
+        return fixture.originalPdfBase64
+          ? { document, job, originalPdfBase64: fixture.originalPdfBase64 }
+          : { document, job };
       },
     }),
   });
@@ -467,6 +482,7 @@ export async function exerciseResumeRuntime(mode, kernelPath, imageStart = start
       const bytes = Buffer.from(value.contentBase64, "base64");
       assert.ok(bytes.byteLength > 100);
       assert.equal(createHash("sha256").update(bytes).digest("hex"), value.sha256);
+      fixture.onPdf?.(bytes);
       bytes.fill(0);
       value.contentBase64 = "";
       files++;

@@ -29,8 +29,10 @@ const staging = realpathSync(mkdtempSync(path.join(stagingRoot, "native-resume-i
 if (!staging.startsWith(`${realpathSync(stagingRoot)}${path.sep}`))
   throw Error("NativeResumeImageTestTargetRejected");
 const label = "d3-native-resume-image";
+// "redraw": no original file, drawn from the layout. "original": a synthetic candidate PDF edited in place.
+const scenarios = ["redraw", "original"];
 let failure;
-let receipt;
+const receipts = [];
 try {
   const certificate = spawnSync(
     args[6],
@@ -68,86 +70,113 @@ try {
       js: 'import {createRequire as fixtureRequire} from "node:module"; const require = fixtureRequire("file:///materials/native-resume/runtime.cjs");',
     },
   });
-  const started = performance.now();
-  const result = spawnSync(
-    "docker",
-    [
-      "run",
-      "--init",
-      "--pull",
-      "never",
-      "--cidfile",
-      path.join(staging, "container-id"),
-      "--label",
-      `ai-job-apply.task=${label}`,
-      "--network",
-      "none",
-      "--read-only",
-      "--cap-drop",
-      "ALL",
-      "--security-opt",
-      "no-new-privileges",
-      "--ulimit",
-      "core=0",
-      "--memory",
-      "512m",
-      "--pids-limit",
-      "64",
-      "--user",
-      "65532:65532",
-      "--mount",
-      `type=bind,source=${staging},target=/native,readonly`,
-      "--env",
-      "NODE_ENV=test",
-      "--entrypoint",
-      "/usr/local/bin/node",
-      args[2],
-      "/native/fixture.mjs",
-      args[4],
-    ],
-    { cwd: root, encoding: "utf8", timeout: 15_000, maxBuffer: 1024 * 1024 },
-  );
-  const elapsed = performance.now() - started;
-  assert.equal(result.error, undefined, "Image must exit before host fallback");
-  assert.equal(result.status, 137, result.stderr);
-  assert.ok(elapsed < 12_000, "Image deadline exceeded container startup tolerance");
-  assert.equal(result.stderr, "", "Image emitted unexpected diagnostics");
-  const completedId = readFileSync(path.join(staging, "container-id"), "utf8").trim();
-  assert.match(completedId, /^[a-f0-9]{64}$/u);
-  const observed = spawnSync("docker", ["inspect", "--format", "{{json .State}}", completedId], {
-    encoding: "utf8",
-    timeout: 10_000,
+  // The synthetic candidate PDF and its parsed document are made on the host, before the container
+  // starts with no network and a read-only root.
+  await build({
+    entryPoints: [path.join(root, "backend/workers/ai/native-resume/image-fixture-prep.mjs")],
+    outfile: path.join(staging, "prep.mjs"),
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    target: "node24",
+    external: ["@napi-rs/canvas"],
+    banner: {
+      js: 'import {createRequire as prepRequire} from "node:module"; const require = prepRequire(import.meta.url);',
+    },
   });
-  assert.equal(observed.status, 0);
-  const state = JSON.parse(observed.stdout);
-  assert.equal(state.Status, "exited");
-  assert.equal(state.ExitCode, 137);
-  assert.equal(state.OOMKilled, false, "An OOM kill is not native deadline evidence");
-  const proof = JSON.parse(result.stdout.trim());
-  assert.equal(proof.ready, true);
-  assert.equal(proof.actualFiles, 1);
-  assert.ok(proof.runtimeAssertions >= 20);
-  assert.equal(proof.originalExpiry - proof.originalCompletion, 1_800_000);
-  receipt = {
-    image: args[2],
-    sourceSha: args[4],
-    ...proof,
-    exitCode: 137,
-    elapsedMilliseconds: Math.round(elapsed),
-    externalPorts: "synthetic",
-    network: "none",
-    init: true,
-    readOnly: true,
-    uid: 65532,
-    oomKilled: false,
-  };
+  const prepared = spawnSync(process.execPath, [path.join(staging, "prep.mjs"), staging], {
+    encoding: "utf8",
+    timeout: 60_000,
+  });
+  if (prepared.error || prepared.status !== 0) throw Error("SyntheticOriginalPdfUnavailable");
+  for (const scenario of scenarios) {
+    const started = performance.now();
+    const result = spawnSync(
+      "docker",
+      [
+        "run",
+        "--init",
+        "--pull",
+        "never",
+        "--cidfile",
+        path.join(staging, `container-id-${scenario}`),
+        "--label",
+        `ai-job-apply.task=${label}`,
+        "--network",
+        "none",
+        "--read-only",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges",
+        "--ulimit",
+        "core=0",
+        "--memory",
+        "512m",
+        "--pids-limit",
+        "64",
+        "--user",
+        "65532:65532",
+        "--mount",
+        `type=bind,source=${staging},target=/native,readonly`,
+        "--env",
+        "NODE_ENV=test",
+        "--entrypoint",
+        "/usr/local/bin/node",
+        args[2],
+        "/native/fixture.mjs",
+        args[4],
+        scenario,
+      ],
+      { cwd: root, encoding: "utf8", timeout: 15_000, maxBuffer: 1024 * 1024 },
+    );
+    const elapsed = performance.now() - started;
+    assert.equal(result.error, undefined, "Image must exit before host fallback");
+    assert.equal(result.status, 137, result.stderr);
+    assert.ok(
+      elapsed < 12_000,
+      `Image deadline exceeded container startup tolerance (${scenario}, ${Math.round(elapsed)} ms)`,
+    );
+    assert.equal(result.stderr, "", "Image emitted unexpected diagnostics");
+    const completedId = readFileSync(path.join(staging, `container-id-${scenario}`), "utf8").trim();
+    assert.match(completedId, /^[a-f0-9]{64}$/u);
+    const observed = spawnSync("docker", ["inspect", "--format", "{{json .State}}", completedId], {
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+    assert.equal(observed.status, 0);
+    const state = JSON.parse(observed.stdout);
+    assert.equal(state.Status, "exited");
+    assert.equal(state.ExitCode, 137);
+    assert.equal(state.OOMKilled, false, "An OOM kill is not native deadline evidence");
+    const proof = JSON.parse(result.stdout.trim());
+    assert.equal(proof.ready, true);
+    assert.equal(proof.actualFiles, 1);
+    assert.ok(proof.runtimeAssertions >= 20);
+    assert.equal(proof.originalExpiry - proof.originalCompletion, 1_800_000);
+    receipts.push({
+      image: args[2],
+      sourceSha: args[4],
+      scenario,
+      ...proof,
+      exitCode: 137,
+      elapsedMilliseconds: Math.round(elapsed),
+      externalPorts: "synthetic",
+      network: "none",
+      init: true,
+      readOnly: true,
+      uid: 65532,
+      oomKilled: false,
+    });
+  }
 } catch (error) {
   failure = error;
 }
 let cleaned = false;
 try {
-  const cid = path.join(staging, "container-id");
-  if (existsSync(cid)) {
+  for (const scenario of scenarios) {
+    const cid = path.join(staging, `container-id-${scenario}`);
+    if (!existsSync(cid)) continue;
     const id = readFileSync(cid, "utf8").trim();
     if (!/^[a-f0-9]{64}$/u.test(id)) throw Error("NativeResumeImageCleanupTargetRejected");
     const inspected = spawnSync("docker", ["inspect", "--format", "{{json .Config.Labels}}", id], {
@@ -175,4 +204,4 @@ try {
   if (cleaned) rmSync(staging, { recursive: true, force: true });
 }
 if (failure) throw failure;
-process.stdout.write(`${JSON.stringify(receipt)}\n`);
+for (const receipt of receipts) process.stdout.write(`${JSON.stringify(receipt)}\n`);
