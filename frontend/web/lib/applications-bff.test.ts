@@ -554,6 +554,44 @@ describe("Applications browser boundary", () => {
     expect(refused.status).toBe(503);
   });
 
+  it("forwards the candidate's own uploaded resume read and refuses a body that breaks the contract", async () => {
+    const uploaded = {
+      documentId: APP,
+      fileName: "my-resume.pdf",
+      format: "pdf",
+      mediaType: "application/pdf",
+      sha256: "a".repeat(64),
+      sizeBytes: 3,
+      contentBase64: "YWJj",
+    };
+    const ok = harness(() => json(uploaded));
+    const response = await applicationsRoute(
+      "uploadedResume",
+      new Request("http://localhost:3000/x", { method: "GET" }),
+      { applicationId: APP },
+      ok.deps,
+    );
+    expect(response.status).toBe(200);
+    expect(String((ok.fetch.mock.calls[0] as unknown[])[0])).toBe(
+      `http://localhost:4000/v1/applications/${APP}/resume/uploaded`,
+    );
+    for (const broken of [
+      { ...uploaded, sizeBytes: 2_097_153 },
+      { ...uploaded, format: "exe" },
+      { ...uploaded, fileName: "bad/name.pdf" },
+      { ...uploaded, extra: true },
+    ]) {
+      const { deps } = harness(() => json(broken));
+      const refused = await applicationsRoute(
+        "uploadedResume",
+        new Request("http://localhost:3000/x", { method: "GET" }),
+        { applicationId: APP },
+        deps,
+      );
+      expect(refused.status).toBe(503);
+    }
+  });
+
   it("never passes an invalid, oversized, mistyped, or foreign success body to the browser", async () => {
     const cases: Array<[string, () => Response]> = [
       ["wrong status", () => json(application(), 200)],

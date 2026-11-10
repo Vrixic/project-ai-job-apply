@@ -2,6 +2,14 @@
 
 2026-10-26 owner decisions on closing D3: (1) the accountable legal and security review is carried to D6-015 (independent assessment) and D6-016 (counsel review), as D1's was, so D3 closes on its engineering criteria. (2) Live AI generation is the product's main feature but cannot meet ADR-038's 30-minute all-copy retention with any provider or account the owner has today, so it moves to the new [D3.2 Live AI generation](phase-3-2-live-ai-generation.md); D3 closes with live AI off and deterministic tailoring. (3) Greenhouse is the live submission proof for D3; Ashby's live submission proof moves to D3.2. (4) One working session with the owner will run the live Greenhouse submission and the canonical export and deletion run (the D4 nine-owner policy) with a disposable MFA user; before it, the failing step of the 2026-10-17 run is diagnosed and fixed locally. D3 stays In progress until that session passes.
 
+2026-11-10: D3-155 "What changed" view for the generated resume (owner request): the generated-resume panel has a
+"See what changed" button that reads the candidate's own uploaded PDF (the existing owner-only
+`GET /v1/applications/{id}/resume/uploaded` through a new BFF operation, checked against its digest) and shows it
+beside the tailored PDF. Both files are read in the browser only: PDF.js text lines are matched in order
+(`web/lib/resume-diff.ts`) into kept, moved, changed (with the words that changed), removed and added lines, drawn
+as boxes over each page and listed as text, so nothing depends on colour. Today's tailoring only removes and
+reorders existing lines, so "changed" and "added" appear when rewriting does. No contract change.
+
 2026-11-07: D3-154 edit the candidate's own PDF in place ([ADR-058](../../adr/058-edit-the-candidates-own-pdf-in-place.md)):
 the owner asked that the generated PDF never change the look of their own PDF. For single-flow Word-style
 PDFs the page content stream is edited (dropped and moved text blocks, rules and links with their line, text

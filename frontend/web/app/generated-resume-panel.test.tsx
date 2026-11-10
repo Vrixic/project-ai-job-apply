@@ -42,6 +42,31 @@ vi.mock("./resume-pdf-viewer", async () => {
   };
 });
 
+// The comparison needs PDF.js and a canvas; its line matching is proven in lib/resume-diff.test.ts.
+vi.mock("./resume-diff-viewer", async () => {
+  const react = await import("react");
+  return {
+    ResumeDiffViewer: ({
+      originalBytes,
+      tailoredBytes,
+      onClose,
+    }: {
+      originalBytes: Uint8Array;
+      tailoredBytes: Uint8Array;
+      onClose(): void;
+    }) =>
+      react.createElement(
+        "section",
+        {
+          "aria-label": "Comparison",
+          "data-original": originalBytes.byteLength,
+          "data-tailored": tailoredBytes.byteLength,
+        },
+        react.createElement("button", { type: "button", onClick: onClose }, "Hide comparison"),
+      ),
+  };
+});
+
 const APP = "00000000-0000-7000-8000-000000000001";
 const JOB = "00000000-0000-7000-8000-000000000002";
 const PACKET = "00000000-0000-7000-8000-000000000003";
@@ -288,6 +313,87 @@ describe("GeneratedResumePanel", () => {
       expect(created[0]?.type).toBe("application/pdf");
       expect(container.textContent).toContain(`${FILE_NAME} downloaded.`);
       click.mockRestore();
+    });
+
+    describe("comparison with the uploaded resume", () => {
+      const ORIGINAL_BYTES = Buffer.from("%PDF-1.4\n%the candidate's own file\n%%EOF\n", "latin1");
+      const ORIGINAL_SHA = createHash("sha256").update(ORIGINAL_BYTES).digest("hex");
+      const uploadedBody = (overrides: Record<string, unknown> = {}) => ({
+        documentId: "00000000-0000-7000-8000-000000000040",
+        fileName: "my-resume.pdf",
+        format: "pdf",
+        mediaType: "application/pdf",
+        sha256: ORIGINAL_SHA,
+        sizeBytes: ORIGINAL_BYTES.byteLength,
+        contentBase64: ORIGINAL_BYTES.toString("base64"),
+        ...overrides,
+      });
+      function withUploaded(uploaded: (() => Response) | Record<string, unknown> = uploadedBody()) {
+        const bound = material();
+        const calls: string[] = [];
+        const send = vi.fn<typeof fetch>(async (input) => {
+          calls.push(String(input));
+          if (String(input).includes("/resume/uploaded"))
+            return typeof uploaded === "function" ? uploaded() : json(uploaded);
+          return json(pdfBody(bound));
+        });
+        return { bound, calls, send, app: application({ temporaryMaterials: [bound] }) };
+      }
+
+      it("reads the candidate's own file only when asked, then shows the comparison and can hide it", async () => {
+        const { bound, send, app, calls } = withUploaded();
+        await render({ kind: "ready", material: bound }, { application: app, send });
+        expect(calls.some((call) => call.includes("/resume/uploaded"))).toBe(false);
+        await act(async () => button("See what changed")?.click());
+        await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
+        expect(calls.filter((call) => call.endsWith(`/${APP}/resume/uploaded`))).toHaveLength(1);
+        const comparison = container.querySelector('[aria-label="Comparison"]');
+        expect(comparison?.getAttribute("data-original")).toBe(String(ORIGINAL_BYTES.byteLength));
+        expect(comparison?.getAttribute("data-tailored")).toBe(String(PDF_BYTES.byteLength));
+        expect(button("See what changed")).toBeUndefined();
+        await act(async () => button("Hide comparison")?.click());
+        expect(container.querySelector('[aria-label="Comparison"]')).toBeNull();
+        expect(button("See what changed")).toBeDefined();
+      });
+
+      it("says so when the uploaded resume is not a PDF", async () => {
+        const { bound, send, app } = withUploaded(
+          uploadedBody({
+            format: "docx",
+            mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          }),
+        );
+        await render({ kind: "ready", material: bound }, { application: app, send });
+        await act(async () => button("See what changed")?.click());
+        await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
+        expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+          "available when your uploaded resume is a PDF",
+        );
+        expect(container.querySelector('[aria-label="Comparison"]')).toBeNull();
+      });
+
+      it("refuses a file whose digest does not match what the server described", async () => {
+        const { bound, send, app } = withUploaded(uploadedBody({ sha256: "c".repeat(64) }));
+        await render({ kind: "ready", material: bound }, { application: app, send });
+        await act(async () => button("See what changed")?.click());
+        await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
+        expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+          "That did not go through",
+        );
+        expect(container.querySelector('[aria-label="Comparison"]')).toBeNull();
+      });
+
+      it("shows fixed copy when the server will not hand the file over", async () => {
+        const { bound, send, app } = withUploaded(() =>
+          json({ code: "application_packet_stale" }, 409),
+        );
+        await render({ kind: "ready", material: bound }, { application: app, send });
+        await act(async () => button("See what changed")?.click());
+        await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
+        expect(container.querySelector('[role="alert"]')).not.toBeNull();
+        expect(container.querySelector('[aria-label="Comparison"]')).toBeNull();
+        expect(button("See what changed")?.disabled).toBe(false);
+      });
     });
 
     it("refuses a file whose digest does not match and shows no resume", async () => {
