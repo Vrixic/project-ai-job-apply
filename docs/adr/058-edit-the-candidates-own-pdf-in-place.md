@@ -123,5 +123,21 @@ still holds: tailoring keeps, moves or omits the candidate's own lines and adds 
   sets aside exactly these two id and severity pairs and still fails on any other High or Critical
   finding, an accepted id at a different severity, a findings list that does not account for the counts,
   or a paginated scan. Remove an entry when a fixed package exists.
+- Findings and releases 2026-11-08 to 2026-11-10 (the first live tests fell back to a plain redraw three times,
+  each for a different reason):
+  1. The S3 gateway endpoint policy lacked the original-PDF read (fixed in #815).
+  2. The candidate's Google Docs (Skia) export was not editable in place and the first parse had no layout
+     (editor fixed in #816). Native image r4 (`fe0c1205`) replaced r3: resume-r2 was retired (its failure queue
+     stays), r4 took new work and r3 stopped taking it.
+  3. Replacing a resume purged the old one and its generations, which left the application's admission head
+     unsealed, so every later request for that application failed after five attempts (fixed by Documents
+     migration `0019_native_resume_purge_seals_epoch`, #817, applied to development 2026-11-10).
+  4. The document release published parser version 11 but the processor kept invoking `document-parser:8`
+     (`document_parser_invocation_qualified_arn`), so new uploads were stored without layout. It was repointed
+     to `:11` on 2026-11-10 through a platform stage. A parser release is not live until that pin moves:
+     check that the parser version's CloudWatch invocations are non-zero and that a fresh upload's stored
+     document has layout.
+  The native image smoke now runs a second scenario with a synthetic Google Docs style PDF and fails unless the
+  delivered file is that original edited in place (it fails on the r3 image).
 - The Lambda tailoring service keeps producing the ADR-051 redraw; it is not used when native
   preparation is on.

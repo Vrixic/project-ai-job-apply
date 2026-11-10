@@ -42,6 +42,9 @@ The separate immutable-image smoke executes the image-owned runtime bundle and k
 node scripts/verify-native-resume-image.mjs --enable-local-image-test --image sha256:<image-id> --source-sha <image-source-commit> --openssl 'C:/Program Files/Git/usr/bin/openssl.exe'
 ```
 
+It runs two scenarios: `redraw` (no original file) and `original` (a synthetic Google Docs style PDF made on
+the host, which must come back as that file edited in place, found by a marker rectangle only its page content
+has). The second fails on an image that cannot edit such a PDF.
 It verifies image manifest hashes, uses UID 65532, init, read-only root, dropped capabilities,
 no-new-privileges, a memory limit and disabled networking. Synthetic source/identity/AWS ports
 exercise actual PDF rendering, TLS 1.3, authenticated current-packet preview/download,
