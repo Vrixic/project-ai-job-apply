@@ -273,6 +273,7 @@ module "platform" {
   restricted_answer_vault_enabled               = var.restricted_answer_vault_enabled
   restricted_answer_reuse_enabled               = var.restricted_answer_reuse_enabled
   narrative_answers_enabled                     = var.narrative_answers_enabled
+  uploaded_resume_attachment_enabled            = var.uploaded_resume_attachment_enabled
   restricted_answer_export_enabled              = var.restricted_answer_export_enabled
   applications_attempt_recovery_enabled         = var.applications_attempt_recovery_enabled
   applications_attempt_recovery_artifact_s3_key = var.applications_attempt_recovery_artifact_s3_key

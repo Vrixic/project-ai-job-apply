@@ -2119,6 +2119,9 @@ resource "aws_lambda_function" "gateway" {
       local.document_tailoring_invoke_enabled ? {
         DOCUMENT_TAILORING_FUNCTION_ARN = local.document_processor_alias_arn
       } : {},
+      local.document_tailoring_invoke_enabled && var.uploaded_resume_attachment_enabled ? {
+        UPLOADED_RESUME_ATTACHMENT_ENABLED = "true"
+      } : {},
       var.restricted_answer_vault_enabled ? {
         RESTRICTED_ANSWER_VAULT_KMS_KEY_ARN = aws_kms_key.restricted_answer_vault[0].arn
       } : {},

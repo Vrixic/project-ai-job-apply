@@ -501,6 +501,13 @@ variable "restricted_answer_reuse_enabled" {
   nullable    = false
 }
 
+variable "uploaded_resume_attachment_enabled" {
+  description = "Let the Gateway hand the candidate their own uploaded resume back (ADR-050), for the comparison view and the uploaded-resume apply option; false switches it off without a code release."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "restricted_answer_export_enabled" {
   description = "Enable decrypt-only restricted-answer access for the candidate-rights export activity."
   type        = bool

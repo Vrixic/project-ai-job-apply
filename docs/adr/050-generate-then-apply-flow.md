@@ -103,6 +103,11 @@ use.
    parser's own mechanism; the processor already assumes that role, so no IAM change is expected, to be confirmed by policy simulation at release), verifies size and digest, and returns the bytes only to
    the owner's request. It is default off (`UPLOADED_RESUME_ATTACHMENT_ENABLED`) and needs a
    Documents release and owner security review before activation.
+   Activation (owner approval 2026-11-10, development): the Terraform bool
+   `uploaded_resume_attachment_enabled` (default false, requires `deploy_gateway_lambda` and
+   `document_tailoring_invoke_enabled`) sets the Gateway flag, and only when the processor alias is actually
+   deployed; setting it false switches the route off without a code release. The candidate's web app uses
+   the same route for its "See what changed" comparison, fetching the file once per browser session.
 6. **Extension hand-off: arm, then confirm.** Pressing Apply opens the employer page from the click
    and sends the extension an identifiers-only `application-apply-intent.v1` over the existing
    first-party channel. The extension reads the packet with its own session and derives the resume

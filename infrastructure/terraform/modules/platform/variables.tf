@@ -1296,6 +1296,18 @@ variable "restricted_answer_reuse_enabled" {
   }
 }
 
+variable "uploaded_resume_attachment_enabled" {
+  description = "Lets the Gateway hand the candidate their own uploaded resume back, byte for byte (ADR-050): owner only, bound to the current packet, 2 MiB cap, never cached. It is read through the Documents processor's reviewed original-resume request, so it needs the Gateway's tailoring invoke path. False switches it off without a code release."
+  type        = bool
+  default     = false
+  nullable    = false
+
+  validation {
+    condition     = !var.uploaded_resume_attachment_enabled || (var.deploy_gateway_lambda && var.document_tailoring_invoke_enabled)
+    error_message = "The uploaded-resume read goes through the Documents processor, so it requires the Gateway Lambda and document_tailoring_invoke_enabled."
+  }
+}
+
 variable "restricted_answer_export_enabled" {
   description = "Allow the private candidate-rights activity to decrypt latest non-deleted restricted answers into the candidate's encrypted export only."
   type        = bool
