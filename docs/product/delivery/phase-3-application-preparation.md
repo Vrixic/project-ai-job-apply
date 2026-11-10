@@ -9,6 +9,10 @@ beside the tailored PDF. Both files are read in the browser only: PDF.js text li
 (`web/lib/resume-diff.ts`) into kept, moved, changed (with the words that changed), removed and added lines, drawn
 as boxes over each page and listed as text, so nothing depends on colour. Today's tailoring only removes and
 reorders existing lines, so "changed" and "added" appear when rewriting does. No contract change.
+The original is fetched once per application packet: it is verified, then held in page memory only
+(`web/lib/uploaded-resume-cache.ts`, one file, keyed by application and packet hash), so hiding and showing the
+comparison, or the panel coming back, makes no further request. It is zeroed when the packet changes, the page is
+left or the candidate signs out.
 
 2026-11-07: D3-154 edit the candidate's own PDF in place ([ADR-058](../../adr/058-edit-the-candidates-own-pdf-in-place.md)):
 the owner asked that the generated PDF never change the look of their own PDF. For single-flow Word-style

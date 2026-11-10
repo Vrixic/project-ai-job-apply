@@ -7,6 +7,7 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GenerationView } from "../lib/apply-flow";
+import { dropUploadedResume } from "../lib/uploaded-resume-cache";
 import {
   CoverLetterSection,
   GeneratedCoverLetterPanel,
@@ -146,6 +147,7 @@ afterEach(() => {
   act(() => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
+  dropUploadedResume();
 });
 
 interface Handlers {
@@ -354,6 +356,63 @@ describe("GeneratedResumePanel", () => {
         await act(async () => button("Hide comparison")?.click());
         expect(container.querySelector('[aria-label="Comparison"]')).toBeNull();
         expect(button("See what changed")).toBeDefined();
+      });
+
+      const uploadedReads = (calls: string[]) =>
+        calls.filter((call) => call.endsWith(`/${APP}/resume/uploaded`)).length;
+      const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
+
+      it("reads the original once: hiding and showing the comparison again asks the server for nothing", async () => {
+        const { bound, send, app, calls } = withUploaded();
+        await render({ kind: "ready", material: bound }, { application: app, send });
+        await act(async () => button("See what changed")?.click());
+        await settle();
+        await act(async () => button("Hide comparison")?.click());
+        await act(async () => button("See what changed")?.click());
+        await settle();
+        expect(container.querySelector('[aria-label="Comparison"]')).not.toBeNull();
+        expect(uploadedReads(calls)).toBe(1);
+      });
+
+      it("keeps the original in memory across the panel going away and coming back", async () => {
+        const { bound, send, app, calls } = withUploaded();
+        await render({ kind: "ready", material: bound }, { application: app, send });
+        await act(async () => button("See what changed")?.click());
+        await settle();
+        expect(uploadedReads(calls)).toBe(1);
+        // The panel leaves the page (another tab of the workspace) and returns for the same packet.
+        await act(async () => root.render(null));
+        await render({ kind: "ready", material: bound }, { application: app, send });
+        await act(async () => button("See what changed")?.click());
+        await settle();
+        expect(container.querySelector('[aria-label="Comparison"]')).not.toBeNull();
+        expect(uploadedReads(calls)).toBe(1);
+      });
+
+      it("reads the original again for a new packet, never reusing one held for the old", async () => {
+        const { bound, send, app, calls } = withUploaded();
+        await render({ kind: "ready", material: bound }, { application: app, send });
+        await act(async () => button("See what changed")?.click());
+        await settle();
+        await act(async () => root.render(null));
+        const next = application({ temporaryMaterials: [bound], packetHash: "d".repeat(64) });
+        await render({ kind: "ready", material: bound }, { application: next, send });
+        await act(async () => button("See what changed")?.click());
+        await settle();
+        expect(uploadedReads(calls)).toBe(2);
+      });
+
+      it("reads the original again once the held copy is dropped", async () => {
+        const { bound, send, app, calls } = withUploaded();
+        await render({ kind: "ready", material: bound }, { application: app, send });
+        await act(async () => button("See what changed")?.click());
+        await settle();
+        await act(async () => root.render(null));
+        dropUploadedResume();
+        await render({ kind: "ready", material: bound }, { application: app, send });
+        await act(async () => button("See what changed")?.click());
+        await settle();
+        expect(uploadedReads(calls)).toBe(2);
       });
 
       it("says so when the uploaded resume is not a PDF", async () => {
