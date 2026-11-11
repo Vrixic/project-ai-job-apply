@@ -2,6 +2,22 @@
 
 2026-10-26 owner decisions on closing D3: (1) the accountable legal and security review is carried to D6-015 (independent assessment) and D6-016 (counsel review), as D1's was, so D3 closes on its engineering criteria. (2) Live AI generation is the product's main feature but cannot meet ADR-038's 30-minute all-copy retention with any provider or account the owner has today, so it moves to the new [D3.2 Live AI generation](phase-3-2-live-ai-generation.md); D3 closes with live AI off and deterministic tailoring. (3) Greenhouse is the live submission proof for D3; Ashby's live submission proof moves to D3.2. (4) One working session with the owner will run the live Greenhouse submission and the canonical export and deletion run (the D4 nine-owner policy) with a disposable MFA user; before it, the failing step of the 2026-10-17 run is diagnosed and fixed locally. D3 stays In progress until that session passes.
 
+2026-11-11: job details open on their own page (owner request: "it should take me into the job's details page, not
+open it up in the panel", "remove that feature where it opens in place"). In the search results `View details and
+sources` is now a client-side link to `/jobs?job=<id>` (the existing `?job=&application=` page, with the
+application optional; parsed by `lib/linked-job.ts`), and the in-place disclosure is gone: no toggle, no Close
+details, no Escape handling, no per-result details read. The page is `app/job-detail-view.tsx` (the old
+`job-detail-panel.tsx` minus the disclosure code; same description, sources and apply flow, same fixed error copy,
+abort and generation fencing); it reads the job as it opens. Because that leaves the results, the last search is
+held in page memory only (`lib/last-job-search.ts`: never browser storage, which the browser-assurance suite
+asserts stays empty) and restored when the form returns, so "Back to jobs" and the browser's Back show the same
+results; it is dropped on sign-out, on session end and when a new search finds nothing. A job applied to leaves
+the results as before, now through the applied list the form reads when it returns. The D3 browser-assurance
+gallery emulates the client-side navigation (link to the details page, "Back to jobs") and its steps follow;
+that suite was already stale (the profile-basics gate of #791 to #803 is not served by its fake backend) and the
+D1 browser-assurance gallery no longer builds (it imports `foundation-form`, removed in #482): both need their own
+maintenance pass.
+
 2026-11-10: D3-155 "What changed" view for the generated resume (owner request): the generated-resume panel has a
 "See what changed" button that reads the candidate's own uploaded PDF (the existing owner-only
 `GET /v1/applications/{id}/resume/uploaded` through a new BFF operation, checked against its digest) and shows it

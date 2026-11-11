@@ -2,23 +2,11 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, it, vi } from "vitest";
 
-vi.mock("../../job-detail-panel", () => ({
-  JobDetailPanel: ({
-    applicationId,
-    jobId,
-    standalone,
-  }: {
-    applicationId?: string;
-    jobId: string;
-    standalone?: boolean;
-  }) =>
+vi.mock("../../job-detail-view", () => ({
+  JobDetailView: ({ applicationId, jobId }: { applicationId?: string; jobId: string }) =>
     React.createElement(
       "div",
-      {
-        "data-application": applicationId,
-        "data-job": jobId,
-        "data-standalone": String(standalone),
-      },
+      { "data-application": applicationId, "data-job": jobId, "data-view": "true" },
       "Job page",
     ),
 }));
@@ -39,13 +27,28 @@ it("opens a linked job and its application on their own page, apart from the sea
   const html = renderToStaticMarkup(
     React.createElement(JobsPageClient, {
       authenticated: true,
-      initialApplication: { id: "synthetic-application", jobId: "synthetic-job" },
+      initialJob: { jobId: "synthetic-job", applicationId: "synthetic-application" },
     }),
   );
   expect(html).toContain('data-application="synthetic-application"');
   expect(html).toContain('data-job="synthetic-job"');
-  expect(html).toContain('data-standalone="true"');
+  expect(html).toContain('data-view="true"');
   expect(html).toContain('href="/jobs"');
+  expect(html).not.toContain("data-search");
+});
+
+it("opens a linked job on its own page with no application", async () => {
+  vi.stubGlobal("React", React);
+  const { JobsPageClient } = await import("./jobs-page-client");
+  const html = renderToStaticMarkup(
+    React.createElement(JobsPageClient, {
+      authenticated: true,
+      initialJob: { jobId: "synthetic-job" },
+    }),
+  );
+  expect(html).toContain('data-job="synthetic-job"');
+  expect(html).not.toContain("data-application");
+  expect(html).toContain("Back to jobs");
   expect(html).not.toContain("data-search");
 });
 
@@ -54,5 +57,5 @@ it("shows the search when no job is linked", async () => {
   const { JobsPageClient } = await import("./jobs-page-client");
   const html = renderToStaticMarkup(React.createElement(JobsPageClient, { authenticated: true }));
   expect(html).toContain("data-search");
-  expect(html).not.toContain("data-standalone");
+  expect(html).not.toContain("data-view");
 });

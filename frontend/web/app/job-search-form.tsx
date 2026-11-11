@@ -1,9 +1,10 @@
 "use client";
 
 import type { CanonicalJobSummary, JobSearchPage } from "@ai-job-apply/api-contracts";
+import Link from "next/link";
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { APPLICATIONS_CHANGED_EVENT, listAppliedApplications } from "../lib/applications-client";
-import { JobDetailPanel } from "./job-detail-panel";
+import { clearLastJobSearch, readLastJobSearch, saveLastJobSearch } from "../lib/last-job-search";
 import { JobReportControl } from "./job-report-control";
 import {
   appendJobSearchPage,
@@ -195,6 +196,34 @@ export function JobSearchForm({
     });
     return () => controller.abort();
   }, [authenticated, appliedRefresh]);
+
+  // A job opens on its own page, so coming back restores the search it was opened from. It is held in
+  // memory only, never in browser storage.
+  useEffect(() => {
+    if (!authenticatedRef.current) return;
+    const saved = readLastJobSearch();
+    if (!saved) return;
+    setFields(saved.fields);
+    setSubmittedFields(saved.fields);
+    setItems(saved.items);
+    setCursor(saved.cursor);
+    setMessage(`${saved.items.length} job${saved.items.length === 1 ? "" : "s"} loaded.`);
+  }, []);
+
+  // The search is kept while it has results, replaced by the next one, and dropped when a search finds
+  // nothing or the candidate signs out.
+  useEffect(() => {
+    if (!authenticated) {
+      clearLastJobSearch();
+      return;
+    }
+    if (!submittedFields || searching) return;
+    if (items.length > 0) {
+      saveLastJobSearch({ fields: submittedFields, items, ...(cursor ? { cursor } : {}) });
+    } else {
+      clearLastJobSearch();
+    }
+  }, [authenticated, submittedFields, searching, items, cursor]);
 
   function update<Key extends keyof JobSearchFields>(key: Key, value: JobSearchFields[Key]) {
     setFields((current) => ({ ...current, [key]: value }));
@@ -543,15 +572,14 @@ export function JobSearchForm({
                 >
                   {savingJobId === job.id ? "Saving…" : "Save job"}
                 </button>
-                <JobDetailPanel
-                  jobId={job.id}
-                  authenticated={authenticated}
-                  onSubmitted={() =>
-                    setAppliedJobIds((current) =>
-                      current.has(job.id) ? current : new Set(current).add(job.id),
-                    )
-                  }
-                />
+                {authenticated ? (
+                  <Link
+                    className="button-link secondary-button"
+                    href={`/jobs?job=${encodeURIComponent(job.id)}`}
+                  >
+                    View details and sources
+                  </Link>
+                ) : null}
                 <JobReportControl jobId={job.id} />
                 <MatchAssessmentPanel jobId={job.id} />
               </article>
