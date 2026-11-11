@@ -161,6 +161,7 @@ async function render(
   options: {
     application?: Application | undefined;
     nativeMaterials?: boolean;
+    comparisonAvailable?: boolean;
     busy?: boolean;
     send?: typeof fetch;
   } = {},
@@ -176,6 +177,7 @@ async function render(
         application={options.application}
         view={view}
         nativeMaterials={options.nativeMaterials ?? true}
+        comparisonAvailable={options.comparisonAvailable ?? true}
         nowMs={NOW}
         busy={options.busy ?? false}
         fileName={FILE_NAME}
@@ -356,6 +358,17 @@ describe("GeneratedResumePanel", () => {
         await act(async () => button("Hide comparison")?.click());
         expect(container.querySelector('[aria-label="Comparison"]')).toBeNull();
         expect(button("See what changed")).toBeDefined();
+      });
+
+      it("does not offer the comparison while the server cannot serve the original of a generated resume", async () => {
+        const { bound, send, app, calls } = withUploaded();
+        await render(
+          { kind: "ready", material: bound },
+          { application: app, send, comparisonAvailable: false },
+        );
+        expect(button("Download PDF")).toBeDefined();
+        expect(button("See what changed")).toBeUndefined();
+        expect(calls.some((call) => call.includes("/resume/uploaded"))).toBe(false);
       });
 
       const uploadedReads = (calls: string[]) =>

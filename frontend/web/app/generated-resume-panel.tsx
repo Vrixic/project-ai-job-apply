@@ -43,6 +43,7 @@ export function GeneratedResumePanel({
   application,
   view,
   nativeMaterials,
+  comparisonAvailable,
   nowMs,
   busy,
   fileName,
@@ -54,6 +55,12 @@ export function GeneratedResumePanel({
   application: Application | undefined;
   view: GenerationView;
   nativeMaterials: boolean;
+  /**
+   * Whether "See what changed" is offered. The server only serves the candidate's original while the
+   * packet carries that original, never for a generated resume, so the workspace turns this off
+   * until the server can serve the original a generated resume was made from.
+   */
+  comparisonAvailable: boolean;
   nowMs: number;
   busy: boolean;
   /** The name a downloaded or attached resume carries: `User_Job_Name_ID.pdf`. */
@@ -154,6 +161,7 @@ export function GeneratedResumePanel({
           packet={packet}
           material={view.material}
           nativeMaterials={nativeMaterials}
+          comparisonAvailable={comparisonAvailable}
           nowMs={nowMs}
           busy={busy}
           fileName={fileName}
@@ -181,6 +189,7 @@ function ReadyResume({
   packet,
   material,
   nativeMaterials,
+  comparisonAvailable,
   nowMs,
   busy,
   fileName,
@@ -191,6 +200,7 @@ function ReadyResume({
   packet: Packet;
   material: ApplicationTemporaryMaterial | undefined;
   nativeMaterials: boolean;
+  comparisonAvailable: boolean;
   nowMs: number;
   busy: boolean;
   fileName: string;
@@ -392,7 +402,7 @@ function ReadyResume({
         <button type="button" disabled={busy || loaded.phase !== "ready"} onClick={download}>
           Download PDF
         </button>{" "}
-        {comparison.phase === "open" ? null : (
+        {!comparisonAvailable || comparison.phase === "open" ? null : (
           <button
             type="button"
             disabled={busy || loaded.phase !== "ready" || comparison.phase === "loading"}
