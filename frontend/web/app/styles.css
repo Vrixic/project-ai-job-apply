@@ -1557,43 +1557,18 @@ aside {
   gap: 14px;
 }
 
-.resume-sheet .resume-diff-summary {
-  margin: 0;
-  font-weight: 600;
-}
-
-.resume-sheet .resume-diff-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.resume-sheet .resume-diff-swatch {
-  display: inline-block;
-  width: 18px;
-  height: 12px;
-  margin-right: 6px;
-  vertical-align: middle;
-}
-
 /* Each status differs in outline style as well as colour, so none depends on colour alone. */
-.resume-sheet .resume-diff-box[data-status="removed"],
-.resume-sheet .resume-diff-swatch[data-status="removed"] {
+.resume-sheet .resume-diff-box[data-status="removed"] {
   border: 2px solid #b3261e;
   background: rgb(179 38 30 / 18%);
 }
 
-.resume-sheet .resume-diff-box[data-status="changed"],
-.resume-sheet .resume-diff-swatch[data-status="changed"] {
+.resume-sheet .resume-diff-box[data-status="changed"] {
   border: 2px dotted #a05a00;
   background: rgb(160 90 0 / 16%);
 }
 
-.resume-sheet .resume-diff-box[data-status="added"],
-.resume-sheet .resume-diff-swatch[data-status="added"] {
+.resume-sheet .resume-diff-box[data-status="added"] {
   border: 2px double #14633e;
   background: rgb(20 99 62 / 16%);
 }
@@ -1636,11 +1611,6 @@ aside {
   box-sizing: border-box;
   border-radius: 3px;
   pointer-events: none;
-}
-
-.resume-sheet .resume-diff-swatch[data-status="cut"] {
-  height: 0;
-  border-top: 2px dashed #b3261e;
 }
 
 /* Where a line was cut: a red line across the tailored page and a tag beside it saying what was cut. */

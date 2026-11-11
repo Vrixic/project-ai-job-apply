@@ -72,10 +72,6 @@ async function show(original: TextLine[], tailored: TextLine[], windowWidth = 0)
   await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
 }
 
-const legend = () =>
-  Array.from(container.querySelectorAll(".resume-diff-legend li")).map((item) =>
-    item.textContent?.trim(),
-  );
 const columns = () => Array.from(container.querySelectorAll(".resume-diff-column"));
 const sections = () =>
   Array.from(container.querySelectorAll(".resume-diff-lists summary")).map(
@@ -101,10 +97,9 @@ describe("ResumeDiffViewer", () => {
       [line("Alpha line one", 10), line("Beta line two", 30), line("Gamma line three", 50)],
       [line("Gamma line three", 10), line("Alpha line one", 30), line("Beta line two", 50)],
     );
-    expect(container.querySelector(".resume-diff-summary")?.textContent).toBe(
-      "0 removed, 0 changed, 1 added or moved. 2 lines kept as they were.",
-    );
-    expect(legend()).toEqual(["Removed", "Changed", "Added or moved"]);
+    // There is no summary line and no legend above the pages: the colours speak for themselves.
+    expect(container.querySelector(".resume-diff-summary")).toBeNull();
+    expect(container.querySelector(".resume-diff-legend")).toBeNull();
     const [original, tailored] = columns();
     expect(Array.from(tailored?.querySelectorAll(".resume-diff-box") ?? [])).toHaveLength(1);
     expect(tailored?.querySelector(".resume-diff-box")?.getAttribute("data-status")).toBe("added");
@@ -114,27 +109,23 @@ describe("ResumeDiffViewer", () => {
     // reworded there are no lists at all.
     expect(container.querySelector(".resume-diff-lists")).toBeNull();
     expect(sections()).toEqual([]);
-    expect(legend().some((label) => /^moved/iu.test(label ?? ""))).toBe(false);
   });
 
-  it("says nothing changed when every line is where it was", async () => {
+  it("marks nothing when every line is where it was, and says nothing above the pages", async () => {
     await show(
       [line("Alpha line one", 10), line("Beta line two", 30)],
       [line("Alpha line one", 10), line("Beta line two", 30)],
     );
-    expect(container.querySelector(".resume-diff-summary")?.textContent).toBe(
-      "No line was removed, changed, added or moved.",
-    );
+    expect(container.querySelector(".resume-diff-summary")).toBeNull();
+    expect(container.querySelector(".resume-diff-legend")).toBeNull();
     expect(container.querySelector(".resume-diff-lists")).toBeNull();
     expect(container.querySelectorAll(".resume-diff-box")).toHaveLength(0);
   });
 
   it("marks removed lines red on the original, new, moved and edited lines on the tailored, and lists them", async () => {
     await show(ORIGINAL, TAILORED);
-    expect(container.querySelector(".resume-diff-summary")?.textContent).toBe(
-      "1 removed, 1 changed, 2 added or moved. 1 lines kept as they were.",
-    );
-    expect(legend()).toEqual(["Removed", "Changed", "Added or moved", "Cut from here"]);
+    expect(container.querySelector(".resume-diff-summary")).toBeNull();
+    expect(container.querySelector(".resume-diff-legend")).toBeNull();
     const [original, tailored] = columns();
     const statuses = (column: Element | undefined) =>
       Array.from(column?.querySelectorAll(".resume-diff-box") ?? [])
