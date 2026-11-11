@@ -1638,6 +1638,48 @@ aside {
   pointer-events: none;
 }
 
+.resume-sheet .resume-diff-swatch[data-status="cut"] {
+  height: 0;
+  border-top: 2px dashed #b3261e;
+}
+
+/* Where a line was cut: a red line across the tailored page and a tag beside it saying what was cut. */
+.resume-sheet .resume-diff-page-wrap {
+  position: relative;
+}
+
+.resume-sheet .resume-diff-cut {
+  position: absolute;
+  left: 0;
+  height: 0;
+}
+
+.resume-sheet .resume-diff-cut-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -1px;
+  border-top: 2px dashed #b3261e;
+}
+
+.resume-sheet .resume-diff-cut-tag {
+  position: absolute;
+  right: 0;
+  top: 0;
+  box-sizing: border-box;
+  padding: 1px 6px;
+  overflow: hidden;
+  transform: translateY(-50%);
+  border: 1px solid #b3261e;
+  border-radius: 3px;
+  background: #fdecea;
+  color: #8a1c14;
+  font-size: 11px;
+  line-height: 15px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .resume-sheet .resume-diff-lists summary {
   cursor: pointer;
   font-weight: 600;
