@@ -2,9 +2,10 @@
  * Line-level comparison of the candidate's own resume with the tailored one. Pure and free of PDF.js so
  * it can be tested on its own: callers read both PDFs into `TextLine`s and draw the result.
  *
- * A line is "kept" when its text survives, wherever it now sits (reordering is not reported), "changed"
- * when most of its words survive but some were added or removed, "removed" when it exists only in the
- * original and "added" when it exists only in the tailored resume.
+ * A line is "kept" when it survives in the same relative order, "moved" when the same text sits in a
+ * different place, "changed" when most of its words survive but some were added or removed, "removed"
+ * when it exists only in the original and "added" when it exists only in the tailored resume. A view
+ * shows moved and added lines alike: both are lines that are new where they now stand.
  */
 
 /** One line of text on a page, in PDF points with the origin at the top left of the page. */
@@ -17,8 +18,8 @@ export interface TextLine {
   text: string;
 }
 
-export type OriginalStatus = "kept" | "changed" | "removed";
-export type TailoredStatus = "kept" | "changed" | "added";
+export type OriginalStatus = "kept" | "moved" | "changed" | "removed";
+export type TailoredStatus = "kept" | "moved" | "changed" | "added";
 
 export interface WordChange {
   kind: "same" | "added" | "removed";
@@ -36,6 +37,7 @@ export interface DiffLine<Status extends string> {
 
 export interface ResumeDiffCounts {
   kept: number;
+  moved: number;
   changed: number;
   removed: number;
   added: number;
@@ -146,7 +148,7 @@ export function diffResumeLines(
   // 1. Same text, same relative order.
   for (const [i, j] of commonSubsequence(aKeys, bKeys)) settle(i, j, "kept", "kept");
 
-  // 2. Same text somewhere else: still the same line, so kept. Reordering is not reported.
+  // 2. Same text somewhere else.
   const freeTailored = new Map<string, number[]>();
   tailored.forEach((entry, j) => {
     if (!entry)
@@ -156,7 +158,7 @@ export function diffResumeLines(
     if (entry) return;
     const candidates = freeTailored.get(aKeys[i] as string);
     const j = candidates?.shift();
-    if (j !== undefined) settle(i, j, "kept", "kept");
+    if (j !== undefined) settle(i, j, "moved", "moved");
   });
 
   // 3. Mostly the same words: an edited line.
@@ -188,12 +190,75 @@ export function diffResumeLines(
     (entry, j) =>
       entry ?? ({ line: b[j] as TextLine, status: "added" } as DiffLine<TailoredStatus>),
   );
-  const counts: ResumeDiffCounts = { kept: 0, changed: 0, removed: 0, added: 0 };
+  const counts: ResumeDiffCounts = { kept: 0, moved: 0, changed: 0, removed: 0, added: 0 };
   for (const entry of finalOriginal) {
     if (entry.status === "removed") counts.removed += 1;
     else if (entry.status === "kept") counts.kept += 1;
+    else if (entry.status === "moved") counts.moved += 1;
     else counts.changed += 1;
   }
   for (const entry of finalTailored) if (entry.status === "added") counts.added += 1;
   return { original: finalOriginal, tailored: finalTailored, counts };
+}
+
+/** Where lines were cut: a point on a tailored page, and the text of what was taken out there. */
+export interface RemovalPoint {
+  /** The tailored page, from 1. */
+  page: number;
+  /** Distance from the top of that page in PDF points: the gap between two tailored lines. */
+  top: number;
+  /** The removed lines in their original order. Consecutive removals share one point. */
+  texts: string[];
+}
+
+/** A line that kept its place, or was only edited: it marks where its neighbours were. */
+const isStable = (status: OriginalStatus): boolean => status === "kept" || status === "changed";
+
+/**
+ * Where on the tailored resume each run of removed lines used to sit. A removed line has no place
+ * there, so it is put just below the nearest earlier original line that stayed in place (moved lines
+ * are no anchor: they are somewhere else), or just above the first one that did when nothing earlier
+ * stayed. A resume in which nothing stayed has no place to point to, so its points go to the top of
+ * the first page.
+ */
+export function removalPoints(diff: ResumeDiff): RemovalPoint[] {
+  const points: RemovalPoint[] = [];
+  const anchorOf = (index: number): { line: TextLine; below: boolean } | undefined => {
+    for (let i = index - 1; i >= 0; i -= 1) {
+      const entry = diff.original[i];
+      const pair = entry && isStable(entry.status) ? entry.pair : undefined;
+      const tailored = pair === undefined ? undefined : diff.tailored[pair];
+      if (tailored) return { line: tailored.line, below: true };
+    }
+    for (let i = index + 1; i < diff.original.length; i += 1) {
+      const entry = diff.original[i];
+      const pair = entry && isStable(entry.status) ? entry.pair : undefined;
+      const tailored = pair === undefined ? undefined : diff.tailored[pair];
+      if (tailored) return { line: tailored.line, below: false };
+    }
+    return undefined;
+  };
+  let run: RemovalPoint | undefined;
+  diff.original.forEach((entry, index) => {
+    if (entry.status !== "removed") {
+      run = undefined;
+      return;
+    }
+    if (run) {
+      run.texts.push(lineKey(entry.line.text));
+      return;
+    }
+    const anchor = anchorOf(index);
+    run = {
+      page: anchor ? anchor.line.page : 1,
+      top: anchor
+        ? anchor.below
+          ? anchor.line.top + anchor.line.height + 1
+          : Math.max(anchor.line.top - 1, 0)
+        : 0,
+      texts: [lineKey(entry.line.text)],
+    };
+    points.push(run);
+  });
+  return points;
 }

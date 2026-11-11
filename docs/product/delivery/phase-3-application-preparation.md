@@ -32,8 +32,17 @@ narrow window); it is a modal dialog (focus kept inside, Escape, Close or a clic
 behind does not scroll, no animation under reduced motion). It opens by itself once per mount as soon as the
 generated resume is on screen, so after generation and on coming back to an application that already has one,
 and "See what changed" opens it again. When it cannot open on its own (the original is not a PDF, or the read
-is refused) it stays quiet; the button then explains. "Moved" is gone: a line whose text only changed place is
-kept (`diffResumeLines`), so the counts, legend, boxes and lists show only removed, changed and added.
+is refused) it stays quiet; the button then explains. "Moved" is not a category of its own: a line whose text only
+changed place is, like an added one, new where it now stands, so it is green ("Added or moved" in the legend,
+summary and list) and the original page marks nothing for it.
+Owner feedback on the opened panel (2026-11-10): the Tailored page should show what changed at a glance, in green
+and red. Green boxes mark added, reworded and moved lines (so the six reordered bullets of the first live
+resume are visible). Red marks where a line was cut: a removed line has no place on the tailored page, so a red
+dashed line crosses the page just below the nearest earlier line that kept its place (`removalPoints`; a moved
+line is no anchor), with a tag in a column beside the page giving the first words of what was cut ("+n" when
+several lines went at one place; the full text on hover; the red list stays under the pages). The two pages stay
+the same width; the tag column exists only with two columns and at least one cut. Stacked (narrow) pages keep the
+red line and drop the tags.
 Size: the web proxy's default 512 KB response cap would have refused the comparison for an original above about
 380 KB, though the contract allows 2 MiB (2,796,212 base64 characters). The two original-resume operations now
 carry their own 3 MiB cap (`maximumResponseBytes`); every other operation keeps 512 KB, and a body past 3 MiB is

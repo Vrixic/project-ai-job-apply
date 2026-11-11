@@ -7,7 +7,9 @@ import {
   type DiffLine,
   diffResumeLines,
   type OriginalStatus,
+  type RemovalPoint,
   type ResumeDiff,
+  removalPoints,
   type TailoredStatus,
   type TextLine,
 } from "../lib/resume-diff";
@@ -20,15 +22,47 @@ type PdfDocument = Awaited<
 >;
 type PdfPage = Awaited<ReturnType<PdfDocument["getPage"]>>;
 
-type Side = "original" | "tailored";
 type Status = OriginalStatus | TailoredStatus;
 
-const STATUS_LABEL: Readonly<Record<Status, string>> = {
-  kept: "Kept",
-  changed: "Changed",
+/** What a box over a line says. A moved line is new where it now stands, so it is green like an added one. */
+type BoxStatus = "removed" | "changed" | "added";
+
+const BOX_LABEL: Readonly<Record<BoxStatus, string>> = {
   removed: "Removed",
-  added: "Added",
+  changed: "Changed",
+  added: "Added or moved",
 };
+
+const boxStatusOf = (status: Status, side: "original" | "tailored"): BoxStatus | undefined => {
+  if (status === "changed") return "changed";
+  if (side === "original") return status === "removed" ? "removed" : undefined;
+  return status === "added" || status === "moved" ? "added" : undefined;
+};
+
+interface Box {
+  line: TextLine;
+  status: BoxStatus;
+}
+
+const boxesOf = (entries: ReadonlyArray<DiffLine<Status>>, side: "original" | "tailored"): Box[] =>
+  entries.flatMap((entry) => {
+    const status = boxStatusOf(entry.status, side);
+    return status ? [{ line: entry.line, status }] : [];
+  });
+
+/** Room beside the tailored page for the red tags that say what was cut and where. */
+const CUT_GUTTER = 150;
+const CUT_TAG_CHARACTERS = 20;
+
+/** The first words of a removed line, with how many more were cut at the same place. */
+function cutLabel(texts: readonly string[]): string {
+  const first = texts[0] ?? "";
+  const words =
+    first.length > CUT_TAG_CHARACTERS
+      ? `${first.slice(0, CUT_TAG_CHARACTERS).replace(/\s+\S*$/u, "")}...`
+      : first;
+  return `- ${words}${texts.length > 1 ? ` (+${texts.length - 1})` : ""}`;
+}
 
 type Loaded =
   | { phase: "loading" }
@@ -40,23 +74,31 @@ type Loaded =
       tailoredPages: PdfPage[];
     };
 
-/** One page drawn on a canvas with a box over every line that is not simply kept. */
+/**
+ * One page drawn on a canvas with a box over every line that is new, changed or removed. On the tailored
+ * side a red line also crosses the page at each place a line was cut, leading to a tag that says what
+ * was cut.
+ */
 function ComparedPage({
   page,
   pageNumber,
   width,
-  lines,
-  side,
+  boxes,
+  cuts = [],
+  gutter = 0,
 }: {
   page: PdfPage;
   pageNumber: number;
   width: number;
-  lines: ReadonlyArray<DiffLine<Status>>;
-  side: Side;
+  boxes: ReadonlyArray<Box>;
+  cuts?: ReadonlyArray<RemovalPoint>;
+  /** Width of the tag column beside the page, 0 where there is none. */
+  gutter?: number;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const natural = page.getViewport({ scale: 1 });
   const scale = width / natural.width;
+  const height = natural.height * scale;
 
   useEffect(() => {
     const element = canvas.current;
@@ -77,26 +119,53 @@ function ComparedPage({
     };
   }, [page, scale]);
 
-  return (
-    <div className="resume-diff-page" style={{ width, height: natural.height * scale }}>
+  const drawn = (
+    <div className="resume-diff-page" style={{ width, height }}>
       <canvas ref={canvas} className="resume-diff-canvas" />
-      {lines
-        .filter((entry) => entry.line.page === pageNumber && entry.status !== "kept")
-        .map((entry, index) => (
+      {boxes
+        .filter((box) => box.line.page === pageNumber)
+        .map((box, index) => (
           <span
             // biome-ignore lint/suspicious/noArrayIndexKey: a stable list drawn once per comparison.
-            key={`${side}-${index}`}
+            key={index}
             className="resume-diff-box"
-            data-status={entry.status}
+            data-status={box.status}
             aria-hidden="true"
             style={{
-              left: entry.line.x * scale - 2,
-              top: entry.line.top * scale - 1,
-              width: entry.line.width * scale + 4,
-              height: entry.line.height * scale + 2,
+              left: box.line.x * scale - 2,
+              top: box.line.top * scale - 1,
+              width: box.line.width * scale + 4,
+              height: box.line.height * scale + 2,
             }}
           />
         ))}
+    </div>
+  );
+  const here = cuts.filter((cut) => cut.page === pageNumber);
+  if (here.length === 0 && gutter === 0) return drawn;
+  return (
+    <div className="resume-diff-page-wrap" style={{ width: width + gutter, height }}>
+      {drawn}
+      {here.map((cut, index) => (
+        <div
+          // biome-ignore lint/suspicious/noArrayIndexKey: a stable list drawn once per comparison.
+          key={index}
+          className="resume-diff-cut"
+          aria-hidden="true"
+          style={{ top: cut.top * scale, width: width + gutter }}
+        >
+          <span className="resume-diff-cut-line" title={`Cut here:\n${cut.texts.join("\n")}`} />
+          {gutter > 0 ? (
+            <span
+              className="resume-diff-cut-tag"
+              style={{ maxWidth: gutter - 8 }}
+              title={`Cut here:\n${cut.texts.join("\n")}`}
+            >
+              {cutLabel(cut.texts)}
+            </span>
+          ) : null}
+        </div>
+      ))}
     </div>
   );
 }
@@ -109,11 +178,11 @@ function linesOf(entries: ReadonlyArray<DiffLine<Status>>, status: Status): Text
 const TWO_COLUMNS_FROM_WIDTH = 760;
 
 /**
- * Side by side view of the candidate's own resume and the tailored one, with every line that was
- * removed, changed or added marked, plus the same facts as text so nothing depends on colour. A line
- * that only moved is the same line and is not reported. Both files are read in this page only; nothing
- * leaves the browser and the buffers are cleared when the view goes away. Its title and close control
- * belong to the side panel that holds it.
+ * Side by side view of the candidate's own resume and the tailored one. On the tailored page, green marks
+ * every line that is new or in a new place and a red line with a tag marks where a line was cut; the
+ * original page marks what was removed. The same facts follow as text so nothing depends on colour. Both
+ * files are read in this page only; nothing leaves the browser and the buffers are cleared when the view
+ * goes away. Its title and close control belong to the side panel that holds it.
  */
 export function ResumeDiffViewer({
   originalBytes,
@@ -124,15 +193,12 @@ export function ResumeDiffViewer({
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState<Loaded>({ phase: "loading" });
-  const [width, setWidth] = useState(0);
+  const [hostWidth, setHostWidth] = useState(0);
 
   useEffect(() => {
     const element = host.current;
     if (!element) return;
-    const measure = () => {
-      const columns = element.clientWidth >= TWO_COLUMNS_FROM_WIDTH ? 2 : 1;
-      setWidth(Math.max(Math.floor(element.clientWidth / columns) - 24, 200));
-    };
+    const measure = () => setHostWidth(element.clientWidth);
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
@@ -190,12 +256,25 @@ export function ResumeDiffViewer({
   const changes = diff
     ? {
         removed: linesOf(diff.original, "removed"),
-        added: linesOf(diff.tailored, "added"),
+        added: diff.tailored
+          .filter((entry) => entry.status === "added" || entry.status === "moved")
+          .map((entry) => entry.line),
         changed: diff.tailored.filter((entry) => entry.status === "changed"),
       }
     : undefined;
   const unchanged =
-    diff !== undefined && diff.counts.removed + diff.counts.added + diff.counts.changed === 0;
+    diff !== undefined &&
+    diff.counts.removed + diff.counts.added + diff.counts.changed + diff.counts.moved === 0;
+  const cuts = diff ? removalPoints(diff) : [];
+  const originalBoxes = diff ? boxesOf(diff.original, "original") : [];
+  const tailoredBoxes = diff ? boxesOf(diff.tailored, "tailored") : [];
+  // Two pages side by side, with room for the cut tags beside the tailored one; stacked pages have none.
+  const columns = hostWidth >= TWO_COLUMNS_FROM_WIDTH ? 2 : 1;
+  const gutter = columns === 2 && cuts.length > 0 ? CUT_GUTTER : 0;
+  const width = Math.max(
+    columns === 2 ? Math.floor((hostWidth - 48 - gutter) / 2) : hostWidth - 24,
+    200,
+  );
 
   return (
     <div className="resume-diff">
@@ -209,21 +288,27 @@ export function ResumeDiffViewer({
         <>
           <p className="resume-diff-summary" role="status">
             {unchanged
-              ? "No line was removed, changed or added."
-              : `${diff.counts.removed} removed, ${diff.counts.changed} changed, ${diff.counts.added} added. ${diff.counts.kept} lines kept as they were.`}
+              ? "No line was removed, changed, added or moved."
+              : `${diff.counts.removed} removed, ${diff.counts.changed} changed, ${diff.counts.added + diff.counts.moved} added or moved. ${diff.counts.kept} lines kept as they were.`}
           </p>
           <ul className="resume-diff-legend" aria-label="Legend">
             {(["removed", "changed", "added"] as const).map((status) => (
               <li key={status}>
                 <span className="resume-diff-swatch" data-status={status} aria-hidden="true" />
-                {STATUS_LABEL[status]}
+                {BOX_LABEL[status]}
               </li>
             ))}
+            {cuts.length > 0 ? (
+              <li>
+                <span className="resume-diff-swatch" data-status="cut" aria-hidden="true" />
+                Cut from here
+              </li>
+            ) : null}
           </ul>
         </>
       ) : null}
       <div ref={host} className="resume-diff-columns">
-        {loaded.phase === "ready" && width > 0 ? (
+        {loaded.phase === "ready" ? (
           <>
             <figure className="resume-diff-column">
               <figcaption>Your original</figcaption>
@@ -234,8 +319,7 @@ export function ResumeDiffViewer({
                   page={page}
                   pageNumber={index + 1}
                   width={width}
-                  lines={loaded.diff.original}
-                  side="original"
+                  boxes={originalBoxes}
                 />
               ))}
             </figure>
@@ -248,8 +332,9 @@ export function ResumeDiffViewer({
                   page={page}
                   pageNumber={index + 1}
                   width={width}
-                  lines={loaded.diff.tailored}
-                  side="tailored"
+                  boxes={tailoredBoxes}
+                  cuts={cuts}
+                  gutter={gutter}
                 />
               ))}
             </figure>
@@ -297,7 +382,7 @@ export function ResumeDiffViewer({
           ) : null}
           {changes.added.length > 0 ? (
             <details open>
-              <summary>Added ({changes.added.length})</summary>
+              <summary>Added or moved ({changes.added.length})</summary>
               <ul>
                 {changes.added.map((line, index) => (
                   // biome-ignore lint/suspicious/noArrayIndexKey: a stable list drawn once.

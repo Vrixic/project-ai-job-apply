@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { linesFromTextItems, type PdfTextItem } from "./pdf-text-lines";
-import { diffResumeLines, lineKey, type TextLine, wordChanges } from "./resume-diff";
+import { diffResumeLines, lineKey, removalPoints, type TextLine, wordChanges } from "./resume-diff";
 
 const line = (text: string, top = 0, page = 1): TextLine => ({
   page,
@@ -18,7 +18,7 @@ describe("diffResumeLines", () => {
       lines("A one", "B two", "C three"),
       lines("A one", "B two", "C three"),
     );
-    expect(diff.counts).toEqual({ kept: 3, changed: 0, removed: 0, added: 0 });
+    expect(diff.counts).toEqual({ kept: 3, moved: 0, changed: 0, removed: 0, added: 0 });
     expect(diff.original.map((entry) => entry.pair)).toEqual([0, 1, 2]);
   });
 
@@ -34,21 +34,22 @@ describe("diffResumeLines", () => {
       "kept",
       "kept",
     ]);
-    expect(diff.counts).toEqual({ kept: 4, changed: 0, removed: 1, added: 0 });
+    expect(diff.counts).toEqual({ kept: 4, moved: 0, changed: 0, removed: 1, added: 0 });
     expect(diff.tailored.every((entry) => entry.status === "kept")).toBe(true);
   });
 
-  it("does not report a reordered block: the same lines are kept on both sides", () => {
+  it("marks a line that sits in another place as moved, on both sides, and keeps the rest", () => {
     const diff = diffResumeLines(
       lines("Summary", "Skills", "Experience"),
       lines("Experience", "Summary", "Skills"),
     );
-    expect(diff.counts).toEqual({ kept: 3, changed: 0, removed: 0, added: 0 });
-    expect(diff.original.every((entry) => entry.status === "kept")).toBe(true);
-    expect(diff.tailored.every((entry) => entry.status === "kept")).toBe(true);
-    // Each is still paired with its other side, so a view can relate them.
-    const experience = diff.original.findIndex((entry) => entry.line.text === "Experience");
-    expect(diff.tailored[diff.original[experience]?.pair ?? -1]?.line.text).toBe("Experience");
+    expect(diff.counts).toEqual({ kept: 2, moved: 1, changed: 0, removed: 0, added: 0 });
+    const moved = diff.original.findIndex((entry) => entry.status === "moved");
+    expect(diff.original[moved]?.line.text).toBe("Experience");
+    expect(diff.tailored[diff.original[moved]?.pair ?? -1]).toMatchObject({
+      status: "moved",
+      line: { text: "Experience" },
+    });
   });
 
   it("marks an edited line as changed and says which words changed", () => {
@@ -65,7 +66,7 @@ describe("diffResumeLines", () => {
       "profiling",
     ]);
     expect(words.filter((word) => word.kind === "removed")).toEqual([]);
-    expect(diff.counts).toEqual({ kept: 0, changed: 1, removed: 0, added: 0 });
+    expect(diff.counts).toEqual({ kept: 0, moved: 0, changed: 1, removed: 0, added: 0 });
   });
 
   it("marks text that is only in the tailored resume as added", () => {
@@ -91,7 +92,7 @@ describe("diffResumeLines", () => {
 
   it("ignores spacing differences and empty lines", () => {
     const diff = diffResumeLines(lines("A   one ", "", "B two"), lines("A one", "B   two"));
-    expect(diff.counts).toEqual({ kept: 2, changed: 0, removed: 0, added: 0 });
+    expect(diff.counts).toEqual({ kept: 2, moved: 0, changed: 0, removed: 0, added: 0 });
     expect(diff.original).toHaveLength(2);
   });
 
@@ -100,9 +101,9 @@ describe("diffResumeLines", () => {
       lines("a1 a2 a3", "b1 b2 b3", "c1 c2 c3", "d1 d2 d3 d4", "e1"),
       lines("c1 c2 c3", "a1 a2 a3 a4", "x1 x2", "e1"),
     );
-    const { kept, changed, removed, added } = diff.counts;
-    expect(kept + changed + removed).toBe(diff.original.length);
-    expect(kept + changed + added).toBe(diff.tailored.length);
+    const { kept, moved, changed, removed, added } = diff.counts;
+    expect(kept + moved + changed + removed).toBe(diff.original.length);
+    expect(kept + moved + changed + added).toBe(diff.tailored.length);
   });
 });
 
@@ -168,5 +169,66 @@ describe("linesFromTextItems", () => {
 
   it("drops whitespace-only items", () => {
     expect(linesFromTextItems([item(" ", 36, 700), item("Text", 40, 700)], 1, 792)).toHaveLength(1);
+  });
+});
+
+describe("removalPoints", () => {
+  it("is empty when nothing was removed", () => {
+    expect(
+      removalPoints(diffResumeLines(lines("A one", "B two"), lines("B two", "A one"))),
+    ).toEqual([]);
+  });
+
+  it("puts a removed line just below the earlier line that stayed in place", () => {
+    const diff = diffResumeLines(
+      lines("Header", "Job one", "Bullet a", "Bullet b", "Job two"),
+      lines("Header", "Job one", "Bullet b", "Job two"),
+    );
+    // "Job one" is the second tailored line: top 14, height 12, so the gap starts at 26 (+1).
+    expect(removalPoints(diff)).toEqual([{ page: 1, top: 27, texts: ["Bullet a"] }]);
+  });
+
+  it("gives consecutive removals one point and separate cuts their own", () => {
+    const diff = diffResumeLines(
+      lines("A one", "B two", "C three", "D four", "E five", "F six", "G seven"),
+      lines("A one", "E five", "G seven"),
+    );
+    expect(removalPoints(diff)).toEqual([
+      { page: 1, top: 13, texts: ["B two", "C three", "D four"] },
+      { page: 1, top: 27, texts: ["F six"] },
+    ]);
+  });
+
+  it("puts a leading cut just above the first line that stayed", () => {
+    const diff = diffResumeLines(
+      [line("X first line", 0), line("A one", 20), line("B two", 34)],
+      [line("A one", 100), line("B two", 114)],
+    );
+    expect(removalPoints(diff)).toEqual([{ page: 1, top: 99, texts: ["X first line"] }]);
+  });
+
+  it("does not use a moved line as the place a cut was made", () => {
+    const diff = diffResumeLines(
+      lines("S1", "S2", "S3", "Mover line", "Gone line", "S4"),
+      lines("Mover line", "S1", "S2", "S3", "S4"),
+    );
+    expect(diff.counts.moved).toBe(1);
+    // The nearest earlier line is the one that moved; the cut is below S3, which stayed (tailored index 3).
+    expect(removalPoints(diff)).toEqual([{ page: 1, top: 3 * 14 + 13, texts: ["Gone line"] }]);
+  });
+
+  it("follows the tailored page of the line it sits below", () => {
+    const diff = diffResumeLines(
+      [line("A one", 700, 1), line("B two", 20, 2), line("Gone line", 34, 2)],
+      [line("A one", 700, 1), line("B two", 20, 2)],
+    );
+    expect(removalPoints(diff)).toEqual([{ page: 2, top: 33, texts: ["Gone line"] }]);
+  });
+
+  it("points at the top of the first page when nothing stayed in place", () => {
+    const diff = diffResumeLines(lines("Only the original has this"), lines("Brand new"));
+    expect(removalPoints(diff)).toEqual([
+      { page: 1, top: 0, texts: ["Only the original has this"] },
+    ]);
   });
 });
