@@ -13,6 +13,12 @@ The original is fetched once per application packet: it is verified, then held i
 (`web/lib/uploaded-resume-cache.ts`, one file, keyed by application and packet hash), so hiding and showing the
 comparison, or the panel coming back, makes no further request. It is zeroed when the packet changes, the page is
 left or the candidate signs out.
+Found live on dev (2026-11-10): the button ended in a 409 for every generated resume, because
+`/resume/uploaded` serves the original only while the packet is bound to it (`packetUsesUploadedResume`), which a
+generated packet is not; the extension's attach flow relies on that refusal, so it stays. The unit tests had mocked
+a 200 and could not see it. The workspace now hides the button (`comparisonAvailable={false}`) until a new
+owner-only route serves the original of the document the generation was made from (`base_document_id` on the
+generation ledger); that route and the flag's removal follow as their own changes.
 
 2026-11-07: D3-154 edit the candidate's own PDF in place ([ADR-058](../../adr/058-edit-the-candidates-own-pdf-in-place.md)):
 the owner asked that the generated PDF never change the look of their own PDF. For single-flow Word-style

@@ -957,6 +957,7 @@ function JobApplicationWorkspace({
                   application={application}
                   view={view}
                   nativeMaterials={nativeMaterials}
+                  comparisonAvailable={false}
                   nowMs={clock}
                   busy={busy}
                   fileName={application ? resumeFileNameFor(application) : ""}
