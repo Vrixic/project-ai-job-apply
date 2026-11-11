@@ -14,6 +14,11 @@ const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 const JSON_CONTENT_TYPE = /^application\/json(?:\s*;\s*charset=utf-8)?$/i;
 const MAXIMUM_REQUEST_BYTES = 32 * 1024;
 const MAXIMUM_RESPONSE_BYTES = 512 * 1024;
+/**
+ * The candidate's original resume travels as base64 inside JSON. The contract allows a file of 2 MiB,
+ * which is at most 2,796,212 base64 characters plus a few hundred bytes of fields.
+ */
+const MAXIMUM_ORIGINAL_RESUME_RESPONSE_BYTES = 3 * 1024 * 1024;
 
 type ComponentName = Parameters<typeof compileComponentValidator>[0];
 
@@ -58,6 +63,8 @@ interface OperationSpec {
   /** Submission-start responses must contain the application that was addressed. */
   echoesNestedApplicationId?: boolean;
   echoesPreparationApplicationId?: boolean;
+  /** A larger response than the default, for an operation that returns a whole file. */
+  maximumResponseBytes?: number;
 }
 
 const OPERATIONS: Readonly<Record<ApplicationsOperation, OperationSpec>> = {
@@ -128,6 +135,7 @@ const OPERATIONS: Readonly<Record<ApplicationsOperation, OperationSpec>> = {
     idempotent: false,
     needsApplication: true,
     needsAttempt: false,
+    maximumResponseBytes: MAXIMUM_ORIGINAL_RESUME_RESPONSE_BYTES,
   },
   generatedResumeOriginal: {
     method: "GET",
@@ -137,6 +145,7 @@ const OPERATIONS: Readonly<Record<ApplicationsOperation, OperationSpec>> = {
     idempotent: false,
     needsApplication: true,
     needsAttempt: false,
+    maximumResponseBytes: MAXIMUM_ORIGINAL_RESUME_RESPONSE_BYTES,
   },
   preparePacket: {
     method: "POST",
@@ -504,17 +513,18 @@ async function validateSuccess(
 ): Promise<Response> {
   const cancel = () => void response.body?.cancel().catch(() => undefined);
   const declaredLength = response.headers.get("content-length");
+  const maximumBytes = spec.maximumResponseBytes ?? MAXIMUM_RESPONSE_BYTES;
   if (
     response.status !== (asynchronous ? 202 : spec.success) ||
     !JSON_CONTENT_TYPE.test(response.headers.get("content-type") ?? "") ||
     (declaredLength !== null &&
-      (!/^\d+$/.test(declaredLength) || Number(declaredLength) > MAXIMUM_RESPONSE_BYTES))
+      (!/^\d+$/.test(declaredLength) || Number(declaredLength) > maximumBytes))
   ) {
     cancel();
     return unavailable();
   }
   try {
-    const bytes = await readBounded(response.body, MAXIMUM_RESPONSE_BYTES, undefined, 10_000);
+    const bytes = await readBounded(response.body, maximumBytes, undefined, 10_000);
     const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     if (!validator(asynchronous ? "ApplicationPacketPreparation" : spec.response)(value))
       throw new Error("The response is invalid");

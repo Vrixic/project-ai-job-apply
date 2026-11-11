@@ -592,6 +592,43 @@ describe("Applications browser boundary", () => {
     }
   });
 
+  it("passes a large original resume through, up to the contract's 2 MiB, and still bounds it", async () => {
+    // The contract allows a 2 MiB file, which is 2,796,212 base64 characters: far above the default cap.
+    const large = {
+      documentId: APP,
+      fileName: "my-resume.pdf",
+      format: "pdf",
+      mediaType: "application/pdf",
+      sha256: "a".repeat(64),
+      sizeBytes: 2_097_152,
+      contentBase64: "A".repeat(2_796_212),
+    };
+    for (const operation of ["uploadedResume", "generatedResumeOriginal"] as const) {
+      const { deps } = harness(() => json(large));
+      const response = await applicationsRoute(
+        operation,
+        new Request("http://localhost:3000/x", { method: "GET" }),
+        { applicationId: APP },
+        deps,
+      );
+      expect(response.status, operation).toBe(200);
+      expect(((await response.json()) as { contentBase64: string }).contentBase64).toHaveLength(
+        2_796_212,
+      );
+    }
+    // The larger cap is still a bound: a body past 3 MiB is refused, whatever it claims to be.
+    for (const operation of ["uploadedResume", "generatedResumeOriginal"] as const) {
+      const { deps } = harness(() => json({ ...large, contentBase64: "A".repeat(3_300_000) }));
+      const response = await applicationsRoute(
+        operation,
+        new Request("http://localhost:3000/x", { method: "GET" }),
+        { applicationId: APP },
+        deps,
+      );
+      expect(response.status, `${operation} past the cap`).toBe(503);
+    }
+  });
+
   it("forwards the original behind a generated resume to its own route only", async () => {
     const original = {
       documentId: APP,

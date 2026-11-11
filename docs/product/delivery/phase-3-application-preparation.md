@@ -34,6 +34,10 @@ generated resume is on screen, so after generation and on coming back to an appl
 and "See what changed" opens it again. When it cannot open on its own (the original is not a PDF, or the read
 is refused) it stays quiet; the button then explains. "Moved" is gone: a line whose text only changed place is
 kept (`diffResumeLines`), so the counts, legend, boxes and lists show only removed, changed and added.
+Size: the web proxy's default 512 KB response cap would have refused the comparison for an original above about
+380 KB, though the contract allows 2 MiB (2,796,212 base64 characters). The two original-resume operations now
+carry their own 3 MiB cap (`maximumResponseBytes`); every other operation keeps 512 KB, and a body past 3 MiB is
+still refused.
 
 2026-11-07: D3-154 edit the candidate's own PDF in place ([ADR-058](../../adr/058-edit-the-candidates-own-pdf-in-place.md)):
 the owner asked that the generated PDF never change the look of their own PDF. For single-flow Word-style
