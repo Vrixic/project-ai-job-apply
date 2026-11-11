@@ -27,12 +27,6 @@ type Status = OriginalStatus | TailoredStatus;
 /** What a box over a line says. A moved line is new where it now stands, so it is green like an added one. */
 type BoxStatus = "removed" | "changed" | "added";
 
-const BOX_LABEL: Readonly<Record<BoxStatus, string>> = {
-  removed: "Removed",
-  changed: "Changed",
-  added: "Added or moved",
-};
-
 const boxStatusOf = (status: Status, side: "original" | "tailored"): BoxStatus | undefined => {
   if (status === "changed") return "changed";
   if (side === "original") return status === "removed" ? "removed" : undefined;
@@ -259,9 +253,6 @@ export function ResumeDiffViewer({
         changed: diff.tailored.filter((entry) => entry.status === "changed"),
       }
     : undefined;
-  const unchanged =
-    diff !== undefined &&
-    diff.counts.removed + diff.counts.added + diff.counts.changed + diff.counts.moved === 0;
   const cuts = diff ? removalPoints(diff) : [];
   const originalBoxes = diff ? boxesOf(diff.original, "original") : [];
   const tailoredBoxes = diff ? boxesOf(diff.tailored, "tailored") : [];
@@ -280,29 +271,6 @@ export function ResumeDiffViewer({
         <p role="alert">
           The two resumes could not be compared here. You can still download the tailored one.
         </p>
-      ) : null}
-      {diff && changes ? (
-        <>
-          <p className="resume-diff-summary" role="status">
-            {unchanged
-              ? "No line was removed, changed, added or moved."
-              : `${diff.counts.removed} removed, ${diff.counts.changed} changed, ${diff.counts.added + diff.counts.moved} added or moved. ${diff.counts.kept} lines kept as they were.`}
-          </p>
-          <ul className="resume-diff-legend" aria-label="Legend">
-            {(["removed", "changed", "added"] as const).map((status) => (
-              <li key={status}>
-                <span className="resume-diff-swatch" data-status={status} aria-hidden="true" />
-                {BOX_LABEL[status]}
-              </li>
-            ))}
-            {cuts.length > 0 ? (
-              <li>
-                <span className="resume-diff-swatch" data-status="cut" aria-hidden="true" />
-                Cut from here
-              </li>
-            ) : null}
-          </ul>
-        </>
       ) : null}
       <div ref={host} className="resume-diff-columns">
         {loaded.phase === "ready" ? (
