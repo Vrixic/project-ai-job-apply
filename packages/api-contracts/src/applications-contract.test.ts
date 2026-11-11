@@ -184,7 +184,7 @@ describe("Applications OpenAPI contract", () => {
     const applicationPaths = Object.entries(contract.paths).filter(([path]) =>
       path.startsWith("/applications"),
     );
-    expect(applicationPaths.length).toBe(24);
+    expect(applicationPaths.length).toBe(25);
     for (const [, item] of applicationPaths) {
       for (const operation of Object.values(item) as Array<{
         security: Array<{ oidc: string[] }>;
@@ -226,6 +226,7 @@ describe("Applications OpenAPI contract", () => {
       "GET /applications/{applicationId}/resume/authorization",
       "GET /applications/{applicationId}/resume/file",
       "GET /applications/{applicationId}/resume/location",
+      "GET /applications/{applicationId}/resume/original",
       "GET /applications/{applicationId}/resume/uploaded",
       "POST /applications/search",
       "POST /applications/{applicationId}/attempts/{attemptId}/dispatch",

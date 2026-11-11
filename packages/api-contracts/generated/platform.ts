@@ -1095,6 +1095,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/applications/{applicationId}/resume/original": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The candidate's own original resume that the current packet's generated resume was made from, in its original format, for comparing the two. Owner-scoped. It is served only while the packet carries a current generated resume (the opposite of the uploaded-resume read, which is refused for such a packet), and the original is found through the generation's own record: the caller cannot name a document. It is refused with a stale-packet conflict when there is no current generated resume, or when the original is gone or has been replaced since the resume was generated. Files above 2 MiB are refused. The response is not cacheable and must not be persisted, logged or placed in a URL. */
+        get: operations["getApplicationGeneratedResumeOriginal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/applications/{applicationId}/cover-letter": {
         parameters: {
             query?: never;
@@ -6257,6 +6274,34 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Owner-scoped uploaded resume file */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationUploadedResumeFile"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getApplicationGeneratedResumeOriginal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped original resume file */
             200: {
                 headers: {
                     "Cache-Control": "no-store";

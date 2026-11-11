@@ -25,6 +25,7 @@ export type ApplicationsOperation =
   | "resumePreview"
   | "resumeFile"
   | "uploadedResume"
+  | "generatedResumeOriginal"
   | "preparePacket"
   | "preparation"
   | "resumeLocation"
@@ -122,6 +123,15 @@ const OPERATIONS: Readonly<Record<ApplicationsOperation, OperationSpec>> = {
   uploadedResume: {
     method: "GET",
     path: (id) => `/v1/applications/${id}/resume/uploaded`,
+    response: "ApplicationUploadedResumeFile",
+    success: 200,
+    idempotent: false,
+    needsApplication: true,
+    needsAttempt: false,
+  },
+  generatedResumeOriginal: {
+    method: "GET",
+    path: (id) => `/v1/applications/${id}/resume/original`,
     response: "ApplicationUploadedResumeFile",
     success: 200,
     idempotent: false,

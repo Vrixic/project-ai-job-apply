@@ -16,9 +16,14 @@ left or the candidate signs out.
 Found live on dev (2026-11-10): the button ended in a 409 for every generated resume, because
 `/resume/uploaded` serves the original only while the packet is bound to it (`packetUsesUploadedResume`), which a
 generated packet is not; the extension's attach flow relies on that refusal, so it stays. The unit tests had mocked
-a 200 and could not see it. The workspace now hides the button (`comparisonAvailable={false}`) until a new
-owner-only route serves the original of the document the generation was made from (`base_document_id` on the
-generation ledger); that route and the flag's removal follow as their own changes.
+a 200 and could not see it. The button was hidden (#824) until the fix: a new owner-only
+`GET /v1/applications/{id}/resume/original` serves the original of the document the generation was made from.
+The Applications service refuses it unless the packet carries a current generated resume (the opposite guard of
+`/resume/uploaded`), and the Documents processor's `generation_file` mode resolves the document from the
+generation ledger (`base_document_id`, `base_version` and `base_sha256` checked), so the caller names no
+document. The web client reads this route; the unit tests now run the real service guard on a generated-resume
+packet and check the Gateway client's request against the processor's own parser. Release order: the Documents
+processor, then the Gateway (same `UPLOADED_RESUME_ATTACHMENT_ENABLED` flag, no new Terraform).
 
 2026-11-07: D3-154 edit the candidate's own PDF in place ([ADR-058](../../adr/058-edit-the-candidates-own-pdf-in-place.md)):
 the owner asked that the generated PDF never change the look of their own PDF. For single-flow Word-style

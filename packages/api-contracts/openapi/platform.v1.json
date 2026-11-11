@@ -5220,6 +5220,64 @@
         }
       }
     },
+    "/applications/{applicationId}/resume/original": {
+      "get": {
+        "operationId": "getApplicationGeneratedResumeOriginal",
+        "security": [
+          {
+            "oidc": ["applications:read"]
+          }
+        ],
+        "description": "The candidate's own original resume that the current packet's generated resume was made from, in its original format, for comparing the two. Owner-scoped. It is served only while the packet carries a current generated resume (the opposite of the uploaded-resume read, which is refused for such a packet), and the original is found through the generation's own record: the caller cannot name a document. It is refused with a stale-packet conflict when there is no current generated resume, or when the original is gone or has been replaced since the resume was generated. Files above 2 MiB are refused. The response is not cacheable and must not be persisted, logged or placed in a URL.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "applicationId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner-scoped original resume file",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "enum": ["no-store"]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationUploadedResumeFile"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/applications/{applicationId}/cover-letter": {
       "get": {
         "operationId": "getApplicationCoverLetterPreview",

@@ -161,7 +161,6 @@ async function render(
   options: {
     application?: Application | undefined;
     nativeMaterials?: boolean;
-    comparisonAvailable?: boolean;
     busy?: boolean;
     send?: typeof fetch;
   } = {},
@@ -177,7 +176,6 @@ async function render(
         application={options.application}
         view={view}
         nativeMaterials={options.nativeMaterials ?? true}
-        comparisonAvailable={options.comparisonAvailable ?? true}
         nowMs={NOW}
         busy={options.busy ?? false}
         fileName={FILE_NAME}
@@ -337,7 +335,7 @@ describe("GeneratedResumePanel", () => {
         const calls: string[] = [];
         const send = vi.fn<typeof fetch>(async (input) => {
           calls.push(String(input));
-          if (String(input).includes("/resume/uploaded"))
+          if (String(input).includes("/resume/original"))
             return typeof uploaded === "function" ? uploaded() : json(uploaded);
           return json(pdfBody(bound));
         });
@@ -347,10 +345,10 @@ describe("GeneratedResumePanel", () => {
       it("reads the candidate's own file only when asked, then shows the comparison and can hide it", async () => {
         const { bound, send, app, calls } = withUploaded();
         await render({ kind: "ready", material: bound }, { application: app, send });
-        expect(calls.some((call) => call.includes("/resume/uploaded"))).toBe(false);
+        expect(calls.some((call) => call.includes("/resume/original"))).toBe(false);
         await act(async () => button("See what changed")?.click());
         await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
-        expect(calls.filter((call) => call.endsWith(`/${APP}/resume/uploaded`))).toHaveLength(1);
+        expect(calls.filter((call) => call.endsWith(`/${APP}/resume/original`))).toHaveLength(1);
         const comparison = container.querySelector('[aria-label="Comparison"]');
         expect(comparison?.getAttribute("data-original")).toBe(String(ORIGINAL_BYTES.byteLength));
         expect(comparison?.getAttribute("data-tailored")).toBe(String(PDF_BYTES.byteLength));
@@ -360,19 +358,17 @@ describe("GeneratedResumePanel", () => {
         expect(button("See what changed")).toBeDefined();
       });
 
-      it("does not offer the comparison while the server cannot serve the original of a generated resume", async () => {
+      it("reads the original through its own route, never the attach route that refuses a generated resume", async () => {
         const { bound, send, app, calls } = withUploaded();
-        await render(
-          { kind: "ready", material: bound },
-          { application: app, send, comparisonAvailable: false },
-        );
-        expect(button("Download PDF")).toBeDefined();
-        expect(button("See what changed")).toBeUndefined();
+        await render({ kind: "ready", material: bound }, { application: app, send });
+        await act(async () => button("See what changed")?.click());
+        await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
+        expect(calls.some((call) => call.endsWith(`/${APP}/resume/original`))).toBe(true);
         expect(calls.some((call) => call.includes("/resume/uploaded"))).toBe(false);
       });
 
       const uploadedReads = (calls: string[]) =>
-        calls.filter((call) => call.endsWith(`/${APP}/resume/uploaded`)).length;
+        calls.filter((call) => call.endsWith(`/${APP}/resume/original`)).length;
       const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
 
       it("reads the original once: hiding and showing the comparison again asks the server for nothing", async () => {

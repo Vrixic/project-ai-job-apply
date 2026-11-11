@@ -26,6 +26,7 @@ export {
   S3NormalizedDocumentReader,
 } from "./normalized-document-reader.js";
 
+import { PostgresGenerationBaseSource } from "./generation-base-source.js";
 import {
   createOriginalResumeService,
   ORIGINAL_RESUME_REQUEST_KIND,
@@ -405,6 +406,7 @@ export async function handler(
     const source = new PostgresParsedResumeSource(database.client);
     runtimeOriginalResume = createOriginalResumeService({
       source,
+      generations: new PostgresGenerationBaseSource(database.client),
       reader: new S3OriginalResumeReader(
         bucketName,
         kmsKeyArn,

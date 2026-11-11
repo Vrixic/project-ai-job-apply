@@ -592,6 +592,38 @@ describe("Applications browser boundary", () => {
     }
   });
 
+  it("forwards the original behind a generated resume to its own route only", async () => {
+    const original = {
+      documentId: APP,
+      fileName: "my-resume.pdf",
+      format: "pdf",
+      mediaType: "application/pdf",
+      sha256: "a".repeat(64),
+      sizeBytes: 3,
+      contentBase64: "YWJj",
+    };
+    const ok = harness(() => json(original));
+    const response = await applicationsRoute(
+      "generatedResumeOriginal",
+      new Request("http://localhost:3000/x", { method: "GET" }),
+      { applicationId: APP },
+      ok.deps,
+    );
+    expect(response.status).toBe(200);
+    // The attach route stays a different operation: the two are never interchangeable.
+    expect(String((ok.fetch.mock.calls[0] as unknown[])[0])).toBe(
+      `http://localhost:4000/v1/applications/${APP}/resume/original`,
+    );
+    const { deps } = harness(() => json({ ...original, sizeBytes: 2_097_153 }));
+    const refused = await applicationsRoute(
+      "generatedResumeOriginal",
+      new Request("http://localhost:3000/x", { method: "GET" }),
+      { applicationId: APP },
+      deps,
+    );
+    expect(refused.status).toBe(503);
+  });
+
   it("never passes an invalid, oversized, mistyped, or foreign success body to the browser", async () => {
     const cases: Array<[string, () => Response]> = [
       ["wrong status", () => json(application(), 200)],

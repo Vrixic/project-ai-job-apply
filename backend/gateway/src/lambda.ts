@@ -300,6 +300,10 @@ const APPLICATION_UPLOADED_RESUME_PATH_PATTERN = new RegExp(
   `^/v1/applications/${APPLICATION_ID}/resume/uploaded$`,
   "u",
 );
+const APPLICATION_ORIGINAL_RESUME_PATH_PATTERN = new RegExp(
+  `^/v1/applications/${APPLICATION_ID}/resume/original$`,
+  "u",
+);
 const APPLICATION_COVER_LETTER_PATH_PATTERN = new RegExp(
   `^/v1/applications/${APPLICATION_ID}/cover-letter$`,
   "u",
@@ -429,6 +433,7 @@ function allowedRoute(
     method === "GET" &&
     (APPLICATION_RESUME_PATH_PATTERN.test(path) ||
       APPLICATION_UPLOADED_RESUME_PATH_PATTERN.test(path) ||
+      APPLICATION_ORIGINAL_RESUME_PATH_PATTERN.test(path) ||
       APPLICATION_COVER_LETTER_PATH_PATTERN.test(path) ||
       APPLICATION_PREPARATION_PATH_PATTERN.test(path))
   ) {

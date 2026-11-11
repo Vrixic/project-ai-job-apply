@@ -10,8 +10,8 @@ import {
   ApprovalRefusedError,
   AttemptRefusedError,
   NarrativeAnswerLimitError,
-  NarrativeAnswersUnavailableError,
   NarrativeAnswerStateError,
+  NarrativeAnswersUnavailableError,
   PreparationNotFoundError,
   RestrictedPacketStoreUnavailableError,
   StalePacketError,
@@ -3713,6 +3713,15 @@ describe("Applications routes", () => {
       sizeBytes: 4,
       contentBase64: "dGVzdA==",
     } as const),
+    generatedResumeOriginal: record("generatedResumeOriginal", {
+      documentId: jobId,
+      fileName: "Candidate Resume.pdf",
+      format: "pdf",
+      mediaType: "application/pdf",
+      sha256: hash,
+      sizeBytes: 4,
+      contentBase64: "dGVzdA==",
+    } as const),
     resumeFile: record("resumeFile", {
       format: "pdf",
       mediaType: "application/pdf",
@@ -4237,6 +4246,57 @@ describe("Applications routes", () => {
       expect(response.statusCode).toBe(status);
       expect(response.json()).toMatchObject({ code });
       expect(response.body).not.toContain("Candidate Resume");
+    }
+  });
+
+  it("serves the original behind a generated resume to its owner only, with no query and no-store", async () => {
+    const read = { authorization: `Bearer ${await token("applications:read")}` };
+    const url = `/v1/applications/${applicationId}/resume/original`;
+    const response = await app.inject({ method: "GET", url, headers: read });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.json()).toMatchObject({ documentId: jobId, format: "pdf", sha256: hash });
+    // The owner is the authenticated candidate's resolved identity, never a request value, and no
+    // document or generation is taken from the request.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.method).toBe("generatedResumeOriginal");
+    expect(calls[0]?.args).toHaveLength(2);
+    expect(calls[0]?.args[1]).toBe(applicationId);
+    expect(calls[0]?.args[0]).not.toBe(applicationId);
+    calls.length = 0;
+    for (const request of [
+      { method: "GET", url: `${url}?documentId=${jobId}` },
+      { method: "GET", url: `${url}?generationId=${jobId}` },
+      { method: "GET", url: `${url}?owner=other` },
+      { method: "GET", url: "/v1/applications/not-a-uuid/resume/original" },
+    ] as const) {
+      expect(
+        (await app.inject({ ...request, headers: read } as never)).statusCode,
+        request.url,
+      ).toBe(400);
+    }
+    expect(calls).toHaveLength(0);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url,
+          headers: { authorization: `Bearer ${await token("applications:write")}` },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect((await app.inject({ method: "GET", url })).statusCode).toBe(401);
+    expect(calls).toHaveLength(0);
+    for (const [error, status, code] of [
+      [new ApplicationNotFoundError(), 404, "application_not_found"],
+      [new StalePacketError(["resume_changed"]), 409, "application_packet_stale"],
+      [new ApplicationsUnavailableError(), 503, "applications_unavailable"],
+    ] as const) {
+      failure = error;
+      const failed = await app.inject({ method: "GET", url, headers: read });
+      expect(failed.statusCode).toBe(status);
+      expect(failed.json()).toMatchObject({ code });
+      expect(failed.body).not.toContain("Candidate Resume");
     }
   });
 
