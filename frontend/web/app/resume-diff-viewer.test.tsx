@@ -96,7 +96,7 @@ const TAILORED = [
 ];
 
 describe("ResumeDiffViewer", () => {
-  it("shows a reordered line as green on the tailored page only, with no cut and no separate moved list", async () => {
+  it("shows a reordered line as green on the tailored page only, with no cut and no list", async () => {
     await show(
       [line("Alpha line one", 10), line("Beta line two", 30), line("Gamma line three", 50)],
       [line("Gamma line three", 10), line("Alpha line one", 30), line("Beta line two", 50)],
@@ -110,9 +110,10 @@ describe("ResumeDiffViewer", () => {
     expect(tailored?.querySelector(".resume-diff-box")?.getAttribute("data-status")).toBe("added");
     expect(original?.querySelector(".resume-diff-box")).toBeNull();
     expect(container.querySelector(".resume-diff-cut")).toBeNull();
-    expect(sections()).toEqual(["Added or moved (1)"]);
-    // Moved lines are not a category of their own: no section or legend entry is called just "Moved".
-    expect(sections().some((title) => /^moved/iu.test(title ?? ""))).toBe(false);
+    // The green lines are already on the page: there is no list of them, so with nothing removed or
+    // reworded there are no lists at all.
+    expect(container.querySelector(".resume-diff-lists")).toBeNull();
+    expect(sections()).toEqual([]);
     expect(legend().some((label) => /^moved/iu.test(label ?? ""))).toBe(false);
   });
 
@@ -141,7 +142,8 @@ describe("ResumeDiffViewer", () => {
         .sort();
     expect(statuses(original)).toEqual(["changed", "removed"]);
     expect(statuses(tailored)).toEqual(["added", "added", "changed"]);
-    expect(sections()).toEqual(["Removed (1)", "Changed (1)", "Added or moved (2)"]);
+    // Only what is not visible on the tailored page is listed: the removed line and the reworded words.
+    expect(sections()).toEqual(["Removed (1)", "Changed (1)"]);
     expect(container.querySelectorAll(".resume-diff-canvas")).toHaveLength(2);
   });
 

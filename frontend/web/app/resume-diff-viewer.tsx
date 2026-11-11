@@ -256,9 +256,6 @@ export function ResumeDiffViewer({
   const changes = diff
     ? {
         removed: linesOf(diff.original, "removed"),
-        added: diff.tailored
-          .filter((entry) => entry.status === "added" || entry.status === "moved")
-          .map((entry) => entry.line),
         changed: diff.tailored.filter((entry) => entry.status === "changed"),
       }
     : undefined;
@@ -341,7 +338,9 @@ export function ResumeDiffViewer({
           </>
         ) : null}
       </div>
-      {changes && !unchanged ? (
+      {changes && (changes.removed.length > 0 || changes.changed.length > 0) ? (
+        // Added and moved lines are already green on the tailored page, so they are not listed again; what
+        // was removed is not on it, and a reworded line's words are not visible there, so those are.
         <div className="resume-diff-lists">
           {changes.removed.length > 0 ? (
             <details open>
@@ -375,19 +374,6 @@ export function ResumeDiffViewer({
                         )}{" "}
                       </Fragment>
                     ))}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          ) : null}
-          {changes.added.length > 0 ? (
-            <details open>
-              <summary>Added or moved ({changes.added.length})</summary>
-              <ul>
-                {changes.added.map((line, index) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: a stable list drawn once.
-                  <li key={index} className="resume-diff-added">
-                    {line.text}
                   </li>
                 ))}
               </ul>
