@@ -33,8 +33,10 @@ behind does not scroll, no animation under reduced motion). It opens by itself o
 generated resume is on screen, so after generation and on coming back to an application that already has one,
 and "See what changed" opens it again. When it cannot open on its own (the original is not a PDF, or the read
 is refused) it stays quiet; the button then explains. "Moved" is not a category of its own: a line whose text only
-changed place is, like an added one, new where it now stands, so it is green ("Added or moved" in the legend,
-summary and list) and the original page marks nothing for it.
+changed place is, like an added one, new where it now stands, so it is green ("Added or moved" in the legend
+and summary) and the original page marks nothing for it. There is no list of added or moved lines (owner,
+2026-11-11: they are already green on the page); only what the page cannot show is listed, the removed lines
+and the words of a reworded line.
 Owner feedback on the opened panel (2026-11-10): the Tailored page should show what changed at a glance, in green
 and red. Green boxes mark added, reworded and moved lines (so the six reordered bullets of the first live
 resume are visible). Red marks where a line was cut: a removed line has no place on the tailored page, so a red
