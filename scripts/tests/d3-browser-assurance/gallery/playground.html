@@ -48,8 +48,9 @@
       async function pressWhenShown(name) {
         for (let attempt = 0; attempt < 100; attempt += 1) {
           // The tab and the form submit share the label "Search"; the submit is the last one.
-          const match = [...document.querySelectorAll("#root button")]
-            .filter((button) => button.textContent.trim() === name && !button.disabled)
+          // The details control is a link (a job opens on its own page); the rest are buttons.
+          const match = [...document.querySelectorAll("#root button, #root a")]
+            .filter((control) => control.textContent.trim() === name && !control.disabled)
             .at(-1);
           if (match) return match.click();
           await new Promise((resolve) => setTimeout(resolve, 50));

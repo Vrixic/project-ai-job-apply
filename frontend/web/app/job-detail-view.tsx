@@ -59,28 +59,25 @@ function failureMessage(status: number): string {
   return unavailableMessage;
 }
 
-export function JobDetailPanel({
+/**
+ * A job's own page: its description, its sources, and the apply flow. The details load as soon as the
+ * page opens (there is nothing to expand), and a job or session change drops whatever was loaded
+ * before a late answer can be shown.
+ */
+export function JobDetailView({
   jobId,
   authenticated,
-  onSubmitted,
-  standalone = false,
   applicationId,
 }: {
   jobId: string;
   authenticated: boolean;
-  /** The job has its own page: details load at once and cannot be collapsed. */
-  standalone?: boolean;
   /** An existing application to open, from a link to the job. */
   applicationId?: string;
-  /** Called once the candidate's submission for this job is logged. */
-  onSubmitted?: () => void;
 }) {
   const panelId = useId();
   const headingId = `${panelId}-heading`;
-  const trigger = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const focusHeading = useRef(false);
-  const restoreTriggerFocus = useRef(false);
   const generation = useRef(0);
   const activeRequest = useRef<DetailRequest | undefined>(undefined);
   const scopeRef = useRef<DetailScope>({ jobId, authenticated });
@@ -101,7 +98,6 @@ export function JobDetailPanel({
     activeRequest.current = undefined;
     cancelRequest(previous);
     focusHeading.current = false;
-    restoreTriggerFocus.current = false;
     setState(undefined);
     return () => {
       generation.current += 1;
@@ -111,32 +107,18 @@ export function JobDetailPanel({
     };
   }, [scope]);
 
-  // A job opened by its own link shows its details at once, with no toggle.
+  // The page shows its details at once, with no toggle.
   // biome-ignore lint/correctness/useExhaustiveDependencies: load reads the current scope through its ref.
   useEffect(() => {
-    if (standalone && authenticated) void load();
-  }, [standalone, authenticated, scope]);
+    if (authenticated) void load();
+  }, [authenticated, scope]);
 
   useEffect(() => {
-    if (!authenticated) return;
-    if (result && focusHeading.current) {
+    if (authenticated && result && focusHeading.current) {
       focusHeading.current = false;
       heading.current?.focus();
-    } else if (!result && restoreTriggerFocus.current) {
-      restoreTriggerFocus.current = false;
-      trigger.current?.focus();
     }
   }, [authenticated, result]);
-
-  function close() {
-    generation.current += 1;
-    const pending = activeRequest.current;
-    activeRequest.current = undefined;
-    cancelRequest(pending);
-    focusHeading.current = false;
-    restoreTriggerFocus.current = true;
-    setState(undefined);
-  }
 
   async function load() {
     if (!scopeRef.current.authenticated || activeRequest.current) return;
@@ -218,45 +200,13 @@ export function JobDetailPanel({
 
   return (
     <div className="job-detail">
-      {standalone ? null : (
-        <button
-          ref={trigger}
-          className="secondary-button"
-          type="button"
-          aria-expanded={Boolean(result)}
-          aria-controls={panelId}
-          disabled={loading}
-          onClick={() => {
-            if (result) heading.current?.focus();
-            else void load();
-          }}
-        >
-          View details and sources
-        </button>
-      )}
-      {standalone && !result ? <p role="status">Loading job details…</p> : null}
+      {!result ? <p role="status">Loading job details…</p> : null}
       {result && (
-        <section
-          id={panelId}
-          className="job-detail-content"
-          aria-labelledby={headingId}
-          onKeyDown={(event) => {
-            if (event.key === "Escape" && !standalone) {
-              event.preventDefault();
-              event.stopPropagation();
-              close();
-            }
-          }}
-        >
+        <section id={panelId} className="job-detail-content" aria-labelledby={headingId}>
           <div className="job-detail-heading">
             <h4 id={headingId} ref={heading} tabIndex={-1}>
               Job details and sources
             </h4>
-            {standalone ? null : (
-              <button className="secondary-button" type="button" onClick={close}>
-                Close details
-              </button>
-            )}
           </div>
           <p role="status" aria-live="polite">
             {loading
@@ -325,14 +275,13 @@ export function JobDetailPanel({
                     </li>
                   ))}
                 </ul>
-                {authenticated && applicationsUiEnabled && result.detail.status === "active" ? (
+                {applicationsUiEnabled && result.detail.status === "active" ? (
                   <ApplicationsWorkspace
                     jobId={result.detail.id}
                     jobTitle={result.detail.title}
                     {...(applicationId ? { applicationId } : {})}
                     applyUrl={result.detail.sources[0]?.canonicalUrl}
                     requireBasics
-                    {...(onSubmitted ? { onApplied: onSubmitted } : {})}
                   />
                 ) : null}
               </>

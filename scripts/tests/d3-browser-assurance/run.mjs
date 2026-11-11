@@ -91,9 +91,8 @@ try {
     assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0, label);
   const openJob = async () => {
     await page.getByRole("button", { name: "Search", exact: true }).press("Enter");
-    await page
-      .getByRole("button", { name: "View details and sources", exact: true })
-      .press("Enter");
+    // A job opens on its own page: the result is a link, and its details load as the page opens.
+    await page.getByRole("link", { name: "View details and sources", exact: true }).press("Enter");
     await page.getByRole("button", { name: "Generate resume", exact: true }).waitFor();
   };
   const callsOf = () => page.evaluate(() => window.readD3AssuranceCalls());
@@ -206,7 +205,9 @@ try {
   // The outcome dialog opened by itself when Apply sent the candidate to the employer's page.
   await page.getByRole("dialog").waitFor();
   await page.getByRole("button", { name: "I submitted it", exact: true }).press("Enter");
-  // Search only holds jobs that were not applied to, so the submitted job leaves the results.
+  // The job's own page stays. Back on the search, which holds only jobs that were not applied to,
+  // the submitted job is no longer among the results.
+  await page.getByRole("link", { name: "Back to jobs", exact: true }).press("Enter");
   await page.getByRole("list", { name: "Job search results" }).waitFor({ state: "detached" });
   assert.equal(await page.getByRole("button", { name: "Save job", exact: true }).count(), 0);
   assert.equal(await page.getByText("Apply to this job", { exact: true }).count(), 0);

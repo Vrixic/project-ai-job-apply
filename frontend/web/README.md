@@ -141,14 +141,16 @@ only in a bounded JSON body to a narrow server-side BFF. Auth0 tokens remain ser
 strings are rejected, and pagination uses the API's opaque cursor. Results are explicitly
 non-personalized and do not use profile facts.
 
-Each active result also offers `View details and sources`. This explicit, on-demand read uses the
+Each active result also offers `View details and sources`, a link to that job's own page
+(`/jobs?job=<id>`; nothing opens in place in the results). The page reads the job as it opens, with the
 bodyless `GET /api/platform/jobs/[jobId]` BFF, the server-held session's existing `jobs:read`
 permission, and the existing `CanonicalJobDetail` projection. Reversible aliases may resolve to a
-different canonical identifier. The panel renders the description as plain text and shows source
+different canonical identifier. The page renders the description as plain text and shows source
 provenance and observation times with validated HTTPS links that suppress referrers; it never
-automatically fetches a provider page. Loading, fixed error copy, manual retry, close/Escape focus
-restoration, and abort/generation fencing cover request and authentication transitions. Search
-ordering, Save, Report, and match-evidence behavior remain unchanged. This source and local-test
+automatically fetches a provider page. Loading, fixed error copy, manual retry, and
+abort/generation fencing cover request and authentication transitions. The last search is held in
+page memory only (never in browser storage), so "Back to jobs" and the browser's Back return to its
+results. Search ordering, Save, Report, and match-evidence behavior remain unchanged. This source and local-test
 surface does not claim hosted deployment, managed-OIDC acceptance, or provider acceptance, and
 does not enable the separately gated anonymous projection or public indexing.
 

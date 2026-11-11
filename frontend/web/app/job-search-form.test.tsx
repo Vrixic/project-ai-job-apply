@@ -4,8 +4,19 @@ import type { MatchAssessment } from "@ai-job-apply/api-contracts";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { clearLastJobSearch } from "../lib/last-job-search";
 import { JobSearchForm } from "./job-search-form";
 import { SAVED_JOBS_CHANGED_EVENT } from "./saved-jobs-panel";
+
+// Routing is not under test here, and the real link schedules its own prefetch timers, which these
+// tests count. A plain anchor keeps them about the form.
+vi.mock("next/link", async () => {
+  const react = await import("react");
+  return {
+    default: ({ href, children, ...rest }: { href: string; children?: React.ReactNode }) =>
+      react.createElement("a", { href, ...rest }, children),
+  };
+});
 
 const firstJob = {
   id: "00000000-0000-7000-8000-000000000001",
@@ -128,27 +139,94 @@ describe("JobSearchForm", () => {
     container.remove();
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    clearLastJobSearch();
   });
 
-  it("offers explicit details per result without changing order, saving, reports, or match requests", async () => {
-    const details = {
-      ...restartedJob,
-      id: firstJob.id,
-      description: "Synthetic canonical description from an alias.",
-      sources: [
-        {
-          provider: "greenhouse",
-          provenance: "authorized_fixture",
-          canonicalUrl: "https://jobs.synthetic.example/alias-target",
-          firstObservedAt: restartedJob.firstObservedAt,
-          lastVerifiedAt: restartedJob.lastVerifiedAt,
-        },
-      ],
-    };
+  async function searchOnce(
+    fetchMock: ReturnType<typeof vi.fn<typeof fetch>>,
+    element = <JobSearchForm authenticated />,
+  ) {
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => root.render(element));
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+  }
+
+  const shownTitles = () =>
+    Array.from(
+      container.querySelectorAll(".job-results article > h3"),
+      (entry) => entry.textContent,
+    );
+
+  describe("coming back from a job's own page", () => {
+    it("restores the search it was left from, with no new read", async () => {
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          jsonResponse({ items: [firstJob, restartedJob], nextCursor: "more" }),
+        );
+      await searchOnce(fetchMock);
+      expect(shownTitles()).toEqual([firstJob.title, restartedJob.title]);
+      // Following a job's link unloads the page; coming back builds the form again.
+      await act(async () => root.unmount());
+      root = createRoot(container);
+      await act(async () => root.render(<JobSearchForm authenticated />));
+      expect(shownTitles()).toEqual([firstJob.title, restartedJob.title]);
+      expect(container.textContent).toContain("2 jobs loaded.");
+      expect(
+        Array.from(container.querySelectorAll("button")).some(
+          (entry) => entry.textContent === "Load more jobs",
+        ),
+      ).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("starts empty when there was no search", async () => {
+      const fetchMock = vi.fn<typeof fetch>();
+      vi.stubGlobal("fetch", fetchMock);
+      await act(async () => root.render(<JobSearchForm authenticated />));
+      expect(container.querySelector(".job-results")).toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("drops the kept search when the next one finds nothing", async () => {
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }))
+        .mockResolvedValueOnce(jsonResponse({ items: [] }));
+      await searchOnce(fetchMock);
+      await act(async () =>
+        container
+          .querySelector("form")
+          ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+      );
+      expect(container.textContent).toContain("No active jobs matched these filters.");
+      await act(async () => root.unmount());
+      root = createRoot(container);
+      await act(async () => root.render(<JobSearchForm authenticated />));
+      expect(container.querySelector(".job-results")).toBeNull();
+    });
+
+    it("drops the kept search on sign-out", async () => {
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }));
+      await searchOnce(fetchMock);
+      await act(async () => root.render(<JobSearchForm authenticated={false} />));
+      await act(async () => root.unmount());
+      root = createRoot(container);
+      await act(async () => root.render(<JobSearchForm authenticated />));
+      expect(container.querySelector(".job-results")).toBeNull();
+    });
+  });
+
+  it("links each result to its own details page without changing order, saving, reports, or match requests", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonResponse({ items: [firstJob, restartedJob] }))
-      .mockResolvedValueOnce(jsonResponse(details));
+      .mockResolvedValueOnce(jsonResponse({ items: [firstJob, restartedJob] }));
     vi.stubGlobal("fetch", fetchMock);
     await act(async () => root.render(<JobSearchForm authenticated />));
     await act(async () =>
@@ -156,26 +234,28 @@ describe("JobSearchForm", () => {
         .querySelector("form")
         ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
     );
-    const controls = Array.from(container.querySelectorAll("button")).filter(
+    // Details are a page of their own: a link per result, nothing opens or is read in place.
+    const links = Array.from(container.querySelectorAll("a")).filter(
       (entry) => entry.textContent === "View details and sources",
     );
-    expect(controls).toHaveLength(2);
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      `/jobs?job=${firstJob.id}`,
+      `/jobs?job=${restartedJob.id}`,
+    ]);
+    expect(
+      Array.from(container.querySelectorAll("button")).filter(
+        (entry) => entry.textContent === "View details and sources",
+      ),
+    ).toHaveLength(0);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const ordering = Array.from(
-      container.querySelectorAll(".job-results article > h3"),
-      (entry) => entry.textContent,
-    );
-    await act(async () => controls[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[1]?.[0]).toBe(`/api/platform/jobs/${restartedJob.id}`);
-    expect(container.querySelectorAll(".job-detail-description")).toHaveLength(1);
-    expect(container.textContent).toContain(details.description);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(container.querySelector(".job-detail")).toBeNull();
     expect(
       Array.from(
         container.querySelectorAll(".job-results article > h3"),
         (entry) => entry.textContent,
       ),
-    ).toEqual(ordering);
+    ).toEqual([firstJob.title, restartedJob.title]);
     expect(
       Array.from(container.querySelectorAll("button")).filter(
         (entry) => entry.textContent === "Save job",
@@ -189,37 +269,11 @@ describe("JobSearchForm", () => {
     expect(container.querySelectorAll(".job-report-control")).toHaveLength(2);
     expect(container.querySelectorAll('a[href^="/jobs/"]')).toHaveLength(0);
     await act(async () => root.render(<JobSearchForm authenticated={false} />));
-    expect(container.textContent).not.toContain(details.description);
-    expect(container.querySelector(".job-detail")).toBeNull();
-  });
-
-  it("unmounts and aborts a pending detail read on candidate sign-out", async () => {
-    const pending = deferredResponse();
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonResponse({ items: [firstJob] }))
-      .mockImplementationOnce(() => pending.promise);
-    vi.stubGlobal("fetch", fetchMock);
-    await act(async () => root.render(<JobSearchForm authenticated />));
-    await act(async () =>
-      container
-        .querySelector("form")
-        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
-    );
-    const control = Array.from(container.querySelectorAll("button")).find(
-      (entry) => entry.textContent === "View details and sources",
-    );
-    await act(async () => control?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
-    const signal = fetchMock.mock.calls[1]?.[1]?.signal;
-    await act(async () => root.render(<JobSearchForm authenticated={false} />));
-    expect(signal?.aborted).toBe(true);
-    await act(async () =>
-      pending.resolve(
-        jsonResponse({ ...firstJob, description: "stale-detail-canary", sources: [] }),
+    expect(
+      Array.from(container.querySelectorAll("a")).filter(
+        (entry) => entry.textContent === "View details and sources",
       ),
-    );
-    expect(container.textContent).not.toContain("stale-detail-canary");
-    expect(container.querySelector(".job-detail")).toBeNull();
+    ).toHaveLength(0);
   });
 
   it("keeps rapid initial search activation single-flight and cleans up its deadline", async () => {

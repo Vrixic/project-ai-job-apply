@@ -17,12 +17,12 @@ personalized-match claim. Each result composes the existing owner-self match-evi
 does not request private evidence until the candidate explicitly selects `Check match evidence`.
 The panel does not automatically filter or reorder results, produce a score, or gate saving.
 
-The explicit `View details and sources` control reads `api/platform/jobs/[jobId]` on demand through
-the server-held session and existing `jobs:read` permission. It accepts the existing canonical
-detail projection, including an alias resolving to a different canonical identifier. Descriptions
-render literally, while provenance and observation times accompany validated HTTPS source links
-with no referrer; rendering never fetches a provider page. The disclosure has loading and fixed
-error states, manual retry, close/Escape focus restoration, and abort/generation fencing across
+The `View details and sources` link opens that job's own page (`/jobs?job=<id>`), which reads
+`api/platform/jobs/[jobId]` as it opens through the server-held session and existing `jobs:read`
+permission. It accepts the existing canonical detail projection, including an alias resolving to a
+different canonical identifier. Descriptions render literally, while provenance and observation
+times accompany validated HTTPS source links with no referrer; rendering never fetches a provider
+page. The page has loading and fixed error states, manual retry, and abort/generation fencing across
 job, authentication, and unmount transitions. It does not change search ordering, saving, reports,
 or match evidence. These source and local-test changes do not establish hosted or managed-OIDC
 acceptance or activate the separate anonymous API and indexing gates.

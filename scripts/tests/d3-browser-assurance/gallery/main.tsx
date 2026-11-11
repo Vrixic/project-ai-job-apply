@@ -1,10 +1,12 @@
 import type { Application, ApplicationTemporaryMaterial } from "@ai-job-apply/api-contracts";
 import { validateApplicationNativeTransferCommit } from "@ai-job-apply/api-contracts/browser-validators";
+import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "../../../../frontend/web/app/styles.css";
 import { ApplicationsWorkspace } from "../../../../frontend/web/app/applications-workspace";
 import { AppliedJobsPanel } from "../../../../frontend/web/app/applied-jobs-panel";
 import { CandidateNameProvider } from "../../../../frontend/web/app/candidate-name-context";
+import { JobDetailView } from "../../../../frontend/web/app/job-detail-view";
 import { JobSearchForm } from "../../../../frontend/web/app/job-search-form";
 import { MaterialSignOutSignal } from "../../../../frontend/web/app/signed-out/material-sign-out-signal";
 
@@ -767,6 +769,47 @@ window.showD3CoverLetterPreparation = () => {
   );
 };
 let journeys = 0;
+/**
+ * The jobs page without a router: a result's "View details and sources" link opens that job's own page
+ * (the details view with a back link), and "Back to jobs" returns to the search, as the app does with
+ * client-side navigation. The page itself never reloads, so the synthetic BFF stays installed.
+ */
+function JobsJourney() {
+  const [openJobId, setOpenJobId] = useState<string>();
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      const link = event.target instanceof Element ? event.target.closest("a") : null;
+      const href = link?.getAttribute("href") ?? "";
+      if (href === "/jobs") {
+        event.preventDefault();
+        event.stopPropagation();
+        setOpenJobId(undefined);
+      } else if (href.startsWith("/jobs?job=")) {
+        event.preventDefault();
+        event.stopPropagation();
+        setOpenJobId(new URLSearchParams(href.slice(href.indexOf("?"))).get("job") ?? undefined);
+      }
+    };
+    // Capture phase, before the app's own link handler would try to route.
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, []);
+  return openJobId ? (
+    <section aria-label="Job">
+      <p>
+        <a href="/jobs">Back to jobs</a>
+      </p>
+      <JobDetailView authenticated jobId={openJobId} />
+    </section>
+  ) : (
+    <JobSearchForm
+      authenticated
+      savedPanel={<p>No saved jobs in this synthetic journey.</p>}
+      appliedPanel={<AppliedJobsPanel authenticated />}
+    />
+  );
+}
+
 window.showD3ApplyJourney = (mode = "ready", pollsUntilResolved = 2) => {
   current = undefined;
   coverLetterScenario = false;
@@ -781,19 +824,8 @@ window.showD3ApplyJourney = (mode = "ready", pollsUntilResolved = 2) => {
   journeys += 1;
   root.render(
     <CandidateNameProvider value="Vrij Patel">
-      <JobSearchForm
-        key={`journey-${journeys}`}
-        authenticated
-        savedPanel={<p>No saved jobs.</p>}
-        appliedPanel={<AppliedJobsPanel authenticated />}
-      />
+      <JobsJourney key={`journey-${journeys}`} />
     </CandidateNameProvider>,
   );
 };
-root.render(
-  <JobSearchForm
-    authenticated
-    savedPanel={<p>No saved jobs in this synthetic journey.</p>}
-    appliedPanel={<AppliedJobsPanel authenticated />}
-  />,
-);
+root.render(<JobsJourney />);
