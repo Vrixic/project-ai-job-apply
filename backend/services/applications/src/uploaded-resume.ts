@@ -30,6 +30,15 @@ export interface UploadedResumeSource {
   descriptor(ownerUserId: string): Promise<UploadedResumeDescriptor | undefined>;
   /** The exact original bytes of one owned document, or undefined when it is gone. */
   file(ownerUserId: string, documentId: string): Promise<UploadedResumeFileBody | undefined>;
+  /**
+   * The exact original a generated resume was made from, found by Documents through the
+   * generation's own record, or undefined when it is gone or has since been replaced.
+   */
+  generationFile(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+  ): Promise<UploadedResumeFileBody | undefined>;
 }
 
 /** The candidate's uploaded resume is larger than the automatic-attachment limit. */

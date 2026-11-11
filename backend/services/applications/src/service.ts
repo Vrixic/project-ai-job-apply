@@ -260,6 +260,14 @@ export interface ApplicationsApi {
     ownerUserId: string,
     applicationId: string,
   ): Promise<ApplicationUploadedResumeFile>;
+  /**
+   * The candidate's own original the current packet's generated resume was made from, for comparing
+   * the two; refused unless the packet carries a current generated resume.
+   */
+  generatedResumeOriginal?(
+    ownerUserId: string,
+    applicationId: string,
+  ): Promise<ApplicationUploadedResumeFile>;
   history(
     ownerUserId: string,
     applicationId: string,
@@ -802,6 +810,47 @@ export class ApplicationsService implements ApplicationsApi {
       file.sha256 !== expected ||
       file.sizeBytes > UPLOADED_RESUME_MAXIMUM_BYTES
     )
+      throw new StalePacketError(["resume_changed"]);
+    return {
+      documentId: file.documentId,
+      fileName: file.fileName,
+      format: file.format,
+      mediaType: file.mediaType,
+      sha256: file.sha256,
+      sizeBytes: file.sizeBytes,
+      contentBase64: file.contentBase64,
+    };
+  }
+
+  /**
+   * The exact original a generated resume was made from, so the candidate can see what changed.
+   * It is the opposite case from `uploadedResumeFile`, which refuses a packet that carries a generated
+   * resume: this serves only a packet that carries one, only while it is current, and Documents finds
+   * the original through the generation's own record, so the caller cannot ask for any other file.
+   */
+  async generatedResumeOriginal(
+    ownerUserId: string,
+    applicationId: string,
+  ): Promise<ApplicationUploadedResumeFile> {
+    const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    const uploaded = this.dependencies.uploadedResumes;
+    if (!uploaded) throw new ApplicationsUnavailableError();
+    if (view.application.status === "applied" || view.application.status === "cancelled")
+      throw new StalePacketError(["temporary_material_changed"]);
+    const material = view.currentPacket?.temporaryMaterials?.find(
+      (reference) => reference.kind === "tailored_resume",
+    );
+    if (!material) throw new StalePacketError(["resume_changed"]);
+    const reasons = temporaryMaterialReasons([material], [material], this.clock());
+    if (reasons.length) throw new StalePacketError(reasons);
+    let file: Awaited<ReturnType<UploadedResumeSource["generationFile"]>>;
+    try {
+      file = await uploaded.generationFile(ownerUserId, applicationId, material.generationId);
+    } catch {
+      throw new ApplicationsUnavailableError();
+    }
+    // Gone, or replaced since the resume was generated: the comparison would no longer be of this resume.
+    if (!file || file.sizeBytes > UPLOADED_RESUME_MAXIMUM_BYTES)
       throw new StalePacketError(["resume_changed"]);
     return {
       documentId: file.documentId,

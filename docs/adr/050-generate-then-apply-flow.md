@@ -106,8 +106,15 @@ use.
    Activation (owner approval 2026-11-10, development): the Terraform bool
    `uploaded_resume_attachment_enabled` (default false, requires `deploy_gateway_lambda` and
    `document_tailoring_invoke_enabled`) sets the Gateway flag, and only when the processor alias is actually
-   deployed; setting it false switches the route off without a code release. The candidate's web app uses
-   the same route for its "See what changed" comparison, fetching the file once per browser session.
+   deployed; setting it false switches the route off without a code release.
+   The "See what changed" comparison cannot use this route, which refuses a packet that carries a
+   generated resume. It reads `GET /applications/{id}/resume/original` (same flag, same 2 MiB cap, never
+   cached), served only while the packet carries a current generated resume. The Documents processor's
+   `generation_file` mode finds the original through the generation's own ledger row (`base_document_id`,
+   with `base_version` and `base_sha256` checked against the stored resume), so the caller names no document
+   and a resume uploaded since cannot be substituted; a replaced or gone original is a stale-packet
+   conflict. The processor is released before the Gateway. The web app fetches the file once per browser
+   session.
 6. **Extension hand-off: arm, then confirm.** Pressing Apply opens the employer page from the click
    and sends the extension an identifiers-only `application-apply-intent.v1` over the existing
    first-party channel. The extension reads the packet with its own session and derives the resume

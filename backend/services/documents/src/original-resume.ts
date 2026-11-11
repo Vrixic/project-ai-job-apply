@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
+import type { GenerationBase, GenerationBaseSource } from "./generation-base-source.js";
 import {
   ORIGINAL_RESUME_MAXIMUM_BYTES,
   ORIGINAL_RESUME_RESULT_SCHEMA,
@@ -131,15 +132,30 @@ function describe(record: ParsedResumeRecord): OriginalResumeDocument | undefine
 export function createOriginalResumeService(dependencies: {
   source: ParsedResumeSource;
   reader: OriginalResumeObjectReader;
+  /** Without it, `generation_file` is refused as an invalid request. */
+  generations?: GenerationBaseSource;
 }) {
   return async function originalResume(raw: unknown): Promise<OriginalResumeResult> {
     const request = parseOriginalResumeRequest(raw);
     if (!request) return unavailable("invalid_request");
-    const record = await dependencies.source.findParsedResume(
-      request.ownerUserId,
-      request.documentId,
-    );
+    let documentId = request.documentId;
+    let base: GenerationBase | null = null;
+    if (request.mode === "generation_file") {
+      if (!dependencies.generations || !request.applicationId || !request.generationId)
+        return unavailable("invalid_request");
+      base = await dependencies.generations.findGenerationBase(
+        request.ownerUserId,
+        request.applicationId,
+        request.generationId,
+      );
+      if (!base) return { schema: ORIGINAL_RESUME_RESULT_SCHEMA, status: "no_resume" };
+      documentId = base.documentId;
+    }
+    const record = await dependencies.source.findParsedResume(request.ownerUserId, documentId);
     if (!record) return { schema: ORIGINAL_RESUME_RESULT_SCHEMA, status: "no_resume" };
+    // The exact file the generation was made from, not a later upload under the same document.
+    if (base && (record.version !== base.version || record.sha256 !== base.sha256))
+      return { schema: ORIGINAL_RESUME_RESULT_SCHEMA, status: "no_resume" };
     const document = describe(record);
     if (!document) return unavailable("document_unreadable");
     if (request.mode === "descriptor")

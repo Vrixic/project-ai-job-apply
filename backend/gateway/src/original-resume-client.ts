@@ -66,7 +66,7 @@ export class LambdaOriginalResumeClient implements UploadedResumeSource {
   private async invoke(
     mode: OriginalResumeMode,
     ownerUserId: string,
-    documentId?: string,
+    target: { documentId?: string; applicationId?: string; generationId?: string } = {},
   ): Promise<OriginalResumeResult> {
     let payload: Uint8Array | undefined;
     try {
@@ -79,7 +79,9 @@ export class LambdaOriginalResumeClient implements UploadedResumeSource {
               kind: ORIGINAL_RESUME_REQUEST_KIND,
               mode,
               ownerUserId,
-              ...(documentId ? { documentId } : {}),
+              ...(target.documentId ? { documentId: target.documentId } : {}),
+              ...(target.applicationId ? { applicationId: target.applicationId } : {}),
+              ...(target.generationId ? { generationId: target.generationId } : {}),
             }),
           ),
         }),
@@ -116,13 +118,34 @@ export class LambdaOriginalResumeClient implements UploadedResumeSource {
   }
 
   async file(ownerUserId: string, documentId: string): Promise<UploadedResumeFileBody | undefined> {
-    const result = await this.invoke("file", ownerUserId, documentId);
+    const result = await this.invoke("file", ownerUserId, { documentId });
+    return this.verifiedFile(result, documentId);
+  }
+
+  /** The original a generated resume was made from. Documents finds it; the caller names no document. */
+  async generationFile(
+    ownerUserId: string,
+    applicationId: string,
+    generationId: string,
+  ): Promise<UploadedResumeFileBody | undefined> {
+    const result = await this.invoke("generation_file", ownerUserId, {
+      applicationId,
+      generationId,
+    });
+    return this.verifiedFile(result);
+  }
+
+  /** `expectedDocumentId` pins the document where the caller chose it; a generation's is Documents' to name. */
+  private verifiedFile(
+    result: OriginalResumeResult,
+    expectedDocumentId?: string,
+  ): UploadedResumeFileBody | undefined {
     if (result.status === "no_resume") return undefined;
     if (
       result.status !== "ready" ||
       !validDocument(result.document) ||
       typeof result.contentBase64 !== "string" ||
-      result.document.id !== documentId
+      (expectedDocumentId !== undefined && result.document.id !== expectedDocumentId)
     )
       throw new OriginalResumeTransportError();
     const { document } = result;

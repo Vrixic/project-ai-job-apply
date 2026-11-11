@@ -508,10 +508,8 @@ describe("ApplicationsWorkspace: generate, then apply", () => {
     expect(button("Apply")?.disabled).toBe(false);
     expect(container.textContent).toContain("Apply will use your generated resume (PDF)");
     expectNoRemovedCopy();
-    // The comparison is not offered while the server cannot serve the original behind a generated
-    // resume: it would only end in an error.
     expect(button("Download PDF")).toBeDefined();
-    expect(button("See what changed")).toBeUndefined();
+    expect(button("See what changed")).toBeDefined();
     // The only reads are the application itself and the BFF-proxied preview: no sign-in step.
     expect(
       bff.calls.filter((call) => call.url.includes("/content")).map((call) => call.url),

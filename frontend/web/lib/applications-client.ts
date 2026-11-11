@@ -329,22 +329,23 @@ export async function fetchResumeFile(
   }
 }
 
-export type UploadedResumeFileResult =
+export type OriginalResumeFileResult =
   | { ok: true; file: ApplicationUploadedResumeFile }
   | { ok: false; message: string };
 
 /**
- * Fetches the candidate's own uploaded resume, byte for byte, while the current packet is bound to it
- * (the generated one is temporary material beside it). Used to compare the two; failures collapse to
- * fixed copy.
+ * Fetches the candidate's own original resume, byte for byte: the file the packet's generated resume
+ * was made from, which the server finds itself (this names no document). Used to compare the two;
+ * failures collapse to fixed copy. This is not the attach route, which serves a packet bound to the
+ * original and refuses one that carries a generated resume.
  */
-export async function fetchUploadedResumeFile(
+export async function fetchGeneratedResumeOriginal(
   applicationId: string,
   options: ApplicationsCallOptions = {},
-): Promise<UploadedResumeFileResult> {
+): Promise<OriginalResumeFileResult> {
   const send = options.fetch ?? fetch;
   try {
-    const response = await send(`/api/platform/applications/${applicationId}/resume/uploaded`, {
+    const response = await send(`/api/platform/applications/${applicationId}/resume/original`, {
       method: "GET",
       cache: "no-store",
       credentials: "same-origin",

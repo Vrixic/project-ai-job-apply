@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import type { GenerationBase, GenerationBaseSource } from "./generation-base-source.js";
 import {
   createOriginalResumeService,
   ORIGINAL_RESUME_MAXIMUM_BYTES,
@@ -37,16 +38,40 @@ function record(overrides: Partial<ParsedResumeRecord> = {}): ParsedResumeRecord
   };
 }
 
+const APPLICATION = "0192f7c2-0000-7000-8000-0000000000a1";
+const GENERATION = "0192f7c2-0000-7000-8000-0000000000c1";
+
 function build(
-  options: { record?: ParsedResumeRecord | null; bytes?: Uint8Array; fail?: boolean } = {},
+  options: {
+    record?: ParsedResumeRecord | null;
+    bytes?: Uint8Array;
+    fail?: boolean;
+    /** The generation ledger: `undefined` has no generations dependency at all. */
+    base?: GenerationBase | null | undefined;
+    generations?: boolean;
+  } = {},
 ) {
   const lookups: Array<{ owner: string; documentId?: string | undefined }> = [];
+  const baseLookups: Array<{ owner: string; applicationId: string; generationId: string }> = [];
   const source: ParsedResumeSource = {
     async findParsedResume(owner, documentId) {
       lookups.push({ owner, documentId });
       return owner === OWNER ? (options.record === undefined ? record() : options.record) : null;
     },
   };
+  const generations: GenerationBaseSource | undefined =
+    options.generations === false
+      ? undefined
+      : {
+          async findGenerationBase(owner, applicationId, generationId) {
+            baseLookups.push({ owner, applicationId, generationId });
+            if (owner !== OWNER || applicationId !== APPLICATION || generationId !== GENERATION)
+              return null;
+            return options.base === undefined
+              ? { documentId: DOCUMENT, version: 1, sha256: sha(PDF) }
+              : options.base;
+          },
+        };
   const held: Uint8Array[] = [];
   const reader = {
     read: vi.fn(async () => {
@@ -56,7 +81,17 @@ function build(
       return bytes;
     }),
   };
-  return { service: createOriginalResumeService({ source, reader }), reader, lookups, held };
+  return {
+    service: createOriginalResumeService({
+      source,
+      reader,
+      ...(generations ? { generations } : {}),
+    }),
+    reader,
+    lookups,
+    baseLookups,
+    held,
+  };
 }
 
 const request = (overrides: Record<string, unknown> = {}) => ({
@@ -82,6 +117,33 @@ describe("original resume request contract", () => {
       request({ documentId: "nope" }),
       request({ extra: 1 }),
       { kind: ORIGINAL_RESUME_REQUEST_KIND, mode: "file" },
+      // A generation is named only in generation_file mode, and then with an application.
+      request({ generationId: GENERATION }),
+      request({ applicationId: APPLICATION }),
+      request({ mode: "descriptor", generationId: GENERATION, applicationId: APPLICATION }),
+    ])
+      expect(parseOriginalResumeRequest(bad)).toBeNull();
+  });
+
+  it("takes a generation and its application, and never a document, for generation_file", () => {
+    const generationRequest = request({
+      mode: "generation_file",
+      applicationId: APPLICATION,
+      generationId: GENERATION,
+    });
+    expect(parseOriginalResumeRequest(generationRequest)).toEqual(generationRequest);
+    for (const bad of [
+      request({ mode: "generation_file" }),
+      request({ mode: "generation_file", generationId: GENERATION }),
+      request({ mode: "generation_file", applicationId: APPLICATION }),
+      request({ mode: "generation_file", applicationId: "nope", generationId: GENERATION }),
+      // The caller must not choose the document the generation is read as.
+      request({
+        mode: "generation_file",
+        applicationId: APPLICATION,
+        generationId: GENERATION,
+        documentId: DOCUMENT,
+      }),
     ])
       expect(parseOriginalResumeRequest(bad)).toBeNull();
   });
@@ -180,6 +242,105 @@ describe("original resume service", () => {
     expect(await service(request())).toMatchObject({
       status: "unavailable",
       reason: "document_unreadable",
+    });
+  });
+
+  describe("the original a generated resume was made from", () => {
+    const generationRequest = (overrides: Record<string, unknown> = {}) =>
+      request({
+        mode: "generation_file",
+        applicationId: APPLICATION,
+        generationId: GENERATION,
+        ...overrides,
+      });
+
+    it("reads the document the generation's ledger row names, in its exact bytes", async () => {
+      const { service, lookups, baseLookups, held } = build();
+      const result = await service(generationRequest());
+      expect(baseLookups).toEqual([
+        { owner: OWNER, applicationId: APPLICATION, generationId: GENERATION },
+      ]);
+      // The document read is the ledger's, not one the caller chose.
+      expect(lookups).toEqual([{ owner: OWNER, documentId: DOCUMENT }]);
+      expect(result).toMatchObject({
+        status: "ready",
+        document: { id: DOCUMENT, sha256: sha(PDF), format: "pdf" },
+        contentBase64: PDF.toString("base64"),
+      });
+      expect(held[0]?.every((byte) => byte === 0)).toBe(true);
+    });
+
+    it("reads the generation's base even when the candidate has uploaded a newer resume", async () => {
+      const OLD = "0192f7c2-0000-7000-8000-0000000000d0";
+      const oldBytes = Buffer.from("%PDF-1.4 the resume the generation started from");
+      const { service, lookups } = build({
+        base: { documentId: OLD, version: 3, sha256: sha(oldBytes) },
+        record: record({
+          id: OLD,
+          version: 3,
+          sizeBytes: oldBytes.byteLength,
+          sha256: sha(oldBytes),
+        }),
+        bytes: oldBytes,
+      });
+      expect(await service(generationRequest())).toMatchObject({
+        status: "ready",
+        document: { id: OLD, sha256: sha(oldBytes) },
+      });
+      expect(lookups).toEqual([{ owner: OWNER, documentId: OLD }]);
+    });
+
+    it.each([
+      ["another owner", { ownerUserId: OTHER }],
+      ["another application", { applicationId: "0192f7c2-0000-7000-8000-0000000000a2" }],
+      ["an unknown generation", { generationId: "0192f7c2-0000-7000-8000-0000000000c2" }],
+    ])("finds nothing for %s and reads no object", async (_name, overrides) => {
+      const { service, reader, lookups } = build();
+      expect(await service(generationRequest(overrides))).toEqual({
+        schema: ORIGINAL_RESUME_RESULT_SCHEMA,
+        status: "no_resume",
+      });
+      expect(lookups).toEqual([]);
+      expect(reader.read).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["no ledger row", { base: null }],
+      ["a base that is no longer a parsed resume", { record: null }],
+      [
+        "a base whose version has moved on",
+        { base: { documentId: DOCUMENT, version: 2, sha256: sha(PDF) } },
+      ],
+      [
+        "a base whose bytes differ",
+        { base: { documentId: DOCUMENT, version: 1, sha256: "f".repeat(64) } },
+      ],
+    ])("serves nothing for %s", async (_name, options) => {
+      const { service, reader } = build(options);
+      expect(await service(generationRequest())).toEqual({
+        schema: ORIGINAL_RESUME_RESULT_SCHEMA,
+        status: "no_resume",
+      });
+      expect(reader.read).not.toHaveBeenCalled();
+    });
+
+    it("is an invalid request where no generation ledger is wired", async () => {
+      const { service, reader } = build({ generations: false });
+      expect(await service(generationRequest())).toEqual({
+        schema: ORIGINAL_RESUME_RESULT_SCHEMA,
+        status: "unavailable",
+        reason: "invalid_request",
+      });
+      expect(reader.read).not.toHaveBeenCalled();
+    });
+
+    it("fails closed with a fixed reason for a substituted object", async () => {
+      const { service } = build({ bytes: Buffer.from("%PDF-1.4 other bytes of equal length!!") });
+      expect(await service(generationRequest())).toEqual({
+        schema: ORIGINAL_RESUME_RESULT_SCHEMA,
+        status: "unavailable",
+        reason: "document_unreadable",
+      });
     });
   });
 

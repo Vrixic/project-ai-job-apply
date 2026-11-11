@@ -253,11 +253,11 @@ function body(overrides: Partial<UploadedResumeFileBody> = {}): UploadedResumeFi
   };
 }
 
-function service(view: ApplicationView, uploaded?: UploadedResumeSource) {
+function service(view: ApplicationView, uploaded?: UploadedResumeSource, now: Date = NOW) {
   const store = { getApplication: vi.fn(async () => view) } as unknown as ApplicationStorePort;
   return new ApplicationsService({
     store,
-    clock: () => NOW,
+    clock: () => now,
     packets: {
       prepare: async () => {
         throw Error();
@@ -274,9 +274,13 @@ function service(view: ApplicationView, uploaded?: UploadedResumeSource) {
 }
 
 describe("the uploaded resume file read", () => {
-  const sourceOf = (file: UploadedResumeSource["file"]): UploadedResumeSource => ({
+  const sourceOf = (
+    file: UploadedResumeSource["file"],
+    generationFile: UploadedResumeSource["generationFile"] = async () => undefined,
+  ): UploadedResumeSource => ({
     descriptor: async () => undefined,
     file,
+    generationFile,
   });
 
   it("returns the exact original bytes the packet binds, in its original format", async () => {
@@ -370,6 +374,102 @@ describe("the uploaded resume file read", () => {
       ).rejects.toBeInstanceOf(StalePacketError);
     }
     expect(read).not.toHaveBeenCalled();
+  });
+});
+
+describe("the original behind a generated resume", () => {
+  const GENERATION_ID = "0192f7c2-0000-7000-8000-0000000000c1";
+  const generatedPacket = (expiresAtMs = NOW.getTime() - 1 + 1_800_000) =>
+    packetFor({
+      fields: [],
+      artifactHashes: { resume: HASH_C },
+      temporaryMaterials: [
+        {
+          schemaVersion: 1,
+          kind: "tailored_resume",
+          generationId: GENERATION_ID,
+          ownerUserId: USER_ID,
+          applicationId: APPLICATION_ID,
+          version: 1,
+          contentSha256: HASH_C,
+          completedAtMs: NOW.getTime() - 1,
+          expiresAtMs,
+        },
+      ],
+    });
+  const sourceOf = (generationFile: UploadedResumeSource["generationFile"]) => {
+    const file = vi.fn(async () => body());
+    return { file, source: { descriptor: async () => undefined, file, generationFile } };
+  };
+
+  it("serves the original of the packet's generated resume, named by its generation", async () => {
+    const generationFile = vi.fn(async () => body());
+    const { source, file } = sourceOf(generationFile);
+    const result = await service(viewOf(generatedPacket()), source).generatedResumeOriginal?.(
+      USER_ID,
+      APPLICATION_ID,
+    );
+    expect(generationFile).toHaveBeenCalledWith(USER_ID, APPLICATION_ID, GENERATION_ID);
+    // The caller never picks a document: the by-id read is not used.
+    expect(file).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      documentId: DOCUMENT_ID,
+      fileName: "resume.pdf",
+      format: "pdf",
+      mediaType: "application/pdf",
+      sha256: HASH_A,
+      sizeBytes: 8,
+      contentBase64: "JVBERi0xLjQ=",
+    });
+  });
+
+  it("is the opposite of the attach read: the same packet is served here and refused there", async () => {
+    const { source } = sourceOf(async () => body());
+    const generated = service(viewOf(generatedPacket()), source);
+    await expect(
+      generated.generatedResumeOriginal?.(USER_ID, APPLICATION_ID),
+    ).resolves.toMatchObject({ documentId: DOCUMENT_ID });
+    await expect(generated.uploadedResumeFile?.(USER_ID, APPLICATION_ID)).rejects.toBeInstanceOf(
+      StalePacketError,
+    );
+  });
+
+  const PAST_DEADLINE = new Date(NOW.getTime() + 1_800_000);
+  it.each([
+    ["a packet bound to the uploaded resume", () => viewOf(packetFor()), NOW],
+    ["no packet", () => viewOf(null), NOW],
+    ["a generated resume past its deadline", () => viewOf(generatedPacket()), PAST_DEADLINE],
+    ["an applied application", () => viewOf(generatedPacket(), "applied"), NOW],
+    ["a cancelled application", () => viewOf(generatedPacket(), "cancelled"), NOW],
+  ])("refuses %s as a stale packet and reads nothing", async (_name, view, now) => {
+    const generationFile = vi.fn(async () => body());
+    const { source } = sourceOf(generationFile);
+    await expect(
+      service(view(), source, now).generatedResumeOriginal?.(USER_ID, APPLICATION_ID),
+    ).rejects.toBeInstanceOf(StalePacketError);
+    expect(generationFile).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["an original that is gone or has been replaced", () => undefined],
+    ["an oversized original", () => body({ sizeBytes: UPLOADED_RESUME_MAXIMUM_BYTES + 1 })],
+  ])("refuses %s as a stale packet", async (_name, make) => {
+    const { source } = sourceOf(async () => make());
+    await expect(
+      service(viewOf(generatedPacket()), source).generatedResumeOriginal?.(USER_ID, APPLICATION_ID),
+    ).rejects.toBeInstanceOf(StalePacketError);
+  });
+
+  it("is unavailable when the Documents owner cannot be reached or is not wired", async () => {
+    const { source } = sourceOf(async () => {
+      throw new Error("SECRET");
+    });
+    await expect(
+      service(viewOf(generatedPacket()), source).generatedResumeOriginal?.(USER_ID, APPLICATION_ID),
+    ).rejects.toBeInstanceOf(ApplicationsUnavailableError);
+    await expect(
+      service(viewOf(generatedPacket())).generatedResumeOriginal?.(USER_ID, APPLICATION_ID),
+    ).rejects.toBeInstanceOf(ApplicationsUnavailableError);
   });
 });
 

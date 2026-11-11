@@ -440,6 +440,7 @@ const SAFE_ROUTE_TEMPLATES = new Set([
   "/v1/applications/:applicationId/resume",
   "/v1/applications/:applicationId/resume/file",
   "/v1/applications/:applicationId/resume/uploaded",
+  "/v1/applications/:applicationId/resume/original",
   "/v1/applications/:applicationId/packets",
   "/v1/applications/:applicationId/approval",
   "/v1/applications/:applicationId/reopen",
@@ -3360,6 +3361,19 @@ class ApplicationsController {
     requireApplicationPath(applicationId);
     if (!this.applications.uploadedResumeFile) throw new ApplicationsUnavailableError();
     return this.applications.uploadedResumeFile(user.id, applicationId);
+  }
+
+  @Get("/:applicationId/resume/original")
+  @Header("cache-control", "no-store")
+  async generatedResumeOriginal(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+  ): Promise<ApplicationUploadedResumeFile> {
+    const user = await this.identity.resolve(request, "applications:read");
+    requireApplicationsRead(request);
+    requireApplicationPath(applicationId);
+    if (!this.applications.generatedResumeOriginal) throw new ApplicationsUnavailableError();
+    return this.applications.generatedResumeOriginal(user.id, applicationId);
   }
 
   @Get("/:applicationId/cover-letter")
