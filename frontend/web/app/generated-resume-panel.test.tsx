@@ -50,21 +50,15 @@ vi.mock("./resume-diff-viewer", async () => {
     ResumeDiffViewer: ({
       originalBytes,
       tailoredBytes,
-      onClose,
     }: {
       originalBytes: Uint8Array;
       tailoredBytes: Uint8Array;
-      onClose(): void;
     }) =>
-      react.createElement(
-        "section",
-        {
-          "aria-label": "Comparison",
-          "data-original": originalBytes.byteLength,
-          "data-tailored": tailoredBytes.byteLength,
-        },
-        react.createElement("button", { type: "button", onClick: onClose }, "Hide comparison"),
-      ),
+      react.createElement("section", {
+        "aria-label": "Comparison",
+        "data-original": originalBytes.byteLength,
+        "data-tailored": tailoredBytes.byteLength,
+      }),
   };
 });
 
@@ -261,6 +255,9 @@ describe("GeneratedResumePanel", () => {
       const bound = material();
       const calls: string[] = [];
       const send = vi.fn<typeof fetch>(async (input) => {
+        // The comparison opens by itself; these tests are about the preview, so it finds no original.
+        if (String(input).includes("/resume/original"))
+          return json({ code: "application_packet_stale" }, 409);
         calls.push(String(input));
         return json(body(bound));
       });
@@ -288,7 +285,7 @@ describe("GeneratedResumePanel", () => {
     });
 
     it("downloads the shown PDF under the User_Job_Name_ID name", async () => {
-      const { bound, send, app } = native();
+      const { bound, send, app, calls } = native();
       const created: Blob[] = [];
       vi.stubGlobal("URL", {
         ...URL,
@@ -309,7 +306,7 @@ describe("GeneratedResumePanel", () => {
       await act(async () => button("Download PDF")?.click());
       // The file is the one already read and shown: no second read, and the generator's own name
       // ("tailored-resume.pdf") is never used.
-      expect(send).toHaveBeenCalledTimes(1);
+      expect(calls).toHaveLength(1);
       expect(names).toEqual([FILE_NAME]);
       expect(created).toHaveLength(1);
       expect(created[0]?.type).toBe("application/pdf");
@@ -342,125 +339,163 @@ describe("GeneratedResumePanel", () => {
         return { bound, calls, send, app: application({ temporaryMaterials: [bound] }) };
       }
 
-      it("reads the candidate's own file only when asked, then shows the comparison and can hide it", async () => {
+      const comparison = () => document.querySelector('[aria-label="Comparison"]');
+      const dialog = () => document.querySelector('[role="dialog"]');
+      const dialogButton = (label: string) =>
+        Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+          (element) => element.textContent === label,
+        ) as HTMLButtonElement | undefined;
+      const originalReads = (calls: string[]) =>
+        calls.filter((call) => call.endsWith(`/${APP}/resume/original`)).length;
+      const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
+      // The panel slides out before it is removed.
+      const slideOut = () => act(async () => new Promise((resolve) => setTimeout(resolve, 320)));
+
+      it("opens by itself as a panel once the generated resume is shown, reading the original once", async () => {
         const { bound, send, app, calls } = withUploaded();
         await render({ kind: "ready", material: bound }, { application: app, send });
-        expect(calls.some((call) => call.includes("/resume/original"))).toBe(false);
-        await act(async () => button("See what changed")?.click());
-        await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
-        expect(calls.filter((call) => call.endsWith(`/${APP}/resume/original`))).toHaveLength(1);
-        const comparison = container.querySelector('[aria-label="Comparison"]');
-        expect(comparison?.getAttribute("data-original")).toBe(String(ORIGINAL_BYTES.byteLength));
-        expect(comparison?.getAttribute("data-tailored")).toBe(String(PDF_BYTES.byteLength));
+        await settle();
+        expect(originalReads(calls)).toBe(1);
+        const panel = dialog();
+        expect(panel?.getAttribute("aria-modal")).toBe("true");
+        expect(panel?.textContent).toContain("What changed in your resume");
+        expect(comparison()?.getAttribute("data-original")).toBe(String(ORIGINAL_BYTES.byteLength));
+        expect(comparison()?.getAttribute("data-tailored")).toBe(String(PDF_BYTES.byteLength));
+        // Focus is inside the panel, and the page behind does not scroll.
+        expect(panel?.contains(document.activeElement)).toBe(true);
+        expect(document.body.style.overflow).toBe("hidden");
         expect(button("See what changed")).toBeUndefined();
-        await act(async () => button("Hide comparison")?.click());
-        expect(container.querySelector('[aria-label="Comparison"]')).toBeNull();
-        expect(button("See what changed")).toBeDefined();
       });
 
       it("reads the original through its own route, never the attach route that refuses a generated resume", async () => {
         const { bound, send, app, calls } = withUploaded();
         await render({ kind: "ready", material: bound }, { application: app, send });
-        await act(async () => button("See what changed")?.click());
-        await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
+        await settle();
         expect(calls.some((call) => call.endsWith(`/${APP}/resume/original`))).toBe(true);
         expect(calls.some((call) => call.includes("/resume/uploaded"))).toBe(false);
       });
 
-      const uploadedReads = (calls: string[]) =>
-        calls.filter((call) => call.endsWith(`/${APP}/resume/original`)).length;
-      const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
+      it("does not open before the generated resume itself has been read and verified", async () => {
+        const { bound, app, calls } = withUploaded();
+        const send = vi.fn<typeof fetch>(async (input) => {
+          calls.push(String(input));
+          return json(pdfBody(bound, "c".repeat(64)));
+        });
+        await render({ kind: "ready", material: bound }, { application: app, send });
+        await settle();
+        expect(dialog()).toBeNull();
+        expect(originalReads(calls)).toBe(0);
+      });
 
-      it("reads the original once: hiding and showing the comparison again asks the server for nothing", async () => {
+      it("closes with Close, hands focus back to See what changed, and stays closed until asked", async () => {
         const { bound, send, app, calls } = withUploaded();
         await render({ kind: "ready", material: bound }, { application: app, send });
-        await act(async () => button("See what changed")?.click());
         await settle();
-        await act(async () => button("Hide comparison")?.click());
-        await act(async () => button("See what changed")?.click());
+        await act(async () => dialogButton("Close")?.click());
+        expect(document.querySelector(".resume-sheet")?.getAttribute("data-state")).toBe("leaving");
+        await slideOut();
+        expect(dialog()).toBeNull();
+        expect(document.body.style.overflow).toBe("");
+        const again = button("See what changed");
+        expect(again).toBeDefined();
+        expect(document.activeElement).toBe(again);
         await settle();
-        expect(container.querySelector('[aria-label="Comparison"]')).not.toBeNull();
-        expect(uploadedReads(calls)).toBe(1);
+        expect(dialog()).toBeNull();
+        await act(async () => again?.click());
+        await settle();
+        expect(dialog()).not.toBeNull();
+        // Opening it again asks the server for nothing.
+        expect(originalReads(calls)).toBe(1);
+      });
+
+      it("closes with Escape", async () => {
+        const { bound, send, app } = withUploaded();
+        await render({ kind: "ready", material: bound }, { application: app, send });
+        await settle();
+        await act(async () => {
+          document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        });
+        await slideOut();
+        expect(dialog()).toBeNull();
+        expect(button("See what changed")).toBeDefined();
       });
 
       it("keeps the original in memory across the panel going away and coming back", async () => {
         const { bound, send, app, calls } = withUploaded();
         await render({ kind: "ready", material: bound }, { application: app, send });
-        await act(async () => button("See what changed")?.click());
         await settle();
-        expect(uploadedReads(calls)).toBe(1);
-        // The panel leaves the page (another tab of the workspace) and returns for the same packet.
+        expect(originalReads(calls)).toBe(1);
+        // The panel leaves the page (another tab of the workspace) and returns for the same packet:
+        // the comparison opens again by itself, from memory.
         await act(async () => root.render(null));
         await render({ kind: "ready", material: bound }, { application: app, send });
-        await act(async () => button("See what changed")?.click());
         await settle();
-        expect(container.querySelector('[aria-label="Comparison"]')).not.toBeNull();
-        expect(uploadedReads(calls)).toBe(1);
+        expect(comparison()).not.toBeNull();
+        expect(originalReads(calls)).toBe(1);
       });
 
       it("reads the original again for a new packet, never reusing one held for the old", async () => {
         const { bound, send, app, calls } = withUploaded();
         await render({ kind: "ready", material: bound }, { application: app, send });
-        await act(async () => button("See what changed")?.click());
         await settle();
         await act(async () => root.render(null));
         const next = application({ temporaryMaterials: [bound], packetHash: "d".repeat(64) });
         await render({ kind: "ready", material: bound }, { application: next, send });
-        await act(async () => button("See what changed")?.click());
         await settle();
-        expect(uploadedReads(calls)).toBe(2);
+        expect(originalReads(calls)).toBe(2);
       });
 
       it("reads the original again once the held copy is dropped", async () => {
         const { bound, send, app, calls } = withUploaded();
         await render({ kind: "ready", material: bound }, { application: app, send });
-        await act(async () => button("See what changed")?.click());
         await settle();
         await act(async () => root.render(null));
         dropUploadedResume();
         await render({ kind: "ready", material: bound }, { application: app, send });
-        await act(async () => button("See what changed")?.click());
         await settle();
-        expect(uploadedReads(calls)).toBe(2);
+        expect(originalReads(calls)).toBe(2);
       });
 
-      it("says so when the uploaded resume is not a PDF", async () => {
-        const { bound, send, app } = withUploaded(
+      // When the panel opens it on its own and cannot, it stays quiet; asking says why.
+      const quietThenExplains = async (
+        uploaded: (() => Response) | Record<string, unknown>,
+        explanation: string,
+      ) => {
+        const { bound, send, app } = withUploaded(uploaded);
+        await render({ kind: "ready", material: bound }, { application: app, send });
+        await settle();
+        expect(dialog()).toBeNull();
+        expect(container.querySelector('[role="alert"]')).toBeNull();
+        expect(button("See what changed")?.disabled).toBe(false);
+        await act(async () => button("See what changed")?.click());
+        await settle();
+        expect(container.querySelector('[role="alert"]')?.textContent).toContain(explanation);
+        expect(dialog()).toBeNull();
+        expect(button("See what changed")?.disabled).toBe(false);
+      };
+
+      it("says so, when asked, that the uploaded resume is not a PDF", async () => {
+        await quietThenExplains(
           uploadedBody({
             format: "docx",
             mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
           }),
-        );
-        await render({ kind: "ready", material: bound }, { application: app, send });
-        await act(async () => button("See what changed")?.click());
-        await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
-        expect(container.querySelector('[role="alert"]')?.textContent).toContain(
           "available when your uploaded resume is a PDF",
         );
-        expect(container.querySelector('[aria-label="Comparison"]')).toBeNull();
       });
 
       it("refuses a file whose digest does not match what the server described", async () => {
-        const { bound, send, app } = withUploaded(uploadedBody({ sha256: "c".repeat(64) }));
-        await render({ kind: "ready", material: bound }, { application: app, send });
-        await act(async () => button("See what changed")?.click());
-        await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
-        expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        await quietThenExplains(
+          uploadedBody({ sha256: "c".repeat(64) }),
           "That did not go through",
         );
-        expect(container.querySelector('[aria-label="Comparison"]')).toBeNull();
       });
 
       it("shows fixed copy when the server will not hand the file over", async () => {
-        const { bound, send, app } = withUploaded(() =>
-          json({ code: "application_packet_stale" }, 409),
+        await quietThenExplains(
+          () => json({ code: "application_packet_stale" }, 409),
+          "Prepare the application again",
         );
-        await render({ kind: "ready", material: bound }, { application: app, send });
-        await act(async () => button("See what changed")?.click());
-        await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
-        expect(container.querySelector('[role="alert"]')).not.toBeNull();
-        expect(container.querySelector('[aria-label="Comparison"]')).toBeNull();
-        expect(button("See what changed")?.disabled).toBe(false);
       });
     });
 
@@ -514,7 +549,10 @@ describe("GeneratedResumePanel", () => {
         { kind: "ready" },
         { application: application(), nativeMaterials: false, send },
       );
-      expect(send).toHaveBeenCalledTimes(1);
+      // The tailored file is read once. The comparison then looks for the original on its own and,
+      // finding none here, stays quiet.
+      const reads = send.mock.calls.map((call) => String(call[0]));
+      expect(reads.filter((url) => url.includes("/resume/file"))).toHaveLength(1);
       expect(container.querySelector('[role="img"]')).not.toBeNull();
       expect(container.textContent).toContain("Tailored resume ready");
       expect(handlers.onPreviewShown).toHaveBeenCalledWith(CONTENT_HASH);
