@@ -18,7 +18,7 @@ describe("diffResumeLines", () => {
       lines("A one", "B two", "C three"),
       lines("A one", "B two", "C three"),
     );
-    expect(diff.counts).toEqual({ kept: 3, moved: 0, changed: 0, removed: 0, added: 0 });
+    expect(diff.counts).toEqual({ kept: 3, changed: 0, removed: 0, added: 0 });
     expect(diff.original.map((entry) => entry.pair)).toEqual([0, 1, 2]);
   });
 
@@ -34,22 +34,21 @@ describe("diffResumeLines", () => {
       "kept",
       "kept",
     ]);
-    expect(diff.counts).toEqual({ kept: 4, moved: 0, changed: 0, removed: 1, added: 0 });
+    expect(diff.counts).toEqual({ kept: 4, changed: 0, removed: 1, added: 0 });
     expect(diff.tailored.every((entry) => entry.status === "kept")).toBe(true);
   });
 
-  it("marks a reordered block as moved, on both sides", () => {
+  it("does not report a reordered block: the same lines are kept on both sides", () => {
     const diff = diffResumeLines(
       lines("Summary", "Skills", "Experience"),
       lines("Experience", "Summary", "Skills"),
     );
-    expect(diff.counts.removed).toBe(0);
-    expect(diff.counts.added).toBe(0);
-    expect(diff.counts.moved).toBe(1);
-    expect(diff.counts.kept).toBe(2);
-    const moved = diff.original.findIndex((entry) => entry.status === "moved");
-    expect(diff.original[moved]?.line.text).toBe("Experience");
-    expect(diff.tailored[diff.original[moved]?.pair ?? -1]?.status).toBe("moved");
+    expect(diff.counts).toEqual({ kept: 3, changed: 0, removed: 0, added: 0 });
+    expect(diff.original.every((entry) => entry.status === "kept")).toBe(true);
+    expect(diff.tailored.every((entry) => entry.status === "kept")).toBe(true);
+    // Each is still paired with its other side, so a view can relate them.
+    const experience = diff.original.findIndex((entry) => entry.line.text === "Experience");
+    expect(diff.tailored[diff.original[experience]?.pair ?? -1]?.line.text).toBe("Experience");
   });
 
   it("marks an edited line as changed and says which words changed", () => {
@@ -66,7 +65,7 @@ describe("diffResumeLines", () => {
       "profiling",
     ]);
     expect(words.filter((word) => word.kind === "removed")).toEqual([]);
-    expect(diff.counts).toEqual({ kept: 0, moved: 0, changed: 1, removed: 0, added: 0 });
+    expect(diff.counts).toEqual({ kept: 0, changed: 1, removed: 0, added: 0 });
   });
 
   it("marks text that is only in the tailored resume as added", () => {
@@ -92,7 +91,7 @@ describe("diffResumeLines", () => {
 
   it("ignores spacing differences and empty lines", () => {
     const diff = diffResumeLines(lines("A   one ", "", "B two"), lines("A one", "B   two"));
-    expect(diff.counts).toEqual({ kept: 2, moved: 0, changed: 0, removed: 0, added: 0 });
+    expect(diff.counts).toEqual({ kept: 2, changed: 0, removed: 0, added: 0 });
     expect(diff.original).toHaveLength(2);
   });
 
@@ -101,9 +100,9 @@ describe("diffResumeLines", () => {
       lines("a1 a2 a3", "b1 b2 b3", "c1 c2 c3", "d1 d2 d3 d4", "e1"),
       lines("c1 c2 c3", "a1 a2 a3 a4", "x1 x2", "e1"),
     );
-    const { kept, moved, changed, removed, added } = diff.counts;
-    expect(kept + moved + changed + removed).toBe(diff.original.length);
-    expect(kept + moved + changed + added).toBe(diff.tailored.length);
+    const { kept, changed, removed, added } = diff.counts;
+    expect(kept + changed + removed).toBe(diff.original.length);
+    expect(kept + changed + added).toBe(diff.tailored.length);
   });
 });
 

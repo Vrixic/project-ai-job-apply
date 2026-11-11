@@ -6,7 +6,7 @@
 "See what changed" button that reads the candidate's own uploaded PDF (the existing owner-only
 `GET /v1/applications/{id}/resume/uploaded` through a new BFF operation, checked against its digest) and shows it
 beside the tailored PDF. Both files are read in the browser only: PDF.js text lines are matched in order
-(`web/lib/resume-diff.ts`) into kept, moved, changed (with the words that changed), removed and added lines, drawn
+(`web/lib/resume-diff.ts`) into kept, changed (with the words that changed), removed and added lines, drawn
 as boxes over each page and listed as text, so nothing depends on colour. Today's tailoring only removes and
 reorders existing lines, so "changed" and "added" appear when rewriting does. No contract change.
 The original is fetched once per application packet: it is verified, then held in page memory only
@@ -23,7 +23,17 @@ The Applications service refuses it unless the packet carries a current generate
 generation ledger (`base_document_id`, `base_version` and `base_sha256` checked), so the caller names no
 document. The web client reads this route; the unit tests now run the real service guard on a generated-resume
 packet and check the Gateway client's request against the processor's own parser. Release order: the Documents
-processor, then the Gateway (same `UPLOADED_RESUME_ATTACHMENT_ENABLED` flag, no new Terraform).
+processor, then the Gateway (same `UPLOADED_RESUME_ATTACHMENT_ENABLED` flag, no new Terraform). Released and
+verified live on dev the same night (one original read per packet, none on hide and show or on reopening).
+Owner feedback after that check (2026-11-10): the inline view was too small, and a reorder is not a change the
+candidate cares about. The comparison is now a side panel (`web/app/resume-compare-sheet.tsx`) that slides in from
+the right over the whole height of the window, up to 1680 px wide, with two pages side by side (stacked on a
+narrow window); it is a modal dialog (focus kept inside, Escape, Close or a click beside it closes it, the page
+behind does not scroll, no animation under reduced motion). It opens by itself once per mount as soon as the
+generated resume is on screen, so after generation and on coming back to an application that already has one,
+and "See what changed" opens it again. When it cannot open on its own (the original is not a PDF, or the read
+is refused) it stays quiet; the button then explains. "Moved" is gone: a line whose text only changed place is
+kept (`diffResumeLines`), so the counts, legend, boxes and lists show only removed, changed and added.
 
 2026-11-07: D3-154 edit the candidate's own PDF in place ([ADR-058](../../adr/058-edit-the-candidates-own-pdf-in-place.md)):
 the owner asked that the generated PDF never change the look of their own PDF. For single-flow Word-style

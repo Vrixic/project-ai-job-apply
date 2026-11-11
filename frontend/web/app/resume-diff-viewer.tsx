@@ -25,7 +25,6 @@ type Status = OriginalStatus | TailoredStatus;
 
 const STATUS_LABEL: Readonly<Record<Status, string>> = {
   kept: "Kept",
-  moved: "Moved",
   changed: "Changed",
   removed: "Removed",
   added: "Added",
@@ -106,20 +105,22 @@ function linesOf(entries: ReadonlyArray<DiffLine<Status>>, status: Status): Text
   return entries.filter((entry) => entry.status === status).map((entry) => entry.line);
 }
 
+/** Two pages side by side from this width of the view; narrower views stack them. */
+const TWO_COLUMNS_FROM_WIDTH = 760;
+
 /**
  * Side by side view of the candidate's own resume and the tailored one, with every line that was
- * removed, moved, changed or added marked, plus the same facts as text so nothing depends on colour.
- * Both files are read in this page only; nothing leaves the browser and the buffers are cleared when the
- * view goes away.
+ * removed, changed or added marked, plus the same facts as text so nothing depends on colour. A line
+ * that only moved is the same line and is not reported. Both files are read in this page only; nothing
+ * leaves the browser and the buffers are cleared when the view goes away. Its title and close control
+ * belong to the side panel that holds it.
  */
 export function ResumeDiffViewer({
   originalBytes,
   tailoredBytes,
-  onClose,
 }: {
   originalBytes: Uint8Array;
   tailoredBytes: Uint8Array;
-  onClose(): void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState<Loaded>({ phase: "loading" });
@@ -128,7 +129,10 @@ export function ResumeDiffViewer({
   useEffect(() => {
     const element = host.current;
     if (!element) return;
-    const measure = () => setWidth(Math.max(Math.floor(element.clientWidth / 2) - 24, 200));
+    const measure = () => {
+      const columns = element.clientWidth >= TWO_COLUMNS_FROM_WIDTH ? 2 : 1;
+      setWidth(Math.max(Math.floor(element.clientWidth / columns) - 24, 200));
+    };
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
@@ -187,22 +191,14 @@ export function ResumeDiffViewer({
     ? {
         removed: linesOf(diff.original, "removed"),
         added: linesOf(diff.tailored, "added"),
-        moved: linesOf(diff.tailored, "moved"),
         changed: diff.tailored.filter((entry) => entry.status === "changed"),
       }
     : undefined;
   const unchanged =
-    diff !== undefined &&
-    diff.counts.removed + diff.counts.added + diff.counts.changed + diff.counts.moved === 0;
+    diff !== undefined && diff.counts.removed + diff.counts.added + diff.counts.changed === 0;
 
   return (
-    <section className="resume-diff" aria-labelledby="resume-diff-title">
-      <div className="resume-diff-head">
-        <h3 id="resume-diff-title">What changed in your resume</h3>
-        <button type="button" onClick={onClose}>
-          Hide comparison
-        </button>
-      </div>
+    <div className="resume-diff">
       {loaded.phase === "loading" ? <p role="status">Comparing your resumes...</p> : null}
       {loaded.phase === "error" ? (
         <p role="alert">
@@ -213,11 +209,11 @@ export function ResumeDiffViewer({
         <>
           <p className="resume-diff-summary" role="status">
             {unchanged
-              ? "No line was removed, moved, changed or added."
-              : `${diff.counts.removed} removed, ${diff.counts.moved} moved, ${diff.counts.changed} changed, ${diff.counts.added} added. ${diff.counts.kept} lines kept as they were.`}
+              ? "No line was removed, changed or added."
+              : `${diff.counts.removed} removed, ${diff.counts.changed} changed, ${diff.counts.added} added. ${diff.counts.kept} lines kept as they were.`}
           </p>
           <ul className="resume-diff-legend" aria-label="Legend">
-            {(["removed", "moved", "changed", "added"] as const).map((status) => (
+            {(["removed", "changed", "added"] as const).map((status) => (
               <li key={status}>
                 <span className="resume-diff-swatch" data-status={status} aria-hidden="true" />
                 {STATUS_LABEL[status]}
@@ -312,19 +308,8 @@ export function ResumeDiffViewer({
               </ul>
             </details>
           ) : null}
-          {changes.moved.length > 0 ? (
-            <details>
-              <summary>Moved ({changes.moved.length})</summary>
-              <ul>
-                {changes.moved.map((line, index) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: a stable list drawn once.
-                  <li key={index}>{line.text}</li>
-                ))}
-              </ul>
-            </details>
-          ) : null}
         </div>
       ) : null}
-    </section>
+    </div>
   );
 }

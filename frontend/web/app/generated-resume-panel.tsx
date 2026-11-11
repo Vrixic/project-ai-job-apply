@@ -28,6 +28,7 @@ import {
   holdUploadedResume,
   uploadedResumeKey,
 } from "../lib/uploaded-resume-cache";
+import { ResumeCompareSheet } from "./resume-compare-sheet";
 import { ResumeDiffViewer } from "./resume-diff-viewer";
 import { ResumePdfViewer } from "./resume-pdf-viewer";
 import { useMaterialExpiry } from "./use-material-expiry";
@@ -205,6 +206,10 @@ function ReadyResume({
   // The candidate's own file once read: kept across hiding and showing the comparison. The bytes
   // belong to lib/uploaded-resume-cache, which zeroes them; this only remembers where they are.
   const originalHeld = useRef<Uint8Array | undefined>(undefined);
+  // The comparison opens by itself once per mount, when the preview is ready; closing it keeps it closed.
+  const autoOpened = useRef(false);
+  const seeButton = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
   const resumeHash = packet.artifactHashes.resume;
 
   function closeComparison() {
@@ -220,6 +225,7 @@ function ReadyResume({
     setDisplayFailed(false);
     setMessage(undefined);
     originalHeld.current = undefined;
+    autoOpened.current = false;
     setComparison({ phase: "closed" });
     const options = {
       signal: controller.signal,
@@ -279,9 +285,12 @@ function ReadyResume({
     };
   }, [application.id, packet.id, packet.packetHash, attempt]);
 
-  // The candidate's own file, read the same verified way, only when they ask to compare.
-  async function openComparison() {
+  // The candidate's own file, read the same verified way. `automatic` is the panel opening it on its own:
+  // when that cannot be done it stays quiet, and the button still explains if the candidate asks.
+  async function openComparison(automatic = false) {
     if (loaded.phase !== "ready" || comparison.phase === "loading") return;
+    const fail = (message: string) =>
+      setComparison(automatic ? { phase: "closed" } : { phase: "error", message });
     // Already read in this browser session (this application or another with the same resume): no request.
     const key = uploadedResumeKey(application.id, packet.packetHash);
     const known = originalHeld.current ?? cachedUploadedResume(key);
@@ -295,15 +304,12 @@ function ReadyResume({
       ...(fetchImplementation ? { fetch: fetchImplementation } : {}),
     });
     if (!result.ok) {
-      setComparison({ phase: "error", message: result.message });
+      fail(result.message);
       return;
     }
     const { file } = result;
     if (file.format !== "pdf") {
-      setComparison({
-        phase: "error",
-        message: "Comparing is available when your uploaded resume is a PDF.",
-      });
+      fail("Comparing is available when your uploaded resume is a PDF.");
       return;
     }
     let bytes: Uint8Array | undefined;
@@ -317,13 +323,34 @@ function ReadyResume({
         throw Error("UploadedResumeUnavailable");
     } catch {
       bytes?.fill(0);
-      setComparison({ phase: "error", message: "That did not go through. Try again." });
+      fail("That did not go through. Try again.");
       return;
     }
     holdUploadedResume(key, bytes);
     originalHeld.current = bytes;
     setComparison({ phase: "open", original: bytes });
   }
+
+  // Shows what changed as soon as the generated resume is on screen: after generation, and on coming back
+  // to an application that already has one.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per ready preview, not per render.
+  useEffect(() => {
+    if (loaded.phase !== "ready" || autoOpened.current) return;
+    autoOpened.current = true;
+    void openComparison(true);
+  }, [loaded.phase]);
+
+  // Closing the panel hands focus back to the button that opens it again.
+  useEffect(() => {
+    if (comparison.phase === "open") {
+      wasOpen.current = true;
+      return;
+    }
+    if (wasOpen.current) {
+      wasOpen.current = false;
+      seeButton.current?.focus();
+    }
+  }, [comparison.phase]);
 
   const shown = useCallback(() => {
     if (loaded.phase === "ready") onPreviewShown(loaded.contentSha256);
@@ -394,6 +421,7 @@ function ReadyResume({
         </button>{" "}
         {comparison.phase === "open" ? null : (
           <button
+            ref={seeButton}
             type="button"
             disabled={busy || loaded.phase !== "ready" || comparison.phase === "loading"}
             onClick={() => void openComparison()}
@@ -405,11 +433,9 @@ function ReadyResume({
       {comparison.phase === "loading" ? <p role="status">Loading your uploaded resume...</p> : null}
       {comparison.phase === "error" ? <p role="alert">{comparison.message}</p> : null}
       {comparison.phase === "open" && loaded.phase === "ready" ? (
-        <ResumeDiffViewer
-          originalBytes={comparison.original}
-          tailoredBytes={loaded.bytes}
-          onClose={closeComparison}
-        />
+        <ResumeCompareSheet title="What changed in your resume" onClose={closeComparison}>
+          <ResumeDiffViewer originalBytes={comparison.original} tailoredBytes={loaded.bytes} />
+        </ResumeCompareSheet>
       ) : null}
       <p role="status" aria-live="polite">
         {message}
