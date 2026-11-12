@@ -123,6 +123,144 @@ describe("manual handoff UI", () => {
     expect(control("[data-handoff-status]").textContent).toContain("Filled for your review");
   });
 
+  it("keeps the review link through a token refresh, and drops it when the account changes", async () => {
+    const link = () => control<HTMLInputElement>("input").value;
+    control<HTMLInputElement>("input").value = LINK;
+    storageListener(
+      {
+        auth0Session: {
+          oldValue: { accessToken: "old", identityFence: "F" },
+          newValue: { accessToken: "new", identityFence: "F" },
+        },
+      },
+      "session",
+    );
+    await flush();
+    expect(link()).toBe(LINK);
+    expect(send).not.toHaveBeenCalledWith({ action: "application_handoff_clear" });
+    storageListener(
+      {
+        auth0Session: {
+          oldValue: { identityFence: "F" },
+          newValue: { identityFence: "OTHER" },
+        },
+      },
+      "session",
+    );
+    await flush();
+    expect(link()).toBe("");
+    expect(send).toHaveBeenCalledWith({ action: "application_handoff_clear" });
+  });
+
+  it("reaches the worker every 20 seconds while the panel is open, and says nothing about it", async () => {
+    await flush();
+    const reads = () =>
+      send.mock.calls.filter(([message]) => message.action === "application_pending_intent").length;
+    const before = reads();
+    const text = control("[data-handoff-status]").textContent;
+    await vi.advanceTimersByTimeAsync(19_000);
+    expect(reads()).toBe(before);
+    await vi.advanceTimersByTimeAsync(1_100);
+    expect(reads()).toBe(before + 1);
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(reads()).toBe(before + 3);
+    expect(control("[data-handoff-status]").textContent).toBe(text);
+  });
+
+  describe("when the extension lost the selected page", () => {
+    const lost = { ok: false, outcome: "unavailable", stage: "selection-or-resume:none" };
+    const applyCalls = () =>
+      send.mock.calls.filter(([message]) => message.action === "application_native_apply");
+
+    it.each([
+      ["fill", "[data-native-fill]", true, "Filled for your review"],
+      ["apply", "[data-native-apply]", false, "employer confirmed submission"],
+    ])(
+      "selects the same page again once and carries on with the %s",
+      async (_name, selector, fillOnly, text) => {
+        let applies = 0;
+        send.mockImplementation(async (message) => {
+          if (message.action !== "application_native_apply") return { ok: true };
+          applies++;
+          if (applies === 1) return lost;
+          return fillOnly
+            ? { ok: true, outcome: "review_required", result: "challenge_required" }
+            : { ok: true, outcome: "confirmed" };
+        });
+        control<HTMLInputElement>("input").value = LINK;
+        control<HTMLButtonElement>(selector).click();
+        await flush();
+        const actions = send.mock.calls
+          .map(([message]) => message.action as string)
+          .filter((name) => name.startsWith("application_native_"));
+        expect(actions).toEqual([
+          "application_native_apply",
+          "application_native_select",
+          "application_native_apply",
+        ]);
+        expect(send).toHaveBeenCalledWith({
+          action: "application_native_select",
+          reviewLink: LINK,
+        });
+        expect(applyCalls()).toHaveLength(2);
+        expect(applyCalls()[1]?.[0]).toEqual(applyCalls()[0]?.[0]);
+        expect(control("[data-handoff-status]").textContent).toContain(text);
+        expect(control("[data-handoff-status]").textContent).not.toContain("stopped at");
+      },
+    );
+
+    it("tries once and says where it stopped when the page cannot be selected again", async () => {
+      send.mockImplementation(async (message) =>
+        message.action === "application_native_apply"
+          ? lost
+          : message.action === "application_native_select"
+            ? { ok: false, stage: "employer-tab" }
+            : { ok: true },
+      );
+      control<HTMLInputElement>("input").value = LINK;
+      control<HTMLButtonElement>("[data-native-apply]").click();
+      await flush();
+      expect(applyCalls()).toHaveLength(1);
+      expect(control("[data-handoff-status]").textContent).toContain(
+        "(stopped at: reconnect>employer-tab)",
+      );
+    });
+
+    it("does not select again, or submit twice, when the refusal is anything else", async () => {
+      send.mockImplementation(async (message) =>
+        message.action === "application_native_apply"
+          ? { ok: false, outcome: "unavailable", stage: "selection-or-resume:consumed" }
+          : { ok: true },
+      );
+      control<HTMLInputElement>("input").value = LINK;
+      control<HTMLButtonElement>("[data-native-apply]").click();
+      await flush();
+      expect(send).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: "application_native_select" }),
+      );
+      expect(applyCalls()).toHaveLength(1);
+      expect(control("[data-handoff-status]").textContent).toContain(
+        "(stopped at: selection-or-resume:consumed)",
+      );
+    });
+
+    it("never repeats a second loss: one reconnect per press", async () => {
+      send.mockImplementation(async (message) =>
+        message.action === "application_native_apply" ? lost : { ok: true },
+      );
+      control<HTMLInputElement>("input").value = LINK;
+      control<HTMLButtonElement>("[data-native-fill]").click();
+      await flush();
+      expect(applyCalls()).toHaveLength(2);
+      expect(
+        send.mock.calls.filter(([message]) => message.action === "application_native_select"),
+      ).toHaveLength(1);
+      expect(control("[data-handoff-status]").textContent).toContain(
+        "(stopped at: selection-or-resume:none)",
+      );
+    });
+  });
+
   it("says it is filling while the fill runs, and then how it ended", async () => {
     let finish: (value: unknown) => void = () => undefined;
     send.mockImplementation(async (message) =>

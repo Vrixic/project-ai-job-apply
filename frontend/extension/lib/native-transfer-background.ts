@@ -15,6 +15,7 @@ import {
 import { createNarrativeAnswerSession } from "./narrative-answer-session";
 import { sameNativeTransferBinding } from "./native-transfer-binding";
 import { providerForUrl } from "./providers";
+import { isTokenRenewal } from "./session-change";
 import {
   isOpenPanelRequest,
   notifyPanel,
@@ -301,8 +302,15 @@ export function installNativeTransferBackground(options: {
     transfer.documentChanged(tabId);
     answers.clear(tabId);
   });
+  // A token refresh rewrites the session with new tokens for the same account: the candidate's
+  // selection, resume and pending Apply stay. Signing in or out, or as someone else, ends them.
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "session" && Object.hasOwn(changes, "auth0Session")) clear();
+    if (
+      area === "session" &&
+      Object.hasOwn(changes, "auth0Session") &&
+      !isTokenRenewal(changes.auth0Session)
+    )
+      clear();
   });
   chrome.runtime.onMessageExternal.addListener((message: unknown, sender, respond) => {
     const schema =

@@ -326,34 +326,50 @@ export function discardTransferredNativeMaterials(
 }
 
 /**
- * Retries the one-use admission until the candidate has opened the extension on the employer page
- * and it has selected this application, or the window closes. Each attempt is a complete, fresh
- * transfer; nothing is retained between attempts and no attempt widens any original deadline.
+ * Offers the resume each time the extension asks for it, until the window closes: the first ask
+ * comes once the candidate has opened the extension on the employer page and it has selected this
+ * application. The offer goes on after a delivery, because the extension drops its copy when the
+ * employer page reloads or its worker is stopped, selects the page again and then asks again. An
+ * extension that already holds the resume simply refuses the ask. Each delivery is a complete,
+ * fresh one-use transfer; nothing is retained between attempts and no attempt widens any original
+ * deadline. `onReceipt` is told of every delivery. Rejects only when nothing was ever delivered.
  */
 export async function transferWhenSelected(
   options: Parameters<typeof transferApprovedNativeMaterials>[0] & {
     giveUpAtMs: number;
     retryEveryMs?: number;
+    onReceipt(receipt: ApplicationNativeTransferReceipt): void;
   },
-): Promise<ApplicationNativeTransferReceipt> {
-  const { giveUpAtMs, retryEveryMs = 2_000, ...transfer } = options;
+): Promise<void> {
+  const { giveUpAtMs, retryEveryMs = 2_000, onReceipt, ...transfer } = options;
+  let delivered = false;
   for (;;) {
     try {
-      return await transferApprovedNativeMaterials(transfer);
+      const receipt = await transferApprovedNativeMaterials(transfer);
+      delivered = true;
+      onReceipt(receipt);
     } catch (error) {
-      if (transfer.signal.aborted || Date.now() + retryEveryMs >= giveUpAtMs) throw error;
-      await new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, retryEveryMs);
-        transfer.signal.addEventListener(
-          "abort",
-          () => {
-            clearTimeout(timer);
-            resolve();
-          },
-          { once: true },
-        );
-      });
-      if (transfer.signal.aborted) throw unavailable();
+      if (transfer.signal.aborted) throw error;
+      if (Date.now() + retryEveryMs >= giveUpAtMs) {
+        if (delivered) return;
+        throw error;
+      }
     }
+    if (Date.now() + retryEveryMs >= giveUpAtMs) {
+      if (delivered) return;
+      throw unavailable();
+    }
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, retryEveryMs);
+      transfer.signal.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
+    });
+    if (transfer.signal.aborted) throw unavailable();
   }
 }

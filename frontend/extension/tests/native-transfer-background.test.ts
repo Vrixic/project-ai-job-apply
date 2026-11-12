@@ -165,6 +165,19 @@ function setup(dark = false, session = new Map<string, unknown>()) {
     navigate: (tabId: number) => navigation(tabId, { status: "loading" }, {} as chrome.tabs.Tab),
     remove: (tabId: number) => removed(tabId, { windowId: 1, isWindowClosing: false }),
     authChanged: () => storage({ auth0Session: { newValue: { changed: true } } }, "session"),
+    authChange: (change: { oldValue?: unknown; newValue?: unknown }) =>
+      storage({ auth0Session: change as chrome.storage.StorageChange }, "session"),
+    /** What a token refresh writes: new tokens for the same account. */
+    authRefreshed: (before = "OWNER-FENCE", after = before) =>
+      storage(
+        {
+          auth0Session: {
+            oldValue: { accessToken: "old", identityFence: before },
+            newValue: { accessToken: "new", identityFence: after },
+          },
+        },
+        "session",
+      ),
   };
 }
 
@@ -396,6 +409,33 @@ it("wipes a pulled original when the employer tab or the extension identity chan
     else f.authChanged();
     expect(bytes?.every((byte) => byte === 0)).toBe(true);
   }
+});
+
+it("keeps the selection, the resume and the pending Apply through a token refresh of the same account", async () => {
+  const f = uploadedSetup();
+  await f.message(INTENT);
+  await f.composition.select(LINK);
+  f.authRefreshed();
+  expect(await f.composition.pendingIntent()).toMatchObject({ reviewLink: LINK });
+  const owned = f.composition.consumeSelected(LINK);
+  expect(owned.files[0]?.bytes.some((byte) => byte !== 0)).toBe(true);
+  expect(owned.signal.aborted).toBe(false);
+});
+
+it.each([
+  ["another account", { oldValue: { identityFence: "A" }, newValue: { identityFence: "B" } }],
+  ["a sign-out", { oldValue: { identityFence: "A" } }],
+  ["a first sign-in", { newValue: { identityFence: "A" } }],
+  ["an unreadable session", { oldValue: { identityFence: "A" }, newValue: { accessToken: "x" } }],
+])("still ends the selection on %s", async (_name, change) => {
+  const f = uploadedSetup();
+  await f.message(INTENT);
+  await f.composition.select(LINK);
+  const owned = f.composition.consumeSelected(LINK);
+  const bytes = owned.files[0]?.bytes;
+  f.authChange(change);
+  expect(bytes?.every((byte) => byte === 0)).toBe(true);
+  expect(await f.composition.pendingIntent()).toEqual({ ok: true });
 });
 
 it("never offers a generated-file transfer for an uploaded selection", async () => {
