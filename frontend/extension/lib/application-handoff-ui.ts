@@ -158,18 +158,28 @@ export function mountApplicationHandoff() {
         }
         if (action === "apply" && response.stage === "page-not-ready") {
           // Refused before an attempt was made: nothing was recorded, so there is nothing to
-          // reconcile. The count is of questions, never their text.
+          // reconcile. The questions are named in the employer's own words (plain text, from the
+          // page); nothing the candidate entered is ever shown or sent.
           const needs =
             Number.isSafeInteger(response.needs) && response.needs > 0 ? response.needs : 0;
+          const names: string[] = Array.isArray(response.waiting)
+            ? response.waiting
+                .filter((name: unknown): name is string => typeof name === "string" && name !== "")
+                .slice(0, 5)
+            : [];
+          const more = needs > names.length ? ` and ${needs - names.length} more` : "";
+          const one = needs <= 1;
           status.textContent = `Nothing was submitted and nothing was recorded. ${
             needs === 1
               ? "1 required question"
               : needs > 1
                 ? `${needs} required questions`
                 : "A required question"
-          } on the employer page still ${needs === 1 || needs === 0 ? "needs" : "need"} your own answer. Answer ${
-            needs === 1 || needs === 0 ? "it" : "them"
-          } on the page, then press Fill and submit again.`;
+          } on the employer page still ${one ? "needs" : "need"} your own answer.${
+            names.length
+              ? ` Waiting for you: ${names.map((name) => `"${name}"`).join("; ")}${more}.`
+              : ""
+          } Answer ${one ? "it" : "them"} on the page, then press Fill and submit again.`;
           return;
         }
         if (action === "apply") {

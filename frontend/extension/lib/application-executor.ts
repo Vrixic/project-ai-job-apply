@@ -449,6 +449,7 @@ export async function executeApprovedApplication(options: {
         reviewLink: selection.reviewLink,
         stage,
         needs: inspection.needs,
+        ...(inspection.waiting?.length ? { waiting: inspection.waiting } : {}),
       };
     }
     stage = "approval-again";
