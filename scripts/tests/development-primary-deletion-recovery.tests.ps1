@@ -13,7 +13,7 @@ $manifestPath=Join-Path $PSScriptRoot '../../backend/services/database-migration
 $currentManifestHash=(Get-FileHash $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $manifest=ConvertFrom-D1RestoreJson ([IO.File]::ReadAllText($manifestPath))
 Assert (@($manifest.contributors | ForEach-Object { $_.migrations }).Count -eq 89) 'primary checks current 89 migrations'
-Assert (($manifest.contributors | Where-Object owner -CEQ documents).migrations[-1].version -ceq '0019_native_resume_purge_seals_epoch') 'purge epoch-seal migration included'
+Assert (($manifest.contributors | Where-Object owner -CEQ documents).migrations[-1].version -ceq '0020_resume_purge_reports_native_blockers') 'purge blocker-reporting migration included'
 $config.restoreManifestSha256=$currentManifestHash
 foreach ($part in @('Identifier','Hostname','DbiResourceId','BoundarySha256')) { $config."target$part" = $config."source$part" }
 $encoded = Get-DeletionReplayConfigJson $config ([datetimeoffset]$fixture.now)
