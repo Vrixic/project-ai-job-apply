@@ -151,3 +151,29 @@ Only annual dollar amounts are understood: a question or option that says hourly
 or names another currency is left to the candidate, and a number is never converted or guessed.
 Verified in real Chrome on the real Prompt.io form (posted $100,000-$150,000): 120,000 and 90,000
 answer Yes, 200,000 answers No.
+
+## Amendment: readiness before the attempt is dispatched (2026-11-12)
+
+A live "Fill and submit" pressed before the candidate had answered the required free-text question was
+refused by the page run (`precondition_failed`), but only after the attempt had been dispatched, so the
+platform recorded it as ambiguous and the application sat in "confirm submission status" although
+nothing had been filled or clicked. Dispatch stays the durable point before any employer effect
+(decision 1 and ADR-049 are unchanged). What changes is that the question is asked first:
+
+- A submit run (not a fill for review) adds `readiness` to the existing read-only inspect message: the
+  approved answers the run would use, the provider variant and the file kinds. The page plans exactly as
+  the run will and answers with `needs`, a count of required questions only the candidate can answer
+  that are not complete (`incompleteCandidateControls`, the same function the run uses; it reads
+  validity and emptiness, never a value, and the answers it carried are dropped after the reply).
+- With `needs` above zero, and no challenge on the page, the executor returns `page-not-ready` before
+  `attempt-start`: no attempt, no dispatch, no result, nothing to reconcile, and the application stays
+  approved. The panel says how many questions are left and to press again once answered.
+- A fill for review does not ask (the candidate completes those controls themselves), and a page with a
+  challenge is not held back (it is filled and left to the candidate, as before).
+- The answer is required of a submit run: a page that does not answer is refused before any attempt.
+- The run's own check stays, so a page that changes between the question and the click is still refused
+  after dispatch, and still recorded as ambiguous.
+
+Verified in real Chrome on the real Prompt.io form with every employer write blocked: with the question
+empty nothing is posted to the platform and the application stays approved; with it answered the run goes
+on and starts its attempt.

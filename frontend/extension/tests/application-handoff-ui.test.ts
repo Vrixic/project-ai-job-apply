@@ -159,6 +159,33 @@ describe("manual handoff UI", () => {
     expect(text).toContain(detail);
   });
 
+  it.each([
+    [1, "1 required question on the employer page still needs your own answer. Answer it"],
+    [3, "3 required questions on the employer page still need your own answer. Answer them"],
+    [0, "A required question on the employer page still needs your own answer. Answer it"],
+  ])(
+    "says plainly that nothing was recorded when the page is not ready (%s)",
+    async (needs, sentence) => {
+      send.mockImplementation(async (message) =>
+        message.action === "application_native_apply"
+          ? { ok: false, outcome: "review_required", stage: "page-not-ready", needs }
+          : { ok: true },
+      );
+      control<HTMLInputElement>("input").value = LINK;
+      control<HTMLButtonElement>("[data-native-apply]").click();
+      await flush();
+      const text = control("[data-handoff-status]").textContent ?? "";
+      expect(text).toContain("Nothing was submitted and nothing was recorded.");
+      expect(text).toContain(sentence);
+      expect(text).toContain("press Fill and submit again.");
+      expect(text).not.toContain("stopped at");
+      // No reconnect, no second press, nothing to reconcile.
+      expect(send).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: "application_native_select" }),
+      );
+    },
+  );
+
   it("keeps the review link through a token refresh, and drops it when the account changes", async () => {
     const link = () => control<HTMLInputElement>("input").value;
     control<HTMLInputElement>("input").value = LINK;

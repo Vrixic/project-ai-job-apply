@@ -5,7 +5,8 @@ import {
   validateApplicationExecutionInspect,
   validateApplicationExecutionProofResult,
 } from "@ai-job-apply/api-contracts/browser-validators";
-import { executeApplication } from "../lib/application-run";
+import { buildFillPlan } from "@ai-job-apply/ats-sdk/plan";
+import { executeApplication, incompleteCandidateControls } from "../lib/application-run";
 import { FILL_ONLY_BUDGET_MS, runBudgetMs } from "../lib/execution-budget";
 import type { TransferredNativeFile } from "../lib/native-material-transfer";
 import { applicationExecutionRegistry, providerForUrl } from "../lib/providers";
@@ -67,13 +68,32 @@ if (!Object.hasOwn(globalThis, installed)) {
             active
           )
             throw Error("ApplicationExecutionUnavailable");
+          // Before any attempt exists, how many required questions only the candidate can answer
+          // are still incomplete. The page is only read. A challenge page is filled and left to the
+          // candidate whatever this says, so it is not counted.
+          let needs: number | undefined;
+          if (message.readiness) {
+            const kinds = message.readiness.fileKinds;
+            const plan = buildFillPlan(inspection.form, message.readiness.fields, {
+              resume: kinds.some(
+                (kind) => kind === "tailored_resume" || kind === "uploaded_resume",
+              ),
+              coverLetter: kinds.includes("cover_letter"),
+            });
+            needs = plan.requiresTakeover
+              ? 0
+              : incompleteCandidateControls(provider, inspection, plan);
+          }
           return {
             schema: "application-execution-inspection.v1",
             nonce: message.nonce,
             formHash,
             challengePresent: inspection.form.challengePresent,
+            ...(needs === undefined ? {} : { needs }),
           };
         } finally {
+          // The approved answers the readiness question carried are not kept.
+          if (message.readiness) message.readiness.fields.length = 0;
           inspection.dispose();
         }
       })().then(respond, () => respond({ error: "ApplicationExecutionUnavailable" }));

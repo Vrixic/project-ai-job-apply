@@ -13,6 +13,26 @@ import { revealControl } from "./reveal";
 
 const unavailable = () => Error("ApplicationExecutionUnavailable");
 
+/**
+ * How many controls the extension may not fill (a question only the candidate can answer) are not
+ * complete yet. It reads validity and emptiness only, never a value. The submit run refuses to
+ * start while this is above zero, and the readiness check before an attempt uses the same count.
+ */
+export function incompleteCandidateControls(
+  provider: ApplicationProvider,
+  inspection: ApplicationInspection,
+  plan: ReturnType<typeof buildFillPlan>,
+): number {
+  let incomplete = 0;
+  for (const action of plan.actions) {
+    if (action.kind !== "require_user") continue;
+    const required =
+      inspection.form.fields.find((field) => field.ref === action.ref)?.required === true;
+    if (!provider.controlsSatisfied(inspection.resolve(action.ref), required)) incomplete++;
+  }
+  return incomplete;
+}
+
 /** One document/attempt command, already durably dispatched. No retry or navigation recovery. */
 export async function executeApplication(options: {
   provider: ApplicationProvider;
@@ -197,13 +217,8 @@ export async function executeApplication(options: {
     mark("root");
     const root = provider.root(document);
     // Required candidate-only controls may already be completed; inspect validity, never values.
-    for (const action of takeover ? [] : plan.actions) {
-      if (action.kind !== "require_user") continue;
-      const required =
-        inspection.form.fields.find((field) => field.ref === action.ref)?.required === true;
-      if (!provider.controlsSatisfied(inspection.resolve(action.ref), required))
-        return { kind: "precondition_failed" };
-    }
+    if (!takeover && incompleteCandidateControls(provider, inspection, plan) > 0)
+      return { kind: "precondition_failed" };
     mark("submit-control");
     const button = provider.submitControl(root, profile);
     actionable(button);
