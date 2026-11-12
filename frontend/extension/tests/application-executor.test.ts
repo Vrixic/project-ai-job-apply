@@ -191,7 +191,13 @@ function setup(
           ...(mode === "no-readiness-answer"
             ? {}
             : {
-                needs: mode === "not-ready" ? 2 : mode === "challenge-page" ? 3 : 0,
+                needs:
+                  mode === "not-ready" || mode === "draftable"
+                    ? 2
+                    : mode === "challenge-page"
+                      ? 3
+                      : 0,
+                ...(mode === "draftable" ? { draftable: 2, draftNoAi: true } : {}),
                 ...(mode === "not-ready"
                   ? { waiting: ["Why do you want to work here?", "How did you hear about us?"] }
                   : {}),
@@ -294,9 +300,17 @@ function setup(
     sendMessage,
     preflight,
     application,
-    run: (extra: { fillOnly?: boolean; ownedMs?: number; identityFor?: () => string } = {}) =>
+    run: (
+      extra: {
+        fillOnly?: boolean;
+        skipDraftOffer?: boolean;
+        ownedMs?: number;
+        identityFor?: () => string;
+      } = {},
+    ) =>
       executeApprovedApplication({
         ...(extra.fillOnly ? { fillOnly: true } : {}),
+        ...(extra.skipDraftOffer ? { skipDraftOffer: true } : {}),
         apiOrigin: "https://api.example",
         registry,
         identity: async () => ({
@@ -438,22 +452,20 @@ it("does not report an attempt for a different signed-in account", async () => {
 });
 
 describe("readiness before an attempt exists", () => {
-  it("asks the page with the answers and file kinds a submit run would use, and only a submit run", async () => {
-    const submit = setup("success");
-    expect(await submit.run()).toMatchObject({ ok: true, outcome: "confirmed" });
-    expect(submit.inspects).toHaveLength(1);
-    expect(submit.inspects[0]).toMatchObject({
-      schema: "application-execution-inspect.v1",
-      readiness: {
-        variantId: expect.any(String),
-        fileKinds: ["tailored_resume"],
-        fields: submit.wireCommands[0]?.fields,
-      },
-    });
-
-    const fill = setup("success");
-    expect(await fill.run({ fillOnly: true })).toMatchObject({ ok: true });
-    expect(fill.inspects[0]).not.toHaveProperty("readiness");
+  it("asks the page with the answers and file kinds the run would use, for a submit and for a fill", async () => {
+    for (const fillOnly of [false, true]) {
+      const fixture = setup("success");
+      expect(await fixture.run(fillOnly ? { fillOnly: true } : {})).toMatchObject({ ok: true });
+      expect(fixture.inspects).toHaveLength(1);
+      expect(fixture.inspects[0]).toMatchObject({
+        schema: "application-execution-inspect.v1",
+        readiness: {
+          variantId: expect.any(String),
+          fileKinds: ["tailored_resume"],
+          fields: fixture.wireCommands[0]?.fields,
+        },
+      });
+    }
   });
 
   it("refuses while a question only the candidate can answer is empty, with no attempt and nothing recorded", async () => {
@@ -472,6 +484,27 @@ describe("readiness before an attempt exists", () => {
     expect(fixture.commands).toEqual([]);
     expect(fixture.application.status).toBe("approved");
     expect(fixture.application.attempts ?? []).toEqual([]);
+  });
+
+  it("offers drafts before a fill for review when the engine can write the waiting questions", async () => {
+    const fixture = setup("draftable");
+    expect(await fixture.run({ fillOnly: true })).toEqual({
+      ok: false,
+      outcome: "review_required",
+      reviewLink: LINK,
+      stage: "page-not-ready",
+      needs: 2,
+      draftable: 2,
+      draftNoAi: true,
+    });
+    expect(fixture.posts).toEqual([]);
+    expect(fixture.commands).toEqual([]);
+  });
+
+  it("does not offer again once the candidate has chosen, and fills for review", async () => {
+    const fixture = setup("draftable");
+    expect(await fixture.run({ fillOnly: true, skipDraftOffer: true })).toMatchObject({ ok: true });
+    expect(fixture.commands).toHaveLength(1);
   });
 
   it("does not hold a fill for review back for them, nor a page with a challenge", async () => {

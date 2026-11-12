@@ -559,7 +559,7 @@ export function installNativeTransferBackground(options: {
     consume: transfer.consume,
     consumeSelected: transfer.consumeSelected,
     waitForResume,
-    async apply(reviewLink: string, fillOnly = false) {
+    async apply(reviewLink: string, fillOnly = false, skipDraftOffer = false) {
       await waitForResume();
       let owned: ReturnType<typeof transfer.consumeSelected>;
       try {
@@ -575,6 +575,7 @@ export function installNativeTransferBackground(options: {
           registry: options.registry,
           identity: options.identity,
           ...(fillOnly ? { fillOnly: true } : {}),
+          ...(skipDraftOffer ? { skipDraftOffer: true } : {}),
           owned,
           async preflight(selection, signal) {
             const proof = await protectedSelection(

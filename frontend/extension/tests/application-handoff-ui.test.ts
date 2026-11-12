@@ -292,7 +292,12 @@ describe("manual handoff UI", () => {
       await settle();
       expect(actions()).toEqual([
         { action: "application_native_apply", reviewLink: LINK },
-        { action: "application_native_apply", reviewLink: LINK, fillOnly: true },
+        {
+          action: "application_native_apply",
+          reviewLink: LINK,
+          fillOnly: true,
+          skipDraftOffer: true,
+        },
       ]);
       expect(text()).toContain("Filled for your review. Nothing was submitted.");
       expect(text()).toContain("1 required question still needs you.");
@@ -315,6 +320,7 @@ describe("manual handoff UI", () => {
         action: "application_native_apply",
         reviewLink: LINK,
         fillOnly: true,
+        skipDraftOffer: true,
       });
       expect(text()).toContain("Answers were written for 1 question: read it before you submit.");
     });
@@ -351,6 +357,52 @@ describe("manual handoff UI", () => {
       expect(actions().filter((message) => message.action !== "application_native_clear")).toEqual([
         { action: "application_native_apply", reviewLink: LINK },
       ]);
+    });
+
+    describe("on Fill for my review", () => {
+      async function pressFill() {
+        control<HTMLInputElement>("input").value = LINK;
+        control<HTMLButtonElement>("[data-native-fill]").click();
+        await settle();
+      }
+      const filled = { ok: true, outcome: "review_required", result: "challenge_required" };
+      const review = { action: "application_native_apply", reviewLink: LINK, fillOnly: true };
+
+      it("asks the same question, with wording that never mentions submitting", async () => {
+        script(refusal());
+        await pressFill();
+        expect(choice()?.textContent).toContain(`"${NAME}"`);
+        expect(choice()?.querySelector("[data-draft-yes]")?.textContent).toBe(
+          "Write with AI, then fill for my review",
+        );
+        expect(choice()?.querySelector("[data-draft-no]")?.textContent).toBe(
+          "Fill the rest, I will answer myself",
+        );
+        expect(actions()).toEqual([review]);
+      });
+
+      it("writes the answers and then fills for review, never submitting, when they say yes", async () => {
+        script(refusal(), { ok: true, drafted: 1, declined: 0, failed: 0 }, filled);
+        await pressFill();
+        control<HTMLButtonElement>("[data-draft-yes]").click();
+        await settle();
+        expect(actions()).toEqual([
+          review,
+          { action: "application_native_draft", reviewLink: LINK },
+          { ...review, skipDraftOffer: true },
+        ]);
+        expect(text()).toContain("Filled for your review. Nothing was submitted.");
+        expect(text()).toContain("Answers were written for 1 question: read it before you submit.");
+      });
+
+      it("fills the rest without asking the engine when they say no", async () => {
+        script(refusal(), filled);
+        await pressFill();
+        control<HTMLButtonElement>("[data-draft-no]").click();
+        await settle();
+        expect(actions()).toEqual([review, { ...review, skipDraftOffer: true }]);
+        expect(text()).toContain("Filled for your review. Nothing was submitted.");
+      });
     });
 
     it("keeps the plain refusal when the engine can write none of the waiting questions", async () => {
