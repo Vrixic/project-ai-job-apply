@@ -14,10 +14,10 @@ function scenario(satisfied: Record<string, boolean>) {
   const inspection = {
     form: {
       fields: [
-        { ref: "name", required: true },
-        { ref: "essay", required: true },
-        { ref: "referral", required: false },
-        { ref: "other", required: true },
+        { ref: "name", label: "Name", required: true },
+        { ref: "essay", label: "Why do you want to work here?", required: true },
+        { ref: "referral", label: "How did you hear about us?", required: false },
+        { ref: "other", label: "Other", required: true },
       ],
     },
     resolve: (ref: string) => [controls[ref]],
@@ -49,10 +49,19 @@ describe("incompleteCandidateControls", () => {
       other: false,
     });
     // Only the planned candidate-only controls count, not a fill or a skipped control.
-    expect(incompleteCandidateControls(provider, inspection, plan("essay", "referral"))).toBe(1);
-    expect(incompleteCandidateControls(provider, inspection, plan("essay"))).toBe(1);
-    expect(incompleteCandidateControls(provider, inspection, plan("referral"))).toBe(0);
-    expect(incompleteCandidateControls(provider, inspection, plan())).toBe(0);
+    expect(
+      incompleteCandidateControls(provider, inspection, plan("essay", "referral")),
+    ).toHaveLength(1);
+    expect(incompleteCandidateControls(provider, inspection, plan("essay"))).toHaveLength(1);
+    expect(incompleteCandidateControls(provider, inspection, plan("referral"))).toHaveLength(0);
+    expect(incompleteCandidateControls(provider, inspection, plan())).toHaveLength(0);
+  });
+
+  it("names each one by the employer's own label, in the order the plan lists them", () => {
+    const open = scenario({ essay: false, referral: false });
+    expect(
+      incompleteCandidateControls(open.provider, open.inspection, plan("essay", "referral")),
+    ).toEqual(["Why do you want to work here?", "How did you hear about us?"]);
   });
 
   it("is zero once the candidate has answered them all, and counts each one that is still empty", () => {
@@ -64,11 +73,11 @@ describe("incompleteCandidateControls", () => {
         ]),
         plan("essay", "referral"),
       ),
-    ).toBe(0);
+    ).toHaveLength(0);
     const open = scenario({ essay: false, referral: false });
     expect(
       incompleteCandidateControls(open.provider, open.inspection, plan("essay", "referral")),
-    ).toBe(2);
+    ).toHaveLength(2);
   });
 
   it("tells the provider whether each control is required, and reads nothing else", () => {

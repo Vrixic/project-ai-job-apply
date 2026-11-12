@@ -10,6 +10,7 @@ import { executeApplication, incompleteCandidateControls } from "../lib/applicat
 import { FILL_ONLY_BUDGET_MS, runBudgetMs } from "../lib/execution-budget";
 import type { TransferredNativeFile } from "../lib/native-material-transfer";
 import { applicationExecutionRegistry, providerForUrl } from "../lib/providers";
+import { questionLabels } from "../lib/question-labels";
 
 // Isolated-world lifetime only. Reinjection/restart cannot create a second effect listener.
 const installed = "__applyDashApplicationExecutionV1";
@@ -71,7 +72,7 @@ if (!Object.hasOwn(globalThis, installed)) {
           // Before any attempt exists, how many required questions only the candidate can answer
           // are still incomplete. The page is only read. A challenge page is filled and left to the
           // candidate whatever this says, so it is not counted.
-          let needs: number | undefined;
+          let waiting: string[] | undefined;
           if (message.readiness) {
             const kinds = message.readiness.fileKinds;
             const plan = buildFillPlan(inspection.form, message.readiness.fields, {
@@ -80,8 +81,8 @@ if (!Object.hasOwn(globalThis, installed)) {
               ),
               coverLetter: kinds.includes("cover_letter"),
             });
-            needs = plan.requiresTakeover
-              ? 0
+            waiting = plan.requiresTakeover
+              ? []
               : incompleteCandidateControls(provider, inspection, plan);
           }
           return {
@@ -89,7 +90,9 @@ if (!Object.hasOwn(globalThis, installed)) {
             nonce: message.nonce,
             formHash,
             challengePresent: inspection.form.challengePresent,
-            ...(needs === undefined ? {} : { needs }),
+            ...(waiting === undefined
+              ? {}
+              : { needs: Math.min(waiting.length, 200), waiting: questionLabels(waiting) }),
           };
         } finally {
           // The approved answers the readiness question carried are not kept.

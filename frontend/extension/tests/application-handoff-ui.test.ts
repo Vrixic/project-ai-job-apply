@@ -186,6 +186,28 @@ describe("manual handoff UI", () => {
     },
   );
 
+  it("names the questions the candidate still has to answer, in the employer's words, as plain text", async () => {
+    send.mockImplementation(async (message) =>
+      message.action === "application_native_apply"
+        ? {
+            ok: false,
+            outcome: "review_required",
+            stage: "page-not-ready",
+            needs: 7,
+            waiting: ["Why do you want to work here?", "<img src=x onerror=alert(1)>"],
+          }
+        : { ok: true },
+    );
+    control<HTMLInputElement>("input").value = LINK;
+    control<HTMLButtonElement>("[data-native-apply]").click();
+    await flush();
+    const status = control("[data-handoff-status]");
+    expect(status.textContent).toContain(
+      '7 required questions on the employer page still need your own answer. Waiting for you: "Why do you want to work here?"; "<img src=x onerror=alert(1)>" and 5 more.',
+    );
+    expect(status.querySelector("img")).toBeNull();
+  });
+
   it("keeps the review link through a token refresh, and drops it when the account changes", async () => {
     const link = () => control<HTMLInputElement>("input").value;
     control<HTMLInputElement>("input").value = LINK;

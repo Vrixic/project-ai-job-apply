@@ -14362,7 +14362,17 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 200,
-            "description": "Only when readiness was asked: how many required questions only the candidate can answer are not complete yet. A count; never a label or a value."
+            "description": "Only when readiness was asked: how many required questions only the candidate can answer are not complete yet."
+          },
+          "waiting": {
+            "type": "array",
+            "maxItems": 5,
+            "description": "The employer's own wording of the first of those questions, so the candidate can find them. Question labels only; never anything the candidate entered.",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
           }
         },
         "additionalProperties": false

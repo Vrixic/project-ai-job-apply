@@ -14,21 +14,22 @@ import { revealControl } from "./reveal";
 const unavailable = () => Error("ApplicationExecutionUnavailable");
 
 /**
- * How many controls the extension may not fill (a question only the candidate can answer) are not
- * complete yet. It reads validity and emptiness only, never a value. The submit run refuses to
- * start while this is above zero, and the readiness check before an attempt uses the same count.
+ * The controls the extension may not fill (a question only the candidate can answer) that are not
+ * complete yet, by the employer's own label, in page order. It reads validity and emptiness only,
+ * never a value. The submit run refuses to start while any remain, and the readiness check before
+ * an attempt uses the same list.
  */
 export function incompleteCandidateControls(
   provider: ApplicationProvider,
   inspection: ApplicationInspection,
   plan: ReturnType<typeof buildFillPlan>,
-): number {
-  let incomplete = 0;
+): string[] {
+  const incomplete: string[] = [];
   for (const action of plan.actions) {
     if (action.kind !== "require_user") continue;
-    const required =
-      inspection.form.fields.find((field) => field.ref === action.ref)?.required === true;
-    if (!provider.controlsSatisfied(inspection.resolve(action.ref), required)) incomplete++;
+    const field = inspection.form.fields.find((candidate) => candidate.ref === action.ref);
+    if (!provider.controlsSatisfied(inspection.resolve(action.ref), field?.required === true))
+      incomplete.push(field?.label ?? "");
   }
   return incomplete;
 }
@@ -217,7 +218,7 @@ export async function executeApplication(options: {
     mark("root");
     const root = provider.root(document);
     // Required candidate-only controls may already be completed; inspect validity, never values.
-    if (!takeover && incompleteCandidateControls(provider, inspection, plan) > 0)
+    if (!takeover && incompleteCandidateControls(provider, inspection, plan).length > 0)
       return { kind: "precondition_failed" };
     mark("submit-control");
     const button = provider.submitControl(root, profile);

@@ -165,6 +165,9 @@ nothing had been filled or clicked. Dispatch stays the durable point before any 
   the run will and answers with `needs`, a count of required questions only the candidate can answer
   that are not complete (`incompleteCandidateControls`, the same function the run uses; it reads
   validity and emptiness, never a value, and the answers it carried are dropped after the reply).
+  The reply also names the first five (`waiting`): the employer's own question labels, cleaned to bounded
+  plain text (`questionLabels`), shown by the panel as text. Never anything the candidate entered. (Added
+  the same day: a bare count left the candidate unable to tell which question was meant.)
 - With `needs` above zero, and no challenge on the page, the executor returns `page-not-ready` before
   `attempt-start`: no attempt, no dispatch, no result, nothing to reconcile, and the application stays
   approved. The panel says how many questions are left and to press again once answered.

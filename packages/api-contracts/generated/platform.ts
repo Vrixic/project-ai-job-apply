@@ -3454,8 +3454,10 @@ export interface components {
             nonce: string;
             formHash: string;
             challengePresent: boolean;
-            /** @description Only when readiness was asked: how many required questions only the candidate can answer are not complete yet. A count; never a label or a value. */
+            /** @description Only when readiness was asked: how many required questions only the candidate can answer are not complete yet. */
             needs?: number;
+            /** @description The employer's own wording of the first of those questions, so the candidate can find them. Question labels only; never anything the candidate entered. */
+            waiting?: string[];
         };
         ApplicationExecutionCommand: {
             /** @constant */

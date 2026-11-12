@@ -190,7 +190,12 @@ function setup(
           // How many required questions only the candidate can answer are still empty.
           ...(mode === "no-readiness-answer"
             ? {}
-            : { needs: mode === "not-ready" ? 2 : mode === "challenge-page" ? 3 : 0 }),
+            : {
+                needs: mode === "not-ready" ? 2 : mode === "challenge-page" ? 3 : 0,
+                ...(mode === "not-ready"
+                  ? { waiting: ["Why do you want to work here?", "How did you hear about us?"] }
+                  : {}),
+              }),
         };
       }
       const command = message as ApplicationExecutionCommand;
@@ -459,6 +464,7 @@ describe("readiness before an attempt exists", () => {
       reviewLink: LINK,
       stage: "page-not-ready",
       needs: 2,
+      waiting: ["Why do you want to work here?", "How did you hear about us?"],
     });
     // No attempt was started or dispatched, no result was reported, and the page got no command.
     expect(fixture.posts).toEqual([]);
