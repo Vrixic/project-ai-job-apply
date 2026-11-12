@@ -416,6 +416,17 @@ export async function executeApprovedApplication(options: {
           nonce,
           employerUrl: selection.employerUrl,
           deadline,
+          // A submit run asks the page, before any attempt exists, whether a question only the
+          // candidate can answer is still empty. A fill for review leaves those to the candidate.
+          ...(options.fillOnly
+            ? {}
+            : {
+                readiness: {
+                  variantId: profile.variantId,
+                  fields: commandFieldsFromPacket(originalPacket),
+                  fileKinds: options.owned.files.map((file) => file.kind),
+                },
+              }),
         },
         { documentId: selection.documentId, frameId: 0 },
       ),
@@ -423,9 +434,23 @@ export async function executeApprovedApplication(options: {
     if (
       !validateApplicationExecutionInspection(inspection) ||
       inspection.nonce !== nonce ||
-      (originalPacket.form && inspection.formHash !== originalPacket.form.formHash)
+      (originalPacket.form && inspection.formHash !== originalPacket.form.formHash) ||
+      // The readiness answer is part of the same message: asked for, it must come back.
+      (!options.fillOnly && inspection.needs === undefined)
     )
       throw unavailable();
+    // Nothing has been started: no attempt exists, so nothing is recorded and nothing needs
+    // reconciling. The candidate answers the questions on the page and presses again.
+    if (!options.fillOnly && !inspection.challengePresent && (inspection.needs ?? 0) > 0) {
+      stage = "page-not-ready";
+      return {
+        ok: false,
+        outcome: "review_required",
+        reviewLink: selection.reviewLink,
+        stage,
+        needs: inspection.needs,
+      };
+    }
     stage = "approval-again";
     await bounded(options.preflight(selection, controller.signal));
     await documentProof();

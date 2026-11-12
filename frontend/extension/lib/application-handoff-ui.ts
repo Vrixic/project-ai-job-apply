@@ -156,6 +156,22 @@ export function mountApplicationHandoff() {
               : `The page could not be filled completely. Nothing was submitted. Check the employer page and try again.${where}${pageRun}`;
           return;
         }
+        if (action === "apply" && response.stage === "page-not-ready") {
+          // Refused before an attempt was made: nothing was recorded, so there is nothing to
+          // reconcile. The count is of questions, never their text.
+          const needs =
+            Number.isSafeInteger(response.needs) && response.needs > 0 ? response.needs : 0;
+          status.textContent = `Nothing was submitted and nothing was recorded. ${
+            needs === 1
+              ? "1 required question"
+              : needs > 1
+                ? `${needs} required questions`
+                : "A required question"
+          } on the employer page still ${needs === 1 || needs === 0 ? "needs" : "need"} your own answer. Answer ${
+            needs === 1 || needs === 0 ? "it" : "them"
+          } on the page, then press Fill and submit again.`;
+          return;
+        }
         if (action === "apply") {
           status.textContent =
             response.ok && response.outcome === "confirmed"

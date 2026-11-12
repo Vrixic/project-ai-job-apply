@@ -14306,6 +14306,35 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9007199254740991
+          },
+          "readiness": {
+            "type": "object",
+            "description": "Asks how many required questions only the candidate can answer are still incomplete on the page, before any attempt exists. Carries the approved answers the page run would use; the page only reads, and answers with a count.",
+            "required": ["variantId", "fields", "fileKinds"],
+            "properties": {
+              "variantId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "fields": {
+                "type": "array",
+                "maxItems": 200,
+                "items": {
+                  "$ref": "#/components/schemas/ApplicationExecutionField"
+                }
+              },
+              "fileKinds": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 2,
+                "items": {
+                  "type": "string",
+                  "enum": ["tailored_resume", "cover_letter", "uploaded_resume"]
+                }
+              }
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": false
@@ -14328,6 +14357,12 @@
           },
           "challengePresent": {
             "type": "boolean"
+          },
+          "needs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200,
+            "description": "Only when readiness was asked: how many required questions only the candidate can answer are not complete yet. A count; never a label or a value."
           }
         },
         "additionalProperties": false

@@ -3441,6 +3441,12 @@ export interface components {
             nonce: string;
             employerUrl: string;
             deadline: number;
+            /** @description Asks how many required questions only the candidate can answer are still incomplete on the page, before any attempt exists. Carries the approved answers the page run would use; the page only reads, and answers with a count. */
+            readiness?: {
+                variantId: string;
+                fields: components["schemas"]["ApplicationExecutionField"][];
+                fileKinds: ("tailored_resume" | "cover_letter" | "uploaded_resume")[];
+            };
         };
         ApplicationExecutionInspection: {
             /** @constant */
@@ -3448,6 +3454,8 @@ export interface components {
             nonce: string;
             formHash: string;
             challengePresent: boolean;
+            /** @description Only when readiness was asked: how many required questions only the candidate can answer are not complete yet. A count; never a label or a value. */
+            needs?: number;
         };
         ApplicationExecutionCommand: {
             /** @constant */

@@ -6,7 +6,7 @@ import type {
 } from "@ai-job-apply/api-contracts";
 import { activeJobRevisionDigestInput } from "@ai-job-apply/api-contracts/job-revision-canonical";
 import { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { executeApprovedApplication } from "../lib/application-executor";
 import type { NativeTransferSelection } from "../lib/native-material-transfer";
 import { APP, handoffFixture, LINK } from "./application-handoff-fixture";
@@ -108,6 +108,7 @@ function setup(
   const listeners = new Set<Parameters<typeof chrome.runtime.onMessage.addListener>[0]>();
   const commands: ApplicationExecutionCommand[] = [];
   const wireCommands: ApplicationExecutionCommand[] = [];
+  const inspects: Record<string, unknown>[] = [];
   let attempt: ApplicationAttempt | undefined;
   const send = vi.fn(async (url: URL | RequestInfo, options?: RequestInit) => {
     const path = new URL(String(url)).pathname;
@@ -179,13 +180,19 @@ function setup(
     async (_tab: number, message: { schema: string; nonce?: string }, target: unknown) => {
       expect(target).toEqual({ documentId: DOCUMENT, frameId: 0 });
       if (message.schema === "application-execution-cancel.v1") return { ok: true };
-      if (message.schema === "application-execution-inspect.v1")
+      if (message.schema === "application-execution-inspect.v1") {
+        inspects.push(structuredClone(message) as Record<string, unknown>);
         return {
           schema: "application-execution-inspection.v1",
           nonce: message.nonce,
           formHash: packet.form?.formHash,
-          challengePresent: false,
+          challengePresent: mode === "challenge-page",
+          // How many required questions only the candidate can answer are still empty.
+          ...(mode === "no-readiness-answer"
+            ? {}
+            : { needs: mode === "not-ready" ? 2 : mode === "challenge-page" ? 3 : 0 }),
         };
+      }
       const command = message as ApplicationExecutionCommand;
       commands.push(command);
       wireCommands.push(structuredClone(command));
@@ -277,6 +284,7 @@ function setup(
     results,
     commands,
     wireCommands,
+    inspects,
     listeners,
     sendMessage,
     preflight,
@@ -422,6 +430,58 @@ it("does not report an attempt for a different signed-in account", async () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+describe("readiness before an attempt exists", () => {
+  it("asks the page with the answers and file kinds a submit run would use, and only a submit run", async () => {
+    const submit = setup("success");
+    expect(await submit.run()).toMatchObject({ ok: true, outcome: "confirmed" });
+    expect(submit.inspects).toHaveLength(1);
+    expect(submit.inspects[0]).toMatchObject({
+      schema: "application-execution-inspect.v1",
+      readiness: {
+        variantId: expect.any(String),
+        fileKinds: ["tailored_resume"],
+        fields: submit.wireCommands[0]?.fields,
+      },
+    });
+
+    const fill = setup("success");
+    expect(await fill.run({ fillOnly: true })).toMatchObject({ ok: true });
+    expect(fill.inspects[0]).not.toHaveProperty("readiness");
+  });
+
+  it("refuses while a question only the candidate can answer is empty, with no attempt and nothing recorded", async () => {
+    const fixture = setup("not-ready");
+    expect(await fixture.run()).toEqual({
+      ok: false,
+      outcome: "review_required",
+      reviewLink: LINK,
+      stage: "page-not-ready",
+      needs: 2,
+    });
+    // No attempt was started or dispatched, no result was reported, and the page got no command.
+    expect(fixture.posts).toEqual([]);
+    expect(fixture.results).toEqual([]);
+    expect(fixture.commands).toEqual([]);
+    expect(fixture.application.status).toBe("approved");
+    expect(fixture.application.attempts ?? []).toEqual([]);
+  });
+
+  it("does not hold a fill for review back for them, nor a page with a challenge", async () => {
+    const fill = setup("not-ready");
+    expect(await fill.run({ fillOnly: true })).toMatchObject({ ok: true });
+    const challenge = setup("challenge-page");
+    expect(await challenge.run()).toMatchObject({ ok: true });
+    expect(challenge.commands).toHaveLength(1);
+  });
+
+  it("refuses a submit run whose page did not answer the readiness question", async () => {
+    const fixture = setup("no-readiness-answer");
+    expect(await fixture.run()).toMatchObject({ ok: false, outcome: "review_required" });
+    expect(fixture.posts).toEqual([]);
+    expect(fixture.commands).toEqual([]);
+  });
 });
 
 it("refuses a changed owning attempt before dispatch or any page action", async () => {
