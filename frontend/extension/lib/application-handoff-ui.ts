@@ -2,6 +2,10 @@ import { followActiveTab } from "./active-tab-follow";
 import type { ApprovedHandoff } from "./application-handoff";
 import { FORM_CAPTURE_FAILURE, HANDOFF_FAILURE } from "./application-handoff";
 import { extensionConfiguration } from "./config";
+import { isTokenRenewal } from "./session-change";
+
+/** How often the open panel reaches the worker so the browser does not stop it while idle. */
+const WORKER_HEARTBEAT_MS = 20_000;
 
 /** Popup/side-panel memory only. No document content or persistent handoff queue. */
 const NOTE_FIELDS: Readonly<Record<string, string>> = {
@@ -106,24 +110,50 @@ export function mountApplicationHandoff() {
         if (action === "apply")
           status.textContent =
             "Filling in and submitting your application. Watch the employer page.";
-        const response = await chrome.runtime.sendMessage(
+        const message =
           action === "select"
             ? { action: "application_native_select", reviewLink: input.value }
             : action === "apply"
               ? { action: "application_native_apply", reviewLink: input.value }
               : action === "fill"
                 ? { action: "application_native_apply", reviewLink: input.value, fillOnly: true }
-                : { action: "application_native_clear" },
-        );
+                : { action: "application_native_clear" };
+        let response = await chrome.runtime.sendMessage(message);
+        // The extension holds the selected page and its resume in memory only. If the browser
+        // stopped its worker, or the page reloaded and dropped them, nothing has started: select the
+        // same page once more, as the candidate would, and carry on with their press.
+        if (
+          (action === "fill" || action === "apply") &&
+          response?.stage === "selection-or-resume:none"
+        ) {
+          status.textContent = "Reconnecting to the employer page...";
+          const again = await chrome.runtime.sendMessage({
+            action: "application_native_select",
+            reviewLink: input.value,
+          });
+          if (again?.ok) {
+            status.textContent =
+              action === "fill"
+                ? "Filling in your application. Watch the employer page; nothing is submitted."
+                : "Filling in and submitting your application. Watch the employer page.";
+            response = await chrome.runtime.sendMessage(message);
+          } else if (typeof again?.stage === "string" && again.stage)
+            response = { ...response, stage: `reconnect>${again.stage}` };
+        }
         const where =
           typeof response.stage === "string" && response.stage
             ? ` (stopped at: ${response.stage})`
+            : "";
+        // What the page run reported and the step it reached: names only, never a value or page text.
+        const pageRun =
+          typeof response.result === "string"
+            ? ` (page run: ${response.result}${typeof response.pageStage === "string" && response.pageStage ? `, at ${response.pageStage}` : ""})`
             : "";
         if (action === "fill") {
           status.textContent =
             response.ok && response.result === "challenge_required"
               ? `Filled for your review. Nothing was submitted. Check the employer page; submit it yourself or leave it.${fillNotes(response.notes)}`
-              : `The page could not be filled completely. Nothing was submitted. Check the employer page and try again.${where}${typeof response.result === "string" ? ` (page run: ${response.result}${typeof response.pageStage === "string" && response.pageStage ? `, at ${response.pageStage}` : ""})` : ""}`;
+              : `The page could not be filled completely. Nothing was submitted. Check the employer page and try again.${where}${pageRun}`;
           return;
         }
         if (action === "apply") {
@@ -131,8 +161,12 @@ export function mountApplicationHandoff() {
             response.ok && response.outcome === "confirmed"
               ? "The employer confirmed submission. Return to the application workspace to view history."
               : response.outcome === "unknown"
-                ? "The submission outcome is uncertain. Return to the workspace to review it; do not submit again."
-                : `Not submitted by the extension, or not confirmed. Check the employer page, finish by hand if needed, then record the outcome in the application workspace.${where}`;
+                ? `The submission outcome is uncertain. Return to the workspace to review it; do not submit again.${where}${pageRun}`
+                : response.result === "precondition_failed"
+                  ? // The page was not ready before anything was filled or clicked (for example a
+                    // required question that only the candidate can answer is still empty).
+                    `Nothing was submitted: the employer page was not ready. A required question may still need your own answer. Answer it on the page, record this attempt as not submitted in the application workspace, then try again.${where}${pageRun}`
+                  : `Not submitted by the extension, or not confirmed. Check the employer page, finish by hand if needed, then record the outcome in the application workspace.${where}${pageRun}`;
           return;
         }
         if (!response.ok) throw Object.assign(Error(), { stage: response.stage });
@@ -264,6 +298,15 @@ export function mountApplicationHandoff() {
       waitingSince = undefined;
     },
   );
+  // Chrome stops an idle extension worker after about 30 seconds, and with it the selected page and
+  // the resume, which the worker holds in memory only. While this panel is open, a quiet read every
+  // 20 seconds keeps the worker (and so the selection) alive; closing the panel lets it all go.
+  if (extensionConfiguration.applicationExecutionEnabled)
+    setInterval(() => {
+      void Promise.resolve(
+        chrome.runtime.sendMessage({ action: "application_pending_intent" }),
+      ).catch(() => undefined);
+    }, WORKER_HEARTBEAT_MS);
   function discard(message = "") {
     generation++;
     clearTimeout(timer);
@@ -441,8 +484,14 @@ export function mountApplicationHandoff() {
     });
   document.querySelector("#login")?.addEventListener("click", () => discard());
   document.querySelector("#logout")?.addEventListener("click", () => discard());
+  // A token refresh renews the same account's session and ends nothing; anything else does.
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "session" && Object.hasOwn(changes, "auth0Session")) void discard();
+    if (
+      area === "session" &&
+      Object.hasOwn(changes, "auth0Session") &&
+      !isTokenRenewal(changes.auth0Session)
+    )
+      void discard();
   });
   window.addEventListener("pagehide", () => discard());
   window.addEventListener("focus", expires);

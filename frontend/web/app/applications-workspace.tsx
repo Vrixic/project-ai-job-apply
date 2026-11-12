@@ -798,19 +798,20 @@ function JobApplicationWorkspace({
       isCurrent: () => !controller.signal.aborted && !lifetime.current.signal.aborted,
       signal: controller.signal,
       giveUpAtMs,
-      ...(fetchImplementation ? { fetch: fetchImplementation } : {}),
-    })
-      .then((receipt) => {
+      // Every delivery replaces the earlier one: the extension may take the resume again after its
+      // employer page reloads.
+      onReceipt: (receipt) => {
         if (controller.signal.aborted) {
           discardTransferredNativeMaterials(messenger, extensionId, receipt);
           return;
         }
         transferred.current = { messenger, extensionId, receipt };
         settleHandoff({ phase: "resume_sent" });
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) settleHandoff({ phase: "armed" });
-      });
+      },
+      ...(fetchImplementation ? { fetch: fetchImplementation } : {}),
+    }).catch(() => {
+      if (!controller.signal.aborted) settleHandoff({ phase: "armed" });
+    });
   }
 
   /** Reports the candidate's own statement of what happened. The same body is retried on a replay. */

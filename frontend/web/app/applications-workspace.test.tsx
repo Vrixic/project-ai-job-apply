@@ -1068,7 +1068,9 @@ describe("ApplicationsWorkspace: extension hand-off", () => {
                 expiresAtMs: Date.now() + 600_000,
               });
             else if (message.schema === "application-native-transfer-begin.v1") {
-              if (queue.shift() === "unselected") callback({ error: "unavailable" });
+              // An extension that already holds a ready resume (or no selection) refuses a begin.
+              if ((queue.shift() ?? "unselected") === "unselected")
+                callback({ error: "unavailable" });
               else
                 callback({
                   ...message,
@@ -1209,6 +1211,30 @@ describe("ApplicationsWorkspace: extension hand-off", () => {
     });
     expect(JSON.stringify(messages)).not.toMatch(/docx|wordprocessingml/iu);
     expect(container.textContent).toContain("It will use your generated resume (PDF)");
+  });
+
+  it("keeps offering the resume after the first delivery, so a page that reloads gets it again", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    currentBff = new FakeBff();
+    // The extension takes the resume, later drops it (the employer page reloaded or its worker was
+    // stopped), selects the page again and asks again.
+    const messages = extension(["ok", "unselected", "unselected", "ok"]);
+    await mount(currentBff, { jobTitle: "Billing Engineer" });
+    await click("Generate resume");
+    await advance(6_500);
+    await click("Apply");
+    for (let i = 0; i < 4; i++) await advance(2_100);
+    const commits = messages.filter(
+      (message) => message.schema === "application-native-transfer-commit.v1",
+    );
+    expect(commits).toHaveLength(2);
+    expect(container.textContent).toContain("It will use your generated resume (PDF)");
+    // Nothing more is sent once the page is left.
+    act(() => root.unmount());
+    root = createRoot(container);
+    const sent = messages.length;
+    await advance(10_000);
+    expect(messages.length).toBe(sent);
   });
 
   it("tells the candidate to finish by hand when no extension answers", async () => {

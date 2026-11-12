@@ -2,6 +2,27 @@
 
 2026-10-26 owner decisions on closing D3: (1) the accountable legal and security review is carried to D6-015 (independent assessment) and D6-016 (counsel review), as D1's was, so D3 closes on its engineering criteria. (2) Live AI generation is the product's main feature but cannot meet ADR-038's 30-minute all-copy retention with any provider or account the owner has today, so it moves to the new [D3.2 Live AI generation](phase-3-2-live-ai-generation.md); D3 closes with live AI off and deterministic tailoring. (3) Greenhouse is the live submission proof for D3; Ashby's live submission proof moves to D3.2. (4) One working session with the owner will run the live Greenhouse submission and the canonical export and deletion run (the D4 nine-owner policy) with a disposable MFA user; before it, the failing step of the 2026-10-17 run is diagnosed and fixed locally. D3 stays In progress until that session passes.
 
+2026-11-11: the extension no longer loses the selected employer page and its resume while the candidate waits (live
+Greenhouse try on Prompt.io: Fill and submit stopped at `selection-or-resume:none`). The extension holds the selected
+page and the resume in worker memory only, so anything that empties that memory left the panel pointing at nothing.
+Reproduced in real Chrome by stopping the extension worker after the page was selected (Chrome does this to an idle
+worker after about 30 seconds). Fixes: (1) Fill and Apply select the same page once more when, and only when, nothing is
+selected, then carry on with the candidate's press (a different refusal never retries, so nothing is submitted twice;
+a failed reconnect says `reconnect>step`); (2) the open side panel reaches the worker every 20 seconds so the
+browser does not stop it while the panel waits; (3) a token refresh no longer wipes the selection, the pending Apply
+or the panel's review link (`lib/session-change.ts`: only signing in or out, or as another account, does; this was
+a worker and a panel listener that reacted to every session write); (4) the website keeps offering the generated resume
+after the first delivery, until the same deadline, so a reloaded employer page gets it again (`transferWhenSelected`
+now reports every delivery through `onReceipt`; the extension still refuses an offer while it already holds a
+resume, and nothing is sent after the page is left). The second live try (Fill and submit pressed 11 seconds after
+approval) was refused by the page run before anything was filled or clicked (`precondition_failed` at `root`: a
+required free-text question that only the candidate can answer was still empty), which the platform records as an
+ambiguous attempt because the attempt is dispatched first; reproduced in real Chrome with every employer write blocked,
+and with the question answered the run goes on to fill the form. Apply now shows the page run's result and step in
+its message, and says plainly when the page was not ready. Open design question for the owner: check readiness
+before the attempt is dispatched, so a premature press leaves no ambiguous attempt to reconcile. The unpacked build
+must be reloaded in `chrome://extensions`.
+
 2026-11-11: job details open on their own page (owner request: "it should take me into the job's details page, not
 open it up in the panel", "remove that feature where it opens in place"). In the search results `View details and
 sources` is now a client-side link to `/jobs?job=<id>` (the existing `?job=&application=` page, with the
