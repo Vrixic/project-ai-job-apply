@@ -7,7 +7,12 @@ import { loadCurrentRestoreManifest } from "./restore-verifier.js";
 const source = loadCurrentRestoreManifest();
 const json = JSON.stringify(source.manifest);
 const hash = createHash("sha256").update(json).digest("hex");
-const compressed = gzipSync(json).toString("base64");
+// The packaged contract must fit one ECS container override (8192 bytes, AWS limit) beside the
+// worst-case name, host and checksum below. Its migration checksums do not compress, so each
+// new migration costs about 60 bytes: measure with the best compression a packager can choose.
+// Margin at 0020: 15 bytes. The next migration that does not fit needs a smaller contract
+// (for example, dropping history that restore no longer checks), not a bigger budget.
+const compressed = gzipSync(json, { level: 9 }).toString("base64");
 describe("explicit restore data snapshot contract", () => {
   it("defaults only when both override inputs are absent", () => {
     expect(resolveRestoreDataManifest({})).toEqual(source);
