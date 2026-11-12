@@ -25,6 +25,8 @@ export function offerDrafts(
     names: readonly string[];
     /** The employer asked for a hand-written answer to one of them. */
     noAi: boolean;
+    /** True for Fill and submit: the run may submit once the answers are written. */
+    submitAfter: boolean;
   },
 ): DraftOffer {
   const needs = Math.max(details.needs, details.draftable, 1);
@@ -58,14 +60,18 @@ export function offerDrafts(
   const yes = doc.createElement("button");
   yes.type = "button";
   yes.dataset.draftYes = "";
-  yes.textContent = everyOne
-    ? "Write with AI, then fill and submit"
-    : "Write what AI can, then fill for my review";
+  yes.textContent = !details.submitAfter
+    ? "Write with AI, then fill for my review"
+    : everyOne
+      ? "Write with AI, then fill and submit"
+      : "Write what AI can, then fill for my review";
   const no = doc.createElement("button");
   no.type = "button";
   no.dataset.draftNo = "";
   no.className = "secondary";
-  no.textContent = "Fill the rest, I will answer and submit myself";
+  no.textContent = details.submitAfter
+    ? "Fill the rest, I will answer and submit myself"
+    : "Fill the rest, I will answer myself";
   box.append(yes, no);
   after.insertAdjacentElement("afterend", box);
 

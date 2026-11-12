@@ -257,7 +257,23 @@ export async function executeApplication(options: {
     {
       const notes = [...(filled.notes ?? [])];
       const selectedRefs = new Set(filled.selected ?? []);
-      const needs = plan.unresolvedRequired.filter((ref) => !selectedRefs.has(ref)).length;
+      // Still needing the candidate: not chosen by the fill, and not already answered (by the
+      // candidate, or by a draft they asked for). Validity and emptiness only, never a value.
+      const answeredText = (controls: readonly Element[]) => {
+        const only = controls.length === 1 ? controls[0] : undefined;
+        return (
+          view !== null &&
+          view !== undefined &&
+          ((only instanceof view.HTMLTextAreaElement && only.value.trim() !== "") ||
+            (only instanceof view.HTMLInputElement &&
+              ["text", "search", "email", "url", "tel", "number"].includes(only.type) &&
+              only.getAttribute("role") !== "combobox" &&
+              only.value.trim() !== ""))
+        );
+      };
+      const needs = plan.unresolvedRequired.filter(
+        (ref) => !selectedRefs.has(ref) && !answeredText(inspection?.resolve(ref) ?? []),
+      ).length;
       if (needs > 0) notes.push(`needs:${needs}`);
       options.onNotes?.(notes);
     }

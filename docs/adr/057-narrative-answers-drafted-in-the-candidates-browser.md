@@ -127,9 +127,13 @@ empty, the extension asks whether AI should write it, and either way the form is
   (fill for review) and stops, and tells the candidate which drafts to read before they submit.
 - **The selection survives.** A run refused before any attempt existed gives the selected page and resume
   back unspent, so the candidate can go on without selecting again.
-- **Scope.** Only required, empty, open questions. Optional text boxes stay with the icon. Fill for review
-  is unchanged. Sensitive, attestation and signature questions are never drafted (the Gateway screens
-  them too).
+- **Scope.** Only required, empty, open questions. Optional text boxes stay with the icon. Sensitive, attestation
+  and signature questions are never drafted (the Gateway screens them too).
+- **Fill for review asks too** (same day, owner: the candidate should "just click our fill"). A fill for review
+  that finds a draftable question asks the same thing, worded without any submission (write with AI, then fill for my
+  review; or fill the rest and answer myself), and never submits. Once the candidate has chosen, the fill runs
+  with `skipDraftOffer`, so it does not ask again. The "still needs you" note counts only questions that are not
+  already answered.
 
 Verified in real Chrome on the real Prompt.io form with the answer engine stubbed and every employer
 write blocked (the real question named, the draft written into the real box), and on a local synthetic

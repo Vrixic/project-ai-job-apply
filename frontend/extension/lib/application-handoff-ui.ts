@@ -144,12 +144,12 @@ export function mountApplicationHandoff() {
           } else if (typeof again?.stage === "string" && again.stage)
             response = { ...response, stage: `reconnect>${again.stage}` };
         }
-        // A submit that found required open questions the answer engine can write is not refused:
-        // the candidate is asked, before anything is filled. Nothing has started or been recorded.
+        // A fill or a submit that found required open questions the answer engine can write asks the
+        // candidate first, before anything is filled. Nothing has started or been recorded.
         let shown: "select" | "clear" | "fill" | "apply" = action;
         let draftNote = "";
         if (
-          action === "apply" &&
+          (action === "apply" || action === "fill") &&
           response?.stage === "page-not-ready" &&
           Number.isSafeInteger(response.draftable) &&
           response.draftable > 0
@@ -167,6 +167,7 @@ export function mountApplicationHandoff() {
                   .slice(0, 5)
               : [],
             noAi: response.draftNoAi === true,
+            submitAfter: action === "apply",
           });
           pendingOffer = offer;
           status.textContent = "Choose how to answer the open questions.";
@@ -181,6 +182,7 @@ export function mountApplicationHandoff() {
             action: "application_native_apply",
             reviewLink: input.value,
             fillOnly: true,
+            skipDraftOffer: true,
           };
           if (choice === "draft") {
             status.textContent =
@@ -190,6 +192,7 @@ export function mountApplicationHandoff() {
               reviewLink: input.value,
             });
             if (
+              action === "apply" &&
               drafted?.ok === true &&
               drafted.drafted > 0 &&
               everyOne &&

@@ -3,7 +3,12 @@ import type { JobIntentKind } from "./pending-queue";
 
 export type ExtensionMessage =
   | { action: "application_native_select"; reviewLink: string }
-  | { action: "application_native_apply"; reviewLink: string; fillOnly?: true }
+  | {
+      action: "application_native_apply";
+      reviewLink: string;
+      fillOnly?: true;
+      skipDraftOffer?: true;
+    }
   | { action: "application_native_draft"; reviewLink: string }
   | { action: "application_native_clear" }
   | { action: "application_pending_intent" }
@@ -41,12 +46,18 @@ export function parseExtensionMessage(value: unknown): ExtensionMessage | undefi
   if (typeof record.action !== "string") return undefined;
   if (
     record.action === "application_native_apply" &&
-    Object.keys(record).length === 3 &&
     record.fillOnly === true &&
     typeof record.reviewLink === "string" &&
-    record.reviewLink.length <= 1024
+    record.reviewLink.length <= 1024 &&
+    ((Object.keys(record).length === 3 && record.skipDraftOffer === undefined) ||
+      (Object.keys(record).length === 4 && record.skipDraftOffer === true))
   )
-    return { action: record.action, reviewLink: record.reviewLink, fillOnly: true };
+    return {
+      action: record.action,
+      reviewLink: record.reviewLink,
+      fillOnly: true,
+      ...(record.skipDraftOffer === true ? { skipDraftOffer: true as const } : {}),
+    };
   if (
     record.action === "application_handoff_read" ||
     record.action === "application_native_select" ||

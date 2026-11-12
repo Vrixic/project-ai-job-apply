@@ -35,6 +35,8 @@ export async function executeApprovedApplication(options: {
   preflight(selection: NativeTransferSelection, signal: AbortSignal): Promise<void>;
   /** Fill for the candidate's review without submitting. */
   fillOnly?: boolean;
+  /** The candidate already chose what to do about questions the answer engine can write. */
+  skipDraftOffer?: boolean;
   owned: {
     files: TransferredNativeFile[];
     signal: AbortSignal;
@@ -416,17 +418,13 @@ export async function executeApprovedApplication(options: {
           nonce,
           employerUrl: selection.employerUrl,
           deadline,
-          // A submit run asks the page, before any attempt exists, whether a question only the
-          // candidate can answer is still empty. A fill for review leaves those to the candidate.
-          ...(options.fillOnly
-            ? {}
-            : {
-                readiness: {
-                  variantId: profile.variantId,
-                  fields: commandFieldsFromPacket(originalPacket),
-                  fileKinds: options.owned.files.map((file) => file.kind),
-                },
-              }),
+          // Before any attempt exists, the page says which required questions only the candidate can
+          // answer are still empty, and which of those the answer engine can write.
+          readiness: {
+            variantId: profile.variantId,
+            fields: commandFieldsFromPacket(originalPacket),
+            fileKinds: options.owned.files.map((file) => file.kind),
+          },
         },
         { documentId: selection.documentId, frameId: 0 },
       ),
@@ -436,12 +434,18 @@ export async function executeApprovedApplication(options: {
       inspection.nonce !== nonce ||
       (originalPacket.form && inspection.formHash !== originalPacket.form.formHash) ||
       // The readiness answer is part of the same message: asked for, it must come back.
-      (!options.fillOnly && inspection.needs === undefined)
+      inspection.needs === undefined
     )
       throw unavailable();
     // Nothing has been started: no attempt exists, so nothing is recorded and nothing needs
-    // reconciling. The candidate answers the questions on the page and presses again.
-    if (!options.fillOnly && !inspection.challengePresent && (inspection.needs ?? 0) > 0) {
+    // reconciling. A submit run stops while a question only the candidate can answer is empty. A fill
+    // for review never needs the question answered, but offers to have the answer engine write the
+    // ones it can, unless the candidate has already chosen.
+    if (
+      options.fillOnly
+        ? !options.skipDraftOffer && (inspection.draftable ?? 0) > 0
+        : !inspection.challengePresent && (inspection.needs ?? 0) > 0
+    ) {
       stage = "page-not-ready";
       return {
         ok: false,

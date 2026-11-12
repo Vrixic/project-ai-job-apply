@@ -1045,7 +1045,11 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
       }
       if (message.action === "application_native_apply") {
         if (!nativeTransfer) throw Error("ApplicationExecutionUnavailable");
-        return await nativeTransfer.apply(message.reviewLink, message.fillOnly === true);
+        return await nativeTransfer.apply(
+          message.reviewLink,
+          message.fillOnly === true,
+          message.skipDraftOffer === true,
+        );
       }
       if (message.action === "application_native_draft") {
         if (!nativeTransfer) throw Error("NativeMaterialTransferUnavailable");
