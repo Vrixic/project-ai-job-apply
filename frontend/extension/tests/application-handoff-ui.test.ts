@@ -208,6 +208,159 @@ describe("manual handoff UI", () => {
     expect(status.querySelector("img")).toBeNull();
   });
 
+  describe("required open questions the answer engine can write", () => {
+    const NAME = "What interests you about this role?";
+    const refusal = (extra: Record<string, unknown> = {}) => ({
+      ok: false,
+      outcome: "review_required",
+      stage: "page-not-ready",
+      needs: 1,
+      draftable: 1,
+      waiting: [NAME],
+      ...extra,
+    });
+    const settle = async () => {
+      for (let i = 0; i < 8; i++) await flush();
+    };
+    const actions = () =>
+      send.mock.calls
+        .map(([message]) => message as { action: string; fillOnly?: boolean })
+        .filter((message) => message.action.startsWith("application_native_"));
+    const script = (...replies: unknown[]) => {
+      const queue = [...replies];
+      send.mockImplementation(async (message) =>
+        message.action === "application_native_apply" ||
+        message.action === "application_native_draft"
+          ? queue.shift()
+          : { ok: true },
+      );
+    };
+    async function press() {
+      control<HTMLInputElement>("input").value = LINK;
+      control<HTMLButtonElement>("[data-native-apply]").click();
+      await settle();
+    }
+    const choice = () => document.querySelector<HTMLElement>("[data-draft-choice]");
+    const text = () => control("[data-handoff-status]").textContent ?? "";
+
+    it("asks instead of refusing, in the employer's words, before anything is filled", async () => {
+      script(refusal());
+      await press();
+      expect(choice()?.textContent).toContain(`"${NAME}"`);
+      expect(choice()?.textContent).toContain("Should AI write it from your profile?");
+      expect(choice()?.querySelector("[data-draft-note]")).toBeNull();
+      expect(text()).not.toContain("Nothing was submitted and nothing was recorded");
+      expect(actions().map((message) => message.action)).toEqual(["application_native_apply"]);
+    });
+
+    it("tells the candidate when the employer asked for an answer written without AI, as text", async () => {
+      script(refusal({ draftNoAi: true, waiting: ["<img src=x onerror=alert(1)>"] }));
+      await press();
+      expect(choice()?.querySelector("[data-draft-note]")?.textContent).toContain(
+        "without AI. You decide.",
+      );
+      expect(choice()?.querySelector("img")).toBeNull();
+    });
+
+    it("writes the answers, then fills and submits, when the candidate says yes", async () => {
+      script(
+        refusal(),
+        { ok: true, drafted: 1, declined: 0, failed: 0 },
+        { ok: true, outcome: "confirmed" },
+      );
+      await press();
+      control<HTMLButtonElement>("[data-draft-yes]").click();
+      await settle();
+      expect(actions()).toEqual([
+        { action: "application_native_apply", reviewLink: LINK },
+        { action: "application_native_draft", reviewLink: LINK },
+        { action: "application_native_apply", reviewLink: LINK },
+      ]);
+      expect(text()).toContain("The employer confirmed submission.");
+      expect(choice()).toBeNull();
+    });
+
+    it("fills the rest and stops for the candidate when they say no, and never asks the engine", async () => {
+      script(refusal(), {
+        ok: true,
+        outcome: "review_required",
+        result: "challenge_required",
+        notes: ["needs:1"],
+      });
+      await press();
+      control<HTMLButtonElement>("[data-draft-no]").click();
+      await settle();
+      expect(actions()).toEqual([
+        { action: "application_native_apply", reviewLink: LINK },
+        { action: "application_native_apply", reviewLink: LINK, fillOnly: true },
+      ]);
+      expect(text()).toContain("Filled for your review. Nothing was submitted.");
+      expect(text()).toContain("1 required question still needs you.");
+    });
+
+    it("does not submit when the engine can write only some of the questions, and says so", async () => {
+      script(
+        refusal({ needs: 3, draftable: 1 }),
+        { ok: true, drafted: 1, declined: 0, failed: 0 },
+        { ok: true, outcome: "review_required", result: "challenge_required" },
+      );
+      await press();
+      expect(choice()?.textContent).toContain("AI can write 1 of them from your profile");
+      expect(choice()?.querySelector("[data-draft-yes]")?.textContent).toContain(
+        "fill for my review",
+      );
+      control<HTMLButtonElement>("[data-draft-yes]").click();
+      await settle();
+      expect(actions().at(-1)).toEqual({
+        action: "application_native_apply",
+        reviewLink: LINK,
+        fillOnly: true,
+      });
+      expect(text()).toContain("Answers were written for 1 question: read it before you submit.");
+    });
+
+    it.each([
+      [
+        "the engine declined every question",
+        { ok: true, drafted: 0, declined: 1, failed: 0 },
+        "No answer could be written",
+      ],
+      ["the drafting step failed", { ok: false, stage: "draft-page" }, "(stopped at: draft-page)"],
+    ])("falls back to a fill for review when %s", async (_name, drafted, sentence) => {
+      script(refusal(), drafted, {
+        ok: true,
+        outcome: "review_required",
+        result: "challenge_required",
+      });
+      await press();
+      control<HTMLButtonElement>("[data-draft-yes]").click();
+      await settle();
+      expect(actions().at(-1)).toMatchObject({ fillOnly: true });
+      expect(text()).toContain(sentence);
+      expect(text()).toContain("Nothing was submitted.");
+    });
+
+    it("withdraws the question on Clear: nothing is filled, drafted or submitted, and the transfer is cleared", async () => {
+      script(refusal());
+      await press();
+      control<HTMLButtonElement>("[data-native-clear]").click();
+      await settle();
+      expect(choice()).toBeNull();
+      // Clear also gives up the selected page and resume, and says so.
+      expect(text()).toContain("Approved file transfer cleared.");
+      expect(actions().filter((message) => message.action !== "application_native_clear")).toEqual([
+        { action: "application_native_apply", reviewLink: LINK },
+      ]);
+    });
+
+    it("keeps the plain refusal when the engine can write none of the waiting questions", async () => {
+      script(refusal({ draftable: 0 }));
+      await press();
+      expect(choice()).toBeNull();
+      expect(text()).toContain("Nothing was submitted and nothing was recorded.");
+    });
+  });
+
   it("keeps the review link through a token refresh, and drops it when the account changes", async () => {
     const link = () => control<HTMLInputElement>("input").value;
     control<HTMLInputElement>("input").value = LINK;

@@ -2,21 +2,32 @@ import type { ApplicationExecutionCommand } from "@ai-job-apply/api-contracts";
 import {
   validateApplicationExecutionCancel,
   validateApplicationExecutionCommand,
+  validateApplicationExecutionDraft,
   validateApplicationExecutionInspect,
   validateApplicationExecutionProofResult,
 } from "@ai-job-apply/api-contracts/browser-validators";
 import { buildFillPlan } from "@ai-job-apply/ats-sdk/plan";
-import { executeApplication, incompleteCandidateControls } from "../lib/application-run";
+import { executeApplication, incompleteCandidateQuestions } from "../lib/application-run";
 import { FILL_ONLY_BUDGET_MS, runBudgetMs } from "../lib/execution-budget";
 import type { TransferredNativeFile } from "../lib/native-material-transfer";
+import { draftableQuestion, writeValue } from "../lib/narrative-answer-page";
+import {
+  NARRATIVE_ANSWER_REQUEST,
+  type NarrativeAnswerReply,
+} from "../lib/narrative-answer-protocol";
 import { applicationExecutionRegistry, providerForUrl } from "../lib/providers";
 import { questionLabels } from "../lib/question-labels";
+
+/** Drafting several questions takes a few seconds each; the whole step is bounded. */
+const DRAFT_BUDGET_MS = 120_000;
+const MAXIMUM_DRAFTS = 5;
 
 // Isolated-world lifetime only. Reinjection/restart cannot create a second effect listener.
 const installed = "__applyDashApplicationExecutionV1";
 if (!Object.hasOwn(globalThis, installed)) {
   Object.defineProperty(globalThis, installed, { value: true });
   let spent = false;
+  let drafting = false;
   let active:
     | {
         nonce: string;
@@ -73,6 +84,8 @@ if (!Object.hasOwn(globalThis, installed)) {
           // are still incomplete. The page is only read. A challenge page is filled and left to the
           // candidate whatever this says, so it is not counted.
           let waiting: string[] | undefined;
+          let draftable = 0;
+          let draftNoAi = false;
           if (message.readiness) {
             const kinds = message.readiness.fileKinds;
             const plan = buildFillPlan(inspection.form, message.readiness.fields, {
@@ -81,9 +94,19 @@ if (!Object.hasOwn(globalThis, installed)) {
               ),
               coverLetter: kinds.includes("cover_letter"),
             });
-            waiting = plan.requiresTakeover
+            const questions = plan.requiresTakeover
               ? []
-              : incompleteCandidateControls(provider, inspection, plan);
+              : incompleteCandidateQuestions(provider, inspection, plan);
+            waiting = questions.map((question) => question.label);
+            // Of those, the ones the answer icon can draft, and whether the employer asked for a
+            // hand-written answer to any of them (the candidate is told and decides).
+            for (const question of questions) {
+              const only = question.controls.length === 1 ? question.controls[0] : undefined;
+              const draft = only ? draftableQuestion(only, window) : undefined;
+              if (!draft) continue;
+              draftable++;
+              draftNoAi ||= draft.noAi;
+            }
           }
           return {
             schema: "application-execution-inspection.v1",
@@ -92,12 +115,85 @@ if (!Object.hasOwn(globalThis, installed)) {
             challengePresent: inspection.form.challengePresent,
             ...(waiting === undefined
               ? {}
-              : { needs: Math.min(waiting.length, 200), waiting: questionLabels(waiting) }),
+              : {
+                  needs: Math.min(waiting.length, 200),
+                  waiting: questionLabels(waiting),
+                  draftable: Math.min(draftable, 200),
+                  draftNoAi,
+                }),
           };
         } finally {
           // The approved answers the readiness question carried are not kept.
           if (message.readiness) message.readiness.fields.length = 0;
           inspection.dispose();
+        }
+      })().then(respond, () => respond({ error: "ApplicationExecutionUnavailable" }));
+      return true;
+    }
+    if (validateApplicationExecutionDraft(message)) {
+      void (async () => {
+        if (
+          spent ||
+          active ||
+          drafting ||
+          message.deadline <= Date.now() ||
+          message.deadline > Date.now() + DRAFT_BUDGET_MS ||
+          location.href !== message.employerUrl
+        )
+          throw Error("ApplicationExecutionUnavailable");
+        const provider = providerForUrl(message.employerUrl);
+        if (!provider) throw Error("ApplicationExecutionUnavailable");
+        drafting = true;
+        const inspection = provider.inspect(document, message.employerUrl);
+        try {
+          // The required, empty, open questions the answer icon would draft: nothing else is touched.
+          const targets = inspection.form.fields
+            .filter((field) => field.required)
+            .flatMap((field) => {
+              const controls = inspection.resolve(field.ref);
+              const only = controls.length === 1 ? controls[0] : undefined;
+              const draft = only ? draftableQuestion(only, window) : undefined;
+              return draft ? [draft] : [];
+            })
+            .slice(0, MAXIMUM_DRAFTS);
+          let drafted = 0;
+          let declined = 0;
+          let failed = 0;
+          // One at a time, as the extension's own answer session allows.
+          for (const target of targets) {
+            if (Date.now() >= message.deadline || location.href !== message.employerUrl) {
+              failed++;
+              continue;
+            }
+            let reply: NarrativeAnswerReply;
+            try {
+              reply = (await chrome.runtime.sendMessage({
+                schema: NARRATIVE_ANSWER_REQUEST,
+                question: target.question,
+                ...(target.guidance ? { guidance: target.guidance } : {}),
+              })) as NarrativeAnswerReply;
+            } catch {
+              reply = { status: "error", reason: "failed" };
+            }
+            if (reply?.status === "ready") {
+              // Never over what the candidate typed in the meantime.
+              if (target.box.isConnected && target.box.value.trim() === "") {
+                writeValue(target.box, reply.text);
+                drafted++;
+              } else failed++;
+            } else if (reply?.status === "declined") declined++;
+            else failed++;
+          }
+          return {
+            schema: "application-execution-draft-result.v1",
+            nonce: message.nonce,
+            drafted,
+            declined,
+            failed,
+          };
+        } finally {
+          inspection.dispose();
+          drafting = false;
         }
       })().then(respond, () => respond({ error: "ApplicationExecutionUnavailable" }));
       return true;

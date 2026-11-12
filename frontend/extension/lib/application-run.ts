@@ -15,23 +15,33 @@ const unavailable = () => Error("ApplicationExecutionUnavailable");
 
 /**
  * The controls the extension may not fill (a question only the candidate can answer) that are not
- * complete yet, by the employer's own label, in page order. It reads validity and emptiness only,
- * never a value. The submit run refuses to start while any remain, and the readiness check before
- * an attempt uses the same list.
+ * complete yet, by the employer's own label and the page's controls for it, in page order. It reads
+ * validity and emptiness only, never a value. The submit run refuses to start while any remain, and
+ * the readiness check before an attempt uses the same list.
  */
+export function incompleteCandidateQuestions(
+  provider: ApplicationProvider,
+  inspection: ApplicationInspection,
+  plan: ReturnType<typeof buildFillPlan>,
+): { label: string; controls: readonly Element[] }[] {
+  const incomplete: { label: string; controls: readonly Element[] }[] = [];
+  for (const action of plan.actions) {
+    if (action.kind !== "require_user") continue;
+    const field = inspection.form.fields.find((candidate) => candidate.ref === action.ref);
+    const controls = inspection.resolve(action.ref);
+    if (!provider.controlsSatisfied(controls, field?.required === true))
+      incomplete.push({ label: field?.label ?? "", controls });
+  }
+  return incomplete;
+}
+
+/** The labels of {@link incompleteCandidateQuestions}. */
 export function incompleteCandidateControls(
   provider: ApplicationProvider,
   inspection: ApplicationInspection,
   plan: ReturnType<typeof buildFillPlan>,
 ): string[] {
-  const incomplete: string[] = [];
-  for (const action of plan.actions) {
-    if (action.kind !== "require_user") continue;
-    const field = inspection.form.fields.find((candidate) => candidate.ref === action.ref);
-    if (!provider.controlsSatisfied(inspection.resolve(action.ref), field?.required === true))
-      incomplete.push(field?.label ?? "");
-  }
-  return incomplete;
+  return incompleteCandidateQuestions(provider, inspection, plan).map((question) => question.label);
 }
 
 /** One document/attempt command, already durably dispatched. No retry or navigation recovery. */

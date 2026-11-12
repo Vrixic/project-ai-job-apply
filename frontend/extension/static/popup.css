@@ -572,3 +572,22 @@ textarea {
     transition-duration: 0.01ms;
   }
 }
+
+/* The question asked when required open questions can be written by the answer engine. */
+[data-draft-choice] {
+  background: #f4f8f6;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  margin-block: 8px;
+  padding: 12px;
+}
+
+[data-draft-choice] > p {
+  margin: 0;
+}
+
+[data-draft-choice] > p[data-draft-note] {
+  font-weight: 700;
+}

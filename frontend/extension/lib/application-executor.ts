@@ -450,6 +450,8 @@ export async function executeApprovedApplication(options: {
         stage,
         needs: inspection.needs,
         ...(inspection.waiting?.length ? { waiting: inspection.waiting } : {}),
+        ...(inspection.draftable ? { draftable: inspection.draftable } : {}),
+        ...(inspection.draftNoAi ? { draftNoAi: true } : {}),
       };
     }
     stage = "approval-again";

@@ -102,3 +102,36 @@ Terms of Service, not a prompt at each use.
   deletion, restore and export wiring, which is out of proportion for a counter. A plan-driven
   quota is recorded as the launch prerequisite instead.
 - **Hiding the icon when the employer asks for no AI.** Rejected by the owner.
+
+## Amendment: Fill and submit offers to write the blocking questions (2026-11-12)
+
+The owner's direction after the first real submission: the candidate should not have to answer an open
+question by hand before pressing Fill and submit. They press it once; if a required open question is
+empty, the extension asks whether AI should write it, and either way the form is filled first.
+
+- **When.** The readiness check before an attempt (ADR-053 amendment) already finds the required
+  questions only the candidate can answer. Those the answer icon can draft (an open, usable, empty,
+  required text box that no Profile answer maps to) are counted (`draftable`), and the panel asks
+  instead of refusing. Nothing has started and nothing is recorded at that point.
+- **The question.** The panel shows the employer's own wording and, when the employer's text asks for
+  an answer written without AI, says so (decision 9 stands: the candidate decides). Two choices:
+  write with AI, then fill and submit; or fill the rest and leave the answer and the submission to the
+  candidate. Consent is that choice, in addition to the Terms (decision 4); no draft is asked for without it.
+- **Writing.** The panel asks the background to draft (`application_native_draft`). The background
+  proves the same tab, document, approval and packet again, then asks the page script, which reads the
+  required empty open questions itself and asks the extension's own answer session for each, one at a
+  time, with the existing limits. A draft fills a box only if it is still empty. Only counts come back
+  (`drafted`, `declined`, `failed`); no question text, draft or answer is kept or logged by the background.
+- **Then.** If every blocking question now holds a draft, the submit run starts again as the candidate's
+  choice said. If the engine can write only some, declined, or failed, the extension fills the rest
+  (fill for review) and stops, and tells the candidate which drafts to read before they submit.
+- **The selection survives.** A run refused before any attempt existed gives the selected page and resume
+  back unspent, so the candidate can go on without selecting again.
+- **Scope.** Only required, empty, open questions. Optional text boxes stay with the icon. Fill for review
+  is unchanged. Sensitive, attestation and signature questions are never drafted (the Gateway screens
+  them too).
+
+Verified in real Chrome on the real Prompt.io form with the answer engine stubbed and every employer
+write blocked (the real question named, the draft written into the real box), and on a local synthetic
+board through to a confirmed submission. A real model answer for this question was seen once by the owner
+before this change (the icon); the full path with the live engine is unobserved.

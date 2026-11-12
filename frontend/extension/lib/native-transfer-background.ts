@@ -1,6 +1,7 @@
 import {
   validateApplication,
   validateApplicationApplyIntent,
+  validateApplicationExecutionDraftResult,
   validateApplicationUploadedResumeFile,
 } from "@ai-job-apply/api-contracts/browser-validators";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
@@ -25,6 +26,9 @@ import {
 } from "./side-panel";
 
 const unavailable = () => Error("NativeMaterialTransferUnavailable");
+
+/** The whole drafting step for one page: a few seconds a question, up to five questions. */
+const DRAFT_BUDGET_MS = 110_000;
 
 /** How long the panel waits for the website to arm the extension before it stops saying so. */
 const PREPARING_MS = 90_000;
@@ -475,6 +479,70 @@ export function installNativeTransferBackground(options: {
         if (selecting === controller) selecting = undefined;
       }
     },
+    /**
+     * The candidate chose to have the required open questions drafted for the page they prepared. The
+     * same exact tab and document are proven again (approval, packet, page), then the page script asks
+     * the answer engine for each blocking question and writes the drafts into the empty boxes. Nothing
+     * is submitted. Only counts come back; no question or draft text is kept here.
+     */
+    async draft(reviewLink: string) {
+      const link = parseHandoffLink(reviewLink, options.webOrigin);
+      const open = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabId = open.length === 1 ? open[0]?.id : undefined;
+      const held = link && tabId !== undefined ? transfer.holds(link.href, tabId) : undefined;
+      if (!held) throw Object.assign(unavailable(), { stage: "draft-selection" });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), DRAFT_BUDGET_MS);
+      let where = "draft-proof";
+      try {
+        const proof = await protectedSelection(
+          reviewLink,
+          held.page.tabId,
+          controller.signal,
+          held.page.documentId,
+        );
+        if (proof.applicationId !== held.page.applicationId) throw unavailable();
+        where = "draft-script";
+        await chrome.scripting.executeScript({
+          target: { tabId: held.page.tabId, documentIds: [held.page.documentId] },
+          files: ["application-execution.js"],
+          world: "ISOLATED",
+        });
+        where = "draft-page";
+        const nonceBytes = crypto.getRandomValues(new Uint8Array(32));
+        const nonce = [...nonceBytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+        nonceBytes.fill(0);
+        const reply: unknown = await Promise.race([
+          chrome.tabs.sendMessage(
+            held.page.tabId,
+            {
+              schema: "application-execution-draft.v1",
+              nonce,
+              employerUrl: held.page.employerUrl,
+              deadline: Date.now() + DRAFT_BUDGET_MS - 5_000,
+            },
+            { documentId: held.page.documentId, frameId: 0 },
+          ),
+          new Promise<never>((_, reject) => {
+            controller.signal.addEventListener("abort", () => reject(unavailable()), {
+              once: true,
+            });
+          }),
+        ]);
+        if (!validateApplicationExecutionDraftResult(reply) || reply.nonce !== nonce)
+          throw unavailable();
+        return {
+          ok: true,
+          drafted: reply.drafted,
+          declined: reply.declined,
+          failed: reply.failed,
+        };
+      } catch {
+        throw Object.assign(unavailable(), { stage: where });
+      } finally {
+        clearTimeout(timer);
+      }
+    },
     /** The link the popup may offer after Apply was pressed on the website. No content. */
     async pendingIntent() {
       const pending =
@@ -500,8 +568,9 @@ export function installNativeTransferBackground(options: {
         // No current selection or no resume received yet: the candidate selects the page again.
         throw Object.assign(unavailable(), { stage: `selection-or-resume:${transfer.phase()}` });
       }
+      let unspent = false;
       try {
-        return await executeApprovedApplication({
+        const result = await executeApprovedApplication({
           apiOrigin: options.apiOrigin,
           registry: options.registry,
           identity: options.identity,
@@ -517,8 +586,12 @@ export function installNativeTransferBackground(options: {
             if (!sameNativeTransferBinding(proof, selection)) throw unavailable();
           },
         });
+        // Refused before any attempt existed (the page was not ready): nothing was spent.
+        unspent = !result.ok && "stage" in result && result.stage === "page-not-ready";
+        return result;
       } finally {
-        owned.dispose();
+        if (unspent) owned.release();
+        else owned.dispose();
       }
     },
   };

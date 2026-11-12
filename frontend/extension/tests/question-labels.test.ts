@@ -22,6 +22,14 @@ describe("questionLabels", () => {
     ).toEqual(["Why do you want this role?", "Where from?"]);
   });
 
+  it("drops the required-star a board puts inside a label", () => {
+    expect(questionLabels(["Why this role? *", "Why this role? **", "A * B"])).toEqual([
+      "Why this role?",
+      "Why this role?",
+      "A * B",
+    ]);
+  });
+
   it("bounds a long label to 120 characters, ending in an ellipsis", () => {
     const [label = ""] = questionLabels(["x".repeat(500)]);
     expect([...label]).toHaveLength(120);

@@ -1,5 +1,5 @@
 // Generated; do not edit.
-import type { Application, StartApplicationSubmissionRequest, ApplicationSubmissionStart, ApplicationAttempt, ApplicationSubmissionResultRequest, ApplicationExecutionInspect, ApplicationExecutionInspection, ApplicationExecutionCommand, ApplicationExecutionProof, ApplicationExecutionProofResult, ApplicationExecutionResult, ApplicationExecutionCancel, CanonicalJobDetail, ApplicationTemporaryMaterialAuthorization, ApplicationResumeFile, ApplicationUploadedResumeFile, ApplicationApplyIntent, ApplicationApplyIntentReceipt, ApplicationCoverLetterFile, ApplicationNativeTransferBegin, ApplicationNativeTransferAdmission, ApplicationNativeTransferCommit, ApplicationNativeTransferReceipt, ApplicationNativeTransferDiscard, ApplicationNativeTransferCancel, GenerateNarrativeAnswerRequest, NarrativeAnswer } from "../src/index.js";
+import type { Application, StartApplicationSubmissionRequest, ApplicationSubmissionStart, ApplicationAttempt, ApplicationSubmissionResultRequest, ApplicationExecutionInspect, ApplicationExecutionInspection, ApplicationExecutionDraft, ApplicationExecutionDraftResult, ApplicationExecutionCommand, ApplicationExecutionProof, ApplicationExecutionProofResult, ApplicationExecutionResult, ApplicationExecutionCancel, CanonicalJobDetail, ApplicationTemporaryMaterialAuthorization, ApplicationResumeFile, ApplicationUploadedResumeFile, ApplicationApplyIntent, ApplicationApplyIntentReceipt, ApplicationCoverLetterFile, ApplicationNativeTransferBegin, ApplicationNativeTransferAdmission, ApplicationNativeTransferCommit, ApplicationNativeTransferReceipt, ApplicationNativeTransferDiscard, ApplicationNativeTransferCancel, GenerateNarrativeAnswerRequest, NarrativeAnswer } from "../src/index.js";
 export function validateApplication(value: unknown): value is Application;
 export function validateStartApplicationSubmissionRequest(value: unknown): value is StartApplicationSubmissionRequest;
 export function validateApplicationSubmissionStart(value: unknown): value is ApplicationSubmissionStart;
@@ -7,6 +7,8 @@ export function validateApplicationAttempt(value: unknown): value is Application
 export function validateApplicationSubmissionResultRequest(value: unknown): value is ApplicationSubmissionResultRequest;
 export function validateApplicationExecutionInspect(value: unknown): value is ApplicationExecutionInspect;
 export function validateApplicationExecutionInspection(value: unknown): value is ApplicationExecutionInspection;
+export function validateApplicationExecutionDraft(value: unknown): value is ApplicationExecutionDraft;
+export function validateApplicationExecutionDraftResult(value: unknown): value is ApplicationExecutionDraftResult;
 export function validateApplicationExecutionCommand(value: unknown): value is ApplicationExecutionCommand;
 export function validateApplicationExecutionProof(value: unknown): value is ApplicationExecutionProof;
 export function validateApplicationExecutionProofResult(value: unknown): value is ApplicationExecutionProofResult;

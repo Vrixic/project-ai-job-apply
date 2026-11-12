@@ -450,6 +450,13 @@ export function createNativeMaterialTransfer(options: {
         dispose: () => {
           if (current === state) clear();
         },
+        /**
+         * Gives the selection back, unspent: for a run refused before any attempt existed, so nothing
+         * was started or recorded and the candidate may continue with the same page and resume.
+         */
+        release: () => {
+          if (current === state && state.phase === "consumed") state.phase = "ready";
+        },
       };
     },
     /**

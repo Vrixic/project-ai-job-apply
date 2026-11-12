@@ -14373,6 +14373,75 @@
               "minLength": 1,
               "maxLength": 120
             }
+          },
+          "draftable": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200,
+            "description": "Only when readiness was asked: how many of those questions the answer icon can draft (open, empty, required text boxes no Profile answer maps to)."
+          },
+          "draftNoAi": {
+            "type": "boolean",
+            "description": "Only when readiness was asked: true when the employer's own text for one of the draftable questions asks for an answer written without AI. The candidate is told and decides."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationExecutionDraft": {
+        "type": "object",
+        "description": "Asks the page to draft, with the candidate's own answer engine, the required open questions that are still empty. Carries no answers; the page reads its own questions.",
+        "required": ["schema", "nonce", "employerUrl", "deadline"],
+        "properties": {
+          "schema": {
+            "const": "application-execution-draft.v1",
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "employerUrl": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "deadline": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationExecutionDraftResult": {
+        "type": "object",
+        "required": ["schema", "nonce", "drafted", "declined", "failed"],
+        "properties": {
+          "schema": {
+            "const": "application-execution-draft-result.v1",
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "drafted": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200,
+            "description": "Questions that now hold a draft."
+          },
+          "declined": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200,
+            "description": "Questions the engine would not draft (sensitive, answered by the Profile, no evidence, not grounded)."
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200,
+            "description": "Questions that could not be asked or answered (signed out, limit, unavailable, interrupted)."
           }
         },
         "additionalProperties": false
