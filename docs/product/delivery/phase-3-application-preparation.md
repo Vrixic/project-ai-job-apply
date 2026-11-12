@@ -14,7 +14,14 @@ or the panel's review link (`lib/session-change.ts`: only signing in or out, or 
 a worker and a panel listener that reacted to every session write); (4) the website keeps offering the generated resume
 after the first delivery, until the same deadline, so a reloaded employer page gets it again (`transferWhenSelected`
 now reports every delivery through `onReceipt`; the extension still refuses an offer while it already holds a
-resume, and nothing is sent after the page is left). The unpacked build must be reloaded in `chrome://extensions`.
+resume, and nothing is sent after the page is left). The second live try (Fill and submit pressed 11 seconds after
+approval) was refused by the page run before anything was filled or clicked (`precondition_failed` at `root`: a
+required free-text question that only the candidate can answer was still empty), which the platform records as an
+ambiguous attempt because the attempt is dispatched first; reproduced in real Chrome with every employer write blocked,
+and with the question answered the run goes on to fill the form. Apply now shows the page run's result and step in
+its message, and says plainly when the page was not ready. Open design question for the owner: check readiness
+before the attempt is dispatched, so a premature press leaves no ambiguous attempt to reconcile. The unpacked build
+must be reloaded in `chrome://extensions`.
 
 2026-11-11: job details open on their own page (owner request: "it should take me into the job's details page, not
 open it up in the panel", "remove that feature where it opens in place"). In the search results `View details and

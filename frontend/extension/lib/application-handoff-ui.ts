@@ -144,11 +144,16 @@ export function mountApplicationHandoff() {
           typeof response.stage === "string" && response.stage
             ? ` (stopped at: ${response.stage})`
             : "";
+        // What the page run reported and the step it reached: names only, never a value or page text.
+        const pageRun =
+          typeof response.result === "string"
+            ? ` (page run: ${response.result}${typeof response.pageStage === "string" && response.pageStage ? `, at ${response.pageStage}` : ""})`
+            : "";
         if (action === "fill") {
           status.textContent =
             response.ok && response.result === "challenge_required"
               ? `Filled for your review. Nothing was submitted. Check the employer page; submit it yourself or leave it.${fillNotes(response.notes)}`
-              : `The page could not be filled completely. Nothing was submitted. Check the employer page and try again.${where}${typeof response.result === "string" ? ` (page run: ${response.result}${typeof response.pageStage === "string" && response.pageStage ? `, at ${response.pageStage}` : ""})` : ""}`;
+              : `The page could not be filled completely. Nothing was submitted. Check the employer page and try again.${where}${pageRun}`;
           return;
         }
         if (action === "apply") {
@@ -156,8 +161,12 @@ export function mountApplicationHandoff() {
             response.ok && response.outcome === "confirmed"
               ? "The employer confirmed submission. Return to the application workspace to view history."
               : response.outcome === "unknown"
-                ? "The submission outcome is uncertain. Return to the workspace to review it; do not submit again."
-                : `Not submitted by the extension, or not confirmed. Check the employer page, finish by hand if needed, then record the outcome in the application workspace.${where}`;
+                ? `The submission outcome is uncertain. Return to the workspace to review it; do not submit again.${where}${pageRun}`
+                : response.result === "precondition_failed"
+                  ? // The page was not ready before anything was filled or clicked (for example a
+                    // required question that only the candidate can answer is still empty).
+                    `Nothing was submitted: the employer page was not ready. A required question may still need your own answer. Answer it on the page, record this attempt as not submitted in the application workspace, then try again.${where}${pageRun}`
+                  : `Not submitted by the extension, or not confirmed. Check the employer page, finish by hand if needed, then record the outcome in the application workspace.${where}${pageRun}`;
           return;
         }
         if (!response.ok) throw Object.assign(Error(), { stage: response.stage });

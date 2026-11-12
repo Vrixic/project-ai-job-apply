@@ -123,6 +123,42 @@ describe("manual handoff UI", () => {
     expect(control("[data-handoff-status]").textContent).toContain("Filled for your review");
   });
 
+  it.each([
+    [
+      "a recorded page run that did not confirm",
+      {
+        ok: true,
+        outcome: "review_required",
+        result: "unrecognized_response",
+        pageStage: "fill:salary Error",
+      },
+      "Not submitted by the extension, or not confirmed.",
+      " (page run: unrecognized_response, at fill:salary Error)",
+    ],
+    [
+      "a page that was not ready before anything was filled",
+      { ok: true, outcome: "review_required", result: "precondition_failed", pageStage: "root" },
+      "Nothing was submitted: the employer page was not ready.",
+      " (page run: precondition_failed, at root)",
+    ],
+    [
+      "a run the extension could not record",
+      { ok: false, outcome: "unknown", stage: "attempt-recheck" },
+      "The submission outcome is uncertain.",
+      " (stopped at: attempt-recheck)",
+    ],
+  ])("tells the candidate where an Apply stopped: %s", async (_name, response, lead, detail) => {
+    send.mockImplementation(async (message) =>
+      message.action === "application_native_apply" ? response : { ok: true },
+    );
+    control<HTMLInputElement>("input").value = LINK;
+    control<HTMLButtonElement>("[data-native-apply]").click();
+    await flush();
+    const text = control("[data-handoff-status]").textContent ?? "";
+    expect(text).toContain(lead);
+    expect(text).toContain(detail);
+  });
+
   it("keeps the review link through a token refresh, and drops it when the account changes", async () => {
     const link = () => control<HTMLInputElement>("input").value;
     control<HTMLInputElement>("input").value = LINK;
