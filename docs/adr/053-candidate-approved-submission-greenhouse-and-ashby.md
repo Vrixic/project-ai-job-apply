@@ -180,3 +180,25 @@ nothing had been filled or clicked. Dispatch stays the durable point before any 
 Verified in real Chrome on the real Prompt.io form with every employer write blocked: with the question
 empty nothing is posted to the platform and the application stays approved; with it answered the run goes
 on and starts its attempt.
+
+## Amendment: the confirmation move must not end the run (2026-11-12)
+
+The first real submission (Prompt.io, 2026-11-12) went through at the employer, but the platform kept
+the attempt `dispatched` and never received a result. Cause: after the one click, the board moves the
+same document to its `/confirmation` page, and the extension's own tab listener took that move for the
+candidate leaving the page and cleared the selection, which aborted the run before it could read the
+confirmation or report; a run the candidate stopped is deliberately left to the platform's sweep, so
+nothing was reported. The executor and the page script already allowed that move; only the background
+listener did not, and no test combined them.
+
+- `documentChanged(tabId, url)` now lets a run that is underway (phase `consumed`) survive exactly one
+  move: the selected tab going to its provider's own confirmation URL (`isConfirmationUrl`, same origin,
+  exact path). Any other address, another job's confirmation page, another origin, and a selection no run
+  has started still end it.
+- The executor's own checks are unchanged: a confirmation URL is accepted only after the command is sent.
+
+Reproduced in real Chrome on a local synthetic board that moves to `/confirmation` on submit (employer
+requests answered locally): before the fix the platform saw `submissions` and `dispatch` only (attempt
+`dispatched`, application `submitting`); after it, `result` is posted and the attempt is `confirmed`.
+That live attempt (46) is left for the platform's stale-attempt sweep and the candidate's own "I
+submitted it" reconciliation.
