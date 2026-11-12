@@ -163,6 +163,9 @@ function setup(dark = false, session = new Map<string, unknown>()) {
     begin,
     commit,
     navigate: (tabId: number) => navigation(tabId, { status: "loading" }, {} as chrome.tabs.Tab),
+    /** The tab moves to another address without loading a new document, as a page does by itself. */
+    navigateTo: (tabId: number, url: string) =>
+      navigation(tabId, { url }, { id: tabId, url } as chrome.tabs.Tab),
     remove: (tabId: number) => removed(tabId, { windowId: 1, isWindowClosing: false }),
     authChanged: () => storage({ auth0Session: { newValue: { changed: true } } }, "session"),
     authChange: (change: { oldValue?: unknown; newValue?: unknown }) =>
@@ -436,6 +439,44 @@ it.each([
   f.authChange(change);
   expect(bytes?.every((byte) => byte === 0)).toBe(true);
   expect(await f.composition.pendingIntent()).toEqual({ ok: true });
+});
+
+describe("the employer page moving to its confirmation page", () => {
+  const CONFIRMATION = `${EMPLOYER}/confirmation`;
+
+  it("does not end a run that is underway: that move is the run's own outcome", async () => {
+    const f = uploadedSetup();
+    await f.composition.select(LINK);
+    const owned = f.composition.consumeSelected(LINK);
+    const bytes = owned.files[0]?.bytes;
+    f.navigateTo(7, CONFIRMATION);
+    expect(owned.signal.aborted).toBe(false);
+    expect(bytes?.some((byte) => byte !== 0)).toBe(true);
+  });
+
+  it.each([
+    ["another page of the board", `${EMPLOYER}/elsewhere`],
+    [
+      "the confirmation page of another job",
+      "https://boards.greenhouse.io/synthetic/jobs/999/confirmation",
+    ],
+    ["another origin", "https://evil.example/synthetic/jobs/123/confirmation"],
+  ])("still ends a run underway when the page moves to %s", async (_name, url) => {
+    const f = uploadedSetup();
+    await f.composition.select(LINK);
+    const owned = f.composition.consumeSelected(LINK);
+    const bytes = owned.files[0]?.bytes;
+    f.navigateTo(7, url);
+    expect(owned.signal.aborted).toBe(true);
+    expect(bytes?.every((byte) => byte === 0)).toBe(true);
+  });
+
+  it("still ends a selection that no run has started when the page moves there", async () => {
+    const f = uploadedSetup();
+    await f.composition.select(LINK);
+    f.navigateTo(7, CONFIRMATION);
+    expect(() => f.composition.consumeSelected(LINK)).toThrow();
+  });
 });
 
 it("never offers a generated-file transfer for an uploaded selection", async () => {

@@ -481,9 +481,25 @@ export function createNativeMaterialTransfer(options: {
       return current?.phase ?? "none";
     },
     /** Browser navigation/removal and extension identity/cancel hooks own this invalidation. */
-    documentChanged(tabId: number) {
-      if (current && (current.selection.tabId === tabId || current.sender?.tabId === tabId))
-        clear();
+    /**
+     * The tab's document changed. A run that is underway survives exactly one kind of move: the
+     * selected tab going to its provider's own confirmation page, which is how a board answers the
+     * one submit. Anything else, and any selection no run has started, ends.
+     */
+    documentChanged(tabId: number, url?: string) {
+      const state = current;
+      if (!state || (state.selection.tabId !== tabId && state.sender?.tabId !== tabId)) return;
+      if (
+        url !== undefined &&
+        state.phase === "consumed" &&
+        state.selection.tabId === tabId &&
+        providerForUrl(state.selection.employerUrl)?.isConfirmationUrl?.(
+          state.selection.employerUrl,
+          url,
+        ) === true
+      )
+        return;
+      clear();
     },
     clear,
   };

@@ -292,9 +292,11 @@ export function installNativeTransferBackground(options: {
     };
   }
 
-  chrome.tabs.onUpdated.addListener((tabId, change) => {
+  chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
     if (change.url !== undefined || change.status === "loading") {
-      transfer.documentChanged(tabId);
+      // The new address, so a run's own move to the provider's confirmation page is not mistaken
+      // for the candidate leaving the page.
+      transfer.documentChanged(tabId, change.url ?? tab?.url);
       answers.clear(tabId);
     }
   });
