@@ -3165,9 +3165,14 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
     const { s, original, evidence } = await legacyClaim();
     await sql`UPDATE documents.resume_documents SET deleted_at=clock_timestamp() WHERE id=${input.identity.baseDocumentId}`;
     await sql`UPDATE identity.users SET account_state='quarantined',quarantined_at=clock_timestamp() WHERE id=${original.ownerUserId}`;
-    await expect(
-      sql`SELECT documents.complete_resume_purge(${original.ownerUserId}::uuid,${input.identity.baseDocumentId}::uuid,true)`,
-    ).rejects.toThrow();
+    // A claimed launch that has no rejection or task yet cannot be settled from SQL: the purge says so and deletes nothing.
+    const [blocked] =
+      await sql`SELECT documents.complete_resume_purge(${original.ownerUserId}::uuid,${input.identity.baseDocumentId}::uuid,true) AS result`;
+    expect(blocked?.result).toMatchObject({
+      purged: false,
+      reason: "native_generation_unsettled",
+      unsettled: [{ state: "pending", hasTask: false, launchClaimed: true, expired: false }],
+    });
     await s.recordLegacyLaunchRejection(original, evidence);
     const retire = vi.fn(async () => {
       throw Error("UnexpectedTaskRetirement");
@@ -3194,5 +3199,62 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
       await sql`SELECT documents.complete_resume_purge(${original.ownerUserId}::uuid,${input.identity.baseDocumentId}::uuid,true) AS result`;
     expect(replayed?.result).toEqual({ purged: false, reason: "absent" });
     await expect(s.recordLegacyLaunchRejection(original, evidence)).rejects.toThrow();
+  });
+
+  describe("purging a deleted resume whose native generation is not settled", () => {
+    const tombstone = () =>
+      sql`UPDATE documents.resume_documents SET deleted_at=clock_timestamp() WHERE id=${input.identity.baseDocumentId}`;
+    const purge = async () => {
+      const [row] =
+        await sql`SELECT documents.complete_resume_purge(${input.identity.ownerUserId}::uuid,${input.identity.baseDocumentId}::uuid,true) AS result`;
+      return row?.result;
+    };
+    const rows = async () => ({
+      resumes:
+        await sql`SELECT id FROM documents.resume_documents WHERE id=${input.identity.baseDocumentId}`,
+      generations:
+        await sql`SELECT state FROM documents.native_resume_generations WHERE id=${input.identity.generationId}`,
+    });
+
+    it("abandons a generation that never started anything, then purges the resume", async () => {
+      await store().reserve(input);
+      await tombstone();
+      expect(await purge()).toMatchObject({ purged: true });
+      const after = await rows();
+      expect(after.resumes).toHaveLength(0);
+      expect(after.generations).toHaveLength(0);
+    });
+
+    it("reports a bound generation by state and booleans only, deletes nothing, and purges once it is retired", async () => {
+      const { s, r } = await bound();
+      await tombstone();
+      const blocked = await purge();
+      expect(blocked).toMatchObject({
+        purged: false,
+        reason: "native_generation_unsettled",
+        unsettled: [{ state: "bound", hasTask: true, launchClaimed: true, expired: false }],
+      });
+      // Only fixed fields: no identifier, key or task address.
+      expect(JSON.stringify(blocked)).not.toContain(input.identity.generationId);
+      expect(JSON.stringify(blocked)).not.toContain(task);
+      const kept = await rows();
+      expect(kept.resumes).toHaveLength(1);
+      expect(kept.generations).toEqual([{ state: "bound" }]);
+      // The sweep can try again, and it works once the task's own proof exists.
+      await retireOriginal(s, r);
+      expect(await purge()).toMatchObject({ purged: true });
+      expect((await rows()).generations).toHaveLength(0);
+    });
+
+    it("leaves a claimed but unbound launch to its own rejection proof", async () => {
+      await legacyClaim();
+      await tombstone();
+      expect(await purge()).toMatchObject({
+        purged: false,
+        reason: "native_generation_unsettled",
+        unsettled: [{ state: "pending", hasTask: false, launchClaimed: true }],
+      });
+      expect((await rows()).generations).toEqual([{ state: "pending" }]);
+    });
   });
 });

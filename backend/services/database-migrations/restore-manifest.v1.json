@@ -189,6 +189,10 @@
         {
           "version": "0019_native_resume_purge_seals_epoch",
           "checksum": "d1d56c26e03364d7b011bd389c7e3d843d48faf5e7de5831598d2b40b642131e"
+        },
+        {
+          "version": "0020_resume_purge_reports_native_blockers",
+          "checksum": "c66cd01cf86400fdab1ec959373082622e4eee04cb75ca5f8c91bfa86b93bd36"
         }
       ],
       "relations": [

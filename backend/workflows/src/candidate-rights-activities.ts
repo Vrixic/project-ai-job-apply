@@ -164,6 +164,29 @@ function resumePurgeFailureFields(error: unknown): Record<string, string | numbe
   return { errorCode: "ResumePurgeStepFailed", ...failureFields(error) };
 }
 
+/**
+ * The unsettled native resume generations Documents reports for a resume it could not purge, reduced to the fixed
+ * fields it is allowed to name: the state, whether a launch was claimed or a task is bound, and how long past its
+ * expiry it is. Anything else, and anything of the wrong shape, is dropped.
+ */
+export function unsettledGenerations(
+  value: unknown,
+): Array<Record<string, string | number | boolean>> {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 20).flatMap((item) => {
+    if (!isRecord(item) || typeof item.state !== "string" || !/^[a-z_]{3,20}$/u.test(item.state))
+      return [];
+    const entry: Record<string, string | number | boolean> = { state: item.state };
+    for (const key of ["hasTask", "launchClaimed", "expired"]) {
+      if (typeof item[key] === "boolean") entry[key] = item[key] as boolean;
+    }
+    const overdue = item.overdueHours;
+    if (typeof overdue === "number" && Number.isSafeInteger(overdue) && overdue >= 0)
+      entry.overdueHours = overdue;
+    return [entry];
+  });
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -977,10 +1000,25 @@ export class PostgresCandidateRightsActivityStore {
           throw new CandidateRightsActivityRejected("ResumePurgeObjectsRemain");
         }
         step = "complete_purge";
-        const completed = await client<Array<{ data: { purged?: unknown } }>>`
+        const completed = await client<
+          Array<{ data: { purged?: unknown; reason?: unknown; unsettled?: unknown } }>
+        >`
           SELECT documents.complete_resume_purge(${userId}::uuid, ${documentId}::uuid, true) AS data
         `;
-        if (completed[0]?.data?.purged === true) purged += 1;
+        const outcome = completed[0]?.data;
+        if (outcome?.purged === true) purged += 1;
+        else if (outcome?.reason === "native_generation_unsettled") {
+          // Documents settled what it safely could and found a generation built from this resume that only
+          // its task can settle. Nothing was deleted. It still counts as a failure, so the alarm stays, but
+          // the log now says what blocks it: states and booleans only, never an identifier.
+          failed += 1;
+          console.error({
+            event: "resume_purge_blocked",
+            step,
+            reason: "native_generation_unsettled",
+            unsettled: unsettledGenerations(outcome.unsettled),
+          });
+        }
       } catch (error) {
         failed += 1;
         console.error({ event: "resume_purge_failed", step, ...resumePurgeFailureFields(error) });
