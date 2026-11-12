@@ -585,6 +585,46 @@ describe("candidate-rights resume purge sweep (ADR-034)", () => {
     expect(objectsFailure.calls.some((call) => call.startsWith("complete:"))).toBe(false);
   });
 
+  it("counts a resume blocked by an unsettled native generation as a failure and says why, without identifiers", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const fixture = sweepFixture({
+        completeResult: {
+          purged: false,
+          reason: "native_generation_unsettled",
+          unsettled: [
+            { state: "bound", hasTask: true, launchClaimed: true, expired: true, overdueHours: 41 },
+            { state: "pending", hasTask: false, launchClaimed: true, expired: false },
+            { state: "bound; DROP", hasTask: "yes", id: first, overdueHours: -1 },
+            "not an entry",
+          ],
+        },
+      });
+      await expect(fixture.store.purgeDeletedResumes()).resolves.toMatchObject({
+        scanned: 1,
+        purged: 0,
+        failed: 1,
+      });
+      const logged = error.mock.calls.map(([entry]) => entry as Record<string, unknown>);
+      expect(logged).toEqual([
+        {
+          event: "resume_purge_blocked",
+          step: "complete_purge",
+          reason: "native_generation_unsettled",
+          unsettled: [
+            { state: "bound", hasTask: true, launchClaimed: true, expired: true, overdueHours: 41 },
+            { state: "pending", hasTask: false, launchClaimed: true, expired: false },
+          ],
+        },
+      ]);
+      const text = JSON.stringify(logged);
+      expect(text).not.toContain(first);
+      expect(text).not.toContain(user);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
   it("does not count an already-removed tombstone as purged", async () => {
     const fixture = sweepFixture({ completeResult: { purged: false, reason: "absent" } });
     await expect(fixture.store.purgeDeletedResumes()).resolves.toMatchObject({

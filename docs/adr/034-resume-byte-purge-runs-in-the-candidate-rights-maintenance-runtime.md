@@ -52,3 +52,12 @@ candidate-rights activity role holds. The design and its alternatives are in the
 See the design. In short: adding delete to the document processor role broadens a role that handles scan events; a
 dedicated purge Lambda is the strongest isolation with the largest guard surface and remains a later hardening; S3
 lifecycle expiry is not verifiable and needs a tagger that could overwrite the malware-scan tag the bucket policy trusts.
+
+## Amendment: the purge reports what blocks it (2026-11-12)
+
+A tombstoned resume with an unsettled native resume generation failed the sweep every time with a bare SQLSTATE 55000 and no
+reason (Documents migration 0020). `complete_resume_purge` now abandons a pending generation that never launched, and for a
+generation that is launch-claimed or bound returns a typed `native_generation_unsettled` result (states and booleans, no
+identifier) instead of throwing; nothing is deleted. The sweep counts it as a failure, so the alarm and the "a stuck purge is an
+incident" rule are unchanged, and logs `resume_purge_blocked` with the same fixed fields. Whether and how a generation whose task
+no longer exists may be settled is a separate decision that needs the reported evidence first.

@@ -835,3 +835,12 @@ application. The same migration seals heads already left with no generation and 
 head with any generation or allocation is untouched, an unsealed head without evidence is still
 refused (the fail-closed `unknown` case), and nothing is reopened or created. Apply it before
 the next resume request for an affected application; it needs no code change in the owners.
+
+Migration `0020_resume_purge_reports_native_blockers` makes `complete_resume_purge` look before it deletes. A deleted resume
+whose native resume generation is not settled could never be purged: the delete guard refused the cascade, and the sweep saw only
+a bare SQLSTATE 55000 at its last step, every sweep. The function now abandons a generation that is still pending with no launch
+claim and no task (the transition the table already allows, for a resume that is deleted), and for any other unsettled
+generation returns `{purged:false, reason:'native_generation_unsettled', unsettled:[{state, hasTask, launchClaimed, expired,
+overdueHours}]}` without throwing and without deleting anything: a claimed launch or a bound task can only be settled by its own
+proof, and a task that no longer exists stays unknown. The sweep still counts it as a failure, so the alarm stays, and logs
+`resume_purge_blocked` with those fixed fields and no identifier. Nothing is created or reopened.
