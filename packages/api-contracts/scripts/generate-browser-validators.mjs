@@ -16,6 +16,8 @@ const names = [
   "ApplicationSubmissionResultRequest",
   "ApplicationExecutionInspect",
   "ApplicationExecutionInspection",
+  "ApplicationExecutionDraft",
+  "ApplicationExecutionDraftResult",
   "ApplicationExecutionCommand",
   "ApplicationExecutionProof",
   "ApplicationExecutionProofResult",

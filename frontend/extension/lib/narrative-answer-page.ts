@@ -106,7 +106,7 @@ export function guidanceOf(box: HTMLTextAreaElement, question: string): string {
   return text.slice(0, GUIDANCE_MAX);
 }
 
-function usable(box: HTMLTextAreaElement, view: Window): boolean {
+export function usable(box: HTMLTextAreaElement, view: Window): boolean {
   if (!box.isConnected || box.disabled || box.readOnly) return false;
   const style = view.getComputedStyle(box);
   if (style.display === "none" || style.visibility === "hidden") return false;
@@ -134,7 +134,7 @@ export function isOpenQuestion(box: HTMLTextAreaElement, question: string): bool
   return mapping?.fieldKey === null;
 }
 
-function writeValue(box: HTMLTextAreaElement, value: string) {
+export function writeValue(box: HTMLTextAreaElement, value: string) {
   const view = box.ownerDocument.defaultView;
   const setter = view
     ? Object.getOwnPropertyDescriptor(view.HTMLTextAreaElement.prototype, "value")?.set
@@ -144,6 +144,25 @@ function writeValue(box: HTMLTextAreaElement, value: string) {
   else box.value = value;
   box.dispatchEvent(new Event("input", { bubbles: true }));
   box.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+/**
+ * What the answer icon would draft for this control: an open, usable, EMPTY text box that no Profile
+ * answer maps to. The employer's question and help text come from the page; whether the employer
+ * asked for a hand-written answer is reported so the candidate is told, and decides.
+ */
+export function draftableQuestion(
+  control: Element,
+  view: Window,
+): { box: HTMLTextAreaElement; question: string; guidance: string; noAi: boolean } | undefined {
+  if (!(control instanceof (view as Window & typeof globalThis).HTMLTextAreaElement))
+    return undefined;
+  const box = control;
+  if (!usable(box, view) || box.value.trim() !== "") return undefined;
+  const question = questionOf(box);
+  if (!isOpenQuestion(box, question)) return undefined;
+  const guidance = guidanceOf(box, question);
+  return { box, question, guidance, noAi: NO_AI.test(`${question} ${guidance}`) };
 }
 
 interface Control {

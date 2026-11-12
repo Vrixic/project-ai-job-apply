@@ -3458,6 +3458,29 @@ export interface components {
             needs?: number;
             /** @description The employer's own wording of the first of those questions, so the candidate can find them. Question labels only; never anything the candidate entered. */
             waiting?: string[];
+            /** @description Only when readiness was asked: how many of those questions the answer icon can draft (open, empty, required text boxes no Profile answer maps to). */
+            draftable?: number;
+            /** @description Only when readiness was asked: true when the employer's own text for one of the draftable questions asks for an answer written without AI. The candidate is told and decides. */
+            draftNoAi?: boolean;
+        };
+        /** @description Asks the page to draft, with the candidate's own answer engine, the required open questions that are still empty. Carries no answers; the page reads its own questions. */
+        ApplicationExecutionDraft: {
+            /** @constant */
+            schema: "application-execution-draft.v1";
+            nonce: string;
+            employerUrl: string;
+            deadline: number;
+        };
+        ApplicationExecutionDraftResult: {
+            /** @constant */
+            schema: "application-execution-draft-result.v1";
+            nonce: string;
+            /** @description Questions that now hold a draft. */
+            drafted: number;
+            /** @description Questions the engine would not draft (sensitive, answered by the Profile, no evidence, not grounded). */
+            declined: number;
+            /** @description Questions that could not be asked or answered (signed out, limit, unavailable, interrupted). */
+            failed: number;
         };
         ApplicationExecutionCommand: {
             /** @constant */

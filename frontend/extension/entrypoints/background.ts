@@ -1047,6 +1047,10 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
         if (!nativeTransfer) throw Error("ApplicationExecutionUnavailable");
         return await nativeTransfer.apply(message.reviewLink, message.fillOnly === true);
       }
+      if (message.action === "application_native_draft") {
+        if (!nativeTransfer) throw Error("NativeMaterialTransferUnavailable");
+        return await nativeTransfer.draft(message.reviewLink);
+      }
       if (message.action === "application_native_clear") return { ok: true };
       if (message.action === "application_pending_intent")
         return nativeTransfer?.pendingIntent() ?? { ok: true };
@@ -1163,7 +1167,8 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
         error: safeActionErrorMessage(error, message.action),
         ok: false,
         ...((message.action === "application_native_select" ||
-          message.action === "application_native_apply") &&
+          message.action === "application_native_apply" ||
+          message.action === "application_native_draft") &&
         error instanceof Error &&
         "stage" in error
           ? { stage: String(error.stage) }

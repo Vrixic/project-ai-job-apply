@@ -2,6 +2,7 @@ import { followActiveTab } from "./active-tab-follow";
 import type { ApprovedHandoff } from "./application-handoff";
 import { FORM_CAPTURE_FAILURE, HANDOFF_FAILURE } from "./application-handoff";
 import { extensionConfiguration } from "./config";
+import { type DraftOffer, offerDrafts } from "./draft-choice";
 import { isTokenRenewal } from "./session-change";
 
 /** How often the open panel reaches the worker so the browser does not stop it while idle. */
@@ -64,6 +65,8 @@ export function mountApplicationHandoff() {
   let snapshot: ApprovedHandoff | undefined;
   let snapshotId: string | undefined;
   let busy = false;
+  /** The draft question on screen, if any, so Clear and a closing panel can withdraw it. */
+  let pendingOffer: DraftOffer | undefined;
   /** The page the application was last prepared for: the tab, and its address once visible. */
   let preparedFor: string | undefined;
   const activeTabKey = async () => {
@@ -92,6 +95,7 @@ export function mountApplicationHandoff() {
     button.hidden = false;
     button.addEventListener("click", async () => {
       const ownsBusy = action !== "clear";
+      if (action === "clear") pendingOffer?.cancel();
       if (busy && ownsBusy) return;
       if (ownsBusy) busy = true;
       button.disabled = true;
@@ -140,6 +144,81 @@ export function mountApplicationHandoff() {
           } else if (typeof again?.stage === "string" && again.stage)
             response = { ...response, stage: `reconnect>${again.stage}` };
         }
+        // A submit that found required open questions the answer engine can write is not refused:
+        // the candidate is asked, before anything is filled. Nothing has started or been recorded.
+        let shown: "select" | "clear" | "fill" | "apply" = action;
+        let draftNote = "";
+        if (
+          action === "apply" &&
+          response?.stage === "page-not-ready" &&
+          Number.isSafeInteger(response.draftable) &&
+          response.draftable > 0
+        ) {
+          const needs =
+            Number.isSafeInteger(response.needs) && response.needs > 0 ? response.needs : 0;
+          const offer = offerDrafts(status, {
+            needs,
+            draftable: response.draftable,
+            names: Array.isArray(response.waiting)
+              ? response.waiting
+                  .filter(
+                    (name: unknown): name is string => typeof name === "string" && name !== "",
+                  )
+                  .slice(0, 5)
+              : [],
+            noAi: response.draftNoAi === true,
+          });
+          pendingOffer = offer;
+          status.textContent = "Choose how to answer the open questions.";
+          const choice = await offer.answer;
+          pendingOffer = undefined;
+          if (choice === "cancel") {
+            status.textContent = "Cancelled. Nothing was filled, submitted or recorded.";
+            return;
+          }
+          const everyOne = response.draftable >= needs;
+          const fillForReview = {
+            action: "application_native_apply",
+            reviewLink: input.value,
+            fillOnly: true,
+          };
+          if (choice === "draft") {
+            status.textContent =
+              "Writing your answers from your profile. This takes a few seconds for each question.";
+            const drafted = await chrome.runtime.sendMessage({
+              action: "application_native_draft",
+              reviewLink: input.value,
+            });
+            if (
+              drafted?.ok === true &&
+              drafted.drafted > 0 &&
+              everyOne &&
+              drafted.drafted >= needs
+            ) {
+              status.textContent =
+                "Filling in and submitting your application. Watch the employer page.";
+              response = await chrome.runtime.sendMessage(message);
+            } else {
+              // Some answer could not be written, or the candidate must answer some themselves:
+              // fill everything else and stop, so they read the drafts and submit themselves.
+              draftNote =
+                drafted?.ok === true && drafted.drafted > 0
+                  ? ` Answers were written for ${drafted.drafted} ${drafted.drafted === 1 ? "question" : "questions"}: read ${drafted.drafted === 1 ? "it" : "them"} before you submit.`
+                  : drafted?.ok === true
+                    ? " No answer could be written (the question needs your own words, or your profile has too little to go on)."
+                    : ` The answers could not be written${typeof drafted?.stage === "string" && drafted.stage ? ` (stopped at: ${drafted.stage})` : ""}.`;
+              shown = "fill";
+              status.textContent =
+                "Filling in your application. Watch the employer page; nothing is submitted.";
+              response = await chrome.runtime.sendMessage(fillForReview);
+            }
+          } else {
+            shown = "fill";
+            status.textContent =
+              "Filling in your application. Watch the employer page; nothing is submitted.";
+            response = await chrome.runtime.sendMessage(fillForReview);
+          }
+        }
         const where =
           typeof response.stage === "string" && response.stage
             ? ` (stopped at: ${response.stage})`
@@ -149,14 +228,14 @@ export function mountApplicationHandoff() {
           typeof response.result === "string"
             ? ` (page run: ${response.result}${typeof response.pageStage === "string" && response.pageStage ? `, at ${response.pageStage}` : ""})`
             : "";
-        if (action === "fill") {
+        if (shown === "fill") {
           status.textContent =
             response.ok && response.result === "challenge_required"
-              ? `Filled for your review. Nothing was submitted. Check the employer page; submit it yourself or leave it.${fillNotes(response.notes)}`
+              ? `Filled for your review. Nothing was submitted. Check the employer page; submit it yourself or leave it.${draftNote}${fillNotes(response.notes)}`
               : `The page could not be filled completely. Nothing was submitted. Check the employer page and try again.${where}${pageRun}`;
           return;
         }
-        if (action === "apply" && response.stage === "page-not-ready") {
+        if (shown === "apply" && response.stage === "page-not-ready") {
           // Refused before an attempt was made: nothing was recorded, so there is nothing to
           // reconcile. The questions are named in the employer's own words (plain text, from the
           // page); nothing the candidate entered is ever shown or sent.
@@ -182,7 +261,7 @@ export function mountApplicationHandoff() {
           } Answer ${one ? "it" : "them"} on the page, then press Fill and submit again.`;
           return;
         }
-        if (action === "apply") {
+        if (shown === "apply") {
           status.textContent =
             response.ok && response.outcome === "confirmed"
               ? "The employer confirmed submission. Return to the application workspace to view history."
@@ -334,6 +413,7 @@ export function mountApplicationHandoff() {
       ).catch(() => undefined);
     }, WORKER_HEARTBEAT_MS);
   function discard(message = "") {
+    pendingOffer?.cancel();
     generation++;
     clearTimeout(timer);
     clearTimeout(preparingTimer);

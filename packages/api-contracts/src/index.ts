@@ -164,6 +164,9 @@ export type ApplicationAttempt = components["schemas"]["ApplicationAttempt"];
 export type ApplicationExecutionInspect = components["schemas"]["ApplicationExecutionInspect"];
 export type ApplicationExecutionInspection =
   components["schemas"]["ApplicationExecutionInspection"];
+export type ApplicationExecutionDraft = components["schemas"]["ApplicationExecutionDraft"];
+export type ApplicationExecutionDraftResult =
+  components["schemas"]["ApplicationExecutionDraftResult"];
 export type ApplicationExecutionCommand = components["schemas"]["ApplicationExecutionCommand"];
 export type ApplicationExecutionProof = components["schemas"]["ApplicationExecutionProof"];
 export type ApplicationExecutionProofResult =

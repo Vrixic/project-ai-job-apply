@@ -13,6 +13,8 @@ export function questionLabels(labels: readonly string[]): string[] {
     const plain = label
       .replace(/[\p{Cc}\p{Cf}]/gu, " ")
       .replace(/\s+/gu, " ")
+      // The required-star some boards put inside the label.
+      .replace(/\s*\*+$/u, "")
       .trim();
     if (!plain) return "(an unnamed question)";
     const characters = [...plain];

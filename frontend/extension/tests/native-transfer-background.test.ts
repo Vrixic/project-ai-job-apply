@@ -43,6 +43,18 @@ function setup(dark = false, session = new Map<string, unknown>()) {
     tabs: {
       get: vi.fn(async () => ({ id: 7, url: EMPLOYER, incognito: false })),
       query: vi.fn(async () => [{ id: 7, url: EMPLOYER, incognito: false }]),
+      // The page script's answer to a request to draft the open questions.
+      sendMessage: vi.fn(async (_tab: number, message: { schema?: string; nonce?: string }) =>
+        message.schema === "application-execution-draft.v1"
+          ? {
+              schema: "application-execution-draft-result.v1",
+              nonce: message.nonce,
+              drafted: 2,
+              declined: 1,
+              failed: 0,
+            }
+          : undefined,
+      ),
       onUpdated: {
         addListener: vi.fn((callback: typeof navigation) => {
           navigation = callback;
@@ -439,6 +451,89 @@ it.each([
   f.authChange(change);
   expect(bytes?.every((byte) => byte === 0)).toBe(true);
   expect(await f.composition.pendingIntent()).toEqual({ ok: true });
+});
+
+describe("drafting the open questions the candidate chose to have written", () => {
+  const sentTo = (f: ReturnType<typeof uploadedSetup>) =>
+    (f.browser.tabs.sendMessage as ReturnType<typeof vi.fn>).mock.calls;
+
+  it("proves the same page again, asks only that document, and returns counts", async () => {
+    const f = uploadedSetup();
+    await f.composition.select(LINK);
+    await expect(f.composition.draft(LINK)).resolves.toEqual({
+      ok: true,
+      drafted: 2,
+      declined: 1,
+      failed: 0,
+    });
+    const [tab, message, target] = sentTo(f)[0] ?? [];
+    expect(tab).toBe(7);
+    expect(target).toEqual({ documentId: DOCUMENT, frameId: 0 });
+    expect(message).toMatchObject({
+      schema: "application-execution-draft.v1",
+      employerUrl: EMPLOYER,
+    });
+    expect(message.nonce).toMatch(/^[a-f0-9]{64}$/u);
+    expect(message.deadline).toBeGreaterThan(Date.now());
+    expect(f.browser.scripting.executeScript).toHaveBeenCalledWith({
+      target: { tabId: 7, documentIds: [DOCUMENT] },
+      files: ["application-execution.js"],
+      world: "ISOLATED",
+    });
+    // Nothing the candidate has is in the request: no answers, no question text.
+    expect(JSON.stringify(message)).not.toMatch(/fields|question|synthetic@/u);
+    // The selection stays for the run that follows.
+    expect(() => f.composition.consumeSelected(LINK)).not.toThrow();
+  });
+
+  it("refuses when no page was selected for this link", async () => {
+    const f = uploadedSetup();
+    await expect(f.composition.draft(LINK)).rejects.toMatchObject({ stage: "draft-selection" });
+    expect(sentTo(f)).toEqual([]);
+  });
+
+  it.each([
+    [
+      "another nonce",
+      {
+        schema: "application-execution-draft-result.v1",
+        nonce: "f".repeat(64),
+        drafted: 1,
+        declined: 0,
+        failed: 0,
+      },
+    ],
+    ["an invalid reply", { schema: "application-execution-draft-result.v1", drafted: "1" }],
+    ["no reply", undefined],
+  ])("refuses %s from the page", async (_name, reply) => {
+    const f = uploadedSetup();
+    await f.composition.select(LINK);
+    (f.browser.tabs.sendMessage as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      async (_tab: number, message: { nonce?: string }) =>
+        reply && "nonce" in reply && reply.nonce === "f".repeat(64)
+          ? reply
+          : (reply ?? { ...message }),
+    );
+    await expect(f.composition.draft(LINK)).rejects.toMatchObject({ stage: "draft-page" });
+  });
+});
+
+describe("a run refused before any attempt gives the selection back", () => {
+  it("lets the candidate continue with the same page and resume, and a spent run does not", async () => {
+    const f = uploadedSetup();
+    await f.composition.select(LINK);
+    const refused = f.composition.consumeSelected(LINK);
+    const bytes = refused.files[0]?.bytes;
+    refused.release();
+    expect(bytes?.some((byte) => byte !== 0)).toBe(true);
+    const next = f.composition.consumeSelected(LINK);
+    expect(next.files[0]?.bytes).toBe(bytes);
+    // A run that really started is spent: its inventory is wiped and cannot be given back.
+    next.dispose();
+    expect(bytes?.every((byte) => byte === 0)).toBe(true);
+    next.release();
+    expect(() => f.composition.consumeSelected(LINK)).toThrow();
+  });
 });
 
 describe("the employer page moving to its confirmation page", () => {
