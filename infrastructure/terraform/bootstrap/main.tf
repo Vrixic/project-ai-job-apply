@@ -499,7 +499,7 @@ resource "aws_iam_policy" "workload_boundary" {
         Resource  = [local.candidate_deletion_recovery_bucket_arn, "${local.candidate_deletion_recovery_bucket_arn}/candidate-deletion-recovery/*"],
         Condition = { ArnEquals = { "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-development-deletion-restore" } }
       }
-      ] : [], local.gateway_packet_boundary_statements, local.gateway_disposal_boundary_statements, local.native_cleanup_boundary_statements, local.candidate_rights_native_task_boundary_statements) : {
+      ] : [], local.gateway_packet_boundary_statements, local.native_task_stop_boundary_statements, local.candidate_rights_native_task_boundary_statements, local.live_generation_boundary_statements) : {
       for key, value in statement : key => value if key != "Sid" || anytrue([for prefix in local.workload_boundary_retained_sids : startswith(statement.Sid, prefix)])
     }]
   })

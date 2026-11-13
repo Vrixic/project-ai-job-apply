@@ -287,7 +287,7 @@ run "resume_purge_native_task_description_is_the_rights_role_only" {
     error_message = "The rights role may only DESCRIBE tasks in the retained native cluster: no StopTask, RunTask, other cluster or other role."
   }
   assert {
-    condition     = alltrue([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : !contains(s.Action, "ecs:StopTask") || strcontains(s.Condition.ArnEquals["aws:PrincipalArn"], "gateway-lambda") || strcontains(s.Condition.ArnEquals["aws:PrincipalArn"], "native-material-cleanup-worker") if contains(keys(s), "Condition") && contains(keys(s.Condition), "ArnEquals") && contains(keys(s.Condition.ArnEquals), "aws:PrincipalArn")])
+    condition     = alltrue([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : !contains(s.Action, "ecs:StopTask") || alltrue([for principal in flatten([s.Condition.ArnEquals["aws:PrincipalArn"]]) : strcontains(principal, "gateway-lambda") || strcontains(principal, "native-material-cleanup-worker")]) if contains(keys(s), "Condition") && contains(keys(s.Condition), "ArnEquals") && contains(keys(s.Condition.ArnEquals), "aws:PrincipalArn")])
     error_message = "Only the Gateway and the cleanup worker may stop native tasks."
   }
   assert {
@@ -307,5 +307,117 @@ run "resume_purge_native_task_description_absent_without_retained_clusters" {
   assert {
     condition     = length([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : s if startswith(try(s.Sid, ""), "ResumePurgeNativeTask")]) == 0
     error_message = "Without a retained native cluster the boundary must grant no task description."
+  }
+}
+
+run "native_task_stop_names_each_retaining_principal_only" {
+  command = plan
+  variables {
+    environment                      = "development"
+    github_environment               = "development"
+    state_bucket_name                = "ai-job-apply-development-terraform-state-111122223333"
+    gateway_native_disposal_clusters = ["arn:aws:ecs:us-east-2:111122223333:cluster/shared", "arn:aws:ecs:us-east-2:111122223333:cluster/gateway-only"]
+    native_cleanup_clusters          = ["arn:aws:ecs:us-east-2:111122223333:cluster/shared"]
+  }
+  assert {
+    condition = (
+      length([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : s if startswith(try(s.Sid, ""), "NativeTaskStop")]) == 2 &&
+      one([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : s if try(s.Sid, "") == "NativeTaskStop0"]).Condition.ArnEquals == {
+        "aws:PrincipalArn" = "arn:aws:iam::111122223333:role/ai-job-apply-development-gateway-lambda",
+        "ecs:cluster"      = "arn:aws:ecs:us-east-2:111122223333:cluster/gateway-only"
+      } &&
+      one([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : s if try(s.Sid, "") == "NativeTaskStop1"]).Condition.ArnEquals == {
+        "aws:PrincipalArn" = ["arn:aws:iam::111122223333:role/ai-job-apply-development-gateway-lambda", "arn:aws:iam::111122223333:role/ai-job-apply-development-native-material-cleanup-worker"],
+        "ecs:cluster"      = "arn:aws:ecs:us-east-2:111122223333:cluster/shared"
+      } &&
+      alltrue([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : toset(s.Action) == toset(["ecs:DescribeTasks", "ecs:StopTask"]) if startswith(try(s.Sid, ""), "NativeTaskStop")])
+    )
+    error_message = "The Gateway only where it retains a cluster, and the Gateway and the cleanup worker together only on a cluster both retain."
+  }
+}
+
+run "native_task_stop_cleanup_worker_only_where_it_retains" {
+  command = plan
+  variables {
+    environment             = "development"
+    github_environment      = "development"
+    state_bucket_name       = "ai-job-apply-development-terraform-state-111122223333"
+    native_cleanup_clusters = ["arn:aws:ecs:us-east-2:111122223333:cluster/cleanup-only"]
+  }
+  assert {
+    condition = (
+      length([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : s if startswith(try(s.Sid, ""), "NativeTaskStop")]) == 1 &&
+      one([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : s if try(s.Sid, "") == "NativeTaskStop0"]).Condition.ArnEquals == {
+        "aws:PrincipalArn" = "arn:aws:iam::111122223333:role/ai-job-apply-development-native-material-cleanup-worker",
+        "ecs:cluster"      = "arn:aws:ecs:us-east-2:111122223333:cluster/cleanup-only"
+      }
+    )
+    error_message = "The cleanup worker must be the only principal on a cluster only it retains."
+  }
+}
+
+run "live_generation_default_absent" {
+  command = plan
+  variables {
+    environment        = "development"
+    github_environment = "development"
+    state_bucket_name  = "ai-job-apply-development-terraform-state-111122223333"
+  }
+  assert {
+    condition     = !anytrue([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : anytrue([for a in flatten([s.Action]) : startswith(a, "bedrock:")])])
+    error_message = "The boundary must grant no Bedrock access unless a reviewed live generation model is set."
+  }
+}
+
+run "live_generation_is_the_native_resume_task_role_ceiling" {
+  command = plan
+  variables {
+    environment           = "development"
+    github_environment    = "development"
+    state_bucket_name     = "ai-job-apply-development-terraform-state-111122223333"
+    live_generation_model = "us.anthropic.claude-sonnet-4-6"
+  }
+  assert {
+    condition = (
+      length([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : s if anytrue([for a in flatten([s.Action]) : startswith(a, "bedrock:")])]) == 1 &&
+      one([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : s if anytrue([for a in flatten([s.Action]) : startswith(a, "bedrock:")])]) == {
+        Effect = "Allow", Action = ["bedrock:InvokeModel"],
+        Resource = [
+          "arn:aws:bedrock:us-east-2:111122223333:inference-profile/us.anthropic.claude-sonnet-4-6",
+          "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6"
+        ],
+        Condition = { ArnLike = { "aws:PrincipalArn" = "arn:aws:iam::111122223333:role/ai-job-apply-development-native-resume-r*-task" } }
+      }
+    )
+    error_message = "Live generation must be one InvokeModel statement bound to the native resume task roles and the one reviewed profile and foundation model: no wildcard action, no other role, no other model."
+  }
+}
+
+run "live_generation_unreviewed_model_refused" {
+  command = plan
+  variables {
+    environment           = "development"
+    github_environment    = "development"
+    state_bucket_name     = "ai-job-apply-development-terraform-state-111122223333"
+    live_generation_model = "us.anthropic.claude-fable-5"
+  }
+  expect_failures = [var.live_generation_model]
+}
+
+run "live_generation_fits_the_complete_development_boundary" {
+  command = plan
+  variables {
+    environment                             = "development"
+    github_environment                      = "development"
+    state_bucket_name                       = "ai-job-apply-development-terraform-state-111122223333"
+    candidate_deletion_restore_role_enabled = true
+    gateway_packet_fingerprint_key_arn      = "arn:aws:kms:us-east-2:111122223333:key/32345678-1234-4234-8234-123456789012"
+    gateway_native_disposal_clusters        = ["arn:aws:ecs:us-east-2:111122223333:cluster/ai-job-apply-development"]
+    native_cleanup_clusters                 = ["arn:aws:ecs:us-east-2:111122223333:cluster/ai-job-apply-development"]
+    live_generation_model                   = "us.anthropic.claude-sonnet-4-6"
+  }
+  assert {
+    condition     = 6144 - length(aws_iam_policy.workload_boundary.policy) >= 100
+    error_message = "The complete development boundary, with the restore role, every native grant and live generation, must keep at least 100 characters of headroom."
   }
 }
