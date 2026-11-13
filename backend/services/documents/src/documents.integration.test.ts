@@ -50,7 +50,7 @@ describeWithDatabase("PostgresDocumentStore", () => {
       env: environment,
     });
     expect(first.stdout.trim()).toBe(
-      "Documents migrations through 0020_resume_purge_reports_native_blockers applied and verified.",
+      "Documents migrations through 0021_resume_purge_settles_absent_native_task applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(first.stdout.trim());
   });

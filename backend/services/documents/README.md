@@ -844,3 +844,15 @@ generation returns `{purged:false, reason:'native_generation_unsettled', unsettl
 overdueHours}]}` without throwing and without deleting anything: a claimed launch or a bound task can only be settled by its own
 proof, and a task that no longer exists stays unknown. The sweep still counts it as a failure, so the alarm stays, and logs
 `resume_purge_blocked` with those fixed fields and no identifier. Nothing is created or reopened.
+
+Migration `0021_resume_purge_settles_absent_native_task` lets a purge settle the one case 0020 could only report: a deleted resume
+whose generation is `bound` to a task that no longer exists (ECS keeps a stopped task's description for about an hour, so a
+receipt not recorded in time can never be proven later). `complete_resume_purge` takes an optional list of task ARNs the caller has
+just shown are gone (ECS describes them `MISSING` or `STOPPED`). The resume's `bound` generations are retired inside
+the purge transaction, and deleted with the row, only when every unsettled generation of it is covered (all or nothing: if any
+one is not, nothing is written): its task is on that list, a launch was claimed, its retention ended more
+than a day ago (a completed generation expires 30 minutes after completion; an uncompleted one counts from its binding), and the
+resume is tombstoned and past any security hold. The unsettled result now also carries `proofTasks`, the task ARNs old enough to
+ask about, for the caller only (never for a log). The retirement times satisfy the table's checks and never persist; the trace is
+`nativeGenerationsSettledTaskAbsent` in the `resume.purged` audit metadata. The three-argument function still works and settles
+nothing it was not shown.

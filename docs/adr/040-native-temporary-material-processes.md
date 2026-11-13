@@ -240,3 +240,12 @@ unresolved. Local SDK/adapter tests do not prove managed interruption, terminal 
 TLS/ingress or client acceptance. Existing 900-second deployment configuration is insufficient
 for the full route lifetime and must be extended during integration. This proposal remains
 Proposed; [evidence](../product/delivery/evidence/d3-native-resume-route-lifecycle-2026-10-07.md).
+
+## Amendment: a deleted resume's purge may settle a vanished task (2026-11-12)
+
+The rule above stands: a missing task, a stop request, a timeout or a native-process reply is not a retirement receipt and
+never settles a generation while the candidate's resume lives. One narrow consequence for deletion is recorded in
+[ADR-034](034-resume-byte-purge-runs-in-the-candidate-rights-maintenance-runtime.md): once the candidate has deleted the
+resume, the purge may retire (and in the same transaction delete) a generation whose retention ended more than a day ago when
+ECS, asked about that exact task, reports it `MISSING` or `STOPPED`. ECS retains a stopped task's description only about an hour,
+so without this a lost receipt blocks a candidate's deletion forever. It adds no launch, stop or content capability.

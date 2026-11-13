@@ -24,7 +24,7 @@ locals {
     control  = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-resume-control-r${revision}"
     observer = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-resume-observer-r${revision}"
   } }
-  native_resume_ecs_endpoint_policy = { Version = "2012-10-17", Statement = concat(local.material_ecs_statements, local.gateway_disposal_endpoint_statements, local.native_cleanup_endpoint_statements, flatten([for revision, release in var.native_resume_control_network : [
+  native_resume_ecs_endpoint_policy = { Version = "2012-10-17", Statement = concat(local.material_ecs_statements, local.gateway_disposal_endpoint_statements, local.native_cleanup_endpoint_statements, local.candidate_rights_native_task_endpoint_statements, flatten([for revision, release in var.native_resume_control_network : [
     { Sid       = "OriginalLaunch${revision}", Effect = "Allow", Principal = "*", Action = ["ecs:RunTask"],
       Resource  = "arn:aws:ecs:us-east-2:${data.aws_caller_identity.current.account_id}:task-definition/${var.name}-${var.environment}-native-resume:${revision}",
       Condition = { ArnEquals = { "aws:PrincipalArn" = local.native_resume_api_principals[revision].control, "ecs:cluster" = release.cluster_arn }, Bool = { "ecs:enable-execute-command" = "false" } }

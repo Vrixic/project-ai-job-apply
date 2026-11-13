@@ -193,6 +193,10 @@
         {
           "version": "0020_resume_purge_reports_native_blockers",
           "checksum": "c66cd01cf86400fdab1ec959373082622e4eee04cb75ca5f8c91bfa86b93bd36"
+        },
+        {
+          "version": "0021_resume_purge_settles_absent_native_task",
+          "checksum": "bb2c40d5243b2966a7fd55f7f485cc2b83387ddcbeb09f0427559eacafa643b9"
         }
       ],
       "relations": [

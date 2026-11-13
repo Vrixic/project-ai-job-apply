@@ -436,6 +436,9 @@ importers:
       '@ai-job-apply/trust-service':
         specifier: workspace:*
         version: link:../services/trust
+      '@aws-sdk/client-ecs':
+        specifier: 3.1133.0
+        version: 3.1133.0
       '@aws-sdk/client-kms':
         specifier: 3.1133.0
         version: 3.1133.0

@@ -106,7 +106,7 @@ function fixture(context) {
   return { root, write, run, accept };
 }
 
-test("accepts current 89-migration inventory using the production runtime smoke", (context) => {
+test("accepts current 90-migration inventory using the production runtime smoke", (context) => {
   fixture(context);
 });
 
