@@ -37,7 +37,7 @@ const migrations = manifest.contributors.flatMap((contributor) =>
     relative: `${contributor.owner}/migrations/${migration.version}.sql`,
   })),
 );
-assert.equal(migrations.length, 89);
+assert.equal(migrations.length, 90);
 assert.deepEqual(manifest.contributors.map((x) => x.owner).sort(), [...owners].sort());
 
 function fixture(context) {
