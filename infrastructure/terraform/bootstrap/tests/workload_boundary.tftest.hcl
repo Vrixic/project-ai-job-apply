@@ -39,7 +39,7 @@ run "public_reader_boundary_is_username_and_account_scoped" {
   assert {
     condition = one([
       for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement
-      if statement.Sid == "ConnectExactPublicJobReader"
+      if try(statement.Sid, "") == "ConnectExactPublicJobReader"
     ]).Action == ["rds-db:connect"]
     error_message = "The workload boundary must allow only rds-db:connect in the public-reader statement."
   }
@@ -47,7 +47,7 @@ run "public_reader_boundary_is_username_and_account_scoped" {
   assert {
     condition = one([
       for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement
-      if statement.Sid == "ConnectExactPublicJobReader"
+      if try(statement.Sid, "") == "ConnectExactPublicJobReader"
     ]).Resource == "arn:aws:rds-db:us-east-2:111122223333:dbuser:*/ai_job_apply_public_job_reader"
     error_message = "The boundary must freeze the exact account, region, and public-reader username."
   }
@@ -59,7 +59,7 @@ run "notification_email_fits_the_boundary" {
   assert {
     condition = one([
       for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement
-      if statement.Sid == "SendEmail"
+      if try(statement.Sid, "") == "SendEmail"
     ]) == { Sid = "SendEmail", Effect = "Allow", Action = ["ses:SendEmail"], Resource = "arn:aws:ses:us-east-2:111122223333:*" }
     error_message = "The boundary must allow ses:SendEmail only inside this account and region, or the dispatcher role is silently denied."
   }
@@ -76,7 +76,7 @@ run "durable_execution_status_reads_fit_the_boundary" {
   assert {
     condition = contains(one([
       for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement
-      if statement.Sid == "OperateOwnedServerlessWorkflows"
+      if try(statement.Sid, "") == "OperateOwnedServerlessWorkflows"
     ]).Action, "lambda:GetDurableExecution")
     error_message = "The boundary must allow lambda:GetDurableExecution, or the ingestion coordinator is silently denied when it reads an execution status."
   }
@@ -85,7 +85,7 @@ run "durable_execution_status_reads_fit_the_boundary" {
 run "restore_reads_default_absent" {
   command = plan
   assert {
-    condition     = length([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement if startswith(statement.Sid, "RestoreOnly")]) == 0
+    condition     = length([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement if startswith(try(statement.Sid, ""), "RestoreOnly")]) == 0
     error_message = "The retained-version restore allowance must remain absent by default."
   }
 }
@@ -97,15 +97,15 @@ run "restore_reads_only_exact_development_role" {
     candidate_deletion_restore_role_enabled = true
   }
   assert {
-    condition     = alltrue([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement.Condition.ArnEquals["aws:PrincipalArn"] == "arn:aws:iam::111122223333:role/ai-job-apply-development-deletion-restore" if startswith(statement.Sid, "RestoreOnly")])
+    condition     = alltrue([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement.Condition.ArnEquals["aws:PrincipalArn"] == "arn:aws:iam::111122223333:role/ai-job-apply-development-deletion-restore" if startswith(try(statement.Sid, ""), "RestoreOnly")])
     error_message = "No existing role may inherit the new retained-version reads."
   }
   assert {
-    condition     = one([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement if statement.Sid == "RestoreOnlyReadRetainedVersions"]).Action == ["s3:ListBucketVersions", "s3:GetObjectVersion", "s3:GetObjectRetention"]
+    condition     = one([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement if try(statement.Sid, "") == "RestoreOnlyReadRetainedVersions"]).Action == ["s3:ListBucketVersions", "s3:GetObjectVersion", "s3:GetObjectRetention"]
     error_message = "Restore boundary additions must never include a mutation or wildcard action."
   }
   assert {
-    condition     = length([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement if startswith(statement.Sid, "RestoreOnly")]) == 1 && one([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement if statement.Sid == "RestoreOnlyReadRetainedVersions"]).Resource == ["arn:aws:s3:::ai-job-apply-development-candidate-del-recovery-*", "arn:aws:s3:::ai-job-apply-development-candidate-del-recovery-*/candidate-deletion-recovery/*"]
+    condition     = length([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement if startswith(try(statement.Sid, ""), "RestoreOnly")]) == 1 && one([for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement if try(statement.Sid, "") == "RestoreOnlyReadRetainedVersions"]).Resource == ["arn:aws:s3:::ai-job-apply-development-candidate-del-recovery-*", "arn:aws:s3:::ai-job-apply-development-candidate-del-recovery-*/candidate-deletion-recovery/*"]
     error_message = "Restore reads must stay limited to the retained recovery bucket and its marker prefix."
   }
 }
@@ -212,7 +212,7 @@ run "candidate_rights_version_cleanup_is_activity_and_prefix_scoped" {
   assert {
     condition = one([
       for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement
-      if statement.Sid == "ListCandidateDataExportVersions"
+      if try(statement.Sid, "") == "ListCandidateDataExportVersions"
       ]) == {
       Sid      = "ListCandidateDataExportVersions"
       Effect   = "Allow"
@@ -231,7 +231,7 @@ run "candidate_rights_version_cleanup_is_activity_and_prefix_scoped" {
   assert {
     condition = one([
       for statement in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : statement
-      if statement.Sid == "PurgeDeletedCandidateDocumentVersions"
+      if try(statement.Sid, "") == "PurgeDeletedCandidateDocumentVersions"
       ]) == {
       Sid      = "PurgeDeletedCandidateDocumentVersions"
       Effect   = "Allow"
@@ -257,5 +257,55 @@ run "candidate_rights_version_cleanup_is_activity_and_prefix_scoped" {
   assert {
     condition     = length(aws_iam_policy.workload_boundary.policy) <= 6144
     error_message = "The complete rendered workload boundary must fit the AWS managed policy size limit."
+  }
+}
+
+run "resume_purge_native_task_description_is_the_rights_role_only" {
+  command = plan
+  variables {
+    environment                             = "development"
+    github_environment                      = "development"
+    state_bucket_name                       = "ai-job-apply-development-terraform-state-111122223333"
+    candidate_deletion_restore_role_enabled = true
+    gateway_packet_fingerprint_key_arn      = "arn:aws:kms:us-east-2:111122223333:key/32345678-1234-4234-8234-123456789012"
+    gateway_native_disposal_clusters        = ["arn:aws:ecs:us-east-2:111122223333:cluster/ai-job-apply-development"]
+    native_cleanup_clusters                 = ["arn:aws:ecs:us-east-2:111122223333:cluster/ai-job-apply-development"]
+  }
+  assert {
+    condition = (
+      length([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : s if try(s.Sid, "") == "ResumePurgeNativeTask0"]) == 1 &&
+      length([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : s if startswith(try(s.Sid, ""), "ResumePurgeNativeTask")]) == 1 &&
+      one([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : s if try(s.Sid, "") == "ResumePurgeNativeTask0"]) == {
+        Sid      = "ResumePurgeNativeTask0", Effect = "Allow", Action = ["ecs:DescribeTasks"],
+        Resource = "arn:aws:ecs:us-east-2:111122223333:task/ai-job-apply-development/*",
+        Condition = { ArnEquals = {
+          "aws:PrincipalArn" = "arn:aws:iam::111122223333:role/ai-job-apply-development-profile-readiness-activity",
+          "ecs:cluster"      = "arn:aws:ecs:us-east-2:111122223333:cluster/ai-job-apply-development"
+        } }
+      }
+    )
+    error_message = "The rights role may only DESCRIBE tasks in the retained native cluster: no StopTask, RunTask, other cluster or other role."
+  }
+  assert {
+    condition     = alltrue([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : !contains(s.Action, "ecs:StopTask") || strcontains(s.Condition.ArnEquals["aws:PrincipalArn"], "gateway-lambda") || strcontains(s.Condition.ArnEquals["aws:PrincipalArn"], "native-material-cleanup-worker") if contains(keys(s), "Condition") && contains(keys(s.Condition), "ArnEquals") && contains(keys(s.Condition.ArnEquals), "aws:PrincipalArn")])
+    error_message = "Only the Gateway and the cleanup worker may stop native tasks."
+  }
+  assert {
+    condition     = 6144 - length(aws_iam_policy.workload_boundary.policy) >= 150
+    error_message = "The complete development boundary, with the restore role and every native grant, must keep at least 150 characters of headroom."
+  }
+}
+
+run "resume_purge_native_task_description_absent_without_retained_clusters" {
+  command = plan
+  variables {
+    environment                             = "development"
+    github_environment                      = "development"
+    state_bucket_name                       = "ai-job-apply-development-terraform-state-111122223333"
+    candidate_deletion_restore_role_enabled = true
+  }
+  assert {
+    condition     = length([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : s if startswith(try(s.Sid, ""), "ResumePurgeNativeTask")]) == 0
+    error_message = "Without a retained native cluster the boundary must grant no task description."
   }
 }

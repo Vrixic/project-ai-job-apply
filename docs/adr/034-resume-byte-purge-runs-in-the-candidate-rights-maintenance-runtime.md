@@ -87,6 +87,11 @@ What this is not: it is not a retirement receipt and it does not change how a ge
 applies only to a resume the candidate deleted, only after a day, and only with ECS evidence in hand. Everything else keeps
 the 0020 behaviour: a typed result, nothing deleted, the alarm. The maintenance role gains `ecs:DescribeTasks` (no StopTask,
 RunTask or exec) on the tasks of the clusters the Gateway and the cleanup function already retain, a matching statement in the
-private ECS endpoint policy and the cluster list in its environment. The workload boundary already allows DescribeTasks on
-those clusters, so no boundary change is needed. The sweep logs `resume_purge_blocked` with counts only (bound tasks old
+private ECS endpoint policy and the cluster list in its environment. The workload boundary is a ceiling over every workload
+role, and its DescribeTasks statements are bound to the Gateway and the cleanup worker, so the maintenance role was denied
+until the bootstrap boundary gained its own DescribeTasks-only statement bound to that role (found on the first live sweep
+after 0021: `AccessDeniedException`, and the IAM simulator named the boundary; the first version of this amendment wrongly
+said no boundary change was needed). The boundary was within two characters of IAM's 6,144 limit once the restore role is
+enabled, so statement ids that no test or reviewer looks up were dropped to make room (ids have no effect on evaluation).
+The sweep logs `resume_purge_blocked` with counts only (bound tasks old
 enough to check, whether an observer is configured, how many ECS showed gone) and never a task ARN, cluster or message.

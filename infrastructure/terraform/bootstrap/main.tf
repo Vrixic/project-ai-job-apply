@@ -297,7 +297,10 @@ resource "aws_iam_policy" "workload_boundary" {
   description = "Maximum runtime permissions for ${var.environment} ECS workload roles."
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = concat([
+    # Statement ids carry no meaning for evaluation. Only the ids a test or a reviewer looks statements up by are kept
+    # (local.workload_boundary_retained_sids); the rest are dropped so the boundary has room to grow within IAM's
+    # 6,144-character limit, as the deployment policy already does.
+    Statement = [for statement in concat([
       {
         Sid      = "PullApprovedImages"
         Effect   = "Allow"
@@ -496,7 +499,9 @@ resource "aws_iam_policy" "workload_boundary" {
         Resource  = [local.candidate_deletion_recovery_bucket_arn, "${local.candidate_deletion_recovery_bucket_arn}/candidate-deletion-recovery/*"],
         Condition = { ArnEquals = { "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-development-deletion-restore" } }
       }
-    ] : [], local.gateway_packet_boundary_statements, local.gateway_disposal_boundary_statements, local.native_cleanup_boundary_statements)
+      ] : [], local.gateway_packet_boundary_statements, local.gateway_disposal_boundary_statements, local.native_cleanup_boundary_statements, local.candidate_rights_native_task_boundary_statements) : {
+      for key, value in statement : key => value if key != "Sid" || anytrue([for prefix in local.workload_boundary_retained_sids : startswith(statement.Sid, prefix)])
+    }]
   })
   lifecycle {
     postcondition {
