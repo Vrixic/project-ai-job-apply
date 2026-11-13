@@ -49,3 +49,26 @@ variable "export_retention_days" {
     error_message = "Cost exports must be retained for at least 365 whole days."
   }
 }
+
+variable "live_generation_budget" {
+  description = "ADR-059 spending ceiling for live generation on Amazon Bedrock. Null creates no budget. AWS Budgets alerts but does not cap spend; the live generation kill switch is the hard stop. services are Cost Explorer service names, which name the model (confirm them in Cost Explorer after the first calls); a wrong name tracks nothing, so the burst alarm in the platform module is the faster signal."
+  type = object({
+    amount_usd        = number
+    services          = list(string)
+    alert_percentages = list(number)
+  })
+  default = null
+
+  validation {
+    condition = var.live_generation_budget == null ? true : (
+      var.live_generation_budget.amount_usd > 0 &&
+      length(var.live_generation_budget.services) >= 1 &&
+      length(distinct(var.live_generation_budget.services)) == length(var.live_generation_budget.services) &&
+      alltrue([for service in var.live_generation_budget.services : length(trimspace(service)) > 0]) &&
+      length(var.live_generation_budget.alert_percentages) >= 1 &&
+      alltrue([for percentage in var.live_generation_budget.alert_percentages : percentage > 0 && percentage <= 100]) &&
+      length(distinct(var.live_generation_budget.alert_percentages)) == length(var.live_generation_budget.alert_percentages)
+    )
+    error_message = "Use a positive amount, at least one named service and unique alert percentages above 0 and at most 100."
+  }
+}

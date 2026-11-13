@@ -105,6 +105,14 @@ Residual risks, recorded plainly:
   OpenAI row to narrative answers.
 - Work order: this record, then Terraform (invoke permission, switch, budget, boundary), then the adapter,
   then resume tailoring and cover letters on it, then one restore sitting for the live proofs.
+- Built for D3.2-002 (dark, off by default): the kill switch is the permission itself. Each native resume task role
+  receives `bedrock:InvokeModel` on the one profile and its foundation models only while the development
+  `live_generation.enabled` input is true, so turning generation off edits one role policy and needs no new task
+  revision or release. A private `bedrock-runtime` endpoint with an exact policy (only those task roles, only that
+  action and those models), a $20 a month budget alerting at 50% and 80%, an hourly invocation burst alarm, and
+  `scripts/verify-bedrock-invocation-logging-off.ps1` (read only; fails if any invocation logging configuration
+  exists) complete the controls in decisions 4 to 6. Cost Explorer names the budget filter after the model, so the
+  service name is confirmed after the first calls.
 - The development environment is dormant; live tests wait for a restore with the owner.
 - The reviewed models live in one file, `infrastructure/terraform/live-generation-models.json`, read by the
   bootstrap boundary and the environment role policy, and a test refuses a model that AWS documents as retaining

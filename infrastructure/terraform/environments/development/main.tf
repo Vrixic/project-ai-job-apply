@@ -54,6 +54,7 @@ module "platform" {
   native_cleanup_deployments           = var.native_cleanup_deployments
   restricted_packet_export_enabled     = var.restricted_packet_export_enabled
   gateway_native_materials             = var.gateway_native_materials
+  live_generation                      = local.platform_live_generation
   native_material_image_access = merge(
     { for id, r in var.native_material_task_releases : "material-${id}" => {
       execution_role_arn = "arn:aws:iam::${split(":", r.expected_task_definition_arn)[4]}:role/ai-job-apply-development-native-material-${id}-execution"
@@ -297,4 +298,5 @@ module "cost_controls" {
   operational_alert_topic_arn = module.platform.operational_alert_topic_arn
   monthly_budget_amount_usd   = 5
   actual_cost_alerts_usd      = [5]
+  live_generation_budget      = local.live_generation_budget
 }

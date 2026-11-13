@@ -155,6 +155,50 @@ resource "aws_budgets_budget" "monthly_cost" {
   }
 }
 
+# ADR-059: the monthly spending ceiling for live generation, separate from the account budget above because the
+# account carries unrelated infrastructure cost. Alerts at percentages of the ceiling go to the operational topic.
+resource "aws_budgets_budget" "live_generation" {
+  count    = var.live_generation_budget == null ? 0 : 1
+  provider = aws.billing
+
+  name         = "${var.name}-${var.environment}-live-generation"
+  budget_type  = "COST"
+  limit_amount = tostring(var.live_generation_budget.amount_usd)
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+
+  cost_types {
+    include_credit             = false
+    include_discount           = true
+    include_other_subscription = true
+    include_recurring          = true
+    include_refund             = false
+    include_subscription       = true
+    include_support            = false
+    include_tax                = true
+    include_upfront            = true
+    use_amortized              = false
+    use_blended                = false
+  }
+
+  cost_filter {
+    name   = "Service"
+    values = var.live_generation_budget.services
+  }
+
+  dynamic "notification" {
+    for_each = toset([for percentage in var.live_generation_budget.alert_percentages : tostring(percentage)])
+
+    content {
+      comparison_operator       = "GREATER_THAN"
+      notification_type         = "ACTUAL"
+      subscriber_sns_topic_arns = [var.operational_alert_topic_arn]
+      threshold                 = tonumber(notification.value)
+      threshold_type            = "PERCENTAGE"
+    }
+  }
+}
+
 resource "aws_bcmdataexports_export" "cost_and_usage" {
   provider = aws.billing
 

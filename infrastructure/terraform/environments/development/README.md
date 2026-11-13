@@ -94,3 +94,30 @@ transition authority. Pass a separately verified immutable diagnostic image with
 ordinary migration image. Registration grants no restore or task-launch authority. Keep it null in
 ordinary full input baselines; enable only for the reviewed short diagnostic window and return it
 to null after the original task is terminal. Snapshot/data/privacy and live acceptance stay separate.
+
+## Live generation (ADR-059)
+
+`live_generation` defaults null and creates nothing. Setting it names one model from
+`infrastructure/terraform/live-generation-models.json` (a model enters that file only after its AWS retention
+statements were re-read and recorded in [ADR-059](../../../../docs/adr/059-live-generation-through-amazon-bedrock.md))
+and creates, in the platform module, a private `bedrock-runtime` interface endpoint (dropped with the other private
+endpoints at a drained shutdown) whose policy allows only `bedrock:InvokeModel` on that profile and its foundation
+models for the native resume task roles, and an hourly invocation burst alarm. The cost-controls module adds a
+monthly budget (default $20, alerts at 50% and 80% of actual spend) filtered to `budget_services`, which are the Cost
+Explorer service names that carry the model's cost; confirm them after the first calls, because a wrong name tracks
+nothing. A budget alerts but does not cap spend.
+
+`enabled` is the kill switch and defaults false. Each native resume task role receives `bedrock:InvokeModel` on the
+profile and foundation models only while it is true, so turning live generation off is a Terraform apply that edits one
+role policy: no new task revision, image or release. The bootstrap workload boundary must first carry the matching
+ceiling (`live_generation_model` in the bootstrap inputs), and `scripts/verify-bedrock-invocation-logging-off.ps1`
+must pass before the switch is turned on, because a configured invocation log would keep candidate material beyond the
+30 minute window. Retain the object in later full input baselines once created.
+
+```hcl
+live_generation = {
+  model           = "us.anthropic.claude-sonnet-4-6"
+  enabled         = false
+  budget_services = ["Claude Sonnet 4.6 (Amazon Bedrock Edition)"] # confirm in Cost Explorer
+}
+```
