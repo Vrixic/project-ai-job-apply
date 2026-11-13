@@ -27,6 +27,7 @@ import {
 } from "./candidate-rights-durable.js";
 import { AwsCandidateDeletionRecoveryLedger } from "./candidate-rights-recovery-ledger.js";
 import { resolveCandidateRightsAuth0Secret } from "./candidate-rights-secret.js";
+import { createNativeTaskAbsenceObserver } from "./native-task-absence.js";
 import {
   createNotificationsDispatchHandler,
   createRuntimeNotificationsDispatcher,
@@ -287,6 +288,9 @@ async function getRuntimeCandidateRightsStore(): Promise<PostgresCandidateRights
     throw new Error("CandidateRightsRuntimeConfigurationIncomplete");
   }
   const policy = loadCandidateRightsPolicy(process.env);
+  const nativeTaskClusterArns = (process.env.CANDIDATE_RIGHTS_NATIVE_TASK_CLUSTER_ARNS ?? "")
+    .split(",")
+    .filter((arn) => arn.length > 0);
   const restrictedAnswerCipher = restrictedAnswerExportCipherFromEnvironment(process.env);
   if (policy.subprocessorInventory.length !== 0) {
     throw new Error("CandidateRightsSubprocessorAdapterUnavailable");
@@ -316,6 +320,15 @@ async function getRuntimeCandidateRightsStore(): Promise<PostgresCandidateRights
       createNativeGenerationQuiescenceProof(runtimeDatabaseUrl as string).proof,
     ),
     resumeProposals: new PostgresResumeProposalWriter(),
+    // Terraform names the retained native task clusters only where this role may describe their tasks. Without them
+    // a purge that a lost native task retirement blocks stays blocked and says so.
+    ...(nativeTaskClusterArns.length > 0
+      ? {
+          nativeTaskAbsence: createNativeTaskAbsenceObserver({
+            clusterArns: nativeTaskClusterArns,
+          }),
+        }
+      : {}),
     ...(packetExport ? { restrictedPacketExport: packetExport.reader } : {}),
     ...(coverLetterExportEnabled && runtimeDatabaseUrl && documentKmsKeyArn
       ? {

@@ -458,10 +458,14 @@ describe("candidate-rights resume purge sweep (ADR-034)", () => {
     failRetire?: string[];
     failRetireWith?: Error;
     completeResult?: Record<string, unknown>;
+    /** Answers to successive complete_resume_purge calls; the last one repeats. */
+    completeResults?: Array<Record<string, unknown>>;
+    nativeTaskAbsence?: { absent(taskArns: readonly string[]): Promise<ReadonlySet<string>> };
     withoutPurger?: boolean;
     inventory?: unknown;
   }) {
     const calls: string[] = [];
+    const completeCalls: unknown[][] = [];
     const client = vi.fn(async (query: TemplateStringsArray, ...values: unknown[]) => {
       const text = query.join("?");
       if (text.includes("pending_resume_purges")) {
@@ -480,6 +484,10 @@ describe("candidate-rights resume purge sweep (ADR-034)", () => {
       }
       if (text.includes("complete_resume_purge")) {
         calls.push(`complete:${String(values[1])}:${String(values[0])}`);
+        completeCalls.push(values);
+        const sequence = options.completeResults;
+        if (sequence)
+          return [{ data: sequence[Math.min(completeCalls.length, sequence.length) - 1] }];
         return [{ data: options.completeResult ?? { purged: true } }];
       }
       throw new Error("unexpected query");
@@ -516,6 +524,7 @@ describe("candidate-rights resume purge sweep (ADR-034)", () => {
       artifactStore: {},
       documentObjectStore: options.withoutPurger ? {} : { purgeDocumentPrefixes },
       ...(options.withoutPurger ? {} : { resumeProposals: { retireDocumentProposals } }),
+      ...(options.nativeTaskAbsence ? { nativeTaskAbsence: options.nativeTaskAbsence } : {}),
       identityProvider: {},
       subprocessors: [],
       recoveryLedger: {},
@@ -523,6 +532,7 @@ describe("candidate-rights resume purge sweep (ADR-034)", () => {
     return {
       store: new PostgresCandidateRightsActivityStore(dependencies),
       calls,
+      completeCalls,
       purgeDocumentPrefixes,
       retireDocumentProposals,
     };
@@ -615,6 +625,9 @@ describe("candidate-rights resume purge sweep (ADR-034)", () => {
             { state: "bound", hasTask: true, launchClaimed: true, expired: true, overdueHours: 41 },
             { state: "pending", hasTask: false, launchClaimed: true, expired: false },
           ],
+          boundTasksOldEnoughToCheck: 0,
+          taskObserverConfigured: false,
+          tasksShownGone: 0,
         },
       ]);
       const text = JSON.stringify(logged);
@@ -623,6 +636,157 @@ describe("candidate-rights resume purge sweep (ADR-034)", () => {
     } finally {
       error.mockRestore();
     }
+  });
+
+  describe("a resume whose native task ECS no longer describes (migration 0021)", () => {
+    const taskA =
+      "arn:aws:ecs:us-east-2:362544434697:task/ai-job-apply-development/a1b2c3d4e5f60718293a4b5c6d7e8f90";
+    const taskB =
+      "arn:aws:ecs:us-east-2:362544434697:task/ai-job-apply-development/b1b2c3d4e5f60718293a4b5c6d7e8f90";
+    const blocked = (proofTasks: unknown) => ({
+      purged: false,
+      reason: "native_generation_unsettled",
+      unsettled: [
+        { state: "bound", hasTask: true, launchClaimed: true, expired: true, overdueHours: 559 },
+      ],
+      proofTasks,
+    });
+
+    it("sends back the tasks ECS shows are gone, and the purge then completes", async () => {
+      const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      try {
+        const absent = vi.fn(async () => new Set([taskA]));
+        const fixture = sweepFixture({
+          completeResults: [
+            blocked([taskA]),
+            { purged: true, idempotencyKeysDeleted: 0, nativeGenerationsSettledTaskAbsent: 1 },
+          ],
+          nativeTaskAbsence: { absent },
+        });
+        await expect(fixture.store.purgeDeletedResumes()).resolves.toMatchObject({
+          scanned: 1,
+          purged: 1,
+          failed: 0,
+        });
+        expect(absent).toHaveBeenCalledWith([taskA]);
+        expect(fixture.completeCalls).toEqual([
+          [user, first],
+          [user, first, [taskA]],
+        ]);
+        expect(info.mock.calls.map(([entry]) => entry)).toEqual([
+          { event: "resume_purge_native_task_absent", settled: 1 },
+        ]);
+        expect(error).not.toHaveBeenCalled();
+      } finally {
+        info.mockRestore();
+        error.mockRestore();
+      }
+    });
+
+    it("sends back only the tasks it was asked about and found gone", async () => {
+      const fixture = sweepFixture({
+        completeResults: [blocked([taskA, taskB, "not a task", 7]), { purged: true }],
+        nativeTaskAbsence: { absent: async (arns) => new Set([...arns, "arn:foreign"]) },
+      });
+      await fixture.store.purgeDeletedResumes();
+      expect(fixture.completeCalls[1]).toEqual([user, first, [taskA, taskB]]);
+    });
+
+    it("stays blocked, and says what it checked, when ECS does not show the task gone", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      try {
+        const fixture = sweepFixture({
+          completeResult: blocked([taskA]),
+          nativeTaskAbsence: { absent: async () => new Set() },
+        });
+        await expect(fixture.store.purgeDeletedResumes()).resolves.toMatchObject({
+          purged: 0,
+          failed: 1,
+        });
+        expect(fixture.completeCalls).toEqual([[user, first]]);
+        const logged = error.mock.calls.map(([entry]) => entry as Record<string, unknown>);
+        expect(logged).toEqual([
+          {
+            event: "resume_purge_blocked",
+            step: "complete_purge",
+            reason: "native_generation_unsettled",
+            unsettled: [
+              {
+                state: "bound",
+                hasTask: true,
+                launchClaimed: true,
+                expired: true,
+                overdueHours: 559,
+              },
+            ],
+            boundTasksOldEnoughToCheck: 1,
+            taskObserverConfigured: true,
+            tasksShownGone: 0,
+          },
+        ]);
+        const text = JSON.stringify(logged);
+        expect(text).not.toContain(taskA);
+        expect(text).not.toContain(user);
+        expect(text).not.toContain(first);
+      } finally {
+        error.mockRestore();
+      }
+    });
+
+    it("asks nothing and stays blocked when the runtime has no observer or Documents names no old task", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      try {
+        const absent = vi.fn(async () => new Set([taskA]));
+        const noObserver = sweepFixture({ completeResult: blocked([taskA]) });
+        await expect(noObserver.store.purgeDeletedResumes()).resolves.toMatchObject({ failed: 1 });
+        const noTasks = sweepFixture({
+          completeResult: blocked([]),
+          nativeTaskAbsence: { absent },
+        });
+        await expect(noTasks.store.purgeDeletedResumes()).resolves.toMatchObject({ failed: 1 });
+        const oldDatabase = sweepFixture({
+          completeResult: {
+            purged: false,
+            reason: "native_generation_unsettled",
+            unsettled: [{ state: "bound" }],
+          },
+          nativeTaskAbsence: { absent },
+        });
+        await expect(oldDatabase.store.purgeDeletedResumes()).resolves.toMatchObject({ failed: 1 });
+        expect(absent).not.toHaveBeenCalled();
+        const logged = error.mock.calls.map(([entry]) => entry as Record<string, unknown>);
+        expect(logged.map((entry) => entry.taskObserverConfigured)).toEqual([false, true, true]);
+        expect(logged.map((entry) => entry.boundTasksOldEnoughToCheck)).toEqual([1, 0, 0]);
+      } finally {
+        error.mockRestore();
+      }
+    });
+
+    it("counts a failing observer as a failed step without a message or an identifier", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      try {
+        const fixture = sweepFixture({
+          completeResult: blocked([taskA]),
+          nativeTaskAbsence: {
+            absent: async () => {
+              throw new Error(`boom ${taskA}`);
+            },
+          },
+        });
+        await expect(fixture.store.purgeDeletedResumes()).resolves.toMatchObject({
+          purged: 0,
+          failed: 1,
+        });
+        expect(error.mock.calls[0]?.[0]).toMatchObject({
+          event: "resume_purge_failed",
+          step: "observe_native_tasks",
+        });
+        expect(JSON.stringify(error.mock.calls)).not.toContain(taskA);
+      } finally {
+        error.mockRestore();
+      }
+    });
   });
 
   it("does not count an already-removed tombstone as purged", async () => {

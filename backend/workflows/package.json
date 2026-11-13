@@ -55,6 +55,7 @@
     "@ai-job-apply/observability": "workspace:*",
     "@ai-job-apply/profile-service": "workspace:*",
     "@ai-job-apply/trust-service": "workspace:*",
+    "@aws-sdk/client-ecs": "3.1133.0",
     "@aws-sdk/client-kms": "3.1133.0",
     "@aws-sdk/client-lambda": "3.1133.0",
     "@aws-sdk/client-s3": "3.1133.0",

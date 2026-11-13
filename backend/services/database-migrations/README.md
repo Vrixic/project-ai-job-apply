@@ -45,7 +45,7 @@ are still serialized transiently to measure their size; this is not a database m
 
 The CLI defaults to the packaged manifest. An older snapshot requires both
 `RESTORE_DATA_MANIFEST_GZIP_BASE64` and `RESTORE_DATA_MANIFEST_SHA256`: canonical base64 of gzip
-containing exact reviewed UTF-8 structural bytes, at most 7,000 encoded characters/64 KiB expanded,
+containing exact reviewed UTF-8 structural bytes, at most 7,700 encoded characters/64 KiB expanded,
 with the uncompressed SHA-256. Malformed, oversized or mismatched inputs fail. Compression keeps
 the current contract within the [ECS task-override limit](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html);
 the operator must still check the complete actual override is at most 8,192 characters. Preserve the original

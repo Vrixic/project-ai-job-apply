@@ -21,6 +21,7 @@ import {
 } from "./candidate-rights-durable.js";
 import type { CandidateDeletionRecoveryLedger } from "./candidate-rights-recovery-ledger.js";
 import { failureFields } from "./failure-fields.js";
+import type { NativeTaskAbsenceObserver } from "./native-task-absence.js";
 import { enrichRestrictedPacketExport } from "./restricted-packet-export.js";
 
 export interface CandidateExportArtifact {
@@ -86,6 +87,8 @@ export interface CandidateRightsActivityDependencies {
   documentObjectStore: CandidateDocumentObjectStore;
   /** Profile's own retirement of unreviewed proposals, needed by the resume purge sweep (ADR-034). */
   resumeProposals?: Pick<PostgresResumeProposalWriter, "retireDocumentProposals">;
+  /** Read-only proof that a native resume task no longer runs, for a purge a lost retirement receipt would block. */
+  nativeTaskAbsence?: NativeTaskAbsenceObserver;
   restrictedAnswerExport?: RestrictedAnswerExportReader;
   restrictedPacketExport?: RestrictedPacketExportReader;
   coverLetterExport?: CoverLetterExportReader;
@@ -185,6 +188,20 @@ export function unsettledGenerations(
       entry.overdueHours = overdue;
     return [entry];
   });
+}
+
+/** The task ARNs Documents says are old enough to ask ECS about: at most 20, each in the ECS task ARN shape. */
+function boundTaskArns(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .slice(0, 20)
+    .filter(
+      (item): item is string =>
+        typeof item === "string" &&
+        /^arn:aws:ecs:[a-z]{2}-[a-z]+-[0-9]:[0-9]{12}:task\/[A-Za-z0-9_-]{1,255}\/[A-Za-z0-9]{1,255}$/u.test(
+          item,
+        ),
+    );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1000,23 +1017,70 @@ export class PostgresCandidateRightsActivityStore {
           throw new CandidateRightsActivityRejected("ResumePurgeObjectsRemain");
         }
         step = "complete_purge";
-        const completed = await client<
-          Array<{ data: { purged?: unknown; reason?: unknown; unsettled?: unknown } }>
-        >`
-          SELECT documents.complete_resume_purge(${userId}::uuid, ${documentId}::uuid, true) AS data
-        `;
-        const outcome = completed[0]?.data;
-        if (outcome?.purged === true) purged += 1;
-        else if (outcome?.reason === "native_generation_unsettled") {
-          // Documents settled what it safely could and found a generation built from this resume that only
-          // its task can settle. Nothing was deleted. It still counts as a failure, so the alarm stays, but
-          // the log now says what blocks it: states and booleans only, never an identifier.
+        type PurgeRows = Array<{
+          data: {
+            purged?: unknown;
+            reason?: unknown;
+            unsettled?: unknown;
+            proofTasks?: unknown;
+            nativeGenerationsSettledTaskAbsent?: unknown;
+          };
+        }>;
+        const complete = async (absentTasks: readonly string[]) => {
+          // Without evidence the three-argument function is called, so this also runs before migration 0021.
+          const completed =
+            absentTasks.length === 0
+              ? await client<PurgeRows>`
+                  SELECT documents.complete_resume_purge(${userId}::uuid, ${documentId}::uuid, true) AS data
+                `
+              : await client<PurgeRows>`
+                  SELECT documents.complete_resume_purge(
+                    ${userId}::uuid, ${documentId}::uuid, true, ${[...absentTasks]}::text[]
+                  ) AS data
+                `;
+          return completed[0]?.data;
+        };
+        let outcome = await complete([]);
+        const observer = this.dependencies.nativeTaskAbsence;
+        let checkedTasks = 0;
+        let absentTasks = 0;
+        if (outcome?.reason === "native_generation_unsettled") {
+          // A generation bound to a task can only be settled by that task's own description, and ECS drops a
+          // stopped task's description after about an hour. Documents names the bound tasks old enough to ask
+          // about; the ones ECS shows are gone go back to Documents, which applies its own checks and settles
+          // them in the purge transaction. Anything unproven stays blocked.
+          const candidates = boundTaskArns(outcome.proofTasks);
+          checkedTasks = candidates.length;
+          if (observer && candidates.length > 0) {
+            step = "observe_native_tasks";
+            const gone = await observer.absent(candidates);
+            const absent = candidates.filter((arn) => gone.has(arn));
+            absentTasks = absent.length;
+            step = "complete_purge";
+            if (absent.length > 0) outcome = await complete(absent);
+          }
+        }
+        if (outcome?.purged === true) {
+          purged += 1;
+          if (typeof outcome.nativeGenerationsSettledTaskAbsent === "number") {
+            console.info({
+              event: "resume_purge_native_task_absent",
+              settled: outcome.nativeGenerationsSettledTaskAbsent,
+            });
+          }
+        } else if (outcome?.reason === "native_generation_unsettled") {
+          // Documents settled what it safely could and found a generation built from this resume that nothing
+          // has proven settled. Nothing was deleted. It still counts as a failure, so the alarm stays, but the
+          // log says what blocks it: states, booleans and counts only, never an identifier.
           failed += 1;
           console.error({
             event: "resume_purge_blocked",
             step,
             reason: "native_generation_unsettled",
             unsettled: unsettledGenerations(outcome.unsettled),
+            boundTasksOldEnoughToCheck: checkedTasks,
+            taskObserverConfigured: observer !== undefined,
+            tasksShownGone: absentTasks,
           });
         }
       } catch (error) {

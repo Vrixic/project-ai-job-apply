@@ -61,3 +61,32 @@ generation that is launch-claimed or bound returns a typed `native_generation_un
 identifier) instead of throwing; nothing is deleted. The sweep counts it as a failure, so the alarm and the "a stuck purge is an
 incident" rule are unchanged, and logs `resume_purge_blocked` with the same fixed fields. Whether and how a generation whose task
 no longer exists may be settled is a separate decision that needs the reported evidence first.
+
+## Amendment: a purge settles a native generation whose task is gone (2026-11-12)
+
+The reporting in migration 0020 showed the blocker on the restored development environment: one deleted resume with a native
+resume generation still `bound` to a task whose retirement receipt was never recorded, 559 hours past its expiry. ECS keeps a
+stopped task's description for about an hour, so after that window the proof [ADR-040](040-native-temporary-material-processes.md)
+asks for can never be obtained, and the purge of that resume (and so the alarm, and so the rights run's health gate) was stuck
+for good. This is a hole in the design, not a one-off: any retirement that is not recorded within an hour of the task stopping
+leaves a deleted resume undeletable.
+
+Migration 0021 adds `complete_resume_purge(user, document, objects_absent, absent_task_arns)`; the three-argument form calls it with
+an empty list. The sweep first asks as before. For a generation that is `bound`, has a claimed launch, and whose retention ended
+more than a day ago (a completed generation expires 30 minutes after completion; one that never completed counts from its
+binding), Documents returns the task ARN to the sweep. The sweep asks ECS about exactly those tasks with `DescribeTasks` in the
+retained native clusters and sends back only the ones ECS reports `MISSING` or `STOPPED`; a running, starting or stopping
+task, any other failure, an answer that does not fit the request, an error, or a cluster that is not retained leaves the task
+unproven and the purge blocked. Documents then re-checks the state, the claimed launch, the age, that the ARN is on the list and
+that the resume is tombstoned and past any security hold, and only if that evidence covers every generation of the resume that
+is still unsettled (otherwise it writes nothing), retires them and deletes the resume in the purge transaction. The
+retirement times written to satisfy the table's checks (both now) never persist because the row is deleted in the same
+transaction; the only trace is a count in the value-free `resume.purged` audit metadata and an info log with the same count.
+
+What this is not: it is not a retirement receipt and it does not change how a generation settles while its resume lives. It
+applies only to a resume the candidate deleted, only after a day, and only with ECS evidence in hand. Everything else keeps
+the 0020 behaviour: a typed result, nothing deleted, the alarm. The maintenance role gains `ecs:DescribeTasks` (no StopTask,
+RunTask or exec) on the tasks of the clusters the Gateway and the cleanup function already retain, a matching statement in the
+private ECS endpoint policy and the cluster list in its environment. The workload boundary already allows DescribeTasks on
+those clusters, so no boundary change is needed. The sweep logs `resume_purge_blocked` with counts only (bound tasks old
+enough to check, whether an observer is configured, how many ECS showed gone) and never a task ARN, cluster or message.

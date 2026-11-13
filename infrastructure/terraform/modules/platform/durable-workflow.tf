@@ -128,6 +128,22 @@ data "aws_iam_policy_document" "candidate_rights_activity" {
     }
   }
 
+  # Read-only proof that a native resume task no longer exists, for a purge a lost retirement would block forever.
+  dynamic "statement" {
+    for_each = { for index, cluster in local.candidate_rights_native_task_clusters : tostring(index) => cluster }
+    content {
+      sid       = "ResumePurgeNativeTaskObservation${statement.key}"
+      effect    = "Allow"
+      actions   = ["ecs:DescribeTasks"]
+      resources = ["${replace(statement.value, ":cluster/", ":task/")}/*"]
+      condition {
+        test     = "ArnEquals"
+        variable = "ecs:cluster"
+        values   = [statement.value]
+      }
+    }
+  }
+
   statement {
     sid       = "ReadCandidateRightsIdentitySecret"
     effect    = "Allow"
@@ -251,6 +267,9 @@ resource "aws_lambda_function" "profile_readiness_activity" {
         CANDIDATE_RIGHTS_OWNER_INVENTORY             = var.candidate_rights_owner_inventory
         CANDIDATE_RIGHTS_SUBPROCESSOR_INVENTORY      = var.candidate_rights_subprocessor_inventory
         CANDIDATE_RIGHTS_MAINTENANCE_RULE_ARN        = local.candidate_rights_maintenance_rule_arn
+      } : {},
+      var.candidate_rights_enabled && length(local.candidate_rights_native_task_clusters) > 0 ? {
+        CANDIDATE_RIGHTS_NATIVE_TASK_CLUSTER_ARNS = join(",", local.candidate_rights_native_task_clusters)
       } : {},
       local.packet_export_environment,
       local.notifications_activity_environment,

@@ -3256,5 +3256,283 @@ describe.runIf(requested)("native resume generation ledger with real PostgreSQL"
       });
       expect((await rows()).generations).toEqual([{ state: "pending" }]);
     });
+
+    describe("when the caller shows the bound task is gone (migration 0021)", () => {
+      const purgeWith = async (tasks: string[]) => {
+        const [row] =
+          await sql`SELECT documents.complete_resume_purge(${input.identity.ownerUserId}::uuid,${input.identity.baseDocumentId}::uuid,true,${tasks}::text[]) AS result`;
+        return row?.result;
+      };
+      // Triggers pin a bound generation's timestamps, so the test ages the whole row as a restore of old data would.
+      const age = (days: number) =>
+        sql.begin(async (tx) => {
+          await tx`SET LOCAL session_replication_role = replica`;
+          await tx`UPDATE documents.native_resume_generations
+            SET created_at = created_at - make_interval(days => ${days}),
+                launch_claimed_at = launch_claimed_at - make_interval(days => ${days}),
+                bound_at = bound_at - make_interval(days => ${days})
+            WHERE id=${input.identity.generationId}`;
+        });
+      const auditMetadata = async () =>
+        (
+          await sql`SELECT metadata FROM documents.audit_events
+            WHERE document_id=${input.identity.baseDocumentId} AND action='resume.purged'`
+        ).map((row) => row.metadata);
+
+      it("names the bound task to the caller only once it is more than a day old, and settles nothing on a guess", async () => {
+        await bound();
+        await tombstone();
+        // A task that is not old enough is not offered, and naming it settles nothing.
+        expect(await purge()).toMatchObject({
+          reason: "native_generation_unsettled",
+          proofTasks: [],
+        });
+        expect(await purgeWith([task])).toMatchObject({ purged: false, proofTasks: [] });
+        await age(3);
+        expect(await purge()).toMatchObject({
+          reason: "native_generation_unsettled",
+          proofTasks: [task],
+        });
+        // Only the exact task that was checked counts, and an empty or absent list changes nothing.
+        for (const list of [[], ["arn:aws:ecs:us-east-2:123456789012:task/c/other"]]) {
+          expect(await purgeWith(list)).toMatchObject({
+            purged: false,
+            reason: "native_generation_unsettled",
+          });
+        }
+        expect((await rows()).generations).toEqual([{ state: "bound" }]);
+        expect(await auditMetadata()).toEqual([]);
+      });
+
+      it("retires and purges it in one transaction, and leaves only a count in the audit event", async () => {
+        await bound();
+        await tombstone();
+        await age(3);
+        const settled = await purgeWith([task]);
+        expect(settled).toEqual({
+          purged: true,
+          idempotencyKeysDeleted: 0,
+          nativeGenerationsSettledTaskAbsent: 1,
+        });
+        const after = await rows();
+        expect(after.resumes).toHaveLength(0);
+        expect(after.generations).toHaveLength(0);
+        expect(await auditMetadata()).toEqual([
+          { version: 1, nativeGenerationsSettledTaskAbsent: 1 },
+        ]);
+        expect(JSON.stringify(await auditMetadata())).not.toContain(task);
+        // The application's epoch is closed exactly as after any other guarded purge.
+        const [head] = await sql`SELECT sealed_at FROM documents.native_material_admission
+          WHERE user_id=${input.identity.ownerUserId} AND application_id=${input.identity.applicationId}`;
+        expect(head?.sealed_at).not.toBeNull();
+      });
+
+      it("counts a completed generation from the end of its retention, not from its binding", async () => {
+        await bound();
+        await tombstone();
+        await age(5);
+        // Completed an hour ago: retention ended about half an hour ago, far inside the day, so it is not settled.
+        await sql.begin(async (tx) => {
+          await tx`SET LOCAL session_replication_role = replica`;
+          await tx`UPDATE documents.native_resume_generations
+            SET content_sha256=${"d".repeat(64)},
+                completed_at_ms=floor(extract(epoch FROM clock_timestamp())*1000)::bigint-3600000,
+                expires_at_ms=floor(extract(epoch FROM clock_timestamp())*1000)::bigint-3600000+1800000
+            WHERE id=${input.identity.generationId}`;
+        });
+        expect(await purgeWith([task])).toMatchObject({ purged: false, proofTasks: [] });
+        // Completed three days ago: retention ended more than two days ago, so it is.
+        await sql.begin(async (tx) => {
+          await tx`SET LOCAL session_replication_role = replica`;
+          await tx`UPDATE documents.native_resume_generations
+            SET completed_at_ms=completed_at_ms-3*86400000, expires_at_ms=expires_at_ms-3*86400000
+            WHERE id=${input.identity.generationId}`;
+        });
+        expect(await purgeWith([task])).toMatchObject({
+          purged: true,
+          nativeGenerationsSettledTaskAbsent: 1,
+        });
+        expect((await rows()).generations).toHaveLength(0);
+      });
+
+      it("never settles a claimed launch that has no task", async () => {
+        await legacyClaim();
+        await tombstone();
+        expect(await purgeWith([task])).toMatchObject({
+          purged: false,
+          reason: "native_generation_unsettled",
+          proofTasks: [],
+        });
+        expect((await rows()).generations).toEqual([{ state: "pending" }]);
+      });
+
+      it("is settled end to end by the real maintenance sweep once ECS shows the task gone", async () => {
+        // The sweep's own query, not a hand-written one: parameter binding is where mocks cannot be trusted.
+        const { PostgresCandidateRightsActivityStore } = await import(
+          fileURLToPath(
+            new URL("../../../workflows/dist/src/candidate-rights-activities.js", import.meta.url),
+          )
+        );
+        const sweep = (gone: string[]) =>
+          new PostgresCandidateRightsActivityStore({
+            database: { client: sql },
+            policy: {
+              ownerInventory: [
+                "identity",
+                "profile",
+                "documents",
+                "jobs",
+                "matching",
+                "billing",
+                "trust",
+              ],
+              subprocessorInventory: [],
+            },
+            artifactStore: {},
+            identityProvider: {},
+            subprocessors: [],
+            recoveryLedger: {},
+            documentObjectStore: {
+              purgeDocumentPrefixes: async () => ({ deleted: 0, remaining: 0 }),
+            },
+            resumeProposals: {
+              retireDocumentProposals: async () => ({ proposalsErased: 0, importsErased: 0 }),
+            },
+            nativeTaskAbsence: { absent: async () => new Set(gone) },
+          }).purgeDeletedResumes();
+        const quiet = vi.spyOn(console, "error").mockImplementation(() => undefined);
+        const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+        try {
+          await bound();
+          await tombstone();
+          await age(3);
+          // Other tests leave deleted resumes behind, so the sweep's own counts are not this test's to assert.
+          await sweep([]);
+          expect((await rows()).generations).toEqual([{ state: "bound" }]);
+          await sweep([task]);
+          const after = await rows();
+          expect(after.resumes).toHaveLength(0);
+          expect(after.generations).toHaveLength(0);
+          expect(info).toHaveBeenCalledWith({
+            event: "resume_purge_native_task_absent",
+            settled: 1,
+          });
+        } finally {
+          quiet.mockRestore();
+          info.mockRestore();
+        }
+      });
+
+      it("writes nothing unless the evidence covers every unsettled generation of the resume", async () => {
+        // A second application of the same candidate whose generation is also built from this resume and bound to its own task.
+        await bound();
+        const owner = input.identity.ownerUserId;
+        const secondApplication = uuidv7();
+        const secondPacket = uuidv7();
+        const secondGeneration = uuidv7();
+        const secondTask = `arn:aws:ecs:us-east-2:123456789012:task/synthetic-resume/${uuidv7().replaceAll("-", "")}`;
+        const observed = await catalog.recordObservation({
+          provider: "greenhouse",
+          provenance: "authorized_fixture",
+          companyName: `Synthetic ${secondApplication}`,
+          title: "Software Engineer",
+          locations: ["Remote - US"],
+          description: "Synthetic resume ledger job context.",
+          sourceUrl: `https://jobs.example.test/${secondApplication}`,
+          observedAt: new Date(),
+          atsTenant: `synthetic-${secondApplication}`,
+          externalJobId: "job-2",
+          adapterVersion: "synthetic-v1",
+        });
+        const job = observed.job.id;
+        const active = await catalog.getActiveJob(job);
+        if (!active) throw Error("SyntheticJobUnavailable");
+        const current = bindings(active);
+        const applications = await import(
+          fileURLToPath(new URL("../../applications/dist/src/index.js", import.meta.url))
+        );
+        const packetHash = applications.computePacketHash({
+          userId: owner,
+          applicationId: secondApplication,
+          canonicalJobId: job,
+          version: 1,
+          jobRevision: current.jobRevision,
+          form: null,
+          fields: [],
+          artifactHashes: {},
+        });
+        await sql.begin(async (tx) => {
+          await tx`INSERT INTO applications.applications(id,owner_user_id,canonical_job_id,status,revision,created_at,updated_at) VALUES (${secondApplication},${owner},${job},'review_required',1,clock_timestamp(),clock_timestamp())`;
+          await tx`INSERT INTO applications.packets(id,application_id,owner_user_id,version,packet_hash,job_revision,fields,created_at) VALUES (${secondPacket},${secondApplication},${owner},1,${packetHash},${current.jobRevision},'[]'::jsonb,clock_timestamp())`;
+          await tx`UPDATE applications.applications SET current_packet_id=${secondPacket},revision=2 WHERE id=${secondApplication}`;
+        });
+        const second = {
+          ...input,
+          identity: {
+            ...input.identity,
+            generationId: secondGeneration,
+            applicationId: secondApplication,
+            jobContextSha256: current.jobContextSha256,
+          },
+          application: {
+            ...input.application,
+            applicationId: secondApplication,
+            canonicalJobId: job,
+            packetId: secondPacket,
+            packetHash,
+            jobRevision: current.jobRevision,
+          },
+        };
+        const s = store();
+        const reserved = await s.reserve(second);
+        await s.claimLaunch(scope(reserved), config);
+        await s.bindTask(scope(reserved), config, secondTask);
+        await tombstone();
+        await age(3);
+        await sql.begin(async (tx) => {
+          await tx`SET LOCAL session_replication_role = replica`;
+          await tx`UPDATE documents.native_resume_generations
+            SET created_at = created_at - interval '3 days',
+                launch_claimed_at = launch_claimed_at - interval '3 days',
+                bound_at = bound_at - interval '3 days'
+            WHERE id=${secondGeneration}`;
+        });
+        const states = async () =>
+          (
+            await sql`SELECT state FROM documents.native_resume_generations
+              WHERE base_document_id=${input.identity.baseDocumentId} ORDER BY state, id`
+          ).map((row) => row.state);
+        // Both tasks are named by the caller, so both are offered.
+        expect(await purge()).toMatchObject({
+          reason: "native_generation_unsettled",
+          proofTasks: expect.arrayContaining([task, secondTask]),
+        });
+        // Evidence for one task covers one of two generations: nothing is written, nothing stays retired with an invented time.
+        expect(await purgeWith([task])).toMatchObject({
+          purged: false,
+          reason: "native_generation_unsettled",
+        });
+        expect(await states()).toEqual(["bound", "bound"]);
+        expect(await auditMetadata()).toEqual([]);
+        // Evidence for both settles both and purges the resume in one transaction.
+        expect(await purgeWith([task, secondTask])).toMatchObject({
+          purged: true,
+          nativeGenerationsSettledTaskAbsent: 2,
+        });
+        expect(await states()).toEqual([]);
+        expect((await rows()).resumes).toHaveLength(0);
+      });
+
+      it("refuses a resume that is not deleted, and one whose objects were not shown absent", async () => {
+        await bound();
+        await age(3);
+        await expect(purgeWith([task])).rejects.toThrow();
+        await tombstone();
+        await expect(
+          sql`SELECT documents.complete_resume_purge(${input.identity.ownerUserId}::uuid,${input.identity.baseDocumentId}::uuid,false,${[task]}::text[])`,
+        ).rejects.toThrow();
+        expect((await rows()).generations).toEqual([{ state: "bound" }]);
+      });
+    });
   });
 });
