@@ -30,6 +30,22 @@ variable "gateway_native_disposal_clusters" {
   }
 }
 locals {
+  # Statement ids kept in the workload boundary (matched by prefix); every other id is dropped to save space.
+  workload_boundary_retained_sids = [
+    "ConnectExactPublicJobReader", "SendEmail", "OperateOwnedServerlessWorkflows", "ListCandidateDataExportVersions",
+    "PurgeDeletedCandidateDocumentVersions", "RestoreOnly", "GatewayNativeDisposal", "NativeCleanup", "ResumePurgeNativeTask"
+  ]
+  # The candidate-rights maintenance function may DESCRIBE (never stop) tasks in the clusters the Gateway and the cleanup
+  # worker already retain, so a resume purge can tell that a native task is gone (Documents migration 0021). The statement
+  # is bound to that one role; without it the platform grant is denied by this boundary, and no other role gains anything.
+  candidate_rights_native_task_boundary_statements = [for index, cluster in sort(distinct(concat(tolist(var.gateway_native_disposal_clusters), tolist(var.native_cleanup_clusters)))) : {
+    Sid      = "ResumePurgeNativeTask${index}", Effect = "Allow", Action = ["ecs:DescribeTasks"],
+    Resource = "${replace(cluster, ":cluster/", ":task/")}/*",
+    Condition = { ArnEquals = {
+      "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-${var.environment}-profile-readiness-activity",
+      "ecs:cluster"      = cluster
+    } }
+  }]
   gateway_disposal_boundary_statements = [for index, cluster in sort(tolist(var.gateway_native_disposal_clusters)) : {
     Sid      = "GatewayNativeDisposal${index}", Effect = "Allow", Action = ["ecs:DescribeTasks", "ecs:StopTask"],
     Resource = "${replace(cluster, ":cluster/", ":task/")}/*",
