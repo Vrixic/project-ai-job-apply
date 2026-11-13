@@ -1,0 +1,129 @@
+# ADR-059: Live generation of resumes and cover letters through Amazon Bedrock
+
+Status: Accepted by the owner's direction 2026-11-13 (development scope); real-candidate use stays gated
+by D6-015 and D6-016
+Date: 2026-11-13
+
+## Context
+
+[ADR-038](038-one-off-generated-application-materials.md) decision 7 allows a model provider for
+generated resumes and cover letters only if it establishes no training and no retained prompts or
+generated material beyond 30 minutes, including diagnostics and abuse logs. OpenAI direct keeps prompts
+for abuse monitoring for up to 30 days ([D3-012](../security/d3-012-accountable-disposition.md)), so D3
+closed with live AI off and this decision is task D3.2-001 of [D3.2](../product/delivery/phase-3-2-live-ai-generation.md).
+The owner named `gpt-6-luna` for development on 2026-10-02 and again on 2026-11-13.
+
+Checked on 2026-11-13 in the development account (us-east-2, SSO profile `ai-job-apply-development-admin`):
+
+- Amazon Bedrock model invocation logging is not configured (`GetModelInvocationLoggingConfiguration`
+  returns no configuration).
+- The Converse API answered a synthetic, no-personal-data prompt for `us.anthropic.claude-sonnet-4-6`,
+  `us.anthropic.claude-haiku-4-5-20251001-v1:0`, `us.meta.llama4-maverick-17b-instruct-v1:0`,
+  `mistral.mistral-large-3-675b-instruct`, `us.amazon.nova-pro-v1:0` and `openai.gpt-oss-120b-1:0`.
+- It refused `gpt-6-luna`, `gpt-5.6-luna`, Claude Sonnet 5.5, Claude Haiku 5.5 and Claude Fable with
+  "not available for this account". The cross-region quota for GPT-6 Luna is non-zero, so the refusal is
+  an account enablement matter, not a quota one. Some older models are end of life.
+- AWS's [abuse detection](https://docs.aws.amazon.com/bedrock/latest/userguide/abuse-detection.html)
+  page names the only models whose inputs and outputs are stored: every OpenAI model except the
+  gpt-oss family (classifier-flagged traffic, up to 30 days; full zero data retention through the AWS
+  account team) and Claude Fable 5, 5.1 and 5.2 (all traffic, up to 30 days). It says retained data is
+  held by AWS and not shared with model providers, and that Bedrock uses a zero operator access model.
+  Its CSAM exception covers image inputs and outputs; this product sends text only.
+- AWS's [data retention](https://docs.aws.amazon.com/bedrock/latest/userguide/data-retention.html) page
+  says there is no data retention change to Claude models released before Claude Fable 5.
+- AWS's [data protection](https://docs.aws.amazon.com/bedrock/latest/userguide/data-protection.html) page
+  says model providers have no access to their model deployment accounts, to Bedrock logs, or to
+  customer prompts and completions.
+- The [Bedrock FAQ](https://aws.amazon.com/bedrock/faqs/) says AWS and third-party model providers do not
+  use Bedrock inputs or outputs to train any model.
+
+## Decision
+
+1. **Provider.** Amazon Bedrock in the platform's own AWS account (development now; the staging and
+   production accounts later), through a `ModelProvider` implementation behind the existing model
+   gateway in `@ai-job-apply/ai-sdk`, using the Converse API and `us.` inference profiles (US regions
+   only). The gateway's kill switch, disclosure approval, input and output bounds, timeout, strict JSON
+   output and grounding checks (ADR-030) are unchanged. This adds no model-provider subprocessor: the
+   prompt goes to AWS, which already hosts the platform, not to a model company.
+2. **Interim model.** Claude Sonnet 4.6, `us.anthropic.claude-sonnet-4-6`. The model id is configuration
+   (a Terraform variable that reaches the generation process), and the gateway records provider, model
+   id and prompt version with each result.
+3. **Which models may be enabled for ADR-038 purposes.** A model may be enabled only if the AWS pages above
+   do not list it as retaining inputs or outputs, or the account has zero data retention for it in
+   writing. Changing the model is a configuration change plus a fresh read of those pages, recorded in the
+   decisions log below. Today this excludes the OpenAI models other than gpt-oss and Claude Fable 5.x,
+   and the models this account cannot call. `gpt-6-luna` becomes possible only if AWS enables it for the
+   account and grants zero data retention (the owner may ask the AWS account team; this does not block
+   the work). Narrative answers stay on OpenAI direct as decided in [ADR-057](057-narrative-answers-drafted-in-the-candidates-browser.md).
+4. **Stays off.** Model invocation logging (in every account that runs this), prompt caching and cache
+   points, conversation or session storage, Bedrock Agents, Knowledge Bases, Guardrails traces, batch
+   inference, provisioned throughput and image input. Only the synchronous Converse call is allowed. An
+   operator check fails the release if a logging configuration appears.
+5. **Where it runs.** In the native generation process, where the generated material already lives only
+   in memory for at most 30 minutes (ADR-038), reached with the task role's IAM credentials. There is no
+   provider key and no provider secret. The role may invoke only the chosen inference profile and the
+   foundation models behind it, and holds the permission only while the switch below is on. Private
+   egress to the Bedrock runtime endpoint, and any change to the workload permissions boundary, are
+   designed and reviewed in D3.2-002.
+6. **Limits and kill switch.** Off by default. A Terraform variable turns live generation off without a
+   code release or image rebuild, and removing the switch also removes the invoke permission. The
+   development spending ceiling is $20 a month, with AWS Budgets alarms at 50% and 80% to the owner. A
+   per-request token cap bounds input and output, and the existing single-dispatch admission and
+   per-candidate limits bound request counts. The alarms warn; the switch and the permission are the
+   hard stop.
+7. **Fallback.** When live generation is off, denied, over a cap, unavailable or fails the grounding
+   checks, tailoring falls back to the deterministic path and the candidate sees an honest state. The
+   fallback keeps working with the switch off (D3.2 exit criterion 4).
+
+## How this meets ADR-038 decision 7
+
+- **No training:** the Bedrock FAQ statement above; model providers cannot see prompts or completions.
+- **No retained prompts, including diagnostics and abuse logs:** invocation logging is off and verified;
+  the abuse detection page names the retaining models and Sonnet 4.6 is not among them; the generated
+  material is also never written by the platform (ADR-038 decisions 1 to 5).
+- **Within the window:** nothing is retained at the provider, so the 30-minute bound is set by the
+  platform's own expiry, which D3.2-005 proves with live traffic.
+
+Residual risks, recorded plainly:
+
+- Sonnet 4.6 is not named on the retention pages. The conclusion that it is not retained rests on those
+  pages naming the retaining models and stating no change for Claude models released before Fable 5. It is
+  an inference from AWS documentation, not a statement about Sonnet 4.6 by name, and not a contract.
+  D6-015 reviews it and the owner may ask the AWS account team to confirm it in writing.
+- AWS can change these terms. The pages are re-read at each model change and before any release that turns
+  live generation on in a new account.
+- A `us.` profile may process a request in any US region it covers. Nothing is stored there, but the Terms
+  must say prompts are processed by AWS in the United States.
+- CloudTrail and metrics record that a call happened (model id, counts, sizes), not its text. D3.2-005
+  verifies that no prompt or completion appears in any log or trace.
+
+## Consequences
+
+- The model is Sonnet 4.6, not `gpt-6-luna`. Quality is checked by the owner in D3.2-006 and grounded
+  validation and candidate review apply as before.
+- [Subprocessors](../security/subprocessors.md) names model inference under the AWS row and limits the
+  OpenAI row to narrative answers.
+- Work order: this record, then Terraform (invoke permission, switch, budget, boundary), then the adapter,
+  then resume tailoring and cover letters on it, then one restore sitting for the live proofs.
+- The development environment is dormant; live tests wait for a restore with the owner.
+
+## Alternatives rejected
+
+- **OpenAI direct for resumes and cover letters.** Its 30-day abuse retention breaks ADR-038. Kept only
+  for narrative answers (ADR-057).
+- **`gpt-6-luna` on Bedrock.** Not enabled for this account today, and OpenAI models other than gpt-oss
+  retain flagged traffic unless zero data retention is granted. A later configuration change if both are
+  obtained.
+- **Claude Fable 5.x.** AWS retains all traffic for up to 30 days; zero data retention needs the
+  Enterprise Frontier Safeguards program.
+- **gpt-oss, Llama 4 Maverick, Mistral Large 3, Nova Pro.** Callable today and possible fallbacks, each
+  needing the same page check; weaker for grounded writing than the chosen model.
+- **A direct Anthropic API account.** A new subprocessor with its own retention terms, not evaluated.
+- **Self-hosted model.** Cost and operations out of proportion for development.
+
+## Decisions log
+
+| Date | Decision | Reason |
+|---|---|---|
+| 2026-11-13 | Bedrock in our account with Claude Sonnet 4.6, model id as configuration. | `gpt-6-luna` is not available to the account and would not meet ADR-038 without zero retention; owner agreed. |
+| 2026-11-13 | $20 a month development ceiling, alarms at 50% and 80%, kill switch off by default. | Owner agreed to the recommendation. |

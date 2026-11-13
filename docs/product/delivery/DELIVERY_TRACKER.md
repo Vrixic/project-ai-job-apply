@@ -11,7 +11,7 @@ Last updated: 2026-11-13. Program status: In progress. Started: 2026-07-27. Comp
 | D2 | Extension and community loop | Complete | 2026-09-01 | 2026-09-18 | [Phase 2 tasks](phase-2-extension-and-community.md) |
 | D3 | High-quality application preparation | Complete | 2026-09-18 | 2026-11-13 | [Phase 3 tasks](phase-3-application-preparation.md) |
 | D3.1 | Structured candidate profile | Complete | 2026-10-22 | 2026-11-13 | [Phase 3.1 tasks](phase-3-1-structured-profile.md) |
-| D3.2 | Live AI generation | Ready (not started) | Not started | Not completed | [Phase 3.2 tasks](phase-3-2-live-ai-generation.md) |
+| D3.2 | Live AI generation | In progress | 2026-11-13 | Not completed | [Phase 3.2 tasks](phase-3-2-live-ai-generation.md) |
 | D4 | Workday and remote preparation | In progress | 2026-10-22 | Not completed | [Phase 4 tasks](phase-4-workday-and-remote.md) |
 | D5 | Personalized outreach and application notifications | In progress | 2026-10-22 | Not completed | [Phase 5 tasks](phase-5-outreach-and-notifications.md) |
 | D6 | Mobile and paid launch | In progress | 2026-09-28 | Not completed | [Phase 6 tasks](phase-6-mobile-and-paid.md) |
@@ -40,6 +40,8 @@ The owner answered the open questions in chat. Recorded decisions:
 2026-11-07 owner direction: free-text employer questions get an AI-draft icon in the extension, using OpenAI `gpt-6-luna` with the Terms of Service as consent ([ADR-057](../../adr/057-narrative-answers-drafted-in-the-candidates-browser.md), D3.2-009). The Gateway route, grounding checks and kill switch are built and dark; the extension icon and the live test follow.
 
 2026-11-07 owner direction: the generated resume PDF must never change the look of the candidate's own PDF; only the values change ([ADR-058](../../adr/058-edit-the-candidates-own-pdf-in-place.md), D3-154). The editor, the original-source reader and the session wiring are merged dark and the source-read IAM entry is approved and flagged off (#810, #811); columns and sidebars are recorded as parser reading zones, so all four of the owner's resumes edit in place locally. Released to development 2026-11-08: native resume r3 live (r1 retired, r2 stopped), parser v11 and processor v17 from one receipt, Gateway v148, zero drift. Follow-up releases to development 2026-11-08 to 2026-11-10: native resume r4 (Google Docs exports edit in place; r2 retired), Documents migration 0019 (a replaced resume no longer blocks regeneration for an application), and the processor's parser pin moved from version 8 to 11 so new uploads are stored with layout. The native image smoke now exercises the in-place path. The owner's live generation test remains.
+
+2026-11-13 owner direction on D3.2 (live AI generation): resumes and cover letters use Amazon Bedrock in our own AWS account with Claude Sonnet 4.6 as the interim model and the model id as configuration, because `gpt-6-luna` is not available to the account and would not meet ADR-038 without zero data retention; $20 a month development ceiling with alarms at 50% and 80%; kill switch off by default ([ADR-059](../../adr/059-live-generation-through-amazon-bedrock.md), D3.2-001 complete). Terraform and the adapter follow, then one restore sitting for the live proofs including the Ashby submission (D3.2-007).
 
 Still needing the owner: an AWS sign-in for the deployment, the Stripe account values (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRETS`, `STRIPE_PRO_PRICE_ID`, `BILLING_APP_BASE_URL`), counsel, the independent assessor, and staging and production accounts and Auth0 tenants (D6-013, D6-014, D6-021).
 
