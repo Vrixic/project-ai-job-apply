@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "decision": "docs/adr/059-live-generation-through-amazon-bedrock.md",
+  "models": {
+    "us.anthropic.claude-sonnet-4-6": {
+      "foundationModelId": "anthropic.claude-sonnet-4-6",
+      "destinationRegions": ["us-east-1", "us-east-2", "us-west-2"],
+      "reviewed": "2026-11-13"
+    }
+  }
+}

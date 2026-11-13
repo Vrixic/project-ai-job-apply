@@ -106,6 +106,13 @@ Residual risks, recorded plainly:
 - Work order: this record, then Terraform (invoke permission, switch, budget, boundary), then the adapter,
   then resume tailoring and cover letters on it, then one restore sitting for the live proofs.
 - The development environment is dormant; live tests wait for a restore with the owner.
+- The reviewed models live in one file, `infrastructure/terraform/live-generation-models.json`, read by the
+  bootstrap boundary and the environment role policy, and a test refuses a model that AWS documents as retaining
+  traffic. The workload permissions boundary names the exact profile (a ceiling bound to the native resume task
+  roles), so changing the model is a file entry, a bootstrap apply and an environment apply, never only a
+  runtime setting. To make room, the boundary's two native task statements for the Gateway and the cleanup worker
+  became one statement per cluster naming each principal that retains it (same grants, 304 characters saved);
+  the complete development boundary is 5,995 of 6,144 characters with the restore role and live generation on.
 
 ## Alternatives rejected
 

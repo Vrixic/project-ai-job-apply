@@ -33,7 +33,7 @@ locals {
   # Statement ids kept in the workload boundary (matched by prefix); every other id is dropped to save space.
   workload_boundary_retained_sids = [
     "ConnectExactPublicJobReader", "SendEmail", "OperateOwnedServerlessWorkflows", "ListCandidateDataExportVersions",
-    "PurgeDeletedCandidateDocumentVersions", "RestoreOnly", "GatewayNativeDisposal", "NativeCleanup", "ResumePurgeNativeTask"
+    "PurgeDeletedCandidateDocumentVersions", "RestoreOnly", "NativeTaskStop", "ResumePurgeNativeTask"
   ]
   # The candidate-rights maintenance function may DESCRIBE (never stop) tasks in the clusters the Gateway and the cleanup
   # worker already retain, so a resume purge can tell that a native task is gone (Documents migration 0021). The statement
@@ -46,12 +46,20 @@ locals {
       "ecs:cluster"      = cluster
     } }
   }]
-  gateway_disposal_boundary_statements = [for index, cluster in sort(tolist(var.gateway_native_disposal_clusters)) : {
-    Sid      = "GatewayNativeDisposal${index}", Effect = "Allow", Action = ["ecs:DescribeTasks", "ecs:StopTask"],
+  # The Gateway (terminal application cleanup) and the native cleanup worker may DESCRIBE and STOP tasks in the clusters each
+  # one retains. Both statements were identical apart from the principal, so one statement per cluster names every principal
+  # allowed there: a cluster in only one variable names only that principal, so no cluster gains a principal it did not have.
+  native_task_stop_clusters = sort(distinct(concat(tolist(var.gateway_native_disposal_clusters), tolist(var.native_cleanup_clusters))))
+  native_task_stop_boundary_statements = [for index, cluster in local.native_task_stop_clusters : {
+    Sid      = "NativeTaskStop${index}", Effect = "Allow", Action = ["ecs:DescribeTasks", "ecs:StopTask"],
     Resource = "${replace(cluster, ":cluster/", ":task/")}/*",
     Condition = { ArnEquals = {
-      "aws:PrincipalArn" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-${var.environment}-gateway-lambda",
+      "aws:PrincipalArn" = jsondecode(length(local.native_task_stop_principals[cluster]) == 1 ? jsonencode(local.native_task_stop_principals[cluster][0]) : jsonencode(local.native_task_stop_principals[cluster])),
       "ecs:cluster"      = cluster
     } }
   }]
+  native_task_stop_principals = { for cluster in local.native_task_stop_clusters : cluster => concat(
+    contains(var.gateway_native_disposal_clusters, cluster) ? ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-${var.environment}-gateway-lambda"] : [],
+    contains(var.native_cleanup_clusters, cluster) ? ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ai-job-apply-${var.environment}-native-material-cleanup-worker"] : []
+  ) }
 }

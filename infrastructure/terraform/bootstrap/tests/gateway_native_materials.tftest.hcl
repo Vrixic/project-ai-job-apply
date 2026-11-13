@@ -60,8 +60,8 @@ run "disposal_gateway_only" {
   command = plan
   variables { gateway_native_disposal_clusters = ["arn:aws:ecs:us-east-2:111122223333:cluster/native-materials"] }
   assert {
-    condition     = length(aws_iam_policy.workload_boundary.policy) <= 6144 && length([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : s if try(s.Sid, "") == "GatewayNativeDisposal0" && s.Resource == "arn:aws:ecs:us-east-2:111122223333:task/native-materials/*" && s.Condition.ArnEquals["aws:PrincipalArn"] == "arn:aws:iam::111122223333:role/ai-job-apply-staging-gateway-lambda" && s.Condition.ArnEquals["ecs:cluster"] == "arn:aws:ecs:us-east-2:111122223333:cluster/native-materials" && toset(s.Action) == toset(["ecs:DescribeTasks", "ecs:StopTask"])]) == 1
-    error_message = "Disposal authority must fit the boundary and belong only to the exact Gateway and cluster."
+    condition     = length(aws_iam_policy.workload_boundary.policy) <= 6144 && length([for s in jsondecode(aws_iam_policy.workload_boundary.policy).Statement : s if try(s.Sid, "") == "NativeTaskStop0" && s.Resource == "arn:aws:ecs:us-east-2:111122223333:task/native-materials/*" && s.Condition.ArnEquals["aws:PrincipalArn"] == "arn:aws:iam::111122223333:role/ai-job-apply-staging-gateway-lambda" && s.Condition.ArnEquals["ecs:cluster"] == "arn:aws:ecs:us-east-2:111122223333:cluster/native-materials" && toset(s.Action) == toset(["ecs:DescribeTasks", "ecs:StopTask"])]) == 1
+    error_message = "Disposal authority must fit the boundary and belong only to the exact Gateway and cluster (no cleanup worker without a retained cleanup cluster)."
   }
 }
 run "disposal_foreign_cluster_refused" {
