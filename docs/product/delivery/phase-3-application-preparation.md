@@ -1,5 +1,7 @@
 # D3 — High-Quality Application Preparation
 
+2026-11-13: D3 completed by owner direction on its engineering criteria (decision 2026-10-26), in development only. The two live proofs it waited for are in: the owner's real Greenhouse application (2026-11-11/12) and the D4 rights run (2026-11-13, recovery marker `completed`; the operator's own cleanup check had a bug, fixed in [#844](https://github.com/Vrixic/project-ai-job-apply/pull/844), so there is no clean operator receipt: accepted by the owner). See the exit criteria and the completion record below for the evidence and what is carried.
+
 2026-10-26 owner decisions on closing D3: (1) the accountable legal and security review is carried to D6-015 (independent assessment) and D6-016 (counsel review), as D1's was, so D3 closes on its engineering criteria. (2) Live AI generation is the product's main feature but cannot meet ADR-038's 30-minute all-copy retention with any provider or account the owner has today, so it moves to the new [D3.2 Live AI generation](phase-3-2-live-ai-generation.md); D3 closes with live AI off and deterministic tailoring. (3) Greenhouse is the live submission proof for D3; Ashby's live submission proof moves to D3.2. (4) One working session with the owner will run the live Greenhouse submission and the canonical export and deletion run (the D4 nine-owner policy) with a disposable MFA user; before it, the failing step of the 2026-10-17 run is diagnosed and fixed locally. D3 stays In progress until that session passes.
 
 2026-11-12: the resume purge reports what blocks it (Documents migration 0020, [ADR-034](../../adr/034-resume-byte-purge-runs-in-the-candidate-rights-maintenance-runtime.md) amendment). The D3 rights run's health gate was blocked by one deleted resume that failed the maintenance sweep every ~100 s with a bare SQLSTATE 55000 (its native resume generation is not settled, and a missing task stays unknown by design). The purge now abandons a never-launched pending generation and otherwise returns a typed result naming the blocking states, which the sweep logs without identifiers. Nothing is deleted when anything is unsettled and the alarm is unchanged. Needs a migration run and a profile-readiness activity release; the environment was shut down meanwhile (snapshot `ai-job-apply-development-shutdown-20261112180334`). The Prompt.io application was submitted for real on 2026-11-12 (attempt 46); the platform still shows it as not submitted because the candidate reset it, and it is not recorded as submitted.
@@ -183,7 +185,7 @@ components and the connected journey. Historical proof records remain historical
 reconciled-copy operators and physical restore rehearsals are not D3 dependencies. Independent
 D1/admin acceptance stays deferred.
 
-Status: In progress. Started: 2026-09-18. Completion: Not completed. Updated: 2026-10-21.
+Status: Complete. Started: 2026-09-18. Completion: 2026-11-13. Updated: 2026-11-13.
 
 ## Task register
 
@@ -486,11 +488,19 @@ Owner decision 2026-10-21: rendered-document verification, ATS accuracy acceptan
 rehearsals, AI evaluation, accessibility and product acceptance are removed. Security criteria
 remain; privacy reviews were removed 2026-10-22.
 
-- [ ] Truthful preparation, review, approval, Apply and confirmed-submission history work for the candidate.
-- [ ] Immutable approval bindings and duplicate-submission safety hold.
-- [ ] No generated-content persistence and all-copy expiry within 30 minutes (ADR-038) hold with live AI off; the live provider is [D3.2](phase-3-2-live-ai-generation.md).
-- [ ] The Greenhouse adapter fills, attaches and submits after the candidate's approval on one live posting the owner picks, with a safe manual fallback. Ashby is built and tested on synthetic pages; its live proof is D3.2-007.
-- [ ] Candidate export and deletion complete in one successful canonical run (the 2026-10-17 run FAILED). The accountable legal and security review is carried to D6-015 and D6-016.
+- [x] Truthful preparation, review, approval, Apply and confirmed-submission history work for the candidate. Evidence: used live in the owner's own Chrome from 2026-11-02 to 2026-11-13 (prepared and approved applications, Apply and Fill for my review, one real submission). Note: the first real submission was not recorded by the platform (the confirmation-page navigation ended the run); that is fixed in #837 and proven against a local synthetic board, and has not been re-proven on a second live posting.
+- [x] Immutable approval bindings and duplicate-submission safety hold. Evidence: approval-bound packets and one-shot attempts, exercised live; an attempt that could not be confirmed was classed ambiguous and was never retried (2026-11-12).
+- [x] No generated-content persistence and all-copy expiry within 30 minutes (ADR-038) hold with live AI off; the live provider is [D3.2](phase-3-2-live-ai-generation.md). Evidence: seen live 2026-11-13: a native resume task started 18:25Z had stopped by 18:56Z, and the export prefix held no versions after the run.
+- [x] The Greenhouse adapter fills, attaches and submits after the candidate's approval on one live posting the owner picks, with a safe manual fallback. Ashby is built and tested on synthetic pages; its live proof is D3.2-007. Evidence: the owner's real application to the Prompt.io "Software Engineer" posting (2026-11-11/12) was filled, attached and submitted by the extension after approval; the owner confirmed it was submitted. The platform history still shows it as `review_required` (see #837); the owner chose not to record it by hand.
+- [x] Candidate export and deletion complete in one successful canonical run (the 2026-10-17 run FAILED). The accountable legal and security review is carried to D6-015 and D6-016. Evidence: D4 rights run 2026-11-13 (nine-owner policy, disposable generated-synthetic identity with fresh MFA, 15-step reviewed plan): export, validated download, grant expiry, deletion confirmation and the object-locked recovery marker `completed` (19:07:24Z). The operator then reported `export-cleanup: export_inventory_invalid` because its post-deletion check dropped `IsTruncated` under AWS CLI pagination (the likely cause of the 2026-10-17 failure too); fixed in #844. Independent read-only checks afterwards: no export versions, 89 of 89 alarms OK, no tasks, no queued messages. No clean operator receipt exists; the owner accepted this run for the criterion (2026-11-13).
+
+## Completion record
+
+- Completion date: 2026-11-13
+- Exit review: owner-directed close-out on the engineering criteria (decision 2026-10-26: legal and security review are carried to D6-015 and D6-016, live AI generation to D3.2). Each criterion is evidenced above; no new test run was made for the close-out itself.
+- Release/evidence summary: development environment only; nothing in D3 is deployed to production. This sitting released the resume-purge fix (Documents migration 0021, [#842](https://github.com/Vrixic/project-ai-job-apply/pull/842)), the workload-boundary statement it needed ([#843](https://github.com/Vrixic/project-ai-job-apply/pull/843)) and the rights-operator check fix ([#844](https://github.com/Vrixic/project-ai-job-apply/pull/844)). The development environment is shut down (final snapshot `shutdown-20261113191602`).
+- Carried, not done: a clean operator receipt for the rights run; live deletion of an account that has a resume (D3-028, D3-R9: the canonical run did not use the resume fixture; only the sweep's purge of a deleted resume with a vanished native task is proven live); recording the Prompt.io submission on the platform; a live proof of confirmed-submission recording on a second posting; Ashby live proof (D3.2-007); live AI generation (D3.2); legal and security review (D6-015, D6-016).
+- Accepted residual risks: the carried items above; the Auth0 side of the account deletion was not independently verified by the operator (its deletion client cannot read absence), and the owner is to confirm in the Auth0 dashboard that the deleted user is gone.
 
 ## Evidence
 
