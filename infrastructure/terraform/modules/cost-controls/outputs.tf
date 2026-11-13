@@ -9,3 +9,7 @@ output "cost_export_arn" {
 output "cost_export_bucket" {
   value = aws_s3_bucket.cost_exports.bucket
 }
+
+output "live_generation_budget_name" {
+  value = var.live_generation_budget == null ? null : aws_budgets_budget.live_generation[0].name
+}

@@ -99,3 +99,92 @@ run "unexpected_registered_revision_refused" {
   }
   expect_failures = [aws_ecs_task_definition.resume]
 }
+run "live_generation_absent_by_default" {
+  command = plan
+  assert {
+    condition     = length(jsondecode(aws_iam_role_policy.task[0].policy).Statement) == 4 && !strcontains(aws_iam_role_policy.task[0].policy, "bedrock")
+    error_message = "Without live generation the task role must hold no Bedrock permission and keep its original four statements."
+  }
+}
+run "live_generation_off_grants_nothing" {
+  command = plan
+  variables {
+    live_generation = {
+      enabled               = false
+      profile_arn           = "arn:aws:bedrock:us-east-2:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6"
+      foundation_model_arns = ["arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6"]
+    }
+  }
+  assert {
+    condition     = length(jsondecode(aws_iam_role_policy.task[0].policy).Statement) == 4 && !strcontains(aws_iam_role_policy.task[0].policy, "bedrock")
+    error_message = "The kill switch off must remove the model permission without changing anything else."
+  }
+}
+run "live_generation_on_grants_only_the_reviewed_profile_and_models" {
+  command = plan
+  variables {
+    live_generation = {
+      enabled     = true
+      profile_arn = "arn:aws:bedrock:us-east-2:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6"
+      foundation_model_arns = [
+        "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6",
+        "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6",
+        "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6"
+      ]
+    }
+  }
+  assert {
+    condition = (
+      length(jsondecode(aws_iam_role_policy.task[0].policy).Statement) == 6 &&
+      jsondecode(aws_iam_role_policy.task[0].policy).Statement[0].Resource == [var.release.owner_function_arn, var.release.source_function_arn] &&
+      jsondecode(aws_iam_role_policy.task[0].policy).Statement[3].Effect == "Deny" &&
+      jsondecode(aws_iam_role_policy.task[0].policy).Statement[4] == {
+        Sid      = "InvokeReviewedProfile", Effect = "Allow", Action = ["bedrock:InvokeModel"],
+        Resource = ["arn:aws:bedrock:us-east-2:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6"]
+      } &&
+      jsondecode(aws_iam_role_policy.task[0].policy).Statement[5] == {
+        Sid = "InvokeReviewedFoundationModels", Effect = "Allow", Action = ["bedrock:InvokeModel"],
+        Resource = [
+          "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6",
+          "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6",
+          "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6"
+        ]
+      } &&
+      !strcontains(aws_iam_role_policy.task[0].policy, "bedrock:*") && !strcontains(aws_iam_role_policy.task[0].policy, "InvokeModelWith")
+    )
+    error_message = "When on, the role may only InvokeModel (Converse) on the one reviewed profile and its foundation models; the original statements and the content-persistence Deny are unchanged."
+  }
+}
+run "live_generation_foreign_account_profile_refused" {
+  command = plan
+  variables {
+    live_generation = {
+      enabled               = true
+      profile_arn           = "arn:aws:bedrock:us-east-2:999900001111:inference-profile/us.anthropic.claude-sonnet-4-6"
+      foundation_model_arns = ["arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6"]
+    }
+  }
+  expect_failures = [var.live_generation]
+}
+run "live_generation_wildcard_model_refused" {
+  command = plan
+  variables {
+    live_generation = {
+      enabled               = true
+      profile_arn           = "arn:aws:bedrock:us-east-2:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6"
+      foundation_model_arns = ["arn:aws:bedrock:us-east-2::foundation-model/*"]
+    }
+  }
+  expect_failures = [var.live_generation]
+}
+run "live_generation_non_us_model_refused" {
+  command = plan
+  variables {
+    live_generation = {
+      enabled               = true
+      profile_arn           = "arn:aws:bedrock:us-east-2:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6"
+      foundation_model_arns = ["arn:aws:bedrock:eu-west-1::foundation-model/anthropic.claude-sonnet-4-6"]
+    }
+  }
+  expect_failures = [var.live_generation]
+}

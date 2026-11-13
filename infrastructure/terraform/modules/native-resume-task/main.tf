@@ -47,8 +47,31 @@ variable "release" {
     error_message = "Use an immutable same-account us-east-2 image, numeric original task/RPC versions, exact TLS secret/version and customer key."
   }
 }
+variable "live_generation" {
+  description = "ADR-059. Null, or enabled = false, grants no model access: the permission itself is the kill switch, so turning live generation off needs no new task revision. Resources are the one reviewed inference profile and the foundation models behind it."
+  type = object({
+    enabled               = bool
+    profile_arn           = string
+    foundation_model_arns = list(string)
+  })
+  default = null
+  validation {
+    condition = var.live_generation == null ? true : (
+      can(regex("^arn:aws:bedrock:us-east-2:${var.account_id}:inference-profile/us\\.[a-z0-9]+\\.[a-z0-9.-]+$", var.live_generation.profile_arn)) &&
+      length(var.live_generation.foundation_model_arns) >= 1 && length(var.live_generation.foundation_model_arns) <= 4 &&
+      length(distinct(var.live_generation.foundation_model_arns)) == length(var.live_generation.foundation_model_arns) &&
+      alltrue([for arn in var.live_generation.foundation_model_arns : can(regex("^arn:aws:bedrock:us-(east|west)-[0-9]::foundation-model/[a-z0-9]+\\.[a-z0-9.-]+$", arn))])
+    )
+    error_message = "Use the same-account us-east-2 inference profile and one to four US foundation model ARNs; no wildcard."
+  }
+}
 locals {
-  enabled  = var.release != null
+  enabled = var.release != null
+  # Appended after the existing statements so the original statement order is unchanged. Converse needs bedrock:InvokeModel.
+  live_generation_statements = var.live_generation != null && var.live_generation.enabled ? [
+    { Sid = "InvokeReviewedProfile", Effect = "Allow", Action = ["bedrock:InvokeModel"], Resource = [var.live_generation.profile_arn] },
+    { Sid = "InvokeReviewedFoundationModels", Effect = "Allow", Action = ["bedrock:InvokeModel"], Resource = var.live_generation.foundation_model_arns }
+  ] : []
   name     = "ai-job-apply-${var.environment}-native-resume"
   revision = local.enabled ? element(reverse(split(":", var.release.expected_task_definition_arn)), 0) : "0"
   boundary = "arn:aws:iam::${var.account_id}:policy/ai-job-apply-${var.environment}-workload-boundary"
@@ -117,7 +140,7 @@ resource "aws_iam_role_policy" "task" {
   role  = aws_iam_role.task[0].id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       { Sid = "InvokePinnedOwners", Effect = "Allow", Action = ["lambda:InvokeFunction"],
       Resource = [var.release.owner_function_arn, var.release.source_function_arn] },
       { Sid = "ReadPinnedTls", Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = var.release.tls_secret_arn,
@@ -125,7 +148,7 @@ resource "aws_iam_role_policy" "task" {
       { Sid = "DecryptOnlyTlsSecret", Effect = "Allow", Action = ["kms:Decrypt"], Resource = var.release.tls_kms_key_arn,
       Condition = { StringEquals = { "kms:ViaService" = "secretsmanager.us-east-2.amazonaws.com", "kms:EncryptionContext:SecretARN" = var.release.tls_secret_arn } } },
       { Sid = "NoPersistedContentOrRemoteExec", Effect = "Deny", Action = ["s3:*", "logs:*", "xray:*", "ssmmessages:*", "ecs:*", "rds-db:*"], Resource = "*" }
-    ]
+    ], local.live_generation_statements)
   })
 }
 resource "aws_ecs_task_definition" "resume" {
@@ -159,3 +182,4 @@ output "task_definition_arn" { value = local.enabled ? aws_ecs_task_definition.r
 output "task_role_arn" { value = local.enabled ? aws_iam_role.task[0].arn : null }
 output "execution_role_arn" { value = local.enabled ? aws_iam_role.execution[0].arn : null }
 output "image" { value = local.image }
+output "live_generation_invoke_resources" { value = flatten([for statement in local.live_generation_statements : statement.Resource]) }

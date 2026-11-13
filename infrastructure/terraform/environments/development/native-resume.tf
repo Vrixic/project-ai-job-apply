@@ -65,6 +65,8 @@ module "native_resume_task" {
   account_id  = module.platform.account_id
   environment = "development"
   release     = each.value.release
+  # ADR-059: the permission to invoke the reviewed model, granted only while the kill switch is on.
+  live_generation = local.task_live_generation
 }
 
 variable "native_resume_preparation_releases" {
