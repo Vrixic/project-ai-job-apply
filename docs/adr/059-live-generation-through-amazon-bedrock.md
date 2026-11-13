@@ -113,6 +113,14 @@ Residual risks, recorded plainly:
   `scripts/verify-bedrock-invocation-logging-off.ps1` (read only; fails if any invocation logging configuration
   exists) complete the controls in decisions 4 to 6. Cost Explorer names the budget filter after the model, so the
   service name is confirmed after the first calls.
+- Anthropic models on Bedrock need the account's one-time Anthropic use case details form. On 2026-11-13 the
+  account had none on file, so a Sonnet 4.6 call returned `ResourceNotFoundException` (calls earlier the same day had
+  worked; Llama 4 Maverick still answered). The form carries organisation details and goes to Anthropic, so the
+  owner submits it (or supplies the values and approves a submission) before the first live call. If the owner prefers
+  not to, a non-Anthropic model can replace the interim one after the same retention review.
+- Sonnet 4.6 on Bedrock is listed at 3 USD per million input tokens and 15 USD per million output tokens, so one
+  tailoring call of about 6,000 input and 1,000 output tokens costs about 3 cents and the 20 USD ceiling is roughly
+  600 generations a month.
 - The development environment is dormant; live tests wait for a restore with the owner.
 - The reviewed models live in one file, `infrastructure/terraform/live-generation-models.json`, read by the
   bootstrap boundary and the environment role policy, and a test refuses a model that AWS documents as retaining

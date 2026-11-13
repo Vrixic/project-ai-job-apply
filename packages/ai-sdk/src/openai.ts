@@ -7,29 +7,10 @@ import {
 } from "./gateway.js";
 import { originalBackgroundResponse } from "./openai-background.js";
 import { validateOpenAiBackgroundResponseReference } from "./openai-response-cleanup.js";
+import { GROUNDED_PARAGRAPHS_NAME, GROUNDED_PARAGRAPHS_SCHEMA } from "./provider-output-schema.js";
 
 const ENDPOINT = "https://api.openai.com/v1/responses";
 const MAX_RESPONSE_BYTES = 128_000;
-const PARAGRAPHS_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["paragraphs"],
-  properties: {
-    paragraphs: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["text", "factIds"],
-        properties: {
-          text: { type: "string" },
-          factIds: { type: "array", items: { type: "string" } },
-        },
-      },
-    },
-  },
-};
-
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -48,9 +29,9 @@ function requestBody(request: ProviderRequest, background: boolean) {
     text: {
       format: {
         type: "json_schema",
-        name: "grounded_paragraphs_v1",
+        name: GROUNDED_PARAGRAPHS_NAME,
         strict: true,
-        schema: PARAGRAPHS_SCHEMA,
+        schema: GROUNDED_PARAGRAPHS_SCHEMA,
       },
     },
   };
