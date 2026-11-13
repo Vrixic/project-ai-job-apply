@@ -65,6 +65,10 @@ for (const forbidden of [
   if (inputs.some((name) => name.includes(forbidden))) throw Error("NativeImageCapabilityRejected");
 for (const required of [
   "client-secrets-manager",
+  // ADR-059: the model path is Bedrock only, through the narrow ai-sdk subpaths (the barrel would add OpenAI).
+  "client-bedrock-runtime",
+  "native-bedrock-converse.js",
+  "tailoring/live-tailor.js",
   "native-resume-task-bootstrap.js",
   "native-resume-owner-rpc-client.js",
   "native-resume-source-rpc-client.js",

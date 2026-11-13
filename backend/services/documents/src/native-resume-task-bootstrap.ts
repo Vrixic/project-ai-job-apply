@@ -8,7 +8,7 @@ import {
 import { createNativeResumeSourceRpcClient } from "./native-resume-source-rpc-client.js";
 import { readNativeResumeTaskBinding } from "./native-resume-task-metadata.js";
 
-type Ports = Pick<NativeResumeRuntimeOptions, "transport" | "loadKernel">;
+type Ports = Pick<NativeResumeRuntimeOptions, "transport" | "loadKernel" | "liveTailor">;
 type Options = {
   deployment: Parameters<typeof readNativeResumeTaskBinding>[0]["deployment"];
   ownerFunctionArn: string;
@@ -121,6 +121,7 @@ export async function startNativeResumeTask(options: Options) {
       bootstrap: identity,
       source,
       loadKernel,
+      ...(ports.liveTailor ? { liveTailor: ports.liveTailor } : {}),
       transport,
       controls: {
         checkAdmission: rpc.checkAdmission,

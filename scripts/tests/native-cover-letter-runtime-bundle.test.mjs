@@ -341,7 +341,7 @@ test("native resume generation owner emits scalar SQL control without content, m
   assert.equal(effects, 0);
 });
 
-test("native resume image connects source, pinned TLS and direct reads without provider or persistence", async () => {
+test("native resume image connects source, pinned TLS and direct reads with only the Bedrock model path (ADR-059) and no persistence", async () => {
   const result = await build({
     absWorkingDir: root,
     entryPoints: ["backend/services/documents/dist/src/native-resume-image-runtime.js"],
@@ -374,6 +374,9 @@ test("native resume image connects source, pinned TLS and direct reads without p
     );
   for (const required of [
     "client-secrets-manager",
+    "client-bedrock-runtime",
+    "native-bedrock-converse.js",
+    "tailoring/live-tailor.js",
     "native-resume-task-bootstrap.js",
     "native-resume-owner-rpc-client.js",
     "native-resume-source-rpc-client.js",

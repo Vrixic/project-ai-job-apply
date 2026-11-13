@@ -2,6 +2,9 @@ import { canonicalizeLeadingBullet } from "../leading-bullet.js";
 import type { AstEntry, AstLine, AstNode, AstSection, ResumeAst } from "../resume-ast/types.js";
 
 export const TAILORING_VERSION = "tailoring.v1" as const;
+/** Same structure and the same factuality gate; only the choice of which existing bullets to keep and in what order
+ * comes from a model (ADR-059). It writes no text. */
+export const LIVE_TAILORING_VERSION = "tailoring.live.v1" as const;
 export const DEFAULT_MAX_BULLETS_PER_ENTRY = 6;
 
 export interface JobTextFacts {
@@ -38,7 +41,7 @@ export type DiffOp =
  * path that must pass factuality checks (see D3-004).
  */
 export interface TailoredResume {
-  tailoringVersion: typeof TAILORING_VERSION;
+  tailoringVersion: typeof TAILORING_VERSION | typeof LIVE_TAILORING_VERSION;
   base: { documentId: string; documentVersion: number; sourceSha256: string };
   /** Job terms that already appear in the candidate's own content. Never terms merely wished for. */
   matchedTerms: string[];
@@ -78,7 +81,14 @@ function overlap(bullet: Set<string>, jobTerms: ReadonlySet<string>): string[] {
   return [...bullet].filter((term) => jobTerms.has(term)).sort();
 }
 
-const TAILORABLE_KINDS: readonly AstSection["kind"][] = ["experience", "projects"];
+export const TAILORABLE_KINDS: readonly AstSection["kind"][] = ["experience", "projects"];
+
+/** The bullets of one tailorable entry, in the order to show, and the ones left out (in the order the diff lists them). */
+export interface BulletChoice {
+  kept: readonly AstNode[];
+  omitted: readonly AstNode[];
+}
+export type BulletChooser = (entry: AstEntry, section: AstSection) => BulletChoice;
 
 export function tailorResume(
   ast: ResumeAst,
@@ -86,6 +96,22 @@ export function tailorResume(
   options: TailoringOptions = {},
 ): TailoredResume {
   const maxBullets = options.maxBulletsPerEntry ?? DEFAULT_MAX_BULLETS_PER_ENTRY;
+  const jobTerms = termsIn(`${job.title} ${job.description}`);
+  return buildTailored(ast, job, TAILORING_VERSION, (entry) =>
+    rankBullets(entry, jobTerms, maxBullets),
+  );
+}
+
+/**
+ * The tailored structure for any choice of bullets. Lines, headings and non tailorable sections always come from the
+ * base tree unchanged, so a chooser can only pick among the entry's own bullets and cannot add, reword or move text.
+ */
+export function buildTailored(
+  ast: ResumeAst,
+  job: JobTextFacts,
+  version: TailoredResume["tailoringVersion"],
+  choose: BulletChooser,
+): TailoredResume {
   const jobTerms = termsIn(`${job.title} ${job.description}`);
   const matched = new Set<string>();
   const diff: DiffOp[] = [];
@@ -110,14 +136,14 @@ export function tailorResume(
         return {
           entryId: entry.id,
           lineNodeIds,
-          bulletNodeIds: selectBullets(entry, jobTerms, maxBullets, matched, diff),
+          bulletNodeIds: recordChoice(entry, choose(entry, section), jobTerms, matched, diff),
         };
       }),
     };
   });
 
   return {
-    tailoringVersion: TAILORING_VERSION,
+    tailoringVersion: version,
     base: {
       documentId: ast.documentId,
       documentVersion: ast.documentVersion,
@@ -129,33 +155,47 @@ export function tailorResume(
   };
 }
 
-function selectBullets(
+function rankBullets(
   entry: AstEntry,
   jobTerms: ReadonlySet<string>,
   maxBullets: number,
-  matched: Set<string>,
-  diff: DiffOp[],
-): string[] {
+): BulletChoice {
   const scored = entry.bullets.map((bullet, index) => {
     const terms = overlap(termsIn(bullet.text), jobTerms);
     return { bullet, index, terms };
   });
   // Highest overlap first; ties keep the candidate's own order so nothing is reshuffled without a reason.
   const ranked = [...scored].sort((a, b) => b.terms.length - a.terms.length || a.index - b.index);
-  const kept = ranked.slice(0, maxBullets);
-  const omitted = ranked.slice(maxBullets);
-  for (const { terms } of kept) for (const term of terms) matched.add(term);
-  kept.forEach(({ bullet, index, terms }, toIndex) => {
+  return {
+    kept: ranked.slice(0, maxBullets).map(({ bullet }) => bullet),
+    omitted: ranked.slice(maxBullets).map(({ bullet }) => bullet),
+  };
+}
+
+/** Records the diff and the job terms the kept bullets really contain. Terms are computed from the candidate's own
+ * text here, never taken from whatever chose the bullets. */
+function recordChoice(
+  entry: AstEntry,
+  choice: BulletChoice,
+  jobTerms: ReadonlySet<string>,
+  matched: Set<string>,
+  diff: DiffOp[],
+): string[] {
+  const position = new Map(entry.bullets.map((bullet, index) => [bullet.id, index]));
+  choice.kept.forEach((bullet, toIndex) => {
+    const index = position.get(bullet.id) ?? toIndex;
+    const terms = overlap(termsIn(bullet.text), jobTerms);
+    for (const term of terms) matched.add(term);
     diff.push(
       toIndex === index
         ? { op: "keep", nodeId: bullet.id }
         : { op: "move", nodeId: bullet.id, fromIndex: index, toIndex, matchedTerms: terms },
     );
   });
-  for (const { bullet } of omitted) {
+  for (const bullet of choice.omitted) {
     diff.push({ op: "omit", nodeId: bullet.id, reason: "lower_relevance" });
   }
-  return kept.map(({ bullet }) => bullet.id);
+  return choice.kept.map((bullet) => bullet.id);
 }
 
 export interface FactualityIssue {

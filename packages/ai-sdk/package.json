@@ -11,6 +11,14 @@
     "./context": {
       "types": "./dist/context.d.ts",
       "default": "./dist/context.js"
+    },
+    "./bedrock": {
+      "types": "./dist/bedrock.d.ts",
+      "default": "./dist/bedrock.js"
+    },
+    "./gateway": {
+      "types": "./dist/gateway.d.ts",
+      "default": "./dist/gateway.js"
     }
   },
   "scripts": {
