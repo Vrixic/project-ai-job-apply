@@ -21,7 +21,7 @@ $script:inspections = 0
 function Invoke-AwsJson {
   param([string[]]$Arguments, [string]$Operation)
   $script:inspections++
-  if (($Arguments -join '|') -cne "s3api|list-object-versions|--bucket|generated-export-bucket|--prefix|$key|--output|json") {
+  if (($Arguments -join '|') -cne "s3api|list-object-versions|--bucket|generated-export-bucket|--prefix|$key|--no-paginate|--max-keys|1000|--output|json") {
     throw 'Cleanup did not inspect the state-owned exact export prefix.'
   }
   if ($script:failure) { throw 'SyntheticAccessDenied' }

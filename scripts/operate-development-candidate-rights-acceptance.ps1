@@ -1046,8 +1046,10 @@ function Confirm-RightsExportDeletion {
     throw 'The deleted export does not bind the exact state-owned object version.'
   }
   # A completed deletion marker or expired grant alone does not prove artifact cleanup.
-  # The AWS CLI paginates this exact-prefix version inventory; access errors fail closed.
-  $inventory = Invoke-AwsJson @('s3api','list-object-versions','--bucket',$bucket,'--prefix',$key,'--output','json') 'Deleted export version inventory'
+  # One raw page: the AWS CLI drops IsTruncated when it paginates for you, which made this check refuse the empty
+  # inventory that proves cleanup. The exact-prefix inventory is at most a few versions, so one 1000-key page is
+  # complete, and a truncated or malformed page still fails closed. Access errors fail closed too.
+  $inventory = Invoke-AwsJson @('s3api','list-object-versions','--bucket',$bucket,'--prefix',$key,'--no-paginate','--max-keys','1000','--output','json') 'Deleted export version inventory'
   $truncated = Get-OptionalProperty $inventory 'IsTruncated'
   if ($truncated -isnot [bool] -or $truncated -ne $false -or
       -not [string]::IsNullOrWhiteSpace([string](Get-OptionalProperty $inventory 'NextToken'))) {
