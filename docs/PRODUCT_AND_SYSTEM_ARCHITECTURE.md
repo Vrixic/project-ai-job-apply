@@ -21,7 +21,7 @@ ai-job-apply/
 ├── backend/
 │   ├── gateway/                     # Public API gateway/BFF; REST or GraphQL facade
 │   ├── services/
-│   │   ├── profile/                 # Candidate facts, preferences, answer vault
+│   │   ├── profile/                 # Structured Profile, preferences, answer vault
 │   │   ├── jobs/                    # Canonical job catalog and lifecycle
 │   │   ├── matching/                # Retrieval, ranking, recommendations
 │   │   ├── documents/               # Resume, cover letter, artifact versions
@@ -566,7 +566,7 @@ Task workers may crash, time out, be rate-limited, or encounter changed pages. T
 | Service/module | Owns | Must not own |
 |---|---|---|
 | Gateway/BFF | Client-specific aggregation, auth enforcement, rate limits, API versioning | Business workflows or long-running tasks |
-| Profile | Candidate facts, preferences, answer vault, consent references | Generated job-specific documents |
+| Profile | Structured Profile entries, preferences, answer vault, consent references | Generated job-specific documents |
 | Jobs | Canonical listings, sources, company identity, lifecycle, reports | Per-user match rank |
 | Matching | Retrieval, filters, scoring, explanation, feedback features | Canonical source truth |
 | Documents | Base resumes, tailored versions, cover letters, rendering | Submission state |
@@ -583,8 +583,9 @@ Task workers may crash, time out, be rate-limited, or encounter changed pages. T
 Representative endpoints:
 
 ```text
-POST   /v1/profile/import-resume
-PATCH  /v1/profile/facts/:factId
+POST   /v1/resumes/uploads
+POST   /v1/profile/import-drafts/:draftId/save
+PATCH  /v1/profile/work-experience-entries/:entryId
 GET    /v1/jobs
 GET    /v1/jobs/:jobId
 POST   /v1/jobs/contributions

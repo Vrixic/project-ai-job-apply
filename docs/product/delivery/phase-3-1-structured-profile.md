@@ -1,10 +1,10 @@
 # D3.1 - Structured Candidate Profile
 
-- Status: In progress
+- Status: Complete
 - Start: 2026-10-22
-- Completion: Not completed
+- Completion: 2026-11-13
 - Owners: Unassigned
-- Last updated: 2026-10-22
+- Last updated: 2026-11-13
 - Master tracker: [Delivery tracker](DELIVERY_TRACKER.md#d31---structured-candidate-profile)
 
 ## Objective
@@ -81,13 +81,13 @@ The exact field set per section is decided in D3.1-001.
 
 ## Exit criteria
 
-- [ ] A signed-in candidate can create, edit, and delete entries in every Profile section and in Application answers through the hosted web app, and the changes persist and appear in export.
-- [ ] No candidate-facing "profile facts" panel or proposed, confirmed, rejected, or invalidated state remains, and no profile-fact route, schema, contract, or table remains.
-- [ ] Resume upload prefills draft entries, nothing joins the profile until the candidate saves it, and no value is fabricated or silently accepted.
-- [ ] Prepare, matching, and extension fill read only the structured records, generated claims remain grounded and checked, and the packet approval binding is intact.
-- [ ] Restricted answers are not collected in the general profile and stay behind the ADR-010 review flow.
-- [ ] Export, deletion, and restore cover the new records, with evidence from the guarded tooling.
-- [ ] D3-001, D4-003, architecture section 5.1, this document, and the master tracker agree.
+- [x] A signed-in candidate can create, edit, and delete entries in every Profile section and in Application answers through the hosted web app, and the changes persist and appear in export. Evidence: deployed 2026-10-22 and verified through the hosted path (D3.1-011); the owner confirmed D3.1 works in the hosted app on 2026-10-23. Export: a real-PostgreSQL test validates a live export with the new sections against the portable schema (D3.1-004), and the nine-owner export of the 2026-11-13 rights run validated against it with Profile among the owners (that run did not report per-section Profile counts).
+- [x] No candidate-facing "profile facts" panel or proposed, confirmed, rejected, or invalidated state remains, and no profile-fact route, schema, contract, or table remains. Evidence, inspected 2026-11-13: the OpenAPI document has no fact path or schema, the domain and event schemas have none, migration 0014 dropped the three fact tables, and the web and BFF code has none. Retained on purpose and accepted as residue: the portable export schema's optional `facts` field and `profileFact` definition (so older exports still validate, per the additive-only rule); the AI gateway's data-category label `profile_facts` (part of the disclosure vocabulary and pinned in the export schema, so renaming it is a contract change; it now describes saved Profile entries); `FactGraph` and `GraphFact` as the internal evidence structure saved records are adapted to; and a `profileFactCount` field name in the document-processing acceptance operator (AWS acceptance tooling, left for the owner's cleanup decision).
+- [x] Resume upload prefills draft entries, nothing joins the profile until the candidate saves it, and no value is fabricated or silently accepted. Evidence: D3.1-006 (section-aware extractor that skips an entry it cannot read, idempotent import of unsaved drafts, drafts erased on hold or retire) with its tests, released with parser v10 and processor v16 (D3.1-011), and the hosted flow the owner confirmed on 2026-10-23.
+- [x] Prepare, matching, and extension fill read only the structured records, generated claims remain grounded and checked, and the packet approval binding is intact. Evidence: D3.1-008 and D3.1-009 (packet fields cite saved Profile records; Matching reads job preferences; the extension fills only from the approved packet) with the ADR-030 grounding regression test, and live use since: the owner's applications from 2026-11-02 to 2026-11-13, including the real Greenhouse submission, were prepared and approved on those packets.
+- [x] Restricted answers are not collected in the general profile and stay behind the ADR-010 review flow. Evidence: D3.1-005 refuses restricted categories (tested on PostgreSQL), the Restricted answers tab appears only when that flow is enabled, and the vault is unchanged.
+- [x] Export, deletion, and restore cover the new records, with evidence from the guarded tooling. Evidence: the guarded rights operator's 2026-11-13 run completed the deletion across all nine owners including Profile (recovery marker `completed`; see D3), after the real-PostgreSQL deletion test showed nothing left and other candidates spared (D3.1-004). Restore: the restore manifest pins `profile.entries`, `profile.entry_versions`, `profile.import_drafts`, `profile.personal_versions` and `profile.resume_imports` and migrations 0012 to 0014, and the development database was restored from snapshots on 2026-11-11 and 2026-11-12, after which the migration operator verified the Profile migrations through 0014 on the restored database (2026-11-13). Formal restore proofs are not required (owner decisions 2026-10-10 and 2026-10-21).
+- [x] D3-001, D4-003, architecture section 5.1, this document, and the master tracker agree. Evidence, checked 2026-11-13: the D3 capability row for D3-001 says profile facts were replaced by saved Profile entries (ADR-052), D4-003 is satisfied by design, and architecture section 5.1 describes the structured Profile. This close-out also fixes stale wording elsewhere in the architecture document (the Profile service description, the ownership table and the endpoint sketch, which still named the removed `/v1/profile/facts` route).
 
 ## Work log
 
@@ -107,11 +107,13 @@ The exact field set per section is decided in D3.1-001.
 | 2026-10-22 | D3.1-009 and D3.1-010: consumers confirmed, fact model retired. Migration 0014, source removals in the Profile service, Gateway, contracts, domain and web, and the restore, deletion and replay pins moved to 97 relations and 84 migrations. Domain (80), api-contracts (131), documents (2043), applications (533), gateway (409), profile (unit and integration), web (949) and the workflow unit suites pass; the known stale reconciled-copy and application-restore-reconciliation tests still fail as before. Discovered work D3.1-013 added. D3.1-011 (deployment) waits on the owner. | D3.1-009, D3.1-010, D3.1-013 | Migration `0014_retire_profile_facts.sql` |
 | 2026-10-22 | D3.1-011 prerequisite: the migration-owner test gate failed 4 tests of the Applications transition reconciliation diagnostic, which compared the live restore manifest against its pinned 2026-10-08 hash and so broke whenever the manifest advanced (already failing at 15193dc3). The diagnostic now loads its own retained target manifest, embedded byte-exact and hash-checked, and ignores the live manifest. The live manifest, restore contract and pins are unchanged. 125 of 125 database-migrations tests pass. |
 | 2026-10-22 | D3.1-011 prerequisite: the dependency audit gate failed on new registry advisories, including two critical and one high Next.js flaws in 16.0.0 to 16.4.0 that affected the web and admin apps on 16.3.8. Next moves to 16.4.2 (and its sharp override), Fastify to 5.12.7 (gateway pin and override floor) and Vitest to 5.0.5. The gate passes with no risk exceptions; web typecheck, 985 web tests, the web production build and 437 gateway tests pass. |
+| 2026-11-13 | Completed D3.1 by owner direction. All seven exit criteria are ticked with evidence checked against the code and the live record; the retained compatibility residue is accepted and listed in the completion record. | D3.1-001 to D3.1-013 | [Completion record](#completion-record) |
 
 ## Decisions and scope changes
 
 | Date | Decision or change | Reason | Evidence |
 |---|---|---|---|
+| 2026-11-13 | Completed D3.1. | The owner directed it after D3 closed; the fact model is retired and deployed, and the criteria are evidenced. | Owner direction 2026-11-13 |
 | 2026-10-22 | Accepted [ADR-052](../../adr/052-structured-candidate-profile.md): discard existing development facts and re-import the resume; keep restricted answers out of the general Profile. | The owner approved both recommendations. Only synthetic development data exists. | Owner direction 2026-10-22 |
 | 2026-10-22 | Owner removed privacy reviews from all phases: D3.1-002 is Removed and no longer gates D3.1-004. | Owner direction 2026-10-22 |
 | 2026-10-21 | Owner removed non-security testing and acceptance work: D3.1-012 is Removed and D3.1 no longer waits for D3 to complete. Security and privacy review (D3.1-002) is unchanged. | Owner direction 2026-10-21 |
@@ -121,16 +123,16 @@ The exact field set per section is decided in D3.1-001.
 
 | ID | State | Risk or blocker | Owner | Next action |
 |---|---|---|---|---|
-| D3.1-R1 | Open | D3 builds on facts (D3-001 fact graph, D3-016 tailoring, AI SDK grounding, Applications runtime), so D3.1 changes finished D3 behavior. | Unassigned | D3.1-001 consumer map; D3.1-008 keeps ADR-030 checks and adds a factuality regression run. |
-| D3.1-R2 | Open | Stored packets or history may reference fact identifiers, and immutable history must stay readable. | Unassigned | ADR-052 found packets keep identifiers and hashes only; D3.1-008 adds the test that history renders without dereferencing them. |
-| D3.1-R3 | Open | Copying a reference profile's Equal Employment tab would collect Restricted answers outside ADR-010. | Unassigned | Keep restricted categories out of scope and refuse them in D3.1-005. |
+| D3.1-R1 | Closed | D3 builds on facts (D3-001 fact graph, D3-016 tailoring, AI SDK grounding, Applications runtime), so D3.1 changes finished D3 behavior. | Unassigned | D3.1-001 consumer map; D3.1-008 keeps ADR-030 checks and adds a factuality regression run. Closed 2026-11-13: the consumer map and the ADR-030 checks held; D3 closed on top of the structured Profile. |
+| D3.1-R2 | Closed | Stored packets or history may reference fact identifiers, and immutable history must stay readable. | Unassigned | ADR-052 found packets keep identifiers and hashes only; D3.1-008 adds the test that history renders without dereferencing them. Closed 2026-11-13: ADR-052 found packets keep identifiers and hashes only, so stored packets and history stay readable; applications created before D3.1 stayed readable in the workspace afterward (observed, not a dedicated test). |
+| D3.1-R3 | Closed | Copying a reference profile's Equal Employment tab would collect Restricted answers outside ADR-010. | Unassigned | Keep restricted categories out of scope and refuse them in D3.1-005. Closed 2026-11-13: restricted categories are refused in D3.1-005 and stay in the ADR-010 vault. |
 | D3.1-R4 | Closed | Owner decisions pending: discard existing development facts (recommended) or migrate them; keep restricted answers out until the restricted-data flow exists (recommended). | Product owner | Resolved 2026-10-22: discard existing development facts; keep restricted answers out of the general Profile ([ADR-052](../../adr/052-structured-candidate-profile.md)). |
-| D3.1-R5 | Open | Work in this phase must not collide with open D3 PRs on shared delivery-record rows. | Unassigned | One PR at a time; records ride with the change they describe. |
-| D3.1-R6 | Open | PR #499 (2026-10-02) added Personal and Skills cards to the Profile page on the current profile-facts model, ahead of D3.1 starting. D3.1-010 ("Retire the fact model") must also remove this UI and its `identity`/`skill` facts, not just the older "Your profile facts" panel. | Unassigned | Account for PR #499's UI and facts explicitly in D3.1-007 (replacement UI) and D3.1-010 (retirement). |
+| D3.1-R5 | Closed | Work in this phase must not collide with open D3 PRs on shared delivery-record rows. | Unassigned | One PR at a time; records ride with the change they describe. Closed 2026-11-13: D3.1 shipped one PR at a time. |
+| D3.1-R6 | Closed | PR #499 (2026-10-02) added Personal and Skills cards to the Profile page on the current profile-facts model, ahead of D3.1 starting. D3.1-010 ("Retire the fact model") must also remove this UI and its `identity`/`skill` facts, not just the older "Your profile facts" panel. | Unassigned | Account for PR #499's UI and facts explicitly in D3.1-007 (replacement UI) and D3.1-010 (retirement). Closed 2026-11-13: the PR #499 cards and their facts were removed in D3.1-007 and D3.1-010. |
 
 ## Completion record
 
-- Completion date: Not completed
-- Exit review: Not performed
-- Release/evidence summary: Not available
-- Accepted residual risks: None recorded
+- Completion date: 2026-11-13
+- Exit review: owner-directed close-out. The exit criteria were checked against the code and the live record on 2026-11-13 (evidence in each criterion above); no new acceptance pass was made (owner decision 2026-10-21).
+- Release/evidence summary: deployed to the development environment on 2026-10-22 through the guarded operators (D3.1-011: migrations 0012 to 0014, parser v10, processor v16, Gateway 126, web) and in use since. Nothing in D3.1 is deployed to production.
+- Accepted residual risks: the retained compatibility residue listed under the second criterion (the optional `facts` export field, the `profile_facts` disclosure label, `FactGraph`/`GraphFact`, the `profileFactCount` name in the document-processing acceptance operator); D3.1-013 (saved Application answers for free-text questions) was removed by the owner and stays out of scope.
