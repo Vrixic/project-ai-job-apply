@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-10-22. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
+Last updated: 2026-11-13. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
 
 ## Summary
 
@@ -9,7 +9,7 @@ Last updated: 2026-10-22. Program status: In progress. Started: 2026-07-27. Comp
 | D0 | Product, data, and legal foundation | Complete | 2026-07-27 | 2026-08-12 | [Phase 0 tasks](phase-0-foundation.md) |
 | D1 | Useful web product and canonical job catalog | Complete | 2026-08-11 | 2026-10-22 | [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
 | D2 | Extension and community loop | Complete | 2026-09-01 | 2026-09-18 | [Phase 2 tasks](phase-2-extension-and-community.md) |
-| D3 | High-quality application preparation | In progress | 2026-09-18 | Not completed | [Phase 3 tasks](phase-3-application-preparation.md) |
+| D3 | High-quality application preparation | Complete | 2026-09-18 | 2026-11-13 | [Phase 3 tasks](phase-3-application-preparation.md) |
 | D3.1 | Structured candidate profile | In progress | 2026-10-22 | Not completed | [Phase 3.1 tasks](phase-3-1-structured-profile.md) |
 | D3.2 | Live AI generation | Ready (not started) | Not started | Not completed | [Phase 3.2 tasks](phase-3-2-live-ai-generation.md) |
 | D4 | Workday and remote preparation | In progress | 2026-10-22 | Not completed | [Phase 4 tasks](phase-4-workday-and-remote.md) |
@@ -44,6 +44,8 @@ The owner answered the open questions in chat. Recorded decisions:
 Still needing the owner: an AWS sign-in for the deployment, the Stripe account values (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRETS`, `STRIPE_PRO_PRICE_ID`, `BILLING_APP_BASE_URL`), counsel, the independent assessor, and staging and production accounts and Auth0 tenants (D6-013, D6-014, D6-021).
 
 ## D3 — High-quality application preparation
+
+Completed 2026-11-13 by owner direction, in development only, on the engineering criteria decided 2026-10-26. The two live proofs it waited for: the owner's real Greenhouse application (2026-11-11/12) and the D4 rights run (2026-11-13, recovery marker `completed`, no clean operator receipt because the operator's cleanup check had a bug, fixed in #844; the owner accepted this). Carried, not done: a clean rights receipt; live deletion of an account with a resume (D3-028, D3-R9); recording the Prompt.io submission; Ashby live proof (D3.2-007); live AI (D3.2); legal and security review (D6-015, D6-016). See the [completion record](phase-3-application-preparation.md).
 
 2026-10-22 owner direction (ADR-053, PRs #727 to #736): Greenhouse and Ashby fill, attach and submit once after the candidate's approval, in the candidate's own Chrome. Built and tested against synthetic pages (extension 781 tests and real-Chromium fixtures for both providers) and modeled on read-only inspection of public pages; nothing was run against a live employer, and the post-submit confirmation text of both providers was not observed, so the owner's first real application is the first live evidence. Sensitive questions stay with the candidate, a visible challenge stops the run, and the build enables providers only through `EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON`.
 
