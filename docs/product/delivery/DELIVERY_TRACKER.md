@@ -10,7 +10,7 @@ Last updated: 2026-11-13. Program status: In progress. Started: 2026-07-27. Comp
 | D1 | Useful web product and canonical job catalog | Complete | 2026-08-11 | 2026-10-22 | [Phase 1 tasks](phase-1-web-and-job-catalog.md) |
 | D2 | Extension and community loop | Complete | 2026-09-01 | 2026-09-18 | [Phase 2 tasks](phase-2-extension-and-community.md) |
 | D3 | High-quality application preparation | Complete | 2026-09-18 | 2026-11-13 | [Phase 3 tasks](phase-3-application-preparation.md) |
-| D3.1 | Structured candidate profile | In progress | 2026-10-22 | Not completed | [Phase 3.1 tasks](phase-3-1-structured-profile.md) |
+| D3.1 | Structured candidate profile | Complete | 2026-10-22 | 2026-11-13 | [Phase 3.1 tasks](phase-3-1-structured-profile.md) |
 | D3.2 | Live AI generation | Ready (not started) | Not started | Not completed | [Phase 3.2 tasks](phase-3-2-live-ai-generation.md) |
 | D4 | Workday and remote preparation | In progress | 2026-10-22 | Not completed | [Phase 4 tasks](phase-4-workday-and-remote.md) |
 | D5 | Personalized outreach and application notifications | In progress | 2026-10-22 | Not completed | [Phase 5 tasks](phase-5-outreach-and-notifications.md) |
@@ -243,6 +243,8 @@ open. [Hosting evidence](evidence/d3-candidate-hosting-build-recovery-2026-10-09
 [Phase 2 tasks](phase-2-extension-and-community.md).
 
 ## D3.1 - Structured candidate profile
+
+Completed 2026-11-13 by owner direction, in development only: the fact model is retired and the structured Profile is deployed (2026-10-22) and in use. Retained on purpose and accepted: the optional `facts` field in the portable export schema (older exports still validate), the `profile_facts` AI-disclosure category label, `FactGraph`/`GraphFact` as the internal evidence structure, and a `profileFactCount` name in the document-processing acceptance operator. See the [completion record](phase-3-1-structured-profile.md#completion-record).
 
 2026-10-22: D3.1 started. D3.1-001 is complete: [ADR-052](../../adr/052-structured-candidate-profile.md)
 is accepted (structured Profile sections, draft-then-save resume import, entry references for
