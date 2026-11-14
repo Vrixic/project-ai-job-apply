@@ -33,6 +33,8 @@ export interface NativeResumeRuntimeOptions {
     "session" | "reference" | "tailoringVersion" | "enabled" | "tls"
   > & { tls: { key: string | Buffer; cert: string | Buffer } };
   loadKernel(): KernelMemoryDeadline;
+  /** ADR-059: optional model choice of bullets; the session falls back to deterministic tailoring on any failure. */
+  liveTailor?: NativeResumeSessionOptions["liveTailor"];
   enabled?: () => boolean;
   maximumLifetimeMs?: number;
   bootBudgetMs?: number;
@@ -89,6 +91,7 @@ export async function createNativeResumeRuntime(options: NativeResumeRuntimeOpti
       checkAdmission: check,
       kernel,
       enabled,
+      ...(options.liveTailor ? { liveTailor: options.liveTailor } : {}),
       ...limits,
     });
     const generated = await session.generate();

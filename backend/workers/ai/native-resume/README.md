@@ -8,8 +8,9 @@ metadata at `GET /v1/applications/{applicationId}/resume/authorization?generatio
 Generated content does not travel through that Gateway route.
 
 `Dockerfile.native-resume` and `build.mjs` build a Linux/AMD64 Node 24 image with the actual kernel,
-renderers, PDF verifier and canvas dependency. The emitted runtime excludes model, SQL, S3, ECS,
-KMS and owning-service code. `main.mjs` checks image-owned configuration/runtime/kernel hashes,
+renderers, PDF verifier and canvas dependency. The emitted runtime excludes the OpenAI provider, SQL, S3, ECS,
+KMS and owning-service code; its only model path is Amazon Bedrock through the task role (ADR-059), used only when the
+image configuration carries `liveGeneration` and the role policy allows it. `main.mjs` checks image-owned configuration/runtime/kernel hashes,
 rejects ambient credentials and overrides, and listens on port 8443 as UID/GID 65532.
 
 The synthetic `configuration.disabled.json` is the default. Enabled configuration requires

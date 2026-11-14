@@ -130,6 +130,32 @@ Residual risks, recorded plainly:
   became one statement per cluster naming each principal that retains it (same grants, 304 characters saved);
   the complete development boundary is 5,995 of 6,144 characters with the restore role and live generation on.
 
+## Addendum 2026-11-13: live resume tailoring (D3.2-003)
+
+8. **Selection only.** The model never writes resume text. It is shown the candidate's experience and project entries
+   that offer a real choice (two or more bullets), with their bullet ids, and the job, and answers through one forced
+   tool with the ids to keep per entry, most relevant first, three to six per entry (all when fewer than three).
+   Contact details, education, skills and the summary are not sent. Every word on the tailored resume is therefore a
+   node of the candidate's own document: the same structure and the same factuality gate as the deterministic tailor
+   (`verifyTailoredFactuality`), and the matched job terms are computed from the kept bullets, never taken from the
+   model. Rewriting bullet text is a later decision with its own grounding and layout work (the in-place PDF edit of
+   ADR-058 is sized for the candidate's own lines).
+9. **Fallback and honesty.** Any refusal, denial, timeout (12 seconds, so a slow model cannot outlast the task's boot
+   budget), unusable answer, oversized resume or failed gate returns to the deterministic tailor and the generation
+   continues. The path that ran is recorded as the tailoring version (`tailoring.live.v1` or `tailoring.v1`) and is part
+   of the content hash the candidate's approval binds to.
+10. **Consent.** Purpose `resume_tailoring`, categories `resume_content` and `job_posting`. As for narrative answers
+    (ADR-057 decision 4), consent comes from the Terms of Service and the disclosure the gateway checks is created inside
+    the task at the moment of the call; no disclosure record, prompt or answer is stored. Before any real candidate
+    uses it, the Terms must say that resume text and the job are processed by AWS Bedrock, and
+    [subprocessors](../security/subprocessors.md) must match (D6, launch gate).
+11. **Wiring and the switch.** The task image configuration gains an optional `liveGeneration.modelId` (validated as a
+    US inference profile id; absent means deterministic only), so existing releases stay valid. The kill switch remains
+    the task role policy (Terraform), not a configuration flip: with the permission removed the call is denied and the
+    deterministic tailor runs, at the cost of one denied call per generation. The image bundle imports only the narrow
+    `ai-sdk/bedrock` and `ai-sdk/gateway` subpaths; its build gate still refuses the OpenAI provider and now requires the
+    Bedrock client and the live tailor.
+
 ## Alternatives rejected
 
 - **OpenAI direct for resumes and cover letters.** Its 30-day abuse retention breaks ADR-038. Kept only

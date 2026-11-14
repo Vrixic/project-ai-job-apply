@@ -14,10 +14,11 @@ import { buildResumeAst } from "./resume-ast/build.js";
 import type { AstLine } from "./resume-ast/types.js";
 import { buildTailoredView, tailoredContentSha256 } from "./resume-tailoring.js";
 import type { TailoredSectionView } from "./resume-tailoring-contract.js";
+import type { LiveTailor } from "./tailoring/live-tailor.js";
 import {
   materializeTailoredResume,
   type RenderBlock,
-  TAILORING_VERSION,
+  type TailoredResume,
   tailorResume,
   verifyTailoredFactuality,
 } from "./tailoring/tailor.js";
@@ -71,6 +72,9 @@ export interface NativeResumeSessionOptions {
   checkAdmission(identity: Readonly<NativeResumeIdentity>): Promise<void>;
   completion: TemporaryMaterialCompletionAuthority;
   kernel: KernelMemoryDeadline;
+  /** ADR-059: a model chooses which of the candidate's own bullets to keep and in what order. It writes no text and its
+   * answer passes the same factuality gate; any refusal or failure falls back to the deterministic tailor. */
+  liveTailor?: LiveTailor;
   enabled?: () => boolean;
   maximumLifetimeMs?: number;
   bootBudgetMs?: number;
@@ -232,8 +236,19 @@ export function createNativeResumeSession(options: NativeResumeSessionOptions) {
           loaded.job.description.length > 60_000
         )
           throw unavailable();
-        const ast = buildResumeAst(document),
-          tailored = tailorResume(ast, loaded.job);
+        const ast = buildResumeAst(document);
+        let tailored: TailoredResume | undefined;
+        if (options.liveTailor && enabled()) {
+          try {
+            tailored = await options.liveTailor(ast, loaded.job);
+          } catch {
+            tailored = undefined;
+          }
+          // The model call can outlast admission; losing it ends this process like any other lost check.
+          await check(signal);
+          if (tailored && verifyTailoredFactuality(ast, tailored).length) tailored = undefined;
+        }
+        tailored ??= tailorResume(ast, loaded.job);
         if (verifyTailoredFactuality(ast, tailored).length) throw unavailable();
         // The candidate's own PDF is used only when it is exactly the file the base document was
         // parsed from and the page layout is known; otherwise the resume is drawn from its layout.
@@ -258,7 +273,7 @@ export function createNativeResumeSession(options: NativeResumeSessionOptions) {
         };
         const hash = tailoredContentSha256(
           { sha256: identity.baseSha256 },
-          TAILORING_VERSION,
+          tailored.tailoringVersion,
           held.blocks,
         );
         const completedAtMs = Date.now();
@@ -310,7 +325,7 @@ export function createNativeResumeSession(options: NativeResumeSessionOptions) {
             reference,
             baseDocumentId: identity.baseDocumentId,
             baseVersion: identity.baseVersion,
-            tailoringVersion: TAILORING_VERSION,
+            tailoringVersion: tailored.tailoringVersion,
           };
         } finally {
           signal?.removeEventListener("abort", discard);

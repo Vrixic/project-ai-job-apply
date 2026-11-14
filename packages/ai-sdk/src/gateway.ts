@@ -26,13 +26,18 @@ export interface ModelIdentity {
 export const generationPurposes = ["cover_letter", "narrative_answer"] as const;
 export type GenerationPurpose = (typeof generationPurposes)[number];
 
+/** Everything the gateway can disclose data for. Resume tailoring (ADR-059) only selects and orders the candidate's own
+ * resume lines; it writes no text, so it is not a text generation purpose. */
+export type GatewayPurpose = GenerationPurpose | "resume_tailoring";
+export type DisclosureCategory = "profile_facts" | "job_posting" | "resume_content";
+
 /**
  * Just-in-time approval to share the named data categories with an AI provider for one declared
  * purpose. Approval is short lived and never covers a different purpose or category.
  */
 export interface DataDisclosureApproval {
-  purpose: GenerationPurpose;
-  categories: readonly ("profile_facts" | "job_posting")[];
+  purpose: GatewayPurpose;
+  categories: readonly DisclosureCategory[];
   approvedAt: Date;
 }
 
@@ -107,9 +112,9 @@ export interface GatewayRequest {
   promptVersion: string;
   /** Opaque, content-free key for provider prompt caching (never derived from candidate content). */
   cacheKey?: string;
-  purpose: GenerationPurpose;
+  purpose: GatewayPurpose;
   /** Data categories this request will place in the prompt. */
-  categories: readonly ("profile_facts" | "job_posting")[];
+  categories: readonly DisclosureCategory[];
   system: string;
   user: string;
 }
