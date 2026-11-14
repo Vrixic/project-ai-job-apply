@@ -12,17 +12,17 @@
   },
   "dependencies": {
     "@ai-job-apply/api-contracts": "workspace:*",
-    "@auth0/nextjs-auth0": "4.29.0",
-    "jose": "6.2.12",
-    "next": "16.4.2",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "@auth0/nextjs-auth0": "4.33.0",
+    "jose": "6.2.17",
+    "next": "16.4.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "server-only": "0.0.1"
   },
   "devDependencies": {
-    "@types/node": "24.10.1",
+    "@types/node": "26.6.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "jsdom": "30.0.1"
+    "jsdom": "31.0.0"
   }
 }
