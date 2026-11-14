@@ -42,7 +42,11 @@ function fixture() {
       sourceFactIds: [fact.id],
       confidence: 1,
       promptVersion: "cover_letter.v1",
-      model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+      model: {
+        provider: "bedrock",
+        model: "us.anthropic.claude-sonnet-4-6",
+        version: "us.anthropic.claude-sonnet-4-6",
+      },
     },
     now,
   );

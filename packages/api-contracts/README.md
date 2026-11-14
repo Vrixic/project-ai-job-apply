@@ -19,7 +19,7 @@ with an owner-scoped poll route, plus immutable cover-letter preview and PDF/DOC
 Successful preparation returns an immutable `{packetId, revision}` reference, not a snapshot
 of the application's mutable current state. Read the application separately for its current
 packet/action. This in-progress shape has no deployed consumers.
-Acknowledgement requires the exact `openai-cover-letter.v1` notice and `true`, without
+Acknowledgement requires the exact `bedrock-cover-letter.v1` notice and `true`, without
 caller-supplied approval time or provider/model selection. The notice text/version are exported
 for consumers; generation remains separately default-off and every draft requires review.
 These contracts are not deployment evidence: local persistence, durable factories and Gateway

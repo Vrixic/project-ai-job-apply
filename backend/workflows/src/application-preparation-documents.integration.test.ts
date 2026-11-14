@@ -346,7 +346,7 @@ describe.skipIf(!requested)(
           expectedRevision: 1,
           jobContextHash: "a".repeat(64),
           confirmedFactsHash: "b".repeat(64),
-          noticeVersion: "openai-cover-letter.v1",
+          noticeVersion: "bedrock-cover-letter.v1",
           approvedAt: now,
           expiresAt: new Date(now.getTime() + 900_000),
           generationClaimedAt: null,
@@ -365,7 +365,7 @@ describe.skipIf(!requested)(
           request: {
             expectedRevision: 1,
             coverLetter: {
-              disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+              disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
             },
           },
           packet: {

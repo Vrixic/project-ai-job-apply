@@ -12,7 +12,7 @@ $config | Add-Member recoveryMode 'primary_recovery'
 $manifestPath=Join-Path $PSScriptRoot '../../backend/services/database-migrations/restore-manifest.v1.json'
 $currentManifestHash=(Get-FileHash $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $manifest=ConvertFrom-D1RestoreJson ([IO.File]::ReadAllText($manifestPath))
-Assert (@($manifest.contributors | ForEach-Object { $_.migrations }).Count -eq 90) 'primary checks current 90 migrations'
+Assert (@($manifest.contributors | ForEach-Object { $_.migrations }).Count -eq 91) 'primary checks current 91 migrations'
 Assert (($manifest.contributors | Where-Object owner -CEQ documents).migrations[-1].version -ceq '0021_resume_purge_settles_absent_native_task') 'purge task-absence migration included'
 $config.restoreManifestSha256=$currentManifestHash
 foreach ($part in @('Identifier','Hostname','DbiResourceId','BoundarySha256')) { $config."target$part" = $config."source$part" }

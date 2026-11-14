@@ -1,4 +1,4 @@
-import { coverLetterContext } from "@ai-job-apply/ai-sdk";
+import { coverLetterContext } from "@ai-job-apply/ai-sdk/context";
 import type { CoverLetterEvidenceSource } from "./cover-letter-generation.js";
 import { nativeEvidenceBinding } from "./native-evidence-binding.js";
 import { createNativeOwnerRpcClient } from "./native-owner-rpc-client.js";

@@ -104,7 +104,7 @@ describe.skipIf(!requested)("native recovery through owning Applications ledger"
       request: {
         expectedRevision: 1,
         coverLetter: {
-          disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+          disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
         },
       },
       packet: { jobRevision: "a".repeat(64), form: null, fields: [], artifactHashes: {} },

@@ -101,7 +101,7 @@ function fixture(defaultOff = false) {
     basePacketId: factId,
     expectedRevision: 1,
     ...context,
-    noticeVersion: "openai-cover-letter.v1",
+    noticeVersion: "bedrock-cover-letter.v1",
     approvedAt: new Date(now),
     expiresAt: new Date(now.getTime() + 900_000),
     generationClaimedAt: new Date(now),

@@ -23,6 +23,7 @@ const migrationVersions = [
   "0013_native_material_withdrawals",
   "0014_native_material_cleanup_queue",
   "0015_legacy_receipt_archive",
+  "0016_cover_letter_bedrock_notice",
 ] as const;
 const migrations = await Promise.all(
   migrationVersions.map(async (version) => {

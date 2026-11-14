@@ -22,7 +22,7 @@ export interface CoverLetterProviderReference {
 export interface CoverLetterProviderRequest {
   schemaVersion: 1;
   documentId: string;
-  noticeVersion: "openai-cover-letter.v1";
+  noticeVersion: "bedrock-cover-letter.v1";
   promptVersion: "1.0.0";
   jobContextHash: string;
   confirmedFactsHash: string;
@@ -37,20 +37,49 @@ interface CoverLetterProviderBinding {
   documentId: string;
   requestSha256: string;
 }
+/** ADR-059 addendum 12: the disclosure names the model, so the model is bound to the notice version. A different
+ * model needs a new notice version, owner review and a fresh read of the AWS retention pages. */
 export const COVER_LETTER_PROVIDER_MODEL = Object.freeze({
+  provider: "bedrock",
+  model: "us.anthropic.claude-sonnet-4-6",
+  version: "us.anthropic.claude-sonnet-4-6",
+} as const);
+/** The isolated provider Lambda path (ADR-037) was designed for OpenAI and is superseded for cover letters by
+ * ADR-059 addendum 12. It was never deployed. It stays compiled and tested with its own identity, and nothing
+ * live (the native generation actor) accepts it. */
+export const COVER_LETTER_ISOLATED_OPENAI_MODEL = Object.freeze({
   provider: "openai",
   model: "gpt-6-luna",
   version: "gpt-6-luna",
 } as const);
-export function validateCoverLetterProviderModel(
+type CoverLetterProviderIdentity =
+  | typeof COVER_LETTER_PROVIDER_MODEL
+  | typeof COVER_LETTER_ISOLATED_OPENAI_MODEL;
+function identityMatches(
   value: unknown,
-): value is typeof COVER_LETTER_PROVIDER_MODEL {
+  expected: CoverLetterProviderIdentity,
+): value is CoverLetterProviderIdentity {
   return (
     record(value, ["provider", "model", "version"]) &&
-    value.provider === COVER_LETTER_PROVIDER_MODEL.provider &&
-    value.model === COVER_LETTER_PROVIDER_MODEL.model &&
-    value.version === COVER_LETTER_PROVIDER_MODEL.version
+    value.provider === expected.provider &&
+    value.model === expected.model &&
+    value.version === expected.version
   );
+}
+/** Transport objects of the isolated path: either reviewed identity. */
+export function validateCoverLetterProviderModel(
+  value: unknown,
+): value is CoverLetterProviderIdentity {
+  return (
+    identityMatches(value, COVER_LETTER_PROVIDER_MODEL) ||
+    identityMatches(value, COVER_LETTER_ISOLATED_OPENAI_MODEL)
+  );
+}
+/** The native generation actor: only the model the current notice names. */
+export function validateNativeCoverLetterModel(
+  value: unknown,
+): value is typeof COVER_LETTER_PROVIDER_MODEL {
+  return identityMatches(value, COVER_LETTER_PROVIDER_MODEL);
 }
 export type CoverLetterProviderDispatch = CoverLetterProviderBinding &
   ({ state: "issued" } | { state: "claimed"; dispatchedAt: string });
@@ -61,7 +90,7 @@ export type CoverLetterProviderResult = CoverLetterProviderBinding &
         state: "ready";
         dispatchedAt: string;
         text: string;
-        model: typeof COVER_LETTER_PROVIDER_MODEL;
+        model: CoverLetterProviderIdentity;
         outputCharacters: number;
       }
   );
@@ -182,7 +211,7 @@ function validateObject(
     return (
       value.schemaVersion === 1 &&
       id(value.documentId) &&
-      value.noticeVersion === "openai-cover-letter.v1" &&
+      value.noticeVersion === "bedrock-cover-letter.v1" &&
       value.promptVersion === "1.0.0" &&
       hash(value.jobContextHash) &&
       hash(value.confirmedFactsHash) &&
@@ -271,9 +300,9 @@ export function encodeCoverLetterProviderObject(
           key,
           key === "model"
             ? {
-                provider: COVER_LETTER_PROVIDER_MODEL.provider,
-                model: COVER_LETTER_PROVIDER_MODEL.model,
-                version: COVER_LETTER_PROVIDER_MODEL.version,
+                provider: (source.model as CoverLetterProviderIdentity).provider,
+                model: (source.model as CoverLetterProviderIdentity).model,
+                version: (source.model as CoverLetterProviderIdentity).version,
               }
             : source[key],
         ]),

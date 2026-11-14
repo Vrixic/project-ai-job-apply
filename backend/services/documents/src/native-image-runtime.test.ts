@@ -20,7 +20,7 @@ function configuration(): NativeImageConfiguration {
       containerName: "material",
     },
     ownerFunctionArn: "arn:aws:lambda:us-east-2:123456789012:function:native-owner:7",
-    providerSecret: secret("provider"),
+    liveGeneration: { modelId: "us.anthropic.claude-sonnet-4-6" },
     tlsSecret: secret("tls"),
     apiOrigin: "https://api.synthetic.invalid",
     issuer: "https://issuer.synthetic.invalid/",
@@ -49,13 +49,24 @@ describe("native image reviewed configuration", () => {
     { ownerFunctionArn: "arn:aws:lambda:us-east-2:999999999999:function:native-owner:7" },
     { subject: "candidate-not-an-image-parameter" },
     { apiKey: "never-in-configuration" },
+    // The disclosure names the model, so the image cannot name any other (ADR-059 addendum 12).
+    { liveGeneration: { modelId: "us.anthropic.claude-haiku-4-5-20251001-v1:0" } },
+    { liveGeneration: { modelId: "gpt-6-luna" } },
+    { liveGeneration: { modelId: "us.anthropic.claude-sonnet-4-6", maxTokens: 9999 } },
+    { liveGeneration: {} },
+    { liveGeneration: undefined },
+    {
+      providerSecret: {
+        arn: "arn:aws:secretsmanager:us-east-2:123456789012:secret:native/provider-Abc123",
+        versionId: "12345678-1234-1234-1234-123456789012",
+      },
+    },
   ])("refuses unsafe image configuration %j", (change) => {
     expect(validateNativeImageConfiguration({ ...configuration(), ...change })).toBe(false);
   });
-  it("refuses shared, foreign, unpinned or additive secret configuration", () => {
+  it("refuses foreign, unpinned or additive secret configuration", () => {
     const config = configuration();
     for (const secret of [
-      config.providerSecret,
       { ...config.tlsSecret, versionId: "AWSCURRENT" },
       { ...config.tlsSecret, arn: config.tlsSecret.arn.replace("us-east-2", "us-east-1") },
       { ...config.tlsSecret, secretValue: "never-in-configuration" },
@@ -78,7 +89,7 @@ describe("native image reviewed configuration", () => {
           configuration: { ...configuration(), enabled, providerEnabled },
           loadKernel: effect,
           testMetadataFetch: effect,
-          testModelFetch: effect,
+          testBedrockClient: { send: effect },
           testSecretClient: { send: effect },
         }),
       ).rejects.toThrow(/^NativeImageConfigurationUnavailable$/u);

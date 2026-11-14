@@ -3199,7 +3199,7 @@ export interface components {
         };
         CoverLetterDisclosureAcknowledgement: {
             /** @constant */
-            noticeVersion: "openai-cover-letter.v1";
+            noticeVersion: "bedrock-cover-letter.v1";
             /** @constant */
             acknowledged: true;
         };
@@ -3248,11 +3248,11 @@ export interface components {
             }[];
             model: {
                 /** @constant */
-                provider: "openai";
+                provider: "bedrock";
                 /** @constant */
-                model: "gpt-6-luna";
+                model: "us.anthropic.claude-sonnet-4-6";
                 /** @constant */
-                version: "gpt-6-luna";
+                version: "us.anthropic.claude-sonnet-4-6";
             };
             promptVersion: string;
             /** @description Exact current memory generation and original fixed expiry. This response must not be persisted or cached; discard platform copies at expiry, logout, cancellation or confirmed submission. */

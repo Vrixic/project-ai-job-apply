@@ -68,7 +68,7 @@ function fixture() {
     expectedRevision: 2,
     jobContextHash: "c".repeat(64),
     confirmedFactsHash: "d".repeat(64),
-    noticeVersion: "openai-cover-letter.v1",
+    noticeVersion: "bedrock-cover-letter.v1",
     approvedAt: new Date(now),
     expiresAt: new Date(now + 900_000),
     generationClaimedAt: null,

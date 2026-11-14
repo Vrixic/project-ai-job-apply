@@ -40,7 +40,11 @@ const generation = (): GenerationResult => ({
   sourceFactIds: [FACT],
   confidence: 1,
   promptVersion: "cover_letter.v1",
-  model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+  model: {
+    provider: "bedrock",
+    model: "us.anthropic.claude-sonnet-4-6",
+    version: "us.anthropic.claude-sonnet-4-6",
+  },
 });
 type Renderer = NonNullable<ConstructorParameters<typeof TemporaryCoverLetterService>[5]>;
 const syntheticRenderer: Renderer = async (_document, _owner, _app, contentSha256, format) => ({

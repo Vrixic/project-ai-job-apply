@@ -8,7 +8,7 @@ export interface NativePreparationBootstrap {
   applicationId: string;
   jobContextHash: string;
   confirmedFactsHash: string;
-  noticeVersion: "openai-cover-letter.v1";
+  noticeVersion: "bedrock-cover-letter.v1";
   approvedAt: string;
   expiresAt: string;
 }
@@ -33,7 +33,7 @@ export async function readNativePreparationBootstrap(
           application_id: string;
           job_context_hash: string;
           confirmed_facts_hash: string;
-          notice_version: "openai-cover-letter.v1";
+          notice_version: "bedrock-cover-letter.v1";
           approved_at: Date;
           expires_at: Date;
         }>
@@ -46,8 +46,8 @@ export async function readNativePreparationBootstrap(
           AND p.generation_claimed_at IS NOT NULL AND p.result_packet_id IS NULL AND p.error_code IS NULL
           AND a.status='review_required' AND a.current_packet_id=p.base_packet_id
           AND a.revision=p.expected_revision
-          AND p.notice_version='openai-cover-letter.v1' AND p.provider='openai'
-          AND p.model='gpt-6-luna' AND p.purpose='cover_letter'
+          AND p.notice_version='bedrock-cover-letter.v1' AND p.provider='bedrock'
+          AND p.model='us.anthropic.claude-sonnet-4-6' AND p.purpose='cover_letter'
           AND p.categories='["profile_facts","job_posting"]'::jsonb
       AND NOT EXISTS (SELECT 1 FROM applications.native_material_withdrawals w
         WHERE w.owner_user_id=${fixed.ownerUserId} AND w.requested_at >= p.approved_at)

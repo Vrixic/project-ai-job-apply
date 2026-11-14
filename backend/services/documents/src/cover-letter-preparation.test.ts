@@ -21,7 +21,7 @@ function setup() {
     applicationId: "019a4000-0000-7000-8000-000000000003",
     jobContextHash: "b".repeat(64),
     confirmedFactsHash: "c".repeat(64),
-    noticeVersion: "openai-cover-letter.v1",
+    noticeVersion: "bedrock-cover-letter.v1",
     approvedAt: now,
     expiresAt: new Date(now.getTime() + 15 * 60_000),
   };

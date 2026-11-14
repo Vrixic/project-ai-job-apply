@@ -488,7 +488,7 @@ describe.skipIf(!requested)(
             expectedRevision: current.application.revision,
             coverLetter: {
               disclosure: {
-                noticeVersion: "openai-cover-letter.v1" as const,
+                noticeVersion: "bedrock-cover-letter.v1" as const,
                 acknowledged: true as const,
               },
             },

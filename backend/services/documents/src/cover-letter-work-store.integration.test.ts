@@ -1417,7 +1417,7 @@ describe.skipIf(!requested)("Documents generation work authorization with real P
       const request = encodeCoverLetterProviderObject("request", {
         schemaVersion: 1,
         documentId,
-        noticeVersion: "openai-cover-letter.v1",
+        noticeVersion: "bedrock-cover-letter.v1",
         promptVersion: "1.0.0",
         jobContextHash: "b".repeat(64),
         confirmedFactsHash: "c".repeat(64),

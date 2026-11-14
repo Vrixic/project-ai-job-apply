@@ -156,6 +156,37 @@ Residual risks, recorded plainly:
     `ai-sdk/bedrock` and `ai-sdk/gateway` subpaths; its build gate still refuses the OpenAI provider and now requires the
     Bedrock client and the live tailor.
 
+## Addendum 2026-11-13: live cover letters (D3.2-004)
+
+12. **Notice and model.** The cover-letter disclosure becomes `bedrock-cover-letter.v1`; the OpenAI notice
+    `openai-cover-letter.v1` is retired for new requests. The text names the model and its retention terms, so
+    for cover letters the model is bound to the notice version rather than being free configuration: the
+    contract names `us.anthropic.claude-sonnet-4-6`, the task image configuration `liveGeneration.modelId` must
+    equal it, and a different model needs a new notice version, owner review and a fresh read of the AWS pages
+    (decision 3). The wording claims only what the checked statements support: no training, not shared with the
+    model provider, the model is not among those AWS lists as retaining, those terms can change, memory only,
+    every copy gone within 30 minutes. It keeps the inference of the residual risk visible to the candidate. The
+    owner reviews the wording when merging.
+13. **Persistence and old rows.** Applications adds migration `0016_cover_letter_bedrock_notice`: one tuple CHECK
+    allows the old OpenAI tuple and the new Bedrock tuple, the column defaults become the Bedrock values (the
+    Gateway insert relies on them) and existing rows stay valid and immutable. Documents needs no migration: a
+    native letter never reaches `ready` (a CHECK keeps native readiness on `pending` rows), so the portable
+    export's `model` only describes legacy saved letters, which stay OpenAI. The candidate-data export schema
+    accepts both tuples for the preparation record.
+14. **One provider path.** The native generation process is the only live cover-letter path. Its image drops the
+    provider key, the secret read and the OpenAI client (the image build gate now forbids OpenAI and requires the
+    Bedrock client, as the resume image does) and reaches Bedrock on the task role. The native actor accepts only
+    the model the notice names. The isolated provider Lambda path (ADR-037, never deployed) is superseded for
+    cover letters: it stays compiled and tested with its own OpenAI identity until a cleanup removes it, and
+    nothing live accepts that identity. The image imports only the narrow `ai-sdk` subpaths (`bedrock`, `context`,
+    `gateway`, `generation`, `prompts`).
+15. **Honest failure, next slice.** There is no deterministic cover letter: with live generation off or refused,
+    the candidate writes their own text (the disclosure says so). A definite Bedrock refusal (the kill switch, a
+    missing use case form, throttling) happens before any model work, so it is a positive non-dispatch, but today
+    it ends in the same unsettled state as an unknown outcome, and the candidate sees a generation that never
+    finishes. The next slice classifies definite refusals as non-dispatch so the candidate sees a failed state at
+    once; timeouts and transport errors stay unsettled, because their outcome is unknown.
+
 ## Alternatives rejected
 
 - **OpenAI direct for resumes and cover letters.** Its 30-day abuse retention breaks ADR-038. Kept only
@@ -176,3 +207,4 @@ Residual risks, recorded plainly:
 |---|---|---|
 | 2026-11-13 | Bedrock in our account with Claude Sonnet 4.6, model id as configuration. | `gpt-6-luna` is not available to the account and would not meet ADR-038 without zero retention; owner agreed. |
 | 2026-11-13 | $20 a month development ceiling, alarms at 50% and 80%, kill switch off by default. | Owner agreed to the recommendation. |
+| 2026-11-13 | Cover letters on Bedrock under the new notice `bedrock-cover-letter.v1`, model bound to the notice (addendum 12 to 15). | The disclosure names the model; one live path; the OpenAI notice would be false. |

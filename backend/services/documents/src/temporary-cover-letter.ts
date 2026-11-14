@@ -1,4 +1,5 @@
-import { coverLetterContext, type GenerationResult } from "@ai-job-apply/ai-sdk";
+import type { GenerationResult } from "@ai-job-apply/ai-sdk";
+import { coverLetterContext } from "@ai-job-apply/ai-sdk/context";
 import type {
   ApplicationCoverLetterFile,
   ApplicationCoverLetterPreview,

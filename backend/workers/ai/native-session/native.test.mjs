@@ -178,7 +178,7 @@ for (const mode of [
       if (mode.startsWith("runtime-image")) {
         assert.deepEqual(JSON.parse(output.trim()), {
           imageRefused: true,
-          secretReads: 2,
+          secretReads: 1,
           providerCalls: 0,
           controlInvocations: 0,
         });

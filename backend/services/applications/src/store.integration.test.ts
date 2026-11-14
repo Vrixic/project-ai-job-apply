@@ -68,7 +68,7 @@ describeWithDatabase("PostgresApplicationStore", () => {
     const first = await execFileAsync(process.execPath, [migrationExecutable], { env });
     const replay = await execFileAsync(process.execPath, [migrationExecutable], { env });
     const expected =
-      "Applications migrations through 0015_legacy_receipt_archive applied and verified.";
+      "Applications migrations through 0016_cover_letter_bedrock_notice applied and verified.";
     expect(first.stdout.trim()).toBe(expected);
     expect(replay.stdout.trim()).toBe(expected);
     await store.ping();

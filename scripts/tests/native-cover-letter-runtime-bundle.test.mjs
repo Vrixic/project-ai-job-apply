@@ -52,6 +52,7 @@ test("native image contains actual provider and pinned-secret clients without ow
   );
   for (const forbidden of [
     "postgres",
+    "openai",
     "client-s3",
     "client-ecs",
     "client-kms",
@@ -66,9 +67,10 @@ test("native image contains actual provider and pinned-secret clients without ow
     );
   for (const required of [
     "client-secrets-manager",
+    "client-bedrock-runtime",
+    "native-bedrock-converse.js",
     "native-task-bootstrap.js",
     "native-owner-rpc-client.js",
-    "openai.js",
     "native-memory-transport.js",
     "render/render.js",
     "pdfjs-dist",

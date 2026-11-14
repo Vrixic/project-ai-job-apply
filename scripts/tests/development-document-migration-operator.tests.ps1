@@ -60,7 +60,7 @@ $currentSuccessMarkers = @(
   "Matching migrations through 0003_private_saved_page_captures applied and verified.",
   "Billing migrations through 0002_candidate_rights applied and verified.",
   "Trust migrations through 0005_development_test_removal applied and verified.",
-  "Applications migrations through 0015_legacy_receipt_archive applied and verified.",
+  "Applications migrations through 0016_cover_letter_bedrock_notice applied and verified.",
   "Notifications migrations through 0003_delivery applied and verified.",
   "All service-owned database migrations applied and verified."
 )

@@ -66,7 +66,7 @@ const identity = {
   ownerUserId: ids[0],
   applicationId: ids[1],
   ...coverLetterContext({ facts, job, now }),
-  noticeVersion: "openai-cover-letter.v1",
+  noticeVersion: "bedrock-cover-letter.v1",
   approvedAt: now,
   expiresAt: new Date(now.getTime() + 900000),
 };
@@ -80,7 +80,11 @@ const session = createNativeMemorySession({
   bootBudgetMs: 5000,
   source: { load: async () => ({ facts, job }) },
   provider: {
-    identity: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+    identity: {
+      provider: "bedrock",
+      model: "us.anthropic.claude-sonnet-4-6",
+      version: "us.anthropic.claude-sonnet-4-6",
+    },
     complete: async () => ({
       text: JSON.stringify({
         paragraphs: [{ text: "I have experience with TypeScript.", factIds: [ids[3]] }],

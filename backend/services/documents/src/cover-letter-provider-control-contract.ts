@@ -1,7 +1,7 @@
 import {
   type ProviderBackgroundTerminal,
   validateProviderBackgroundTerminal,
-} from "@ai-job-apply/ai-sdk";
+} from "@ai-job-apply/ai-sdk/gateway";
 import { coverLetterProviderTimestamp } from "./cover-letter-provider-contract.js";
 import type { CoverLetterWorkReference } from "./cover-letter-work-store.js";
 

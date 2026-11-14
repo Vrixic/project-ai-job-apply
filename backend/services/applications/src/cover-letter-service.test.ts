@@ -31,7 +31,7 @@ const preparation: PreparationRecord = {
   expectedRevision: 2,
   jobContextHash: HASH_A,
   confirmedFactsHash: HASH_B,
-  noticeVersion: "openai-cover-letter.v1",
+  noticeVersion: "bedrock-cover-letter.v1",
   approvedAt: NOW,
   expiresAt: new Date(NOW.getTime() + 900_000),
   generationClaimedAt: null,
@@ -43,7 +43,7 @@ const preparation: PreparationRecord = {
 };
 const request: PreparationRequest = {
   expectedRevision: 1,
-  coverLetter: { disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true } },
+  coverLetter: { disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true } },
 };
 const validateOperation = compileComponentValidator("ApplicationPacketPreparation");
 
@@ -293,7 +293,11 @@ describe("owner-scoped cover-letter service", () => {
       matchesPacket: false,
       reviewRequired: true,
       paragraphs: [{ text: "Synthetic draft.", factIds: [PACKET_ID] }],
-      model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+      model: {
+        provider: "bedrock",
+        model: "us.anthropic.claude-sonnet-4-6",
+        version: "us.anthropic.claude-sonnet-4-6",
+      },
       promptVersion: "cover_letter.v1",
     } as const;
     vi.mocked(fixture.letters.preview).mockResolvedValue({

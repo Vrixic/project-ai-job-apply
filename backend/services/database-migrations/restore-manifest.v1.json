@@ -66,6 +66,10 @@
         {
           "version": "0015_legacy_receipt_archive",
           "checksum": "f95d24dea7048d56452f2d1485465f93f1376a73713481dee541a33c54282215"
+        },
+        {
+          "version": "0016_cover_letter_bedrock_notice",
+          "checksum": "1decd24c837b8c6a03a2b628cf5d4d11e6f81d8eaeac4bf6616fd088fe677ea1"
         }
       ],
       "relations": [

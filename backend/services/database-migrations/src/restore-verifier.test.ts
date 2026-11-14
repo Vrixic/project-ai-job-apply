@@ -48,6 +48,7 @@ function preReportRetentionManifest(source: RestoreManifestSource) {
               "0013_native_material_withdrawals",
               "0014_native_material_cleanup_queue",
               "0015_legacy_receipt_archive",
+              "0016_cover_letter_bedrock_notice",
               "0012_profile_sections",
               "0013_profile_sections_candidate_rights",
               "0014_retire_profile_facts",
@@ -156,7 +157,7 @@ describe("current restore manifest", () => {
         (total, contributor) => total + contributor.migrations.length,
         0,
       ),
-    ).toBe(90);
+    ).toBe(91);
     expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // The exact seven-owner assertion above bounds I/O concurrency. Each owner still enumerates
@@ -310,7 +311,7 @@ describe("read-only aggregate restore verification", () => {
       manifestSha256: source.sha256,
       ownerCount: 8,
       relationCount: 105,
-      migrationCount: 90,
+      migrationCount: 91,
     });
     expect(result.aggregateDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.keys(result)).toEqual([

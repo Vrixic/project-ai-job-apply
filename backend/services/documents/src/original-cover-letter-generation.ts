@@ -1,15 +1,14 @@
 import { createHash } from "node:crypto";
-import {
-  type CoverLetterGroundingContext,
-  coverLetterContext,
-  type GatewayRequest,
-  type GenerationResult,
-  groundCoverLetterOutput,
-  type ModelGateway,
-  type OriginalModelGatewayCompletion,
-  PROMPT_VERSIONS,
-  prepareCoverLetterPrompt,
+import type {
+  CoverLetterGroundingContext,
+  GatewayRequest,
+  GenerationResult,
+  ModelGateway,
+  OriginalModelGatewayCompletion,
 } from "@ai-job-apply/ai-sdk";
+import { coverLetterContext } from "@ai-job-apply/ai-sdk/context";
+import { groundCoverLetterOutput, prepareCoverLetterPrompt } from "@ai-job-apply/ai-sdk/generation";
+import { PROMPT_VERSIONS } from "@ai-job-apply/ai-sdk/prompts";
 import { COVER_LETTER_DISCLOSURE_VERSION } from "@ai-job-apply/api-contracts";
 import type {
   CoverLetterEvidenceSource,
@@ -18,7 +17,7 @@ import type {
 } from "./cover-letter-generation.js";
 import {
   encodeCoverLetterProviderObject,
-  validateCoverLetterProviderModel,
+  validateNativeCoverLetterModel,
 } from "./cover-letter-provider-contract.js";
 import { validateProviderControlReference } from "./cover-letter-provider-control-contract.js";
 import type { PostgresCoverLetterWorkStore } from "./cover-letter-work-store.js";
@@ -207,7 +206,7 @@ export class OriginalCoverLetterGenerationActor {
         return { kind: "failed", errorCode: "generation_unavailable" };
       }
       if (receipt.kind === "completed") {
-        if (validateCoverLetterProviderModel(receipt.result.model))
+        if (validateNativeCoverLetterModel(receipt.result.model))
           generated = groundCoverLetterOutput(context, receipt.result);
         receipt.result.value = undefined;
         const remaining =

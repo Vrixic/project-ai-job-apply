@@ -53,6 +53,7 @@ const inputs = Object.values(result.metafile.outputs).flatMap((entry) =>
 );
 for (const forbidden of [
   "postgres",
+  "openai",
   "client-s3",
   "client-ecs",
   "client-kms",
@@ -66,7 +67,8 @@ for (const required of [
   "client-secrets-manager",
   "native-task-bootstrap.js",
   "native-owner-rpc-client.js",
-  "openai",
+  "client-bedrock-runtime",
+  "native-bedrock-converse.js",
   "native-memory-transport.js",
   "render/render.js",
   "pdfjs-dist",

@@ -130,7 +130,7 @@ describe("current cover-letter approval binding", () => {
         {
           expectedRevision: 1,
           coverLetter: {
-            disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+            disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
           },
         },
         "synthetic-key",

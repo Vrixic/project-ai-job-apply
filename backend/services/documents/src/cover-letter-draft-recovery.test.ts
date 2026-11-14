@@ -40,7 +40,7 @@ function setup(output = text) {
     ownerUserId: "019a4000-0000-7000-8000-000000000002",
     applicationId: "019a4000-0000-7000-8000-000000000003",
     ...binding,
-    noticeVersion: "openai-cover-letter.v1",
+    noticeVersion: "bedrock-cover-letter.v1",
     approvedAt: now,
     expiresAt: new Date(now.getTime() + 15 * 60_000),
   };
@@ -105,7 +105,7 @@ function setup(output = text) {
   const request = encodeCoverLetterProviderObject("request", {
     schemaVersion: 1,
     documentId: id,
-    noticeVersion: "openai-cover-letter.v1",
+    noticeVersion: "bedrock-cover-letter.v1",
     promptVersion: "1.0.0",
     ...binding,
     approvedAt: now.toISOString(),

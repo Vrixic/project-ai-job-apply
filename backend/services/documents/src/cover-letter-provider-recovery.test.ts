@@ -39,7 +39,7 @@ function fixture() {
     ownerUserId: "synthetic-owner",
     applicationId: "synthetic-application",
     ...binding,
-    noticeVersion: "openai-cover-letter.v1",
+    noticeVersion: "bedrock-cover-letter.v1",
     approvedAt: now,
     expiresAt: new Date(now.getTime() + 15 * 60_000),
   };
@@ -48,7 +48,7 @@ function fixture() {
   const request: CoverLetterProviderRequest = {
     schemaVersion: 1,
     documentId: id,
-    noticeVersion: "openai-cover-letter.v1",
+    noticeVersion: "bedrock-cover-letter.v1",
     promptVersion: "1.0.0",
     ...binding,
     approvedAt: now.toISOString(),

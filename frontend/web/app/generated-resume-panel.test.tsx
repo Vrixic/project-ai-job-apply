@@ -590,7 +590,11 @@ describe("GeneratedCoverLetterPanel", () => {
     matchesPacket: true,
     reviewRequired: true,
     paragraphs: [{ text: "Dear hiring team", factIds: [JOB] }],
-    model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+    model: {
+      provider: "bedrock",
+      model: "us.anthropic.claude-sonnet-4-6",
+      version: "us.anthropic.claude-sonnet-4-6",
+    },
     promptVersion: "1",
     temporaryMaterial: bound,
   });

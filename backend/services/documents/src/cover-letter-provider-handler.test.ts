@@ -25,7 +25,7 @@ const kms = "arn:aws:kms:us-east-2:123456789012:key/019d04cf-1f80-7000-8000-0000
 const request = {
   schemaVersion: 1,
   documentId,
-  noticeVersion: "openai-cover-letter.v1",
+  noticeVersion: "bedrock-cover-letter.v1",
   promptVersion: "1.0.0",
   jobContextHash: "a".repeat(64),
   confirmedFactsHash: "b".repeat(64),
