@@ -420,7 +420,7 @@ const key = () => `temporary-packet-${uuidv7()}`;
         applicationId: f.applicationId,
         jobContextHash: context.jobContextHash,
         confirmedFactsHash: context.confirmedFactsHash,
-        noticeVersion: "openai-cover-letter.v1",
+        noticeVersion: "bedrock-cover-letter.v1",
         approvedAt: new Date(),
         expiresAt: new Date(),
       };

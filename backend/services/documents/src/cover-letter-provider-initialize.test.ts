@@ -49,7 +49,7 @@ function fixture(
     ownerUserId: "synthetic-owner",
     applicationId: "synthetic-application",
     ...coverLetterContext({ ...evidence, now }),
-    noticeVersion: "openai-cover-letter.v1",
+    noticeVersion: "bedrock-cover-letter.v1",
     approvedAt: now,
     expiresAt: new Date(now.getTime() + 15 * 60_000),
   };
@@ -493,7 +493,7 @@ describe("private first-reservation generation-slot initializer", () => {
       encodeCoverLetterProviderObject("request", {
         schemaVersion: 1,
         documentId: id,
-        noticeVersion: "openai-cover-letter.v1",
+        noticeVersion: "bedrock-cover-letter.v1",
         promptVersion: "1.0.0",
         jobContextHash: "f".repeat(64),
         confirmedFactsHash: "a".repeat(64),

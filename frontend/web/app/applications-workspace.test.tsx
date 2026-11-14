@@ -610,7 +610,7 @@ describe("ApplicationsWorkspace: cover letter", () => {
     expect(container.textContent).not.toMatch(/using these terms|requires a new choice/u);
     await click("Generate cover letter");
     expect(bff.packetRequests().at(-1)).toMatchObject({
-      coverLetter: { disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true } },
+      coverLetter: { disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true } },
     });
   });
 

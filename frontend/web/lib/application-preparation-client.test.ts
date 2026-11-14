@@ -9,7 +9,7 @@ const OP = "019d04cf-1f80-7000-8000-000000000002";
 const request = {
   expectedRevision: 1,
   coverLetter: {
-    disclosure: { noticeVersion: "openai-cover-letter.v1" as const, acknowledged: true as const },
+    disclosure: { noticeVersion: "bedrock-cover-letter.v1" as const, acknowledged: true as const },
   },
 };
 const operation = {

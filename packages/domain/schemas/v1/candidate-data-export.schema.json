@@ -428,16 +428,16 @@
           "enum": ["queued", "running", "succeeded", "failed"]
         },
         "noticeVersion": {
-          "const": "openai-cover-letter.v1"
+          "enum": ["openai-cover-letter.v1", "bedrock-cover-letter.v1"]
         },
         "purpose": {
           "const": "cover_letter"
         },
         "provider": {
-          "const": "openai"
+          "enum": ["openai", "bedrock"]
         },
         "model": {
-          "const": "gpt-6-luna"
+          "enum": ["gpt-6-luna", "us.anthropic.claude-sonnet-4-6"]
         },
         "categories": {
           "const": ["profile_facts", "job_posting"]

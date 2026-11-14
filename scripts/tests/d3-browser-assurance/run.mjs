@@ -313,7 +313,7 @@ try {
   const preparationCommands = calls.filter((call) => call.url.endsWith("/packets"));
   assert.equal(preparationCommands.length, 1);
   assert.deepEqual(preparationCommands[0]?.body.coverLetter, {
-    disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+    disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
   });
   await noRemovedCopy("cover letter");
   await a11y("cover letter");

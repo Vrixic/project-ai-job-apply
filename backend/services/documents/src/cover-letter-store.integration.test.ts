@@ -51,7 +51,11 @@ const generation = {
   sourceFactIds: [factId],
   confidence: 0.95,
   promptVersion: "cover_letter.v1",
-  model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+  model: {
+    provider: "bedrock",
+    model: "us.anthropic.claude-sonnet-4-6",
+    version: "us.anthropic.claude-sonnet-4-6",
+  },
 };
 
 (databaseUrl ? describe : describe.skip)("Documents immutable cover-letter persistence", () => {
@@ -189,7 +193,14 @@ const generation = {
       });
       // Real database/object-owner flow with an offline scripted provider, not live OpenAI.
       const gateway = new ModelGateway(
-        { identity: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" }, complete },
+        {
+          identity: {
+            provider: "bedrock",
+            model: "us.anthropic.claude-sonnet-4-6",
+            version: "us.anthropic.claude-sonnet-4-6",
+          },
+          complete,
+        },
         { enabled: () => true, clock: () => now },
       );
       const service = new CoverLetterGenerationService(
@@ -208,7 +219,7 @@ const generation = {
         ownerUserId: owner,
         applicationId: randomUUID(),
         ...coverLetterContext({ facts: [fact], job, now }),
-        noticeVersion: "openai-cover-letter.v1",
+        noticeVersion: "bedrock-cover-letter.v1",
         approvedAt: now,
         expiresAt: new Date(now.getTime() + 15 * 60_000),
       };
@@ -473,7 +484,7 @@ const generation = {
           ownerUserId: owner,
           applicationId: randomUUID(),
           ...bindings,
-          noticeVersion: "openai-cover-letter.v1",
+          noticeVersion: "bedrock-cover-letter.v1",
           approvedAt: approved,
           expiresAt: new Date(approved.getTime() + 15 * 60_000),
         };
@@ -483,7 +494,7 @@ const generation = {
         const request = encodeCoverLetterProviderObject("request", {
           schemaVersion: 1,
           documentId: identity.id,
-          noticeVersion: "openai-cover-letter.v1",
+          noticeVersion: "bedrock-cover-letter.v1",
           promptVersion: "1.0.0",
           ...bindings,
           approvedAt: approved.toISOString(),
@@ -657,7 +668,7 @@ const generation = {
           ownerUserId: owner,
           applicationId: randomUUID(),
           ...coverLetterContext({ ...evidence, now }),
-          noticeVersion: "openai-cover-letter.v1",
+          noticeVersion: "bedrock-cover-letter.v1",
           approvedAt: now,
           expiresAt: new Date(now.getTime() + 15 * 60_000),
         };
@@ -806,7 +817,7 @@ const generation = {
           ownerUserId: owner,
           applicationId: randomUUID(),
           ...coverLetterContext({ ...evidence, now }),
-          noticeVersion: "openai-cover-letter.v1",
+          noticeVersion: "bedrock-cover-letter.v1",
           approvedAt: now,
           expiresAt: new Date(now.getTime() + 15 * 60_000),
         };

@@ -113,7 +113,7 @@ function fixture(defaultOff = false) {
     applicationId: id(3),
     jobContextHash: context.jobContextHash,
     confirmedFactsHash: context.confirmedFactsHash,
-    noticeVersion: "openai-cover-letter.v1" as const,
+    noticeVersion: "bedrock-cover-letter.v1" as const,
     approvedAt: approvedAt.toISOString(),
     expiresAt: new Date(approvedAt.getTime() + 900_000).toISOString(),
   }));

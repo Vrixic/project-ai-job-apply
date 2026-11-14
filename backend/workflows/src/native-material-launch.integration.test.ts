@@ -171,7 +171,7 @@ describe.runIf(requested)(
           request: {
             expectedRevision: 1,
             coverLetter: {
-              disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+              disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
             },
           },
           packet: {
@@ -702,7 +702,7 @@ describe.runIf(requested)(
         request: {
           expectedRevision: 1,
           coverLetter: {
-            disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+            disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
           },
         },
         packet: {
@@ -961,7 +961,7 @@ describe.runIf(requested)(
         applicationId: request.applicationId,
         jobContextHash: approvedContext.jobContextHash,
         confirmedFactsHash: approvedContext.confirmedFactsHash,
-        noticeVersion: "openai-cover-letter.v1",
+        noticeVersion: "bedrock-cover-letter.v1",
       });
       const [originalConsent] = await sql<
         Array<{ consent: Date }>
@@ -1120,7 +1120,7 @@ describe.runIf(requested)(
         applicationId: request.applicationId,
         jobContextHash: approvedContext.jobContextHash,
         confirmedFactsHash: approvedContext.confirmedFactsHash,
-        noticeVersion: "openai-cover-letter.v1",
+        noticeVersion: "bedrock-cover-letter.v1",
         approvedAt: bootstrap.approvedAt,
         expiresAt: bootstrap.expiresAt,
       };

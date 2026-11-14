@@ -7,7 +7,7 @@ import {
   contract,
 } from "./index.js";
 
-const disclosure = { noticeVersion: "openai-cover-letter.v1", acknowledged: true };
+const disclosure = { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true };
 const now = "2026-10-02T12:00:00.000Z";
 
 describe("explicit cover-letter preparation", () => {
@@ -15,10 +15,13 @@ describe("explicit cover-letter preparation", () => {
 
   it("binds acknowledgement to the published provider, retention and mandatory-review notice", () => {
     expect(disclosure.noticeVersion).toBe(COVER_LETTER_DISCLOSURE_VERSION);
-    expect(COVER_LETTER_DISCLOSURE_TEXT).toContain("OpenAI (gpt-6-luna)");
+    expect(COVER_LETTER_DISCLOSURE_TEXT).toContain("Amazon Bedrock");
+    expect(COVER_LETTER_DISCLOSURE_TEXT).toContain("Claude Sonnet 4.6");
+    expect(COVER_LETTER_DISCLOSURE_TEXT).not.toContain("OpenAI");
     expect(COVER_LETTER_DISCLOSURE_TEXT).toContain("non-restricted");
-    expect(COVER_LETTER_DISCLOSURE_TEXT).toContain("up to 30 days");
-    expect(COVER_LETTER_DISCLOSURE_TEXT).toContain("temporary prompt caching");
+    expect(COVER_LETTER_DISCLOSURE_TEXT).toContain("train models");
+    expect(COVER_LETTER_DISCLOSURE_TEXT).toContain("those terms can change");
+    expect(COVER_LETTER_DISCLOSURE_TEXT).toContain("within 30 minutes");
     expect(COVER_LETTER_DISCLOSURE_TEXT).toContain("You must review");
     expect(COVER_LETTER_DISCLOSURE_TEXT).toContain("You can decline");
   });
@@ -99,7 +102,11 @@ describe("immutable cover-letter preview", () => {
     matchesPacket: true,
     reviewRequired: true,
     paragraphs: [{ text: "I build synthetic test systems.", factIds: [randomUUID()] }],
-    model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+    model: {
+      provider: "bedrock",
+      model: "us.anthropic.claude-sonnet-4-6",
+      version: "us.anthropic.claude-sonnet-4-6",
+    },
     promptVersion: "cover_letter.v1",
   };
 

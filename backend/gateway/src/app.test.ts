@@ -3924,7 +3924,7 @@ describe("Applications routes", () => {
   it("accepts opted-in Prepare as 202 without falling through to synchronous packet creation", async () => {
     const request = {
       expectedRevision: 2,
-      coverLetter: { disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true } },
+      coverLetter: { disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true } },
     };
     const response = await app.inject({
       method: "POST",
@@ -4117,7 +4117,7 @@ describe("Applications routes", () => {
           payload: {
             expectedRevision: 2,
             coverLetter: {
-              disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+              disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
             },
           },
         })
@@ -4134,16 +4134,16 @@ describe("Applications routes", () => {
     for (const coverLetter of [
       {},
       { disclosure: { noticeVersion: "old", acknowledged: true } },
-      { disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: false } },
+      { disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: false } },
       {
         disclosure: {
-          noticeVersion: "openai-cover-letter.v1",
+          noticeVersion: "bedrock-cover-letter.v1",
           acknowledged: true,
           approvedAt: now,
         },
       },
       {
-        disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+        disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
         model: "other",
       },
     ]) {
@@ -4167,7 +4167,7 @@ describe("Applications routes", () => {
           payload: {
             expectedRevision: 2,
             coverLetter: {
-              disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+              disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
             },
           },
         })
@@ -4412,7 +4412,7 @@ describe("Applications routes", () => {
         payload: {
           expectedRevision: 2,
           coverLetter: {
-            disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+            disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
           },
         },
       });

@@ -165,7 +165,7 @@ describe("cross-runtime restore contract fixture", () => {
     ).toEqual(fixture.replay);
   });
 
-  it("binds primary recovery to current 90-migration source while retaining the isolated fixture", () => {
+  it("binds primary recovery to current 91-migration source while retaining the isolated fixture", () => {
     const bytes = readFileSync(
       new URL("../../services/database-migrations/restore-manifest.v1.json", import.meta.url),
     );
@@ -175,7 +175,7 @@ describe("cross-runtime restore contract fixture", () => {
     const manifest = JSON.parse(bytes.toString("utf8"));
     expect(
       manifest.contributors.flatMap((owner: { migrations: unknown[] }) => owner.migrations),
-    ).toHaveLength(90);
+    ).toHaveLength(91);
     expect(
       manifest.contributors
         .find((owner: { owner: string }) => owner.owner === "documents")

@@ -71,7 +71,11 @@ function fixture() {
     matchesPacket: true,
     reviewRequired: true,
     paragraphs: [{ text: "Synthetic TypeScript experience.", factIds: [FACT_A] }],
-    model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+    model: {
+      provider: "bedrock",
+      model: "us.anthropic.claude-sonnet-4-6",
+      version: "us.anthropic.claude-sonnet-4-6",
+    },
     promptVersion: "cover_letter.v1",
   };
   const file: ApplicationCoverLetterFile = {

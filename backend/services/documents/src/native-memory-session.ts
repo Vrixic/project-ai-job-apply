@@ -1,4 +1,5 @@
-import { ModelGateway, type ModelProvider } from "@ai-job-apply/ai-sdk";
+import type { ModelProvider } from "@ai-job-apply/ai-sdk";
+import { ModelGateway } from "@ai-job-apply/ai-sdk/gateway";
 import type {
   CoverLetterEvidenceSource,
   CoverLetterPreparationIdentity,

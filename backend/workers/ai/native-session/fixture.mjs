@@ -64,14 +64,18 @@ const identity = {
   ownerUserId: ids[0],
   applicationId: ids[1],
   ...context,
-  noticeVersion: "openai-cover-letter.v1",
+  noticeVersion: "bedrock-cover-letter.v1",
   approvedAt: new Date(now),
   expiresAt: new Date(now + 900_000),
 };
 let claimed = false;
 let calls = 0;
 const provider = {
-  identity: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+  identity: {
+    provider: "bedrock",
+    model: "us.anthropic.claude-sonnet-4-6",
+    version: "us.anthropic.claude-sonnet-4-6",
+  },
   complete: async () => {
     calls++;
     return {

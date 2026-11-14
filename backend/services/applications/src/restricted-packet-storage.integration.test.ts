@@ -159,7 +159,7 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
     for (let index = 0; index < 2; index++) {
       const result = await run(process.execPath, [executable], { env });
       expect(result.stdout.trim()).toBe(
-        "Applications migrations through 0015_legacy_receipt_archive applied and verified.",
+        "Applications migrations through 0016_cover_letter_bedrock_notice applied and verified.",
       );
     }
   });
@@ -424,7 +424,7 @@ suite("restricted packet owned PostgreSQL boundary (offline cipher)", () => {
       request: {
         expectedRevision: 1,
         coverLetter: {
-          disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+          disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
         },
       },
     });

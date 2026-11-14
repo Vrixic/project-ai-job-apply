@@ -148,7 +148,7 @@ describe("Applications browser boundary", () => {
     };
     const request = {
       expectedRevision: 1,
-      coverLetter: { disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true } },
+      coverLetter: { disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true } },
     };
     for (const [body, upstream, expected] of [
       [request, preparation, 202],

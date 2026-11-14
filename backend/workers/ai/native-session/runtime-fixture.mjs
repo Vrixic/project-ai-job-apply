@@ -40,7 +40,7 @@ export async function exerciseNativeRuntime(mode, kernelPath, externalImage = fa
     ownerUserId: ids[0],
     applicationId: ids[1],
     ...coverLetterContext({ facts, job, now }),
-    noticeVersion: "openai-cover-letter.v1",
+    noticeVersion: "bedrock-cover-letter.v1",
     approvedAt: now,
     expiresAt: new Date(now.getTime() + 900_000),
   };
@@ -121,7 +121,11 @@ export async function exerciseNativeRuntime(mode, kernelPath, externalImage = fa
     loadKernel: () => createRequire(import.meta.url)(kernelPath),
     source: { load: async () => ({ facts, job }) },
     provider: {
-      identity: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+      identity: {
+        provider: "bedrock",
+        model: "us.anthropic.claude-sonnet-4-6",
+        version: "us.anthropic.claude-sonnet-4-6",
+      },
       complete: async () => {
         providerCalls++;
         return {
@@ -364,7 +368,7 @@ export async function exerciseNativeRuntime(mode, kernelPath, externalImage = fa
       containerName: allocation.containerName,
     },
     ownerFunctionArn: workTarget,
-    providerSecret: secretReference("provider"),
+    liveGeneration: { modelId: "us.anthropic.claude-sonnet-4-6" },
     tlsSecret: secretReference("tls"),
     apiOrigin: "https://api.test.invalid",
     issuer: options.transport.identity.issuer,
@@ -384,52 +388,56 @@ export async function exerciseNativeRuntime(mode, kernelPath, externalImage = fa
     testSecretClient: {
       send: async (command) => {
         secretReads++;
-        assert.equal(command.input.VersionId, imageConfiguration.providerSecret.versionId);
+        assert.equal(command.input.VersionId, imageConfiguration.tlsSecret.versionId);
+        assert.equal(command.input.SecretId, imageConfiguration.tlsSecret.arn);
         assert.equal(providerCalls, 0);
-        const tls = command.input.SecretId === imageConfiguration.tlsSecret.arn;
         return {
           $metadata: {},
           ARN: command.input.SecretId,
           VersionId:
             mode === "runtime-image-secret-refused" ? "f".repeat(32) : command.input.VersionId,
-          SecretString: tls
-            ? JSON.stringify({
-                key: readFileSync("/native/key.pem", "utf8"),
-                cert: certificate.toString(),
-              })
-            : "synthetic-provider-key-never-real",
+          SecretString: JSON.stringify({
+            key: readFileSync("/native/key.pem", "utf8"),
+            cert: certificate.toString(),
+          }),
         };
       },
     },
-    testModelFetch: async (url, init) => {
-      providerCalls++;
-      assert.equal(String(url), "https://api.openai.com/v1/responses");
-      assert.equal(init.method, "POST");
-      const request = JSON.parse(init.body);
-      assert.equal(request.store, false);
-      assert.equal(request.background, false);
-      assert.equal(request.stream, false);
-      assert.equal(request.model, "gpt-6-luna");
-      return new Response(
-        JSON.stringify({
-          status: "completed",
-          output: [
-            {
-              type: "message",
+    // ADR-059 addendum 12: one synchronous Converse call on the task role, the model the notice names, the one forced
+    // tool, no cache points; there is no provider key to read.
+    testBedrockClient: {
+      send: async (command, callOptions) => {
+        providerCalls++;
+        assert.ok(callOptions.abortSignal instanceof AbortSignal);
+        const request = command.input;
+        assert.equal(request.modelId, "us.anthropic.claude-sonnet-4-6");
+        assert.equal(request.toolConfig.toolChoice.tool.name, "grounded_paragraphs_v1");
+        assert.equal(JSON.stringify(request).includes("cachePoint"), false);
+        return {
+          $metadata: {},
+          stopReason: "tool_use",
+          output: {
+            message: {
               role: "assistant",
-              status: "completed",
               content: [
                 {
-                  type: "output_text",
-                  text: JSON.stringify({
-                    paragraphs: [{ text: "I have experience with TypeScript.", factIds: [ids[3]] }],
-                  }),
+                  toolUse: {
+                    toolUseId: "synthetic-tool-use",
+                    name: "grounded_paragraphs_v1",
+                    input: {
+                      paragraphs: [
+                        { text: "I have experience with TypeScript.", factIds: [ids[3]] },
+                      ],
+                    },
+                  },
                 },
               ],
             },
-          ],
-        }),
-      );
+          },
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          metrics: { latencyMs: 1 },
+        };
+      },
     },
     testAuthorizationFetch: async (url, init) => {
       const claims = await issuer.verifier.verify(
@@ -457,7 +465,7 @@ export async function exerciseNativeRuntime(mode, kernelPath, externalImage = fa
   if (imageMode) Object.assign(process.env, bootstrapOptions.environment());
   if (["runtime-image-secret-refused", "runtime-image-tls-refused"].includes(mode)) {
     await assert.rejects(startNativeImage(imageOptions), /NativeImageConfigurationUnavailable/u);
-    assert.equal(secretReads, 2);
+    assert.equal(secretReads, 1);
     assert.equal(providerCalls, 0);
     assert.equal(controlInvocations, 0);
     process.stdout.write(

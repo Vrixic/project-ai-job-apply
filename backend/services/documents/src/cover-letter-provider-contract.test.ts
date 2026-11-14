@@ -16,7 +16,7 @@ const documentId = "019d04cf-1f80-7000-8000-000000000001";
 const request = {
   schemaVersion: 1,
   documentId,
-  noticeVersion: "openai-cover-letter.v1",
+  noticeVersion: "bedrock-cover-letter.v1",
   promptVersion: "1.0.0",
   jobContextHash: "a".repeat(64),
   confirmedFactsHash: "b".repeat(64),

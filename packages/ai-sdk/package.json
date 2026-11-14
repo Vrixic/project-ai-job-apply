@@ -19,6 +19,14 @@
     "./gateway": {
       "types": "./dist/gateway.d.ts",
       "default": "./dist/gateway.js"
+    },
+    "./generation": {
+      "types": "./dist/generation.d.ts",
+      "default": "./dist/generation.js"
+    },
+    "./prompts": {
+      "types": "./dist/prompts.d.ts",
+      "default": "./dist/prompts.js"
     }
   },
   "scripts": {

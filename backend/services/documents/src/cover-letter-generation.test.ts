@@ -33,7 +33,7 @@ function setup(options: { enabled?: boolean; output?: string; facts?: GraphFact[
     ownerUserId: "019d04cf-1f80-7000-8000-000000000003",
     applicationId: "019d04cf-1f80-7000-8000-000000000004",
     ...coverLetterContext({ facts, job, now }),
-    noticeVersion: "openai-cover-letter.v1",
+    noticeVersion: "bedrock-cover-letter.v1",
     approvedAt: NOW,
     expiresAt: new Date(NOW.getTime() + 15 * 60_000),
   };
@@ -85,7 +85,11 @@ function setup(options: { enabled?: boolean; output?: string; facts?: GraphFact[
     text: options.output ?? JSON.stringify({ paragraphs: [{ text, factIds: [fact.id] }] }),
   }));
   const provider: ModelProvider = {
-    identity: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+    identity: {
+      provider: "bedrock",
+      model: "us.anthropic.claude-sonnet-4-6",
+      version: "us.anthropic.claude-sonnet-4-6",
+    },
     complete,
   };
   const gateway = new ModelGateway(provider, {

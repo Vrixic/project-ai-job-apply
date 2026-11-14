@@ -29,7 +29,7 @@ const request = {
   expectedRevision: 1,
   coverLetter: {
     disclosure: {
-      noticeVersion: "openai-cover-letter.v1" as const,
+      noticeVersion: "bedrock-cover-letter.v1" as const,
       acknowledged: true as const,
     },
   },

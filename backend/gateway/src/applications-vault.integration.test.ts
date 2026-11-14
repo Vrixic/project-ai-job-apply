@@ -247,7 +247,7 @@ suite("Applications selected vault owner composition", () => {
         payload: {
           expectedRevision: application.revision,
           coverLetter: {
-            disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+            disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
           },
         },
       };
@@ -314,7 +314,7 @@ suite("Applications selected vault owner composition", () => {
           {
             expectedRevision: f.app.revision,
             coverLetter: {
-              disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+              disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
             },
           },
           key(),
@@ -853,7 +853,7 @@ suite("Applications selected vault owner composition", () => {
         ...f.request,
         expectedRevision: f.app.revision,
         coverLetter: {
-          disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+          disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
         },
       },
       key(),
@@ -1000,7 +1000,7 @@ suite("Applications selected vault owner composition", () => {
           ...f.request,
           expectedRevision: f.app.revision,
           coverLetter: {
-            disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+            disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
           },
         },
         key(),
@@ -1063,7 +1063,7 @@ suite("Applications selected vault owner composition", () => {
         ...f.request,
         expectedRevision: f.app.revision,
         coverLetter: {
-          disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+          disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
         },
       },
       key(),

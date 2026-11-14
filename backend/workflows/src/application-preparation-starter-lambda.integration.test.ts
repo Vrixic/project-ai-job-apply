@@ -93,7 +93,7 @@ describe.skipIf(!requested)("native SQS starter through owning Applications ledg
       request: {
         expectedRevision: 1,
         coverLetter: {
-          disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+          disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
         },
       },
       packet: { jobRevision: "a".repeat(64), form: null, fields: [], artifactHashes: {} },

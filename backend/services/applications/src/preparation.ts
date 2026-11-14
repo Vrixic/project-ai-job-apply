@@ -13,7 +13,7 @@ export interface PreparationRecord {
   expectedRevision: number;
   jobContextHash: string;
   confirmedFactsHash: string;
-  noticeVersion: "openai-cover-letter.v1";
+  noticeVersion: "bedrock-cover-letter.v1";
   approvedAt: Date;
   expiresAt: Date;
   generationClaimedAt: Date | null;

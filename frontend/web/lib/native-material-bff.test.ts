@@ -195,7 +195,11 @@ describe("generated material read through the authenticated BFF", () => {
           version: 1,
           reviewRequired: true,
           paragraphs: [{ text: "Hello", factIds: [PACKET] }],
-          model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+          model: {
+            provider: "bedrock",
+            model: "us.anthropic.claude-sonnet-4-6",
+            version: "us.anthropic.claude-sonnet-4-6",
+          },
           promptVersion: "1",
         }),
     });

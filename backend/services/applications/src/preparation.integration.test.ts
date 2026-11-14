@@ -110,7 +110,7 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
     context,
     request: {
       expectedRevision: 1,
-      coverLetter: { disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true } },
+      coverLetter: { disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true } },
     } satisfies PreparationRequest,
     packet: {
       jobRevision: HASH_A,
@@ -164,7 +164,7 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
         ownerUserId: owner,
         applicationId: app,
         ...context,
-        noticeVersion: "openai-cover-letter.v1",
+        noticeVersion: "bedrock-cover-letter.v1",
         approvedAt: before.approvedAt.toISOString(),
         expiresAt: before.expiresAt.toISOString(),
       };
@@ -493,7 +493,7 @@ const startTime = new Date("2026-10-02T12:00:00.000Z");
             expect.objectContaining({
               id,
               state: "succeeded",
-              noticeVersion: "openai-cover-letter.v1",
+              noticeVersion: "bedrock-cover-letter.v1",
               resultPacketId: completed.resultPacketId,
             }),
           ]);

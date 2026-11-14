@@ -197,7 +197,14 @@ const START = new Date("2026-10-02T12:00:00Z");
       }));
       // Synthetic offline provider and object transport. No live credentials or network calls.
       const gateway = new ModelGateway(
-        { identity: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" }, complete },
+        {
+          identity: {
+            provider: "bedrock",
+            model: "us.anthropic.claude-sonnet-4-6",
+            version: "us.anthropic.claude-sonnet-4-6",
+          },
+          complete,
+        },
         { enabled: () => enabled, clock: () => now },
       );
       const service = new CoverLetterGenerationService(documents, source, gateway, () => now);
@@ -215,7 +222,7 @@ const START = new Date("2026-10-02T12:00:00Z");
         request: {
           expectedRevision: 1,
           coverLetter: {
-            disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true },
+            disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true },
           },
         },
         packet: { jobRevision: HASH, form: null, fields: [], artifactHashes: {} },

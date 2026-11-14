@@ -358,7 +358,7 @@ export interface NativeOwnerBootstrap {
   applicationId: string;
   jobContextHash: string;
   confirmedFactsHash: string;
-  noticeVersion: "openai-cover-letter.v1";
+  noticeVersion: "bedrock-cover-letter.v1";
   approvedAt: string;
   expiresAt: string;
 }
@@ -420,7 +420,7 @@ export function validateNativeOwnerBootstrap(
       value.applicationId !== binding.scope.applicationId ||
       !hash(value.jobContextHash) ||
       !hash(value.confirmedFactsHash) ||
-      value.noticeVersion !== "openai-cover-letter.v1"
+      value.noticeVersion !== "bedrock-cover-letter.v1"
     )
       return false;
     for (const key of ["approvedAt", "expiresAt"]) {

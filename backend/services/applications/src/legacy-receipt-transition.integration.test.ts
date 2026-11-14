@@ -344,7 +344,7 @@ describe.skipIf(!url)("atomic historical receipt transition", () => {
     const idempotencyKey = uuidv7();
     const request = {
       expectedRevision: 1,
-      coverLetter: { disclosure: { noticeVersion: "openai-cover-letter.v1", acknowledged: true } },
+      coverLetter: { disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true } },
     } satisfies PreparationRequest;
     const requestHash = canonicalHash({
       operation: "queue_preparation",
@@ -357,7 +357,7 @@ describe.skipIf(!url)("atomic historical receipt transition", () => {
       (id,application_id,owner_user_id,base_packet_id,expected_revision,job_context_hash,confirmed_facts_hash,
        notice_version,approved_at,expires_at,created_at,updated_at)
       VALUES (${preparationId},${original.applicationId},${fixture.owner},${packet?.current_packet_id},2,
-        ${HASH_A},${HASH_A},'openai-cover-letter.v1',${at},${new Date(at.getTime() + 900000)},${at},${at})`;
+        ${HASH_A},${HASH_A},'bedrock-cover-letter.v1',${at},${new Date(at.getTime() + 900000)},${at},${at})`;
     await sql`INSERT INTO applications.preparation_outbox(id,preparation_id,owner_user_id,payload,created_at)
       VALUES (${uuidv7()},${preparationId},${fixture.owner},${sql.json({ preparationId })},${at})`;
     await sql`INSERT INTO applications.preparation_audit(id,preparation_id,owner_user_id,action,occurred_at)

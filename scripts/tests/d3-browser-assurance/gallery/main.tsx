@@ -242,7 +242,11 @@ const syntheticFetch = (async (input: RequestInfo | URL, init: RequestInit = {})
       temporaryMaterial: material,
       reviewRequired: true,
       paragraphs: [{ text: "Native synthetic grounded cover letter", factIds: [JOB] }],
-      model: { provider: "openai", model: "gpt-6-luna", version: "gpt-6-luna" },
+      model: {
+        provider: "bedrock",
+        model: "us.anthropic.claude-sonnet-4-6",
+        version: "us.anthropic.claude-sonnet-4-6",
+      },
       promptVersion: "synthetic.v1",
     });
   }

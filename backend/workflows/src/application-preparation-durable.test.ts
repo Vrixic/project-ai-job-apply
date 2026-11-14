@@ -263,7 +263,7 @@ const preparation: PreparationRecord = {
   expectedRevision: 2,
   jobContextHash: "a".repeat(64),
   confirmedFactsHash: "b".repeat(64),
-  noticeVersion: "openai-cover-letter.v1",
+  noticeVersion: "bedrock-cover-letter.v1",
   approvedAt: new Date("2026-10-02T12:00:00Z"),
   expiresAt: new Date("2026-10-02T12:15:00Z"),
   generationClaimedAt: null,

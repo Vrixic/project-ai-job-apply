@@ -13371,7 +13371,7 @@
         "properties": {
           "noticeVersion": {
             "type": "string",
-            "const": "openai-cover-letter.v1"
+            "const": "bedrock-cover-letter.v1"
           },
           "acknowledged": {
             "type": "boolean",
@@ -13581,15 +13581,15 @@
                 "properties": {
                   "provider": {
                     "type": "string",
-                    "const": "openai"
+                    "const": "bedrock"
                   },
                   "model": {
                     "type": "string",
-                    "const": "gpt-6-luna"
+                    "const": "us.anthropic.claude-sonnet-4-6"
                   },
                   "version": {
                     "type": "string",
-                    "const": "gpt-6-luna"
+                    "const": "us.anthropic.claude-sonnet-4-6"
                   }
                 },
                 "additionalProperties": false

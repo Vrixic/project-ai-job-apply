@@ -178,7 +178,7 @@ function New-ReplayPrimaryContext {
     baseline_mode='primary-recovery'; source_identifier='ai-job-apply-development'; target_identifier='ai-job-apply-development'
     source_dbi_resource_id=$source[0].DbiResourceId; target_dbi_resource_id=$source[0].DbiResourceId
     source_boundary_sha256=$boundary; target_boundary_sha256=$boundary
-    source_manifest_sha256='4eb3abc8d2b17290a4bf72f69fac27710bb7675fb5435fc63c393680659dd452'
+    source_manifest_sha256='fdcf5c48298fdeb69b914e4d3b73b402f3f45ff676f8c91c702b17fa8bfa825e'
     safety_snapshot_identifier=$PrimarySafetySnapshotId
   }
 }

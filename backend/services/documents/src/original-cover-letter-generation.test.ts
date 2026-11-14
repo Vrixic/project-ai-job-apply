@@ -1,6 +1,14 @@
-import { coverLetterContext, ModelGateway, OpenAiLunaProvider } from "@ai-job-apply/ai-sdk";
+import {
+  type BedrockConverseOutput,
+  type BedrockConversePort,
+  BedrockConverseProvider,
+  coverLetterContext,
+  GROUNDED_PARAGRAPHS_NAME,
+  ModelGateway,
+} from "@ai-job-apply/ai-sdk";
 import type { GraphFact } from "@ai-job-apply/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { COVER_LETTER_PROVIDER_MODEL } from "./cover-letter-provider-contract.js";
 import type { CoverLetterWorkReference } from "./cover-letter-work-store.js";
 import {
   OriginalCoverLetterGenerationActor,
@@ -35,12 +43,30 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+const reply = (value: unknown): BedrockConverseOutput => ({
+  stopReason: "tool_use",
+  output: {
+    message: {
+      role: "assistant",
+      content: [
+        {
+          toolUse: {
+            toolUseId: "synthetic-tool-use",
+            name: GROUNDED_PARAGRAPHS_NAME,
+            input: value,
+          },
+        },
+      ],
+    },
+  },
+});
+
 function setup(
   options: {
     documentVersion?: number;
     enabled?: boolean;
     gatewayEnabled?: boolean;
-    text?: string;
+    value?: unknown;
     timeoutMs?: number;
   } = {},
 ) {
@@ -54,7 +80,7 @@ function setup(
     ownerUserId: OWNER,
     applicationId: APP,
     ...binding,
-    noticeVersion: "openai-cover-letter.v1",
+    noticeVersion: "bedrock-cover-letter.v1",
     approvedAt: new Date(NOW),
     expiresAt: new Date(NOW + 900_000),
   };
@@ -77,33 +103,13 @@ function setup(
     settleRejectedProviderDispatch: vi.fn(async () => {}),
     settleUndispatchedProviderDispatch: vi.fn(async () => {}),
   };
-  const transport = vi.fn<typeof fetch>(
-    async () =>
-      new Response(
-        JSON.stringify({
-          status: "completed",
-          output: [
-            {
-              type: "message",
-              role: "assistant",
-              status: "completed",
-              content: [
-                {
-                  type: "output_text",
-                  text:
-                    options.text ??
-                    JSON.stringify({ paragraphs: [{ text: TEXT, factIds: [FACT] }] }),
-                },
-              ],
-            },
-          ],
-        }),
-      ),
+  const transport = vi.fn<BedrockConversePort["converse"]>(async () =>
+    reply(options.value ?? { paragraphs: [{ text: TEXT, factIds: [FACT] }] }),
   );
-  const provider = new OpenAiLunaProvider({
+  const provider = new BedrockConverseProvider({
+    modelId: COVER_LETTER_PROVIDER_MODEL.model,
     enabled: () => true,
-    apiKey: () => "synthetic",
-    fetch: transport,
+    port: { converse: transport },
   });
   const gateway = new ModelGateway(provider, {
     enabled: () => options.gatewayEnabled ?? true,
@@ -203,11 +209,12 @@ describe("original memory-only cover-letter generation actor", () => {
     expect(JSON.stringify(preview.value)).toContain(TEXT);
     preview.release();
     expect(f.transport).toHaveBeenCalledOnce();
-    expect(JSON.parse(f.transport.mock.calls[0]?.[1]?.body as string)).toMatchObject({
-      store: false,
-      background: false,
-      stream: false,
+    // One synchronous Converse call, the model the notice names, the one forced tool, no cache points.
+    expect(f.transport.mock.calls[0]?.[0]).toMatchObject({
+      modelId: COVER_LETTER_PROVIDER_MODEL.model,
+      toolConfig: { toolChoice: { tool: { name: GROUNDED_PARAGRAPHS_NAME } } },
     });
+    expect(JSON.stringify(f.transport.mock.calls[0]?.[0])).not.toContain("cachePoint");
     expect(f.evidence.facts[0]?.value).toBe("TypeScript");
     expect(await f.actor.generate(f.identity)).toEqual({ kind: "in_progress" });
     expect(f.transport).toHaveBeenCalledOnce();
@@ -268,16 +275,13 @@ describe("original memory-only cover-letter generation actor", () => {
     },
   );
 
-  it.each(["not json", "x".repeat(8_001)])(
-    "fences only positive output rejection",
-    async (text) => {
-      const f = setup({ text });
-      expect(await f.actor.generate(f.identity)).toMatchObject({ kind: "failed" });
-      expect(f.work.settleRejectedProviderDispatch).toHaveBeenCalledExactlyOnceWith(f.reference);
-      expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
-      expect(f.authority.claimOriginalCompletion).not.toHaveBeenCalled();
-    },
-  );
+  it("fences only positive output rejection (the forced tool cannot return non-JSON, so size is the case)", async () => {
+    const f = setup({ value: { paragraphs: [{ text: "x".repeat(8_001), factIds: [FACT] }] } });
+    expect(await f.actor.generate(f.identity)).toMatchObject({ kind: "failed" });
+    expect(f.work.settleRejectedProviderDispatch).toHaveBeenCalledExactlyOnceWith(f.reference);
+    expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
+    expect(f.authority.claimOriginalCompletion).not.toHaveBeenCalled();
+  });
 
   it("settles a positive local gateway refusal without a model call", async () => {
     const f = setup({ gatewayEnabled: false });
@@ -313,40 +317,25 @@ describe("original memory-only cover-letter generation actor", () => {
     if (ref) expect(f.memory.has(ref)).toBe(false);
   });
 
-  it("keeps original admission through SDK timeout until positive late fulfillment", async () => {
+  it("keeps original admission unsettled when the SDK timeout aborts the Bedrock call", async () => {
     vi.useFakeTimers();
     const f = setup({ timeoutMs: 10 });
-    let finish!: (response: Response) => void;
     f.transport.mockImplementation(
-      () =>
-        new Promise<Response>((resolve) => {
-          finish = resolve;
+      (_input, options) =>
+        new Promise<never>((_resolve, reject) => {
+          options.abortSignal.addEventListener("abort", () => reject(Error("Aborted")));
         }),
     );
     const original = f.actor.generate(f.identity);
     await vi.advanceTimersByTimeAsync(10);
     expect(f.transport).toHaveBeenCalledOnce();
-    expect(f.transport.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
-    expect(await f.actor.generate(f.identity)).toEqual({ kind: "in_progress" });
-    expect(f.work.claimProviderDispatch).toHaveBeenCalledOnce();
-    expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
-    finish(
-      new Response(
-        JSON.stringify({
-          status: "completed",
-          output: [
-            {
-              type: "message",
-              role: "assistant",
-              status: "completed",
-              content: [{ type: "output_text", text: "{}" }],
-            },
-          ],
-        }),
-      ),
-    );
+    expect(f.transport.mock.calls[0]?.[1]?.abortSignal.aborted).toBe(true);
+    // An aborted call has an unknown outcome: never settled, never redispatched, never previewed.
     expect(await original).toEqual({ kind: "in_progress" });
-    expect(f.work.settleProviderDispatch).toHaveBeenCalledExactlyOnceWith(f.reference);
+    expect(await f.actor.generate(f.identity)).toEqual({ kind: "in_progress" });
+    expect(f.work.claimProviderDispatch).toHaveBeenCalledTimes(2);
+    expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
+    expect(f.work.settleUndispatchedProviderDispatch).not.toHaveBeenCalled();
     expect(f.authority.claimOriginalCompletion).not.toHaveBeenCalled();
     expect(f.transport).toHaveBeenCalledOnce();
   });
@@ -403,10 +392,10 @@ describe("original memory-only cover-letter generation actor", () => {
     const actor = new OriginalCoverLetterGenerationActor(
       f.source,
       new ModelGateway(
-        new OpenAiLunaProvider({
+        new BedrockConverseProvider({
+          modelId: COVER_LETTER_PROVIDER_MODEL.model,
           enabled: () => true,
-          apiKey: () => "synthetic",
-          fetch: f.transport,
+          port: { converse: f.transport },
         }),
         { enabled: () => true, clock: () => new Date(NOW) },
       ),
@@ -431,7 +420,7 @@ describe("original memory-only cover-letter generation actor", () => {
 
   it("withholds ungrounded output even though the original provider positively completed", async () => {
     const f = setup({
-      text: JSON.stringify({ paragraphs: [{ text: "Invented expertise", factIds: [WORK] }] }),
+      value: { paragraphs: [{ text: "Invented expertise", factIds: [WORK] }] },
     });
     expect(await f.actor.generate(f.identity)).toMatchObject({ kind: "failed" });
     expect(f.work.settleProviderDispatch).toHaveBeenCalledExactlyOnceWith(f.reference);
