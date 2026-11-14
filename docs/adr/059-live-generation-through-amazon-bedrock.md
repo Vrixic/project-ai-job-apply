@@ -166,7 +166,11 @@ Residual risks, recorded plainly:
     (decision 3). The wording claims only what the checked statements support: no training, not shared with the
     model provider, the model is not among those AWS lists as retaining, those terms can change, memory only,
     every copy gone within 30 minutes. It keeps the inference of the residual risk visible to the candidate. The
-    owner reviews the wording when merging.
+    owner reviews the wording when merging. Where it is shown is the owner's decision in
+    [ADR-050](050-generate-then-apply-flow.md): the web step states nothing about the provider and sends the
+    version with `acknowledged: true`, and consent is presented in the sign-up terms or privacy policy before
+    activation (an open D6 privacy-review item). The Terms and the subprocessor list must therefore name Amazon
+    Bedrock and Anthropic's Claude in the same terms as this notice.
 13. **Persistence and old rows.** Applications adds migration `0016_cover_letter_bedrock_notice`: one tuple CHECK
     allows the old OpenAI tuple and the new Bedrock tuple, the column defaults become the Bedrock values (the
     Gateway insert relies on them) and existing rows stay valid and immutable. Documents needs no migration: a

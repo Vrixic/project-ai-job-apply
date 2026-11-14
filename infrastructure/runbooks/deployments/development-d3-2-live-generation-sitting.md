@@ -21,23 +21,26 @@ applies it. A rejected or stale plan is never reused; use a new plan name.
 | Docker running; portable Terraform 1.16.2 (`scripts\use-deployment-terraform.ps1` in the same pwsh process); PowerShell 7 | Image build and the operators |
 | Clean `main` equal to `origin/main` | The publishers refuse anything else |
 
+Already decided, for the record:
+
+- **Web consent.** The web cover-letter step sends the notice version with `acknowledged: true` and shows no
+  notice. That is the owner's decision in [ADR-050](../../../docs/adr/050-generate-then-apply-flow.md): consent is
+  presented in the sign-up terms or privacy policy, and it is an open D6 privacy-review item. The Terms and the
+  [subprocessor list](../../../docs/security/subprocessors.md) must name AWS Bedrock and Anthropic's Claude as
+  `COVER_LETTER_DISCLOSURE_TEXT` does, before any real candidate. Nothing to change in the page for the sitting.
+
 Decide before the first apply:
 
-1. **Web consent.** The web cover-letter step sends the notice version with `acknowledged: true` but does not
-   display the notice text (`generated-resume-panel.tsx`, "the page itself states only what the step does").
-   Either show `COVER_LETTER_DISCLOSURE_TEXT` at the Generate button, or record Terms of Service as consent
-   as ADR-057 does for narrative answers. Needed before any real candidate (D6); for the owner's own run it is
-   their call.
-2. **Which control flags are baked into pinned Lambda versions** (*inferred*). The control Lambdas publish a
+1. **Which control flags are baked into pinned Lambda versions** (*inferred*). The control Lambdas publish a
    numeric version with their flags as environment, and the image and the preparation release pin those
    numbers. The resume releases flipped launch, schedule and route flags after the image was pinned (r3d), so
    those are safe to flip later. Read the saved plan: if a flag flip creates a new owner or launcher version,
    decide the final `owner_enabled`, `control_enabled` and `recovery_enabled` before the image is built.
-3. **First revision numbers.** Bootstrap tfvars already carry control `r1` (task revision 1, launcher
+2. **First revision numbers.** Bootstrap tfvars already carry control `r1` (task revision 1, launcher
    `material-launch-r1:1`) and preparation `r1`. The repo cannot prove the `native-material` task family has no
    earlier revision; check `aws ecs list-task-definitions --family-prefix ai-job-apply-development-native-material`
    first, and use the next real revision.
-4. **Budget service name.** Start with `Claude Sonnet 4.6 (Amazon Bedrock Edition)` and confirm it with
+3. **Budget service name.** Start with `Claude Sonnet 4.6 (Amazon Bedrock Edition)` and confirm it with
    `aws ce get-dimension-values --search-string Claude` once billing data exists (up to a day after the first
    calls); a wrong name tracks nothing. The kill switch, not the budget, is the hard stop.
 
