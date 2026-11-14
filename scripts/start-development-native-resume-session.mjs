@@ -11,6 +11,7 @@ import {
 import {
   createNativeResumeSessionOperator,
   NATIVE_DEVELOPMENT_API,
+  NATIVE_HELD_SESSION_MS,
   parseNativeResumeCommand,
 } from "./lib/native-resume-session-operator.mjs";
 
@@ -29,9 +30,12 @@ export function validateNativeDevelopmentBinding(identityConfiguration, caller, 
 
 async function main() {
   const checkOnly = process.argv.length === 3 && process.argv[2] === "--check";
-  if (process.argv.length !== 2 && !checkOnly) {
+  // The default session closes twenty minutes after confirmation. Observing a cover letter's thirty minute expiry needs
+  // this explicit, bounded 45 minute hold (the access token's own expiry still binds).
+  const holdForExpiry = process.argv.length === 3 && process.argv[2] === "--hold-for-expiry";
+  if (process.argv.length !== 2 && !checkOnly && !holdForExpiry) {
     console.log(
-      'Usage: node scripts/start-development-native-resume-session.mjs\nSign in with the disposable synthetic account in your regular browser. Commands: {"action":"inspect"}, {"action":"prepare","jobId":"UUID"}, {"action":"preview"}, {"action":"download"}, {"action":"withdraw"}, {"action":"withdrawal"}, {"action":"cancel"}. One application per session; no submission.',
+      'Usage: node scripts/start-development-native-resume-session.mjs [--check | --hold-for-expiry]\nSign in with the disposable synthetic account in your regular browser. Commands: {"action":"inspect"}, {"action":"prepare","jobId":"UUID"}, {"action":"preview"}, {"action":"download"}, {"action":"coverLetter"}, {"action":"coverLetterStatus"}, {"action":"coverLetterPreview"}, {"action":"coverLetterDownload"}, {"action":"coverLetterExpiry"}, {"action":"withdraw"}, {"action":"withdrawal"}, {"action":"cancel"}. One application per session; no submission. --hold-for-expiry keeps the session 45 minutes so a cover letter can be observed past its thirty minute expiry.',
     );
     process.exitCode = process.argv[2] === "--help" && process.argv.length === 3 ? 0 : 2;
     return;
@@ -100,7 +104,10 @@ async function main() {
       },
       onConfirmed(identity) {
         if (closing || stopRequested || operator) throw new Error("native_session_unavailable");
-        operator = createNativeResumeSessionOperator({ identity });
+        operator = createNativeResumeSessionOperator({
+          identity,
+          ...(holdForExpiry ? { maxSessionMs: NATIVE_HELD_SESSION_MS } : {}),
+        });
         timer = setTimeout(() => void close(), Math.max(1, operator.expiresAt - Date.now()));
         report({
           outcome: "native-session-ready",

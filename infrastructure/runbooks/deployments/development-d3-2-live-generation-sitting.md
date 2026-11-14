@@ -128,9 +128,9 @@ Order, from the module validations (*inferred*; the resume releases are the prec
 | Proof | How | Criterion |
 |---|---|---|
 | Resume tailoring is live and honest | The owner generates from their own PDF; compare with the deterministic tailor; the tailoring version in the result is `tailoring.live.v1` | D3.2-003, 006 |
-| Cover letter end to end | Web app: generate, review, approve, Apply, confirmed submission in history (the extension for the live posting) | Exit criterion 2 |
+| Cover letter end to end | Web app: generate, review, approve, Apply, confirmed submission in history (the extension for the live posting). With the disposable synthetic account, `start-development-native-resume-session.mjs`: `prepare`, `coverLetter`, `coverLetterStatus`, `coverLetterPreview` (shows the Bedrock model id), `coverLetterDownload` | Exit criterion 2 |
 | Kill switch | Set `enabled = false`: resume falls back to `tailoring.v1`; a cover letter request shows "generation unavailable" at once (definite refusal, ADR-059 addendum 16); turn it back on | Exit criterion 4 |
-| 30 minute all-copy expiry with live traffic | Task stop receipts, no object in the document bucket, nothing in invocation logs (still off), browser copies gone at expiry; record timestamps | Exit criterion 3, D3.2-005 |
+| 30 minute all-copy expiry with live traffic | `start-development-native-resume-session.mjs --hold-for-expiry`, then `coverLetterExpiry` after 30 minutes (API-level: no Gateway location, native host unreachable); plus task stop receipts, no object in the document bucket, nothing in invocation logs (still off), browser copies gone at expiry; record timestamps | Exit criterion 3, D3.2-005 |
 | Ashby submission | The owner picks a posting; ask before each submit; fill, attach, submit once after approval | Exit criterion 5, D3.2-007 |
 | Cost | After a day: Cost Explorer service name, spend against the $20 budget, burst alarm quiet | ADR-059 decision 6 |
 
@@ -143,8 +143,7 @@ releases (`r1` ids, digests, versions) in the memory and delivery records so the
 
 ## Gaps to close in code
 
-- No cover-letter operator exists. `start-development-native-resume-session.mjs` prepares "without a cover letter"
-  and its operator has no cover-letter calls. The web app drives the journey; a backend operator that prepares with
-  the cover letter, previews and withdraws would make the 30 minute evidence repeatable.
+- The cover-letter commands of the session operator (`coverLetter`, status, preview, download, expiry) are built
+  ([operator runbook](development-native-resume-session.md)); they have not run against a live deployment.
 - No image push script for either native image.
 - `development-migration-image-publication.md` and `database-migration.md` still cite 87 and 88 migrations.
