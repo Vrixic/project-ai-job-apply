@@ -191,6 +191,14 @@ Residual risks, recorded plainly:
     `PROVIDER_REFUSED` on the receipt paths only, so the claim is settled as non-dispatch and the candidate sees
     "generation unavailable" at once instead of a generation that never finishes. Model timeouts and model errors
     (work happened), server faults, aborts and transport errors stay unsettled.
+17. **Infrastructure for the cover-letter task.** The native material task module takes the same switchable grant as the
+    resume module: `bedrock:InvokeModel` on the one reviewed profile and its foundation models, only while the kill
+    switch is on, with the original statements unchanged. Its release object drops the provider secret, the pinned
+    version and the key (and the platform's secrets endpoint statement and role policy for them); only the TLS secret
+    remains. The private `bedrock-runtime` endpoint policy and security group admit the registered cover-letter task
+    roles and groups next to the resume ones, still one `InvokeModel` statement. The permissions boundary ceiling names
+    both role families (`native-resume-r*-task` and `native-material-r*-task`) and now has 65 characters of headroom, so
+    the next boundary grant needs a lossless compaction first.
 
 ## Alternatives rejected
 

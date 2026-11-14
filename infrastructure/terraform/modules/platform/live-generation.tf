@@ -1,5 +1,5 @@
 variable "live_generation" {
-  description = "ADR-059 live generation on Amazon Bedrock. Null creates nothing. When set, the private bedrock-runtime endpoint (while private service endpoints are retained) and the burst alarm exist, and the exact profile and foundation model ARNs are exposed for the task roles; the permission to invoke is granted to a task role only while the kill switch is on, in the native resume task module."
+  description = "ADR-059 live generation on Amazon Bedrock. Null creates nothing. When set, the private bedrock-runtime endpoint (while private service endpoints are retained) and the burst alarm exist, and the exact profile and foundation model ARNs are exposed for the task roles; the permission to invoke is granted to a task role only while the kill switch is on, in the native resume and native material task modules. The cover-letter task roles and groups come from native_material_task_access."
   type = object({
     profile_id                 = string
     foundation_model_id        = string
@@ -35,13 +35,19 @@ locals {
   live_generation_foundation_model_arns = var.live_generation == null ? [] : [
     for region in sort(var.live_generation.destination_regions) : "arn:aws:bedrock:${region}::foundation-model/${var.live_generation.foundation_model_id}"
   ]
-  live_generation_task_roles = var.live_generation == null ? [] : [for revision in sort(tolist(var.live_generation.task_role_revisions)) : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-native-resume-r${revision}-task"]
-  # Only the native resume task roles of the reviewed revisions may call the endpoint, only to invoke (Converse) the one
-  # reviewed profile and its foundation models. Every other caller and action is denied by the endpoint policy.
+  live_generation_resume_task_roles = var.live_generation == null ? [] : [for revision in sort(tolist(var.live_generation.task_role_revisions)) : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-native-resume-r${revision}-task"]
+  # The cover-letter (native material) task roles are the retained releases already composed in native_material_task_access
+  # (ADR-059 addendum 12); their task groups reach the endpoint the same way.
+  live_generation_material_task_roles = var.live_generation == null ? [] : [for revision in sort(keys(var.native_material_task_access)) : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name}-${var.environment}-native-material-r${revision}-task"]
+  live_generation_task_roles          = concat(local.live_generation_resume_task_roles, local.live_generation_material_task_roles)
+  live_generation_endpoint_groups     = sort(distinct(concat(tolist(var.live_generation == null ? [] : var.live_generation.task_security_group_ids), local.material_task_groups)))
+  # Only the native resume and cover-letter task roles of the reviewed revisions may call the endpoint, only to invoke
+  # (Converse) the one reviewed profile and its foundation models. Every other caller and action is denied by the endpoint
+  # policy.
   live_generation_endpoint_policy = var.live_generation == null ? null : {
     Version = "2012-10-17"
     Statement = [{
-      Sid       = "InvokeReviewedModelFromNativeResumeTasks"
+      Sid       = "InvokeReviewedModelFromNativeTasks"
       Effect    = "Allow"
       Principal = "*"
       Action    = ["bedrock:InvokeModel"]
@@ -54,13 +60,13 @@ locals {
 resource "aws_security_group" "live_generation_endpoint" {
   count       = local.live_generation_endpoint_enabled ? 1 : 0
   name_prefix = "${var.name}-${var.environment}-bedrock-endpoint-"
-  description = "TLS from native resume tasks to the private Bedrock runtime endpoint"
+  description = "TLS from native resume and cover-letter tasks to the private Bedrock runtime endpoint"
   vpc_id      = aws_vpc.this.id
   ingress {
     from_port       = 443
     to_port         = 443
     protocol        = "tcp"
-    security_groups = sort(tolist(var.live_generation.task_security_group_ids))
+    security_groups = local.live_generation_endpoint_groups
   }
 }
 

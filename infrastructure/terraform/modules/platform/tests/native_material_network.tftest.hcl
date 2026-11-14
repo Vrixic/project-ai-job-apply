@@ -88,12 +88,10 @@ run "connected_with_resume" {
       security_group_ids  = ["sg-11111111111111111"]
     } }
     native_material_task_access = { "3" = {
-      owner_function_arn         = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-material-owner-m1:9"
-      provider_secret_arn        = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/provider-abc123"
-      provider_secret_version_id = "12345678-1234-4234-8234-123456789012"
-      tls_secret_arn             = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/tls-abc123"
-      tls_secret_version_id      = "22345678-1234-4234-8234-123456789012"
-      security_group_ids         = ["sg-22222222222222222"]
+      owner_function_arn    = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-material-owner-m1:9"
+      tls_secret_arn        = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/tls-abc123"
+      tls_secret_version_id = "22345678-1234-4234-8234-123456789012"
+      security_group_ids    = ["sg-22222222222222222"]
     } }
     native_resume_control_network = { "7" = {
       cluster_arn        = "arn:aws:ecs:us-east-2:111122223333:cluster/resume"
@@ -118,12 +116,12 @@ run "connected_with_resume" {
     error_message = "Only original material launcher may inspect/launch its bound tasks, without ECS exec."
   }
   assert {
-    condition     = length([for s in data.aws_iam_policy_document.secrets_endpoint[0].statement : s if startswith(s.sid, "MaterialSecret")]) == 4 && alltrue([for s in data.aws_iam_policy_document.secrets_endpoint[0].statement : s.actions == toset(["secretsmanager:GetSecretValue"]) && length(s.resources) == 1 && length(s.condition) == (startswith(s.sid, "MaterialSecretTask") ? 2 : 1) if startswith(s.sid, "MaterialSecret")])
-    error_message = "Controls get only DB secrets; tasks require pinned provider/TLS versions."
+    condition     = length([for s in data.aws_iam_policy_document.secrets_endpoint[0].statement : s if startswith(s.sid, "MaterialSecret")]) == 3 && alltrue([for s in data.aws_iam_policy_document.secrets_endpoint[0].statement : s.actions == toset(["secretsmanager:GetSecretValue"]) && length(s.resources) == 1 && length(s.condition) == (startswith(s.sid, "MaterialSecretTask") ? 2 : 1) if startswith(s.sid, "MaterialSecret")])
+    error_message = "Controls get only DB secrets; tasks require a pinned TLS version and no provider secret exists."
   }
   assert {
-    condition     = one(one([for s in data.aws_iam_policy_document.secrets_endpoint[0].statement : s if s.sid == "MaterialSecretTask3Provider"]).resources) == var.native_material_task_access["3"].provider_secret_arn && one(one([for c in one([for s in data.aws_iam_policy_document.secrets_endpoint[0].statement : s if s.sid == "MaterialSecretTask3Provider"]).condition : c if c.variable == "secretsmanager:VersionId"]).values) == var.native_material_task_access["3"].provider_secret_version_id
-    error_message = "Provider read must enforce the original immutable version."
+    condition     = length([for s in data.aws_iam_policy_document.secrets_endpoint[0].statement : s if endswith(s.sid, "Provider")]) == 0 && one(one([for s in data.aws_iam_policy_document.secrets_endpoint[0].statement : s if s.sid == "MaterialSecretTask3Tls"]).resources) == var.native_material_task_access["3"].tls_secret_arn && one(one([for c in one([for s in data.aws_iam_policy_document.secrets_endpoint[0].statement : s if s.sid == "MaterialSecretTask3Tls"]).condition : c if c.variable == "secretsmanager:VersionId"]).values) == var.native_material_task_access["3"].tls_secret_version_id
+    error_message = "TLS read must enforce the original immutable version, and no provider secret is readable."
   }
   assert {
     condition     = one(one([for s in data.aws_iam_policy_document.outbox_lambda_endpoint[0].statement : s if s.sid == "MaterialOwnerRpc3"]).resources) == var.native_material_task_access["3"].owner_function_arn && one(one(one([for s in data.aws_iam_policy_document.outbox_lambda_endpoint[0].statement : s if s.sid == "MaterialOwnerRpc3"]).condition).values) == local.material_task_roles["3"]
@@ -134,16 +132,14 @@ run "task_registration_before_control" {
   command = plan
   variables {
     native_material_task_access = { "3" = {
-      owner_function_arn         = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-material-owner-m1:9"
-      provider_secret_arn        = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/provider-abc123"
-      provider_secret_version_id = "12345678-1234-4234-8234-123456789012"
-      tls_secret_arn             = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/tls-abc123"
-      tls_secret_version_id      = "22345678-1234-4234-8234-123456789012"
-      security_group_ids         = []
+      owner_function_arn    = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-material-owner-m1:9"
+      tls_secret_arn        = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/tls-abc123"
+      tls_secret_version_id = "22345678-1234-4234-8234-123456789012"
+      security_group_ids    = []
     } }
   }
   assert {
-    condition     = length(aws_vpc_endpoint.native_resume_api) == 0 && length(local.material_task_groups) == 0 && length(local.material_secret_access) == 2
+    condition     = length(aws_vpc_endpoint.native_resume_api) == 0 && length(local.material_task_groups) == 0 && length(local.material_secret_access) == 1
     error_message = "Task registration alone must not admit SQL/ECS or invent task source groups."
   }
 }
@@ -163,12 +159,10 @@ run "owner_alias_refused" {
   command = plan
   variables {
     native_material_task_access = { "3" = {
-      owner_function_arn         = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-material-owner-m1:live"
-      provider_secret_arn        = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/provider-abc123"
-      provider_secret_version_id = "12345678-1234-4234-8234-123456789012"
-      tls_secret_arn             = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/tls-abc123"
-      tls_secret_version_id      = "22345678-1234-4234-8234-123456789012"
-      security_group_ids         = ["sg-22222222222222222"]
+      owner_function_arn    = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-material-owner-m1:live"
+      tls_secret_arn        = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/tls-abc123"
+      tls_secret_version_id = "22345678-1234-4234-8234-123456789012"
+      security_group_ids    = ["sg-22222222222222222"]
     } }
   }
   expect_failures = [var.native_material_task_access]
@@ -183,12 +177,10 @@ run "task_sql_group_refused" {
       security_group_ids  = ["sg-11111111111111111"]
     } }
     native_material_task_access = { "3" = {
-      owner_function_arn         = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-material-owner-m1:9"
-      provider_secret_arn        = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/provider-abc123"
-      provider_secret_version_id = "12345678-1234-4234-8234-123456789012"
-      tls_secret_arn             = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/tls-abc123"
-      tls_secret_version_id      = "22345678-1234-4234-8234-123456789012"
-      security_group_ids         = ["sg-11111111111111111"]
+      owner_function_arn    = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-material-owner-m1:9"
+      tls_secret_arn        = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/tls-abc123"
+      tls_secret_version_id = "22345678-1234-4234-8234-123456789012"
+      security_group_ids    = ["sg-11111111111111111"]
     } }
   }
   expect_failures = [aws_security_group.secrets_endpoint]
@@ -197,12 +189,10 @@ run "task_shared_application_group_refused" {
   command = plan
   variables {
     native_material_task_access = { "3" = {
-      owner_function_arn         = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-material-owner-m1:9"
-      provider_secret_arn        = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/provider-abc123"
-      provider_secret_version_id = "12345678-1234-4234-8234-123456789012"
-      tls_secret_arn             = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/tls-abc123"
-      tls_secret_version_id      = "22345678-1234-4234-8234-123456789012"
-      security_group_ids         = ["sg-aaaaaaaaaaaaaaaaa"]
+      owner_function_arn    = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-material-owner-m1:9"
+      tls_secret_arn        = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/tls-abc123"
+      tls_secret_version_id = "22345678-1234-4234-8234-123456789012"
+      security_group_ids    = ["sg-aaaaaaaaaaaaaaaaa"]
     } }
   }
   expect_failures = [aws_security_group.secrets_endpoint]

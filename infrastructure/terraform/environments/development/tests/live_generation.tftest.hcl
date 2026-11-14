@@ -189,6 +189,57 @@ run "kill_switch_off_removes_the_permission_but_keeps_the_endpoint_and_budget" {
   }
 }
 
+run "cover_letter_task_gets_the_same_switch_and_no_provider_secret" {
+  command = plan
+  variables {
+    live_generation = {
+      model           = "us.anthropic.claude-sonnet-4-6"
+      enabled         = true
+      budget_services = ["Claude Sonnet 4.6 (Amazon Bedrock Edition)"]
+    }
+    native_material_task_releases = { r3 = {
+      "image_repository" : "ai-job-apply/native-material",
+      "image_sha256" : "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "expected_task_definition_arn" : "arn:aws:ecs:us-east-2:111122223333:task-definition/ai-job-apply-development-native-material:3",
+      "owner_function_arn" : "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-material-owner-m1:9",
+      "tls_secret_arn" : "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/native-material-tls-Abc123",
+      "tls_secret_version_id" : "12345678-1234-1234-1234-123456789012",
+      "tls_kms_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-1234-1234-111122223333"
+    } }
+  }
+  assert {
+    condition = (
+      jsonencode(module.native_material_task["r3"].live_generation_invoke_resources) == jsonencode(module.native_resume_task["original7"].live_generation_invoke_resources) &&
+      length(module.native_material_task["r3"].live_generation_invoke_resources) == 4
+    )
+    error_message = "With the kill switch on, the cover-letter task role may invoke exactly what the native resume task role may: the reviewed profile and its foundation models."
+  }
+}
+
+run "kill_switch_off_removes_the_cover_letter_permission_too" {
+  command = plan
+  variables {
+    live_generation = {
+      model           = "us.anthropic.claude-sonnet-4-6"
+      enabled         = false
+      budget_services = ["Claude Sonnet 4.6 (Amazon Bedrock Edition)"]
+    }
+    native_material_task_releases = { r3 = {
+      "image_repository" : "ai-job-apply/native-material",
+      "image_sha256" : "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "expected_task_definition_arn" : "arn:aws:ecs:us-east-2:111122223333:task-definition/ai-job-apply-development-native-material:3",
+      "owner_function_arn" : "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-material-owner-m1:9",
+      "tls_secret_arn" : "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/native-material-tls-Abc123",
+      "tls_secret_version_id" : "12345678-1234-1234-1234-123456789012",
+      "tls_kms_key_arn" : "arn:aws:kms:us-east-2:111122223333:key/12345678-1234-1234-1234-111122223333"
+    } }
+  }
+  assert {
+    condition     = length(module.native_material_task["r3"].live_generation_invoke_resources) == 0
+    error_message = "The kill switch must remove the cover-letter task role's model permission without a release."
+  }
+}
+
 run "unreviewed_model_refused" {
   command = plan
   variables {

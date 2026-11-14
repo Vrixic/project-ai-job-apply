@@ -5,9 +5,6 @@ variable "native_material_task_releases" {
     image_sha256                 = string
     expected_task_definition_arn = string
     owner_function_arn           = string
-    provider_secret_arn          = string
-    provider_secret_version_id   = string
-    provider_kms_key_arn         = string
     tls_secret_arn               = string
     tls_secret_version_id        = string
     tls_kms_key_arn              = string
