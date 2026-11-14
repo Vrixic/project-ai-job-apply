@@ -11,15 +11,19 @@ mounts or content persistence. Its digest-pinned image owns the immutable runtim
 only the launcher supplies the existing seven scalar allocation/original-work overrides.
 CPU/memory are 256/512, matching the existing launcher validation contract; port is 8443.
 
-The task role can invoke one exact numeric owner RPC and read two distinct pinned secret
-versions: provider credentials and TLS. KMS decrypt is restricted to Secrets Manager and each
-exact secret encryption context. It cannot read arbitrary secrets, persist content, log, trace,
-call ECS, use remote exec or authenticate to the database. The execution role can pull only the
+The task role can invoke one exact numeric owner RPC and read one pinned secret version, the
+TLS certificate. KMS decrypt is restricted to Secrets Manager and that secret's encryption
+context. There is no provider key or secret: while the `live_generation` kill switch is on
+(ADR-059 addendum 12 to 17) the role also holds `bedrock:InvokeModel` on the one reviewed
+inference profile and its foundation models, and nothing else; with the switch off, or null, it
+holds no model access and needs no new revision. It cannot read arbitrary secrets, persist
+content, log, trace, call ECS, use remote exec or authenticate to the database. The execution role can pull only the
 specified ECR repository, with the standard wildcard ECR authorization token permission.
 Both roles use the existing environment workload boundary; no boundary expansion is introduced.
 
 Input image configuration must bind the expected task-definition revision, container name
-`native-material`, owner RPC, secret versions, deployment and identities. The registration
+`native-material`, owner RPC, the TLS secret version, `liveGeneration.modelId` (it must equal
+the model the cover-letter notice names), deployment and identities. The registration
 postcondition detects a revision mismatch after registration; it cannot undo the registration.
 Keep launch disabled and reconcile a mismatch. Retain task revisions, original role policies,
 owner function versions, secrets and keys until trusted original-work drain/retirement evidence.
@@ -28,11 +32,13 @@ its roles and policies and is not a safe kill switch.
 
 The image, secret population/policies, owner and launcher Lambdas, task-event observation,
 private endpoints/egress, cluster/subnets/security groups and authenticated DNS/TLS read route
-remain separate prerequisites. Provider access remains consent-gated by the existing runtime.
+remain separate prerequisites. Model access remains consent-gated by the existing runtime.
 This module neither calls a provider nor enables a live candidate journey.
 
-Eight Terraform mock scenarios cover defaults, envelope/permissions, foreign account/environment,
-registration mismatch, provider secret version, distinct secrets and numeric owner binding.
+Fourteen Terraform mock scenarios cover defaults, envelope/permissions, foreign account/environment,
+registration mismatch, the TLS secret version, numeric owner binding, no provider secret and the
+live generation switch (absent, off, on with exact resources, foreign account, wildcard and non-US
+model refused).
 The generated mocked definition was also translated to the AWS SDK response shape and accepted
 by the actual compiled launcher validator, with a foreign entrypoint rejected. This proves local
 source compatibility, not registered ECS state, effective IAM, image execution or AWS acceptance.

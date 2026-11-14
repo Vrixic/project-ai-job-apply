@@ -29,6 +29,9 @@ saved infrastructure plan, success evidence, and recovery boundary.
 - [Staging runtime lifecycle](staging-runtime-lifecycle.md) — Activates isolated synthetic staging
   for bounded release exercises and returns its RDS/interface-endpoint data plane to a guarded
   dormant state.
+- [D3.2 live generation sitting](development-d3-2-live-generation-sitting.md) - Prepared, unexecuted plan to restore
+  development, release live resume tailoring and the first cover-letter pipeline on Bedrock, prove them with
+  evidence, and shut down again, with the decisions to make before the first apply.
 - [Vercel Next.js hosting](vercel-nextjs-hosting.md) — Creates isolated candidate/admin projects,
   preserves exact Auth0 origins and server-held secrets, and verifies the hosted presentation/BFF
   boundary without moving API or product truth out of AWS.
