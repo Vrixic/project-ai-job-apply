@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  BedrockConverseProvider,
   type BedrockConverseInput,
   type BedrockConverseOutput,
   type BedrockConversePort,
+  BedrockConverseProvider,
   toolJsonText,
   validBedrockModelId,
 } from "./bedrock.js";
-import { ModelGateway, type ProviderRequest } from "./gateway.js";
+import { ModelGateway, ProviderRefusedError, type ProviderRequest } from "./gateway.js";
 import { GROUNDED_PARAGRAPHS_NAME, GROUNDED_PARAGRAPHS_SCHEMA } from "./provider-output-schema.js";
 
 const MODEL = "us.anthropic.claude-sonnet-4-6";
@@ -187,6 +187,14 @@ describe("BedrockConverseProvider (offline port)", () => {
     expect(failure).toMatchObject({ code: "PROVIDER_FAILED" });
     expect(String((failure as Error).message)).not.toContain("prompt text");
     expect(String((failure as Error).message)).not.toContain("arn:aws");
+  });
+
+  it("passes the transport's typed refusal through unchanged and wraps everything else", async () => {
+    const { provider, converse } = setup();
+    converse.mockRejectedValueOnce(new ProviderRefusedError());
+    await expect(provider.complete(request())).rejects.toBeInstanceOf(ProviderRefusedError);
+    converse.mockRejectedValueOnce(Object.assign(new Error("x"), { name: "ProviderRefusedError" }));
+    await expect(provider.complete(request())).rejects.toMatchObject({ code: "PROVIDER_FAILED" });
   });
 
   it("stops before the call when already aborted", async () => {

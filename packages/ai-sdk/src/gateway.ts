@@ -86,11 +86,25 @@ export class ModelGatewayError extends Error {
       | "INPUT_TOO_LARGE"
       | "PROVIDER_TIMEOUT"
       | "PROVIDER_FAILED"
+      | "PROVIDER_REFUSED"
       | "OUTPUT_TOO_LARGE"
       | "OUTPUT_NOT_JSON",
   ) {
     super(`Model gateway refused: ${code}`);
     this.name = "ModelGatewayError";
+  }
+}
+
+/** Thrown ONLY by a provider that holds positive proof from its service that the request was rejected before any model
+ * work happened: a definitive client-side rejection such as permission denied, throttled, unknown model or a request
+ * the service did not accept (ADR-059 addendum 16). On the receipt paths the gateway reports it as a `not_dispatched`
+ * receipt, so the single-dispatch claim can be settled and the candidate sees a failed state at once. A timeout, an
+ * abort, a transport error or a server fault is never this: its outcome is unknown and an unknown outcome is never
+ * settled. It carries no provider text. */
+export class ProviderRefusedError extends Error {
+  constructor() {
+    super("Provider refused the request before any model work");
+    this.name = "ProviderRefusedError";
   }
 }
 
@@ -136,7 +150,8 @@ export type OriginalModelGatewayCompletion =
   | { kind: "completed_discarded"; completedAtMs: number; model: ModelIdentity };
 
 /** Internal original lifecycle receipts, never inferred from caught errors or deadlines.
- * `not_dispatched` comes only from gateway-local pre-provider refusal; completed receipts
+ * `not_dispatched` comes only from gateway-local pre-provider refusal or a provider's typed
+ * `ProviderRefusedError` (positive proof from its service); completed receipts
  * require original provider fulfillment. Neither is candidate approval or quiescence proof.
  */
 export type ModelGatewayCompletion =
@@ -149,7 +164,8 @@ export type ModelGatewayCompletion =
         | "DISCLOSURE_PURPOSE_MISMATCH"
         | "DISCLOSURE_CATEGORY_MISSING"
         | "DISCLOSURE_STALE"
-        | "INPUT_TOO_LARGE";
+        | "INPUT_TOO_LARGE"
+        | "PROVIDER_REFUSED";
       model: ModelIdentity;
       promptId: string;
       promptVersion: string;
@@ -447,6 +463,13 @@ export class ModelGateway {
       }
       text = result.text;
     } catch (error) {
+      if (error instanceof ProviderRefusedError) {
+        // Positive proof of non-dispatch exists only for the foreground receipt paths. Anywhere else it is an ordinary
+        // provider failure, and a plain exception is never inferred to be non-dispatch.
+        if (earlyProvenance && !backgroundCapture)
+          return { kind: "not_dispatched", code: "PROVIDER_REFUSED", ...earlyProvenance };
+        throw new ModelGatewayError("PROVIDER_FAILED");
+      }
       if (error instanceof ModelGatewayError) throw error;
       throw new ModelGatewayError("PROVIDER_FAILED");
     } finally {

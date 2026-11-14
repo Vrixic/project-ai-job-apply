@@ -34,7 +34,10 @@ are preserved. Three offline regressions cover this request-specific citation bo
 
 The internal union also carries metadata-only `not_dispatched` receipts for the gateway's
 known local kill-switch/disclosure/input refusals before invoking either provider port.
-Provider-thrown identical error codes and thrown local callbacks cannot produce this receipt.
+Provider-thrown identical error codes and thrown local callbacks cannot produce this receipt. The one exception is a
+provider's typed `ProviderRefusedError`, raised only with positive proof from its service that the request was rejected
+before any model work (the Bedrock transport does this for definitive 4xx service rejections, ADR-059 addendum 16); it
+becomes `not_dispatched` with code `PROVIDER_REFUSED` on the receipt paths and an ordinary failure everywhere else.
 Ordinary `generate` still throws the original fixed refusal code. This is original local
 non-dispatch evidence, not a completed response, candidate approval or purge certificate.
 The current non-dispatch checkpoint passes 111 offline AI SDK tests, including ordinary refusal

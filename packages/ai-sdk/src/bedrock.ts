@@ -2,6 +2,7 @@ import {
   ModelGatewayError,
   type ModelIdentity,
   type ModelProvider,
+  ProviderRefusedError,
   type ProviderRequest,
 } from "./gateway.js";
 import { GROUNDED_PARAGRAPHS_NAME, GROUNDED_PARAGRAPHS_SCHEMA } from "./provider-output-schema.js";
@@ -172,7 +173,7 @@ export class BedrockConverseProvider implements ModelProvider {
       return toolJsonText(response, this.output.name);
     } catch (error) {
       // Never expose provider bodies, prompts, credentials or transport exception messages.
-      if (error instanceof ModelGatewayError) throw error;
+      if (error instanceof ModelGatewayError || error instanceof ProviderRefusedError) throw error;
       throw new ModelGatewayError("PROVIDER_FAILED");
     }
   }
