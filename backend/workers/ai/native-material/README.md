@@ -32,7 +32,7 @@ The process derives its original binding from ECS metadata, authenticates stored
 admission, obtains the exact owner's unambiguous issuer/subject from Profile via signed owner RPC,
 then reads the pinned TLS secret version using ECS task credentials. It rejects mismatched secret
 ARN/version, binary replies, incorrect certificate/key/host/expiry and workstation credentials.
-The provider is Amazon Bedrock Converse on the task role (ADR-059 addendum 12 to 15): one synchronous call, the model the
+The provider is Amazon Bedrock Converse on the task role (ADR-059 addendum 12 to 16): one synchronous call, the model the
 cover-letter notice names, one forced tool, no cache points and no provider key. The image gate forbids the OpenAI client.
 The TLS secret is JSON with exactly `key` and `cert` PEM strings; the certificate must cover
 `<allocation UUID>.<baseHost>` and remain valid through the bounded material lifetime. Routing/DNS

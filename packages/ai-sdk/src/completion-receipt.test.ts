@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ModelGateway, ModelGatewayError } from "./gateway.js";
+import { ModelGateway, ModelGatewayError, ProviderRefusedError } from "./gateway.js";
 import { OpenAiLunaProvider } from "./openai.js";
 
 const identity = { provider: "offline-fake", model: "synthetic", version: "v1" };
@@ -159,6 +159,45 @@ describe("internal original-provider completion receipts", () => {
       expect(complete).toHaveBeenCalledOnce();
     },
   );
+  it("a provider's typed refusal is a non-dispatch receipt on the receipt paths only", async () => {
+    const complete = vi.fn(async () => {
+      throw new ProviderRefusedError();
+    });
+    const gateway = new ModelGateway({ identity, complete }, { enabled: () => true });
+    const expected = {
+      kind: "not_dispatched",
+      code: "PROVIDER_REFUSED",
+      model: identity,
+      promptId: "synthetic",
+      promptVersion: "v1",
+    };
+    await expect(gateway.generateWithCompletion(request, disclosure)).resolves.toEqual(expected);
+    // The original lifecycle never reports a completion time for a refusal.
+    await expect(gateway.generateOriginalWithCompletion(request, disclosure)).resolves.toEqual(
+      expected,
+    );
+    // Callers without receipts keep the ordinary failure contract.
+    await expect(gateway.generate(request, disclosure)).rejects.toMatchObject({
+      code: "PROVIDER_FAILED",
+    });
+    expect(complete).toHaveBeenCalledTimes(3);
+  });
+  it("an exception that merely looks like a refusal is never a non-dispatch receipt", async () => {
+    for (const thrown of [
+      Object.assign(new Error("x"), { name: "ProviderRefusedError" }),
+      Object.assign(new Error("AccessDeniedException"), { name: "AccessDeniedException" }),
+      new ModelGatewayError("MODEL_DISABLED"),
+      "ProviderRefusedError",
+    ]) {
+      const complete = vi.fn(async () => {
+        throw thrown;
+      });
+      const gateway = new ModelGateway({ identity, complete }, { enabled: () => true });
+      await expect(
+        gateway.generateOriginalWithCompletion(request, disclosure),
+      ).rejects.toBeDefined();
+    }
+  });
   it("a local refusal produces non-dispatch, never an original response receipt", async () => {
     const complete = vi.fn(async () => ({ text: "{}" }));
     const gateway = new ModelGateway({ identity, complete }, { enabled: () => false });

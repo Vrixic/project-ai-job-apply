@@ -1,10 +1,15 @@
-import { ModelGateway } from "@ai-job-apply/ai-sdk";
-import { BedrockConverseProvider, GROUNDED_PARAGRAPHS_NAME } from "@ai-job-apply/ai-sdk";
+import {
+  BedrockConverseProvider,
+  GROUNDED_PARAGRAPHS_NAME,
+  ModelGateway,
+  ProviderRefusedError,
+} from "@ai-job-apply/ai-sdk";
 import type { ConverseCommand, ConverseCommandOutput } from "@aws-sdk/client-bedrock-runtime";
 import { describe, expect, it, vi } from "vitest";
 import {
-  NATIVE_BEDROCK_ENDPOINT,
+  bedrockDefiniteRefusal,
   createNativeBedrockConversePort,
+  NATIVE_BEDROCK_ENDPOINT,
   nativeBedrockClientConfig,
 } from "./native-bedrock-converse.js";
 
@@ -163,6 +168,107 @@ describe("native Bedrock Converse transport", () => {
         (error: unknown) => error as Error,
       );
     expect(failure?.message).toBe("NativeImageConfigurationUnavailable");
+  });
+
+  const awsError = (name: string, status: number | undefined, fault: string | null = "client") =>
+    Object.assign(new Error("provider text arn:aws:iam::1:role/x"), {
+      name,
+      ...(fault ? { $fault: fault } : {}),
+      ...(status === undefined ? {} : { $metadata: { httpStatusCode: status } }),
+    });
+
+  it.each([
+    ["AccessDeniedException", 403],
+    ["ValidationException", 400],
+    ["ResourceNotFoundException", 404],
+    ["ThrottlingException", 429],
+    ["ServiceQuotaExceededException", 402],
+    ["ModelNotReadyException", 429],
+  ] as const)("classifies %s (%i) as a definite refusal before any model work", (name, status) => {
+    expect(bedrockDefiniteRefusal(awsError(name, status))).toBe(true);
+  });
+
+  it.each([
+    // Work happened or may have happened: never a refusal.
+    ["ModelTimeoutException", 408, "client"],
+    ["ModelErrorException", 424, "client"],
+    ["InternalServerException", 500, "server"],
+    ["ServiceUnavailableException", 503, "server"],
+    ["ModelStreamErrorException", 424, "client"],
+    // Right name, wrong evidence.
+    ["AccessDeniedException", 403, "server"],
+    ["AccessDeniedException", 500, "client"],
+    ["AccessDeniedException", 408, "client"],
+    ["AccessDeniedException", undefined, "client"],
+    ["AccessDeniedException", 403, null],
+    ["AbortError", undefined, null],
+    ["Error", undefined, null],
+  ] as const)("does not classify %s (%s, %s) as a refusal", (name, status, fault) => {
+    expect(bedrockDefiniteRefusal(awsError(name, status, fault))).toBe(false);
+  });
+
+  it("does not trust a message, a non-object or a non-integer status", () => {
+    expect(bedrockDefiniteRefusal(new Error("AccessDeniedException"))).toBe(false);
+    expect(bedrockDefiniteRefusal("AccessDeniedException")).toBe(false);
+    expect(bedrockDefiniteRefusal(null)).toBe(false);
+    expect(bedrockDefiniteRefusal(awsError("AccessDeniedException", 403.5))).toBe(false);
+  });
+
+  it("raises a typed refusal for a definite rejection and only an unavailable error for everything else", async () => {
+    const make = (error: unknown, signal = new AbortController().signal) =>
+      createNativeBedrockConversePort({
+        accountId: ACCOUNT,
+        enabled: () => true,
+        testClient: {
+          send: async () => {
+            throw error;
+          },
+        },
+      }).converse(input(), { abortSignal: signal });
+    const refusal = await make(awsError("AccessDeniedException", 403)).catch(
+      (error: unknown) => error,
+    );
+    expect(refusal).toBeInstanceOf(ProviderRefusedError);
+    expect(String((refusal as Error).message)).not.toContain("arn:aws");
+    for (const unknown of [
+      awsError("InternalServerException", 500, "server"),
+      awsError("ModelTimeoutException", 408),
+      new Error("socket hang up"),
+    ])
+      await expect(make(unknown)).rejects.toThrow("NativeImageConfigurationUnavailable");
+    // An aborted call has an unknown outcome even if the error looks like a refusal.
+    const controller = new AbortController();
+    controller.abort();
+    await expect(make(awsError("AccessDeniedException", 403), controller.signal)).rejects.toThrow(
+      "NativeImageConfigurationUnavailable",
+    );
+  });
+
+  it("reaches the gateway as a non-dispatch receipt when the invoke grant is gone", async () => {
+    const send = vi.fn(async () => {
+      throw awsError("AccessDeniedException", 403);
+    });
+    const port = createNativeBedrockConversePort({
+      accountId: ACCOUNT,
+      enabled: () => true,
+      testClient: { send },
+    });
+    const provider = new BedrockConverseProvider({ modelId: MODEL, enabled: () => true, port });
+    const gateway = new ModelGateway(provider, { enabled: () => true });
+    await expect(
+      gateway.generateOriginalWithCompletion(
+        {
+          promptId: "cover_letter",
+          promptVersion: "1",
+          purpose: "cover_letter",
+          categories: ["profile_facts"],
+          system: "s",
+          user: "u",
+        },
+        { purpose: "cover_letter", categories: ["profile_facts"], approvedAt: new Date() },
+      ),
+    ).resolves.toMatchObject({ kind: "not_dispatched", code: "PROVIDER_REFUSED" });
+    expect(send).toHaveBeenCalledTimes(1);
   });
 
   it("produces a grounded result end to end through the provider and the gateway", async () => {

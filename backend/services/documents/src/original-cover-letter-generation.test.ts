@@ -5,6 +5,7 @@ import {
   coverLetterContext,
   GROUNDED_PARAGRAPHS_NAME,
   ModelGateway,
+  ProviderRefusedError,
 } from "@ai-job-apply/ai-sdk";
 import type { GraphFact } from "@ai-job-apply/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -274,6 +275,22 @@ describe("original memory-only cover-letter generation actor", () => {
       expect(f.work.settleUndispatchedProviderDispatch).not.toHaveBeenCalled();
     },
   );
+
+  it("settles a definite provider refusal as non-dispatch and shows a failed state at once", async () => {
+    const f = setup();
+    f.transport.mockRejectedValue(new ProviderRefusedError());
+    expect(await f.actor.generate(f.identity)).toEqual({
+      kind: "failed",
+      errorCode: "generation_unavailable",
+    });
+    expect(f.work.settleUndispatchedProviderDispatch).toHaveBeenCalledExactlyOnceWith(f.reference);
+    expect(f.work.settleProviderDispatch).not.toHaveBeenCalled();
+    expect(f.work.settleRejectedProviderDispatch).not.toHaveBeenCalled();
+    expect(f.authority.claimOriginalCompletion).not.toHaveBeenCalled();
+    // The claim is consumed: no second call is ever made for this generation.
+    expect(await f.actor.generate(f.identity)).toEqual({ kind: "in_progress" });
+    expect(f.transport).toHaveBeenCalledOnce();
+  });
 
   it("fences only positive output rejection (the forced tool cannot return non-JSON, so size is the case)", async () => {
     const f = setup({ value: { paragraphs: [{ text: "x".repeat(8_001), factIds: [FACT] }] } });

@@ -180,12 +180,17 @@ Residual risks, recorded plainly:
     cover letters: it stays compiled and tested with its own OpenAI identity until a cleanup removes it, and
     nothing live accepts that identity. The image imports only the narrow `ai-sdk` subpaths (`bedrock`, `context`,
     `gateway`, `generation`, `prompts`).
-15. **Honest failure, next slice.** There is no deterministic cover letter: with live generation off or refused,
-    the candidate writes their own text (the disclosure says so). A definite Bedrock refusal (the kill switch, a
-    missing use case form, throttling) happens before any model work, so it is a positive non-dispatch, but today
-    it ends in the same unsettled state as an unknown outcome, and the candidate sees a generation that never
-    finishes. The next slice classifies definite refusals as non-dispatch so the candidate sees a failed state at
-    once; timeouts and transport errors stay unsettled, because their outcome is unknown.
+15. **No deterministic cover letter.** With live generation off or refused, the candidate writes their own text (the
+    disclosure says so); there is no fallback letter.
+16. **Definite refusals are a positive non-dispatch.** The single-dispatch rule stays: an exception, a timeout or an
+    abort is never proof that nothing was dispatched, and its claim stays unsettled. A definitive service rejection
+    is different. Bedrock answers permission denied (the kill switch removes the invoke grant), a model or use case
+    the account cannot call, a request it did not accept, or throttling before any model work. The Bedrock transport
+    recognises exactly those (a named service error that is a client fault with a 4xx status other than 408, never a
+    message) and raises a typed `ProviderRefusedError`; the gateway reports it as a `not_dispatched` receipt with code
+    `PROVIDER_REFUSED` on the receipt paths only, so the claim is settled as non-dispatch and the candidate sees
+    "generation unavailable" at once instead of a generation that never finishes. Model timeouts and model errors
+    (work happened), server faults, aborts and transport errors stay unsettled.
 
 ## Alternatives rejected
 
@@ -207,4 +212,4 @@ Residual risks, recorded plainly:
 |---|---|---|
 | 2026-11-13 | Bedrock in our account with Claude Sonnet 4.6, model id as configuration. | `gpt-6-luna` is not available to the account and would not meet ADR-038 without zero retention; owner agreed. |
 | 2026-11-13 | $20 a month development ceiling, alarms at 50% and 80%, kill switch off by default. | Owner agreed to the recommendation. |
-| 2026-11-13 | Cover letters on Bedrock under the new notice `bedrock-cover-letter.v1`, model bound to the notice (addendum 12 to 15). | The disclosure names the model; one live path; the OpenAI notice would be false. |
+| 2026-11-13 | Cover letters on Bedrock under the new notice `bedrock-cover-letter.v1`, model bound to the notice (addendum 12 to 16). | The disclosure names the model; one live path; the OpenAI notice would be false. |
