@@ -92,3 +92,22 @@ This source-only capability does not authorize publication. Publication requires
 account/state/source authorization and does not deploy Lambdas, apply database migrations, publish
 the native image, provision task roles/TLS/routing or enable a schedule. The resume image requires
 `linuxParameters.initProcessEnabled: true`. Managed acceptance remains separate from artifact proof.
+
+## Native cover-letter release families
+
+`-ArtifactFamily NativeMaterialControls` selects three private Lambda artifacts (twelve objects):
+the original launcher, the owner RPC and the task-event recovery handler. Build them with
+`pnpm --filter @ai-job-apply/workflows build:lambda:native-material-control-family`. Its immutable
+S3 key root is `lambda/documents/native-material/control`.
+
+`-ArtifactFamily NativePreparation` selects four artifacts (sixteen objects): the native activity,
+durable workflow, starter and recovery handlers. Build them with
+`pnpm --filter @ai-job-apply/workflows build:lambda:native-preparation-family`. Its key root is
+`lambda/applications/native-preparation`.
+
+Both follow every rule above (clean `main`, exact source, dependency audit, two identical builds,
+immutable conditional writes, exact-version readback, `Status` then `Publish` then `Verify`) and,
+like the resume family, neither deploys a Lambda, applies a migration, publishes the image or enables
+a route. Neither has been published in development. The first release order, the image that pins the
+published numeric versions and the activation sequence are in
+[the D3.2 live generation sitting](development-d3-2-live-generation-sitting.md).
