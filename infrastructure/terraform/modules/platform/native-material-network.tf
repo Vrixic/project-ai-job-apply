@@ -23,12 +23,10 @@ variable "native_material_control_network" {
 variable "native_material_task_access" {
   description = "Original task owner/secret bindings. Empty groups permit registration before control composition."
   type = map(object({
-    owner_function_arn         = string
-    provider_secret_arn        = string
-    provider_secret_version_id = string
-    tls_secret_arn             = string
-    tls_secret_version_id      = string
-    security_group_ids         = set(string)
+    owner_function_arn    = string
+    tls_secret_arn        = string
+    tls_secret_version_id = string
+    security_group_ids    = set(string)
   }))
   default  = {}
   nullable = false
@@ -36,12 +34,11 @@ variable "native_material_task_access" {
     condition = length(var.native_material_task_access) <= 4 && alltrue([for revision, r in var.native_material_task_access :
       can(regex("^[1-9][0-9]{0,8}$", revision)) &&
       can(regex("^arn:aws:lambda:us-east-2:${data.aws_caller_identity.current.account_id}:function:${var.name}-${var.environment}-material-owner-[a-z0-9]{1,12}:[1-9][0-9]{0,8}$", r.owner_function_arn)) &&
-      r.provider_secret_arn != r.tls_secret_arn &&
-      alltrue([for arn in [r.provider_secret_arn, r.tls_secret_arn] : can(regex("^arn:aws:secretsmanager:us-east-2:${data.aws_caller_identity.current.account_id}:secret:${var.name}/${var.environment}/[A-Za-z0-9/_+=.@-]+-[A-Za-z0-9]{6}$", arn))]) &&
-      alltrue([for version in [r.provider_secret_version_id, r.tls_secret_version_id] : can(regex("^[A-Za-z0-9-]{32,64}$", version))]) &&
+      alltrue([for arn in [r.tls_secret_arn] : can(regex("^arn:aws:secretsmanager:us-east-2:${data.aws_caller_identity.current.account_id}:secret:${var.name}/${var.environment}/[A-Za-z0-9/_+=.@-]+-[A-Za-z0-9]{6}$", arn))]) &&
+      alltrue([for version in [r.tls_secret_version_id] : can(regex("^[A-Za-z0-9-]{32,64}$", version))]) &&
       length(r.security_group_ids) <= 2 && alltrue([for sg in r.security_group_ids : can(regex("^sg-[a-f0-9]{17}$", sg))])
     ]) && (length(var.native_material_task_access) == 0 || data.aws_region.current.region == "us-east-2")
-    error_message = "Use original numeric task revisions and owner versions, distinct pinned secrets and exact task groups."
+    error_message = "Use original numeric task revisions and owner versions, a pinned TLS secret and exact task groups."
   }
 }
 locals {
@@ -55,8 +52,7 @@ locals {
   material_secret_access = merge(
     merge({}, [for id, r in var.native_material_control_network : { for kind in ["launch", "owner"] : "Control${id}${kind}" => { role = local.material_control_roles[id][kind], secret = r.database_secret_arn, version = null } }]...),
     merge({}, [for revision, r in var.native_material_task_access : {
-      "Task${revision}Provider" = { role = local.material_task_roles[revision], secret = r.provider_secret_arn, version = r.provider_secret_version_id }
-      "Task${revision}Tls"      = { role = local.material_task_roles[revision], secret = r.tls_secret_arn, version = r.tls_secret_version_id }
+      "Task${revision}Tls" = { role = local.material_task_roles[revision], secret = r.tls_secret_arn, version = r.tls_secret_version_id }
     }]...)
   )
   material_ecs_statements = flatten([for id, r in var.native_material_control_network : [

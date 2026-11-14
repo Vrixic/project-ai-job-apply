@@ -94,12 +94,10 @@ run "native_identity_is_exact_and_does_not_expand_assume_role" {
   variables {
     native_resume_task_rpc_bindings = { "7" = { owner_function_arn = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-resume-owner-r7:3", source_function_arn = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-resume-source-r7:4" } }
     native_material_task_access = { "3" = {
-      owner_function_arn         = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-material-owner-m1:9"
-      provider_secret_arn        = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/provider-abc123"
-      provider_secret_version_id = "12345678-1234-4234-8234-123456789012"
-      tls_secret_arn             = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/tls-abc123"
-      tls_secret_version_id      = "22345678-1234-4234-8234-123456789012"
-      security_group_ids         = ["sg-22222222222222222"]
+      owner_function_arn    = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-material-owner-m1:9"
+      tls_secret_arn        = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/tls-abc123"
+      tls_secret_version_id = "22345678-1234-4234-8234-123456789012"
+      security_group_ids    = ["sg-22222222222222222"]
     } }
   }
   assert {

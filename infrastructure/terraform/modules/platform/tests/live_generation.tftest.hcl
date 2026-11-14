@@ -105,7 +105,7 @@ run "live_generation_has_an_exact_private_endpoint_and_a_burst_alarm" {
     condition = jsondecode(aws_vpc_endpoint.live_generation_runtime[0].policy) == {
       Version = "2012-10-17"
       Statement = [{
-        Sid       = "InvokeReviewedModelFromNativeResumeTasks"
+        Sid       = "InvokeReviewedModelFromNativeTasks"
         Effect    = "Allow"
         Principal = "*"
         Action    = ["bedrock:InvokeModel"]
@@ -118,7 +118,7 @@ run "live_generation_has_an_exact_private_endpoint_and_a_burst_alarm" {
         Condition = { ArnEquals = { "aws:PrincipalArn" = ["arn:aws:iam::111122223333:role/ai-job-apply-development-native-resume-r5-task"] } }
       }]
     }
-    error_message = "The endpoint policy must allow only InvokeModel on the reviewed profile and models, only for the reviewed native resume task roles."
+    error_message = "The endpoint policy must allow only InvokeModel on the reviewed profile and models, only for the reviewed native resume task roles (no cover-letter task is registered here)."
   }
   assert {
     condition = (
@@ -134,6 +134,51 @@ run "live_generation_has_an_exact_private_endpoint_and_a_burst_alarm" {
   }
 }
 
+run "live_generation_endpoint_admits_the_registered_cover_letter_tasks" {
+  command = plan
+  variables {
+    live_generation = {
+      profile_id              = "us.anthropic.claude-sonnet-4-6"
+      foundation_model_id     = "anthropic.claude-sonnet-4-6"
+      destination_regions     = ["us-east-1", "us-east-2", "us-west-2"]
+      task_role_revisions     = ["5"]
+      task_security_group_ids = ["sg-0123456789abcdef0"]
+    }
+    native_material_task_access = { "3" = {
+      owner_function_arn    = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-material-owner-m1:9"
+      tls_secret_arn        = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/tls-abc123"
+      tls_secret_version_id = "22345678-1234-4234-8234-123456789012"
+      security_group_ids    = ["sg-22222222222222222"]
+    } }
+  }
+  assert {
+    condition = (
+      one(aws_security_group.live_generation_endpoint[0].ingress).security_groups == toset(["sg-0123456789abcdef0", "sg-22222222222222222"]) &&
+      jsondecode(aws_vpc_endpoint.live_generation_runtime[0].policy).Statement[0].Condition.ArnEquals["aws:PrincipalArn"] == [
+        "arn:aws:iam::111122223333:role/ai-job-apply-development-native-resume-r5-task",
+        "arn:aws:iam::111122223333:role/ai-job-apply-development-native-material-r3-task"
+      ] &&
+      jsondecode(aws_vpc_endpoint.live_generation_runtime[0].policy).Statement[0].Action == ["bedrock:InvokeModel"] &&
+      length(jsondecode(aws_vpc_endpoint.live_generation_runtime[0].policy).Statement) == 1
+    )
+    error_message = "The registered cover-letter task roles and groups join the same exact endpoint: the same single InvokeModel statement and nothing else."
+  }
+}
+run "live_generation_endpoint_ignores_cover_letter_tasks_without_live_generation" {
+  command = plan
+  variables {
+    native_material_task_access = { "3" = {
+      owner_function_arn    = "arn:aws:lambda:us-east-2:111122223333:function:ai-job-apply-development-material-owner-m1:9"
+      tls_secret_arn        = "arn:aws:secretsmanager:us-east-2:111122223333:secret:ai-job-apply/development/tls-abc123"
+      tls_secret_version_id = "22345678-1234-4234-8234-123456789012"
+      security_group_ids    = ["sg-22222222222222222"]
+    } }
+  }
+  assert {
+    condition     = length(aws_vpc_endpoint.live_generation_runtime) == 0 && length(aws_security_group.live_generation_endpoint) == 0
+    error_message = "Registering cover-letter tasks alone must create no Bedrock endpoint."
+  }
+}
 run "live_generation_endpoint_is_dropped_with_private_service_endpoints_but_the_alarm_stays" {
   command = plan
   variables {

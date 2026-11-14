@@ -369,7 +369,7 @@ run "live_generation_default_absent" {
   }
 }
 
-run "live_generation_is_the_native_resume_task_role_ceiling" {
+run "live_generation_is_the_native_task_role_ceiling" {
   command = plan
   variables {
     environment           = "development"
@@ -386,10 +386,13 @@ run "live_generation_is_the_native_resume_task_role_ceiling" {
           "arn:aws:bedrock:us-east-2:111122223333:inference-profile/us.anthropic.claude-sonnet-4-6",
           "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6"
         ],
-        Condition = { ArnLike = { "aws:PrincipalArn" = "arn:aws:iam::111122223333:role/ai-job-apply-development-native-resume-r*-task" } }
+        Condition = { ArnLike = { "aws:PrincipalArn" = [
+          "arn:aws:iam::111122223333:role/ai-job-apply-development-native-resume-r*-task",
+          "arn:aws:iam::111122223333:role/ai-job-apply-development-native-material-r*-task"
+        ] } }
       }
     )
-    error_message = "Live generation must be one InvokeModel statement bound to the native resume task roles and the one reviewed profile and foundation model: no wildcard action, no other role, no other model."
+    error_message = "Live generation must be one InvokeModel statement bound to the native resume and cover-letter task roles and the one reviewed profile and foundation model: no wildcard action, no other role, no other model."
   }
 }
 
@@ -417,7 +420,7 @@ run "live_generation_fits_the_complete_development_boundary" {
     live_generation_model                   = "us.anthropic.claude-sonnet-4-6"
   }
   assert {
-    condition     = 6144 - length(aws_iam_policy.workload_boundary.policy) >= 100
-    error_message = "The complete development boundary, with the restore role, every native grant and live generation, must keep at least 100 characters of headroom."
+    condition     = 6144 - length(aws_iam_policy.workload_boundary.policy) >= 50
+    error_message = "The complete development boundary, with the restore role, every native grant and live generation for both native task families, must keep at least 50 characters of headroom; the next grant needs a lossless compaction first."
   }
 }

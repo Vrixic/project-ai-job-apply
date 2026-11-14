@@ -21,9 +21,6 @@ variables {
     image_sha256                 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     expected_task_definition_arn = "arn:aws:ecs:us-east-2:123456789012:task-definition/ai-job-apply-development-native-material:7"
     owner_function_arn           = "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-material-owner:3"
-    provider_secret_arn          = "arn:aws:secretsmanager:us-east-2:123456789012:secret:ai-job-apply/development/native-material-provider-Abc123"
-    provider_secret_version_id   = "22345678-1234-1234-1234-123456789012"
-    provider_kms_key_arn         = "arn:aws:kms:us-east-2:123456789012:key/22345678-1234-1234-1234-123456789012"
     tls_secret_arn               = "arn:aws:secretsmanager:us-east-2:123456789012:secret:ai-job-apply/development/native-material-tls-Abc123"
     tls_secret_version_id        = "12345678-1234-1234-1234-123456789012"
     tls_kms_key_arn              = "arn:aws:kms:us-east-2:123456789012:key/12345678-1234-1234-1234-123456789012"
@@ -68,13 +65,12 @@ run "exact_release_has_bounded_task_and_roles" {
       jsondecode(aws_iam_role_policy.task[0].policy).Statement[0].Resource == [var.release.owner_function_arn] &&
       jsondecode(aws_iam_role_policy.task[0].policy).Statement[1].Condition.StringEquals["secretsmanager:VersionId"] == var.release.tls_secret_version_id &&
       jsondecode(aws_iam_role_policy.task[0].policy).Statement[2].Condition.StringEquals["kms:EncryptionContext:SecretARN"] == var.release.tls_secret_arn &&
-      jsondecode(aws_iam_role_policy.task[0].policy).Statement[5].Effect == "Deny" &&
-      jsondecode(aws_iam_role_policy.task[0].policy).Statement[3].Condition.StringEquals["secretsmanager:VersionId"] == var.release.provider_secret_version_id &&
-      jsondecode(aws_iam_role_policy.task[0].policy).Statement[4].Condition.StringEquals["kms:EncryptionContext:SecretARN"] == var.release.provider_secret_arn &&
+      jsondecode(aws_iam_role_policy.task[0].policy).Statement[3].Effect == "Deny" &&
+      length(jsondecode(aws_iam_role_policy.task[0].policy).Statement) == 4 &&
       length(jsondecode(aws_iam_role_policy.execution[0].policy).Statement) == 2 &&
       aws_iam_role.task[0].permissions_boundary == "arn:aws:iam::123456789012:policy/ai-job-apply-development-workload-boundary"
     )
-    error_message = "Roles must be bounded and restrict access to original RPC recipients and exact TLS secret/version."
+    error_message = "Roles must be bounded and restrict access to original RPC recipients and exact TLS secret/version. There is no provider secret (ADR-059 addendum 12)."
   }
 }
 run "foreign_account_refused" {
@@ -95,9 +91,6 @@ run "unexpected_registered_revision_refused" {
       image_sha256                 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       expected_task_definition_arn = "arn:aws:ecs:us-east-2:123456789012:task-definition/ai-job-apply-development-native-material:8"
       owner_function_arn           = "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-material-owner:3"
-      provider_secret_arn          = "arn:aws:secretsmanager:us-east-2:123456789012:secret:ai-job-apply/development/native-material-provider-Abc123"
-      provider_secret_version_id   = "22345678-1234-1234-1234-123456789012"
-      provider_kms_key_arn         = "arn:aws:kms:us-east-2:123456789012:key/22345678-1234-1234-1234-123456789012"
       tls_secret_arn               = "arn:aws:secretsmanager:us-east-2:123456789012:secret:ai-job-apply/development/native-material-tls-Abc123"
       tls_secret_version_id        = "12345678-1234-1234-1234-123456789012"
       tls_kms_key_arn              = "arn:aws:kms:us-east-2:123456789012:key/12345678-1234-1234-1234-123456789012"
@@ -106,7 +99,7 @@ run "unexpected_registered_revision_refused" {
   expect_failures = [aws_ecs_task_definition.material]
 }
 
-run "provider_version_required" {
+run "tls_version_required" {
   command = plan
   variables {
     release = {
@@ -114,34 +107,20 @@ run "provider_version_required" {
       image_sha256                 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       expected_task_definition_arn = "arn:aws:ecs:us-east-2:123456789012:task-definition/ai-job-apply-development-native-material:7"
       owner_function_arn           = "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-material-owner:3"
-      provider_secret_arn          = "arn:aws:secretsmanager:us-east-2:123456789012:secret:ai-job-apply/development/native-material-provider-Abc123"
-      provider_secret_version_id   = "AWSCURRENT"
-      provider_kms_key_arn         = "arn:aws:kms:us-east-2:123456789012:key/22345678-1234-1234-1234-123456789012"
       tls_secret_arn               = "arn:aws:secretsmanager:us-east-2:123456789012:secret:ai-job-apply/development/native-material-tls-Abc123"
-      tls_secret_version_id        = "12345678-1234-1234-1234-123456789012"
+      tls_secret_version_id        = "AWSCURRENT"
       tls_kms_key_arn              = "arn:aws:kms:us-east-2:123456789012:key/12345678-1234-1234-1234-123456789012"
     }
   }
   expect_failures = [var.release]
 }
 
-run "secrets_must_be_distinct" {
+run "provider_secret_not_granted" {
   command = plan
-  variables {
-    release = {
-      image_repository             = "ai-job-apply/native-material"
-      image_sha256                 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-      expected_task_definition_arn = "arn:aws:ecs:us-east-2:123456789012:task-definition/ai-job-apply-development-native-material:7"
-      owner_function_arn           = "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-material-owner:3"
-      provider_secret_arn          = "arn:aws:secretsmanager:us-east-2:123456789012:secret:ai-job-apply/development/native-material-tls-Abc123"
-      provider_secret_version_id   = "22345678-1234-1234-1234-123456789012"
-      provider_kms_key_arn         = "arn:aws:kms:us-east-2:123456789012:key/22345678-1234-1234-1234-123456789012"
-      tls_secret_arn               = "arn:aws:secretsmanager:us-east-2:123456789012:secret:ai-job-apply/development/native-material-tls-Abc123"
-      tls_secret_version_id        = "12345678-1234-1234-1234-123456789012"
-      tls_kms_key_arn              = "arn:aws:kms:us-east-2:123456789012:key/12345678-1234-1234-1234-123456789012"
-    }
+  assert {
+    condition     = !strcontains(aws_iam_role_policy.task[0].policy, "provider") && !strcontains(aws_iam_role_policy.task[0].policy, "Provider")
+    error_message = "The cover-letter task holds no provider secret or key; the model is reached with the task role."
   }
-  expect_failures = [var.release]
 }
 
 run "owner_alias_refused" {
@@ -152,13 +131,100 @@ run "owner_alias_refused" {
       image_sha256                 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       expected_task_definition_arn = "arn:aws:ecs:us-east-2:123456789012:task-definition/ai-job-apply-development-native-material:7"
       owner_function_arn           = "arn:aws:lambda:us-east-2:123456789012:function:ai-job-apply-development-material-owner:live"
-      provider_secret_arn          = "arn:aws:secretsmanager:us-east-2:123456789012:secret:ai-job-apply/development/native-material-provider-Abc123"
-      provider_secret_version_id   = "22345678-1234-1234-1234-123456789012"
-      provider_kms_key_arn         = "arn:aws:kms:us-east-2:123456789012:key/22345678-1234-1234-1234-123456789012"
       tls_secret_arn               = "arn:aws:secretsmanager:us-east-2:123456789012:secret:ai-job-apply/development/native-material-tls-Abc123"
       tls_secret_version_id        = "12345678-1234-1234-1234-123456789012"
       tls_kms_key_arn              = "arn:aws:kms:us-east-2:123456789012:key/12345678-1234-1234-1234-123456789012"
     }
   }
   expect_failures = [var.release]
+}
+
+run "live_generation_absent_by_default" {
+  command = plan
+  assert {
+    condition     = length(jsondecode(aws_iam_role_policy.task[0].policy).Statement) == 4 && !strcontains(aws_iam_role_policy.task[0].policy, "bedrock") && length(output.live_generation_invoke_resources) == 0
+    error_message = "Without live generation the task role must hold no Bedrock permission and keep its original four statements."
+  }
+}
+run "live_generation_off_grants_nothing" {
+  command = plan
+  variables {
+    live_generation = {
+      enabled               = false
+      profile_arn           = "arn:aws:bedrock:us-east-2:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6"
+      foundation_model_arns = ["arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6"]
+    }
+  }
+  assert {
+    condition     = length(jsondecode(aws_iam_role_policy.task[0].policy).Statement) == 4 && !strcontains(aws_iam_role_policy.task[0].policy, "bedrock")
+    error_message = "The kill switch off must remove the model permission without changing anything else."
+  }
+}
+run "live_generation_on_grants_only_the_reviewed_profile_and_models" {
+  command = plan
+  variables {
+    live_generation = {
+      enabled     = true
+      profile_arn = "arn:aws:bedrock:us-east-2:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6"
+      foundation_model_arns = [
+        "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6",
+        "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6",
+        "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6"
+      ]
+    }
+  }
+  assert {
+    condition = (
+      length(jsondecode(aws_iam_role_policy.task[0].policy).Statement) == 6 &&
+      jsondecode(aws_iam_role_policy.task[0].policy).Statement[0].Resource == [var.release.owner_function_arn] &&
+      jsondecode(aws_iam_role_policy.task[0].policy).Statement[3].Effect == "Deny" &&
+      jsondecode(aws_iam_role_policy.task[0].policy).Statement[4] == {
+        Sid      = "InvokeReviewedProfile", Effect = "Allow", Action = ["bedrock:InvokeModel"],
+        Resource = ["arn:aws:bedrock:us-east-2:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6"]
+      } &&
+      jsondecode(aws_iam_role_policy.task[0].policy).Statement[5] == {
+        Sid = "InvokeReviewedFoundationModels", Effect = "Allow", Action = ["bedrock:InvokeModel"],
+        Resource = [
+          "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6",
+          "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6",
+          "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6"
+        ]
+      } &&
+      !strcontains(aws_iam_role_policy.task[0].policy, "bedrock:*") && !strcontains(aws_iam_role_policy.task[0].policy, "InvokeModelWith")
+    )
+    error_message = "When on, the role may only InvokeModel (Converse) on the one reviewed profile and its foundation models; the original statements and the content-persistence Deny are unchanged."
+  }
+}
+run "live_generation_foreign_account_profile_refused" {
+  command = plan
+  variables {
+    live_generation = {
+      enabled               = true
+      profile_arn           = "arn:aws:bedrock:us-east-2:999900001111:inference-profile/us.anthropic.claude-sonnet-4-6"
+      foundation_model_arns = ["arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6"]
+    }
+  }
+  expect_failures = [var.live_generation]
+}
+run "live_generation_wildcard_model_refused" {
+  command = plan
+  variables {
+    live_generation = {
+      enabled               = true
+      profile_arn           = "arn:aws:bedrock:us-east-2:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6"
+      foundation_model_arns = ["arn:aws:bedrock:us-east-2::foundation-model/*"]
+    }
+  }
+  expect_failures = [var.live_generation]
+}
+run "live_generation_non_us_model_refused" {
+  command = plan
+  variables {
+    live_generation = {
+      enabled               = true
+      profile_arn           = "arn:aws:bedrock:us-east-2:123456789012:inference-profile/us.anthropic.claude-sonnet-4-6"
+      foundation_model_arns = ["arn:aws:bedrock:eu-west-1::foundation-model/anthropic.claude-sonnet-4-6"]
+    }
+  }
+  expect_failures = [var.live_generation]
 }
