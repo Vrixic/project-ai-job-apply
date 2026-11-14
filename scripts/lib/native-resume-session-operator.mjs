@@ -1,6 +1,9 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { compileComponentValidator } from "../../packages/api-contracts/dist/src/index.js";
+import {
+  COVER_LETTER_DISCLOSURE_VERSION,
+  compileComponentValidator,
+} from "../../packages/api-contracts/dist/src/index.js";
 import { NATIVE_RESUME_SESSION_PROFILE } from "./candidate-rights-session.mjs";
 
 // This operator is deliberately bound to the reviewed development deployment. It must
@@ -9,6 +12,15 @@ export const NATIVE_DEVELOPMENT_API = "https://lemwm7dvi4.execute-api.us-east-2.
 const nativeOrigin =
   /^https:\/\/[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\.materials\.dev\.applydash\.ai:8443$/u;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
+// The default session closes twenty minutes after confirmation. Observing a cover letter's thirty minute expiry needs
+// an explicit, bounded longer hold; the access token's own expiry still binds (ADR-059 addendum 12 to 17, D3.2-005).
+const DEFAULT_SESSION_MS = 20 * 60_000;
+export const NATIVE_HELD_SESSION_MS = 45 * 60_000;
+const MAX_HELD_SESSION_MS = NATIVE_HELD_SESSION_MS;
+const MATERIALS = Object.freeze({
+  tailored_resume: { segment: "resume", hash: "resume" },
+  cover_letter: { segment: "cover-letter", hash: "coverLetter" },
+});
 const validators = new Map();
 function validate(name, value) {
   if (!validators.has(name)) validators.set(name, compileComponentValidator(name));
@@ -33,7 +45,19 @@ export function parseNativeResumeCommand(line) {
   const keys = Object.keys(value).sort().join(",");
   if (
     keys === "action" &&
-    ["inspect", "preview", "download", "withdraw", "withdrawal", "cancel"].includes(value.action)
+    [
+      "inspect",
+      "preview",
+      "download",
+      "coverLetter",
+      "coverLetterStatus",
+      "coverLetterPreview",
+      "coverLetterDownload",
+      "coverLetterExpiry",
+      "withdraw",
+      "withdrawal",
+      "cancel",
+    ].includes(value.action)
   )
     return value;
   if (
@@ -48,8 +72,18 @@ export function parseNativeResumeCommand(line) {
 
 // identity comes only from startNativeResumeSession's signature-verified PKCE/MFA
 // callback. Purpose markers are an additional guard, not an authentication verifier.
-export function createNativeResumeSessionOperator({ identity, fetch: suppliedFetch }) {
+export function createNativeResumeSessionOperator({
+  identity,
+  fetch: suppliedFetch,
+  maxSessionMs = DEFAULT_SESSION_MS,
+}) {
   if (suppliedFetch && process.env.NODE_ENV !== "test") throw new Error("test_transport_only");
+  if (
+    !Number.isSafeInteger(maxSessionMs) ||
+    maxSessionMs < DEFAULT_SESSION_MS ||
+    maxSessionMs > MAX_HELD_SESSION_MS
+  )
+    throw new Error("native_session_window_invalid");
   if (
     identity?.purpose !== "native_resume_workload" ||
     identity.profile !== NATIVE_RESUME_SESSION_PROFILE ||
@@ -63,7 +97,7 @@ export function createNativeResumeSessionOperator({ identity, fetch: suppliedFet
   )
     throw new Error("native_identity_required");
   const transport = suppliedFetch ?? globalThis.fetch;
-  const expiresAt = Math.min(Date.parse(identity.expiresAt), Date.now() + 20 * 60_000);
+  const expiresAt = Math.min(Date.parse(identity.expiresAt), Date.now() + maxSessionMs);
   let token = identity.accessToken;
   let busy = false;
   let closed = false;
@@ -71,11 +105,15 @@ export function createNativeResumeSessionOperator({ identity, fetch: suppliedFet
   let application;
   let preparationBody;
   let prepared = false;
-  let originalLocation;
+  const originalLocations = new Map();
+  let coverLetterQueued = false;
+  let coverLetterBody;
+  let coverLetterPreparationId;
   let recoveryRequired = false;
   let withdrawalStarted = false;
   const createKey = randomUUID();
   const prepareKey = randomUUID();
+  const coverLetterKey = randomUUID();
   const requestId = withdrawalId();
 
   async function request(path, method, body, schema, status, key, origin = NATIVE_DEVELOPMENT_API) {
@@ -128,7 +166,8 @@ export function createNativeResumeSessionOperator({ identity, fetch: suppliedFet
     }
   }
 
-  async function locate() {
+  async function locate(kind = "tailored_resume") {
+    const material = MATERIALS[kind];
     const current = await request(
       `/applications/${application.id}`,
       "GET",
@@ -144,19 +183,19 @@ export function createNativeResumeSessionOperator({ identity, fetch: suppliedFet
       current.currentPacket.jobRevision !== application.currentPacket.jobRevision
     )
       throw new Error("native_application_mismatch");
-    const material = current.currentPacket.temporaryMaterials?.find(
-      (value) => value.kind === "tailored_resume",
+    const reference = current.currentPacket.temporaryMaterials?.find(
+      (value) => value.kind === kind,
     );
-    if (!material) return null;
+    if (!reference) return null;
     if (
-      material.completedAtMs > Date.now() ||
-      material.expiresAtMs <= Date.now() ||
-      current.currentPacket.artifactHashes.resume !== material.contentSha256 ||
-      material.expiresAtMs - material.completedAtMs !== 1_800_000
+      reference.completedAtMs > Date.now() ||
+      reference.expiresAtMs <= Date.now() ||
+      current.currentPacket.artifactHashes[material.hash] !== reference.contentSha256 ||
+      reference.expiresAtMs - reference.completedAtMs !== 1_800_000
     )
       throw new Error("native_material_expired_or_invalid");
     const location = await request(
-      `/applications/${application.id}/resume/location?generationId=${material.generationId}`,
+      `/applications/${application.id}/${material.segment}/location?generationId=${reference.generationId}`,
       "GET",
       undefined,
       "ApplicationTemporaryMaterialLocation",
@@ -166,15 +205,49 @@ export function createNativeResumeSessionOperator({ identity, fetch: suppliedFet
       !nativeOrigin.test(location.origin) ||
       location.packetId !== current.currentPacket.id ||
       location.packetHash !== current.currentPacket.packetHash ||
-      !isDeepStrictEqual(location.temporaryMaterial, material)
+      !isDeepStrictEqual(location.temporaryMaterial, reference)
     )
       throw new Error("native_location_mismatch");
     // Native completion writes a new packet. Bind to its first verified reference,
     // then refuse regeneration or sliding expiry during subsequent reads.
-    if (originalLocation && !isDeepStrictEqual(originalLocation, location))
+    const original = originalLocations.get(kind);
+    if (original && !isDeepStrictEqual(original, location))
       throw new Error("native_generation_changed");
-    originalLocation ??= location;
+    if (!original) originalLocations.set(kind, location);
     return location;
+  }
+
+  // The native cover-letter service strips temporaryMaterial from its own responses, so bind each read to the exact
+  // generation through the content hash, document id and version instead, and never past the original expiry.
+  function checkCoverLetter(result, location, preview) {
+    const reference = location.temporaryMaterial;
+    if (
+      result.contentSha256 !== reference.contentSha256 ||
+      reference.expiresAtMs <= Date.now() ||
+      (preview &&
+        (result.documentId !== reference.generationId || result.version !== reference.version))
+    )
+      throw new Error("native_material_mismatch");
+  }
+
+  // One credentialed GET to an approved origin that never reads a body. A failure to connect is evidence in itself.
+  async function probe(path, origin) {
+    if (closed || Date.now() >= expiresAt) throw new Error("native_session_expired");
+    if (origin !== NATIVE_DEVELOPMENT_API && !nativeOrigin.test(origin))
+      throw new Error("native_origin_rejected");
+    try {
+      const response = await transport(`${origin}/v1${path}`, {
+        method: "GET",
+        redirect: "error",
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      });
+      await response.body?.cancel();
+      return { reachable: true, status: response.status };
+    } catch {
+      return { reachable: false };
+    }
   }
 
   function checkMaterial(result, location) {
@@ -196,7 +269,8 @@ export function createNativeResumeSessionOperator({ identity, fetch: suppliedFet
       token = undefined;
       application = undefined;
       preparationBody = undefined;
-      originalLocation = undefined;
+      originalLocations.clear();
+      coverLetterBody = undefined;
       return {
         outcome: "native-session-closed",
         recoveryRequired,
@@ -268,7 +342,8 @@ export function createNativeResumeSessionOperator({ identity, fetch: suppliedFet
           if (!location) return { outcome: "native-generation-not-ready" };
           if (command.action === "download") {
             const files = [];
-            for (const format of ["pdf", "docx"]) {
+            // A generated resume is a PDF only (ApplicationResumeFile); a cover letter has both formats.
+            for (const format of ["pdf"]) {
               const result = await request(
                 `/applications/${application.id}/resume/file?format=${format}`,
                 "GET",
@@ -323,6 +398,154 @@ export function createNativeResumeSessionOperator({ identity, fetch: suppliedFet
             status: result.status,
             matchesPacket: result.matchesPacket,
             nativeMaterialPresent: result.temporaryMaterial?.kind === "tailored_resume",
+          };
+        }
+        if (command.action === "coverLetter") {
+          if (!prepared || withdrawalStarted) throw new Error("native_preparation_required");
+          if (!coverLetterQueued) {
+            // Same explicit, acknowledged request the web workspace sends; the notice names the model (ADR-059).
+            coverLetterBody ??= {
+              expectedRevision: application.revision,
+              coverLetter: {
+                disclosure: { noticeVersion: COVER_LETTER_DISCLOSURE_VERSION, acknowledged: true },
+              },
+            };
+            recoveryRequired = true;
+            const result = await request(
+              `/applications/${application.id}/packets`,
+              "POST",
+              coverLetterBody,
+              "ApplicationPacketPreparation",
+              202,
+              coverLetterKey,
+            );
+            if (result.applicationId !== application.id)
+              throw new Error("native_application_mismatch");
+            coverLetterPreparationId = result.id;
+            coverLetterQueued = true;
+          }
+          return { outcome: "native-cover-letter-queued" };
+        }
+        if (command.action === "coverLetterStatus") {
+          if (!coverLetterQueued || withdrawalStarted)
+            throw new Error("native_cover_letter_required");
+          const result = await request(
+            `/applications/${application.id}/packet-preparations/${coverLetterPreparationId}`,
+            "GET",
+            undefined,
+            "ApplicationPacketPreparation",
+            200,
+          );
+          if (result.id !== coverLetterPreparationId || result.applicationId !== application.id)
+            throw new Error("native_preparation_mismatch");
+          return {
+            outcome: "native-cover-letter-status",
+            state: result.state,
+            ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+          };
+        }
+        if (command.action === "coverLetterPreview" || command.action === "coverLetterDownload") {
+          if (!coverLetterQueued || withdrawalStarted)
+            throw new Error("native_cover_letter_required");
+          const location = await locate("cover_letter");
+          if (!location) return { outcome: "native-generation-not-ready" };
+          if (command.action === "coverLetterDownload") {
+            const files = [];
+            for (const format of ["pdf", "docx"]) {
+              const result = await request(
+                `/applications/${application.id}/cover-letter/file?format=${format}`,
+                "GET",
+                undefined,
+                "ApplicationCoverLetterFile",
+                200,
+                undefined,
+                location.origin,
+              );
+              const bytes = Buffer.from(result.contentBase64, "base64");
+              try {
+                checkCoverLetter(result, location, false);
+                const mediaType =
+                  format === "pdf"
+                    ? "application/pdf"
+                    : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+                const magic =
+                  format === "pdf"
+                    ? bytes.subarray(0, 5).toString("ascii") === "%PDF-"
+                    : bytes.subarray(0, 4).equals(Buffer.from([80, 75, 3, 4]));
+                if (
+                  result.format !== format ||
+                  result.mediaType !== mediaType ||
+                  !magic ||
+                  result.sizeBytes !== bytes.length ||
+                  bytes.toString("base64") !== result.contentBase64 ||
+                  createHash("sha256").update(bytes).digest("hex") !== result.sha256
+                )
+                  throw new Error("native_file_mismatch");
+                files.push({ format, sizeBytes: bytes.length, sha256: result.sha256 });
+              } finally {
+                bytes.fill(0);
+                result.contentBase64 = "";
+              }
+            }
+            return { outcome: "native-cover-letter-files-verified", files, filesSaved: false };
+          }
+          const result = await request(
+            `/applications/${application.id}/cover-letter`,
+            "GET",
+            undefined,
+            "ApplicationCoverLetterPreview",
+            200,
+            undefined,
+            location.origin,
+          );
+          if (result.status !== "ready" || !result.matchesPacket)
+            throw new Error("native_preview_unavailable");
+          checkCoverLetter(result, location, true);
+          // Metadata only, never the letter: which model wrote it, how many paragraphs, and how long it has left.
+          const reference = location.temporaryMaterial;
+          return {
+            outcome: "native-cover-letter-preview-read",
+            status: result.status,
+            matchesPacket: result.matchesPacket,
+            paragraphCount: result.paragraphs.length,
+            model: { provider: result.model.provider, model: result.model.model },
+            promptVersion: result.promptVersion,
+            completedAtMs: reference.completedAtMs,
+            expiresAtMs: reference.expiresAtMs,
+            msRemaining: reference.expiresAtMs - Date.now(),
+          };
+        }
+        if (command.action === "coverLetterExpiry") {
+          if (!coverLetterQueued || withdrawalStarted)
+            throw new Error("native_cover_letter_required");
+          const location = originalLocations.get("cover_letter");
+          // Needs a verified read before expiry: that read is what the expiry is measured against.
+          if (!location) throw new Error("native_cover_letter_read_required");
+          const reference = location.temporaryMaterial;
+          const remaining = reference.expiresAtMs - Date.now();
+          if (remaining > 0)
+            return { outcome: "native-cover-letter-not-yet-expired", msRemaining: remaining };
+          const gateway = await probe(
+            `/applications/${application.id}/cover-letter/location?generationId=${reference.generationId}`,
+            NATIVE_DEVELOPMENT_API,
+          );
+          const direct = await probe(
+            `/applications/${application.id}/cover-letter`,
+            location.origin,
+          );
+          // Proven only when the Gateway issues no location (a client error, not a fault) and the direct read cannot succeed.
+          const proven =
+            gateway.reachable &&
+            gateway.status >= 400 &&
+            gateway.status < 500 &&
+            (!direct.reachable || direct.status >= 400);
+          return {
+            outcome: proven
+              ? "native-cover-letter-expired-unavailable"
+              : "native-cover-letter-expiry-not-proven",
+            msPastExpiry: -remaining,
+            gatewayStatus: gateway.reachable ? gateway.status : "unreachable",
+            directRead: direct.reachable ? direct.status : "unreachable",
           };
         }
         if (command.action === "withdraw" || command.action === "withdrawal") {

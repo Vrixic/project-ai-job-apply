@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   createNativeResumeSessionOperator,
   NATIVE_DEVELOPMENT_API,
+  NATIVE_HELD_SESSION_MS,
   parseNativeResumeCommand,
 } from "../lib/native-resume-session-operator.mjs";
 import { validateNativeDevelopmentBinding } from "../start-development-native-resume-session.mjs";
@@ -362,17 +363,17 @@ function nativeFixture({
   return { operator, calls: () => nativeCalls };
 }
 
-test("downloads both native file formats into memory and returns only verified sizes and digests", async () => {
+test("downloads the native resume PDF into memory and returns only the verified size and digest", async () => {
   const { operator, calls } = nativeFixture();
   await operator.execute({ action: "prepare", jobId });
   const result = await operator.execute({ action: "download" });
   assert.equal(result.outcome, "native-resume-files-verified");
   assert.deepEqual(
     result.files.map((file) => file.format),
-    ["pdf", "docx"],
+    ["pdf"],
   );
   assert.equal(result.filesSaved, false);
-  assert.equal(calls(), 2);
+  assert.equal(calls(), 1);
   assert.equal(/SENSITIVE|contentBase64|SYNTHETIC/u.test(JSON.stringify(result)), false);
 });
 
@@ -405,7 +406,7 @@ test("later reads cannot silently switch to another allowed native origin", asyn
   await operator.execute({ action: "download" });
   changed = true;
   await assert.rejects(operator.execute({ action: "download" }));
-  assert.equal(calls(), 2);
+  assert.equal(calls(), 1);
 });
 
 for (const [name, update] of [
@@ -437,3 +438,317 @@ for (const [name, update] of [
     await assert.rejects(operator.execute({ action: "download" }));
     assert.equal(calls(), 1);
   });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Cover letters (ADR-059 addendum 12 to 17): the same closed, redacting operator, plus a bounded hold for the expiry.
+const preparationId = "00000000-0000-7000-8000-000000000003";
+const letterGenerationId = "00000000-0000-7000-8000-000000000004";
+const letterMaterial = () => ({
+  schemaVersion: 1,
+  kind: "cover_letter",
+  generationId: letterGenerationId,
+  version: 1,
+  contentSha256: "e".repeat(64),
+  completedAtMs: Date.now(),
+  expiresAtMs: Date.now() + 1_800_000,
+});
+const letterModel = {
+  provider: "bedrock",
+  model: "us.anthropic.claude-sonnet-4-6",
+  version: "us.anthropic.claude-sonnet-4-6",
+};
+const preparation = (state = "queued", extra = {}) => ({
+  id: preparationId,
+  applicationId,
+  state,
+  createdAt: "2026-10-09T00:00:00Z",
+  updatedAt: "2026-10-09T00:00:00Z",
+  ...extra,
+});
+const letterPreview = (letter, overrides = {}) => ({
+  status: "ready",
+  documentId: letterGenerationId,
+  version: 1,
+  contentSha256: letter.contentSha256,
+  matchesPacket: true,
+  reviewRequired: true,
+  paragraphs: [{ text: "SENSITIVE_LETTER_TEXT", factIds: [applicationId] }],
+  model: letterModel,
+  promptVersion: "1.0.0",
+  ...overrides,
+});
+
+// A fixture whose Gateway holds the resume and, once the letter is ready, a cover letter packet too.
+function letterFixture({
+  letterReady = true,
+  nativeAvailable = true,
+  gatewayLocationStatus = 200,
+  maxSessionMs,
+  tokenMinutes = 30,
+  statusBody = () => preparation("running"),
+  previewBody = (letter) => letterPreview(letter),
+} = {}) {
+  const calls = [];
+  const letter = letterMaterial();
+  // The Gateway and the native host can change after the first verified read, as they do at expiry.
+  const state = { bodies: [], gatewayLocationStatus, nativeAvailable };
+  const packet = () => {
+    const value = application(true);
+    value.revision = 3;
+    value.currentPacket.id = jobId;
+    value.currentPacket.version = 2;
+    value.currentPacket.artifactHashes = {
+      resume: material.contentSha256,
+      coverLetter: letter.contentSha256,
+    };
+    value.currentPacket.temporaryMaterials = letterReady ? [material, letter] : [material];
+    return value;
+  };
+  const operator = createNativeResumeSessionOperator({
+    identity: {
+      ...identity(),
+      expiresAt: new Date(Date.now() + tokenMinutes * 60_000).toISOString(),
+    },
+    ...(maxSessionMs ? { maxSessionMs } : {}),
+    fetch: async (url, options) => {
+      calls.push({ url, method: options.method });
+      assert.equal(options.redirect, "error");
+      assert.equal(options.headers.Authorization, `Bearer ${identity().accessToken}`);
+      if (url.endsWith("/applications")) return response(application(), 201);
+      if (url.endsWith("/packets") && !options.body.includes("coverLetter"))
+        return response(application(true), 201);
+      if (url.endsWith("/packets")) {
+        state.bodies.push(JSON.parse(options.body));
+        assert.ok(options.headers["Idempotency-Key"]);
+        return response(preparation(), 202);
+      }
+      if (url.endsWith(`/packet-preparations/${preparationId}`)) return response(statusBody());
+      if (url.endsWith(`/applications/${applicationId}`)) return response(packet());
+      if (url.includes("/cover-letter/location?")) {
+        if (state.gatewayLocationStatus !== 200) return response({}, state.gatewayLocationStatus);
+        return response({
+          schemaVersion: 1,
+          packetId: jobId,
+          packetHash: "a".repeat(64),
+          temporaryMaterial: letter,
+          origin,
+        });
+      }
+      assert.ok(
+        url.startsWith(`${origin}/v1/`),
+        "credential only reaches the approved native host",
+      );
+      if (!state.nativeAvailable) throw new TypeError("fetch failed");
+      if (url.endsWith("/cover-letter")) return response(previewBody(letter));
+      const file = fileResponse(url.endsWith("format=pdf") ? "pdf" : "docx");
+      delete file.temporaryMaterial;
+      return response({ ...file, contentSha256: letter.contentSha256 });
+    },
+  });
+  return { operator, calls, state, letter };
+}
+
+test("the closed grammar admits the cover-letter commands and nothing with arguments", () => {
+  for (const action of [
+    "coverLetter",
+    "coverLetterStatus",
+    "coverLetterPreview",
+    "coverLetterDownload",
+    "coverLetterExpiry",
+  ]) {
+    assert.deepEqual(parseNativeResumeCommand(JSON.stringify({ action })), { action });
+    assert.throws(() => parseNativeResumeCommand(JSON.stringify({ action, text: "write this" })));
+  }
+});
+
+test("the cover-letter request sends the exact acknowledged notice once and keeps its key on retry", async () => {
+  const { operator, state, calls } = letterFixture();
+  await assert.rejects(operator.execute({ action: "coverLetter" }), /native_preparation_required/u);
+  await operator.execute({ action: "prepare", jobId });
+  assert.equal(
+    (await operator.execute({ action: "coverLetter" })).outcome,
+    "native-cover-letter-queued",
+  );
+  await operator.execute({ action: "coverLetter" });
+  assert.equal(state.bodies.length, 1, "a queued request is not sent twice");
+  assert.deepEqual(state.bodies[0], {
+    expectedRevision: 2,
+    coverLetter: { disclosure: { noticeVersion: "bedrock-cover-letter.v1", acknowledged: true } },
+  });
+  assert.equal(calls.filter((call) => call.url.endsWith("/packets")).length, 2);
+});
+
+test("status reports the preparation state and a definite refusal as a failed state", async () => {
+  const { operator } = letterFixture({
+    statusBody: () => preparation("failed", { errorCode: "generation_unavailable" }),
+  });
+  await assert.rejects(operator.execute({ action: "coverLetterStatus" }));
+  await operator.execute({ action: "prepare", jobId });
+  await operator.execute({ action: "coverLetter" });
+  assert.deepEqual(await operator.execute({ action: "coverLetterStatus" }), {
+    outcome: "native-cover-letter-status",
+    state: "failed",
+    errorCode: "generation_unavailable",
+  });
+});
+
+test("a status for another preparation cannot stand in for this one", async () => {
+  const { operator } = letterFixture({
+    statusBody: () => ({ ...preparation(), id: "00000000-0000-7000-8000-000000000099" }),
+  });
+  await operator.execute({ action: "prepare", jobId });
+  await operator.execute({ action: "coverLetter" });
+  await assert.rejects(
+    operator.execute({ action: "coverLetterStatus" }),
+    /native_preparation_mismatch/u,
+  );
+});
+
+test("preview returns only metadata: the model, paragraph count and time left, never the letter", async () => {
+  const { operator } = letterFixture();
+  await operator.execute({ action: "prepare", jobId });
+  await operator.execute({ action: "coverLetter" });
+  const result = await operator.execute({ action: "coverLetterPreview" });
+  assert.equal(result.outcome, "native-cover-letter-preview-read");
+  assert.deepEqual(result.model, { provider: "bedrock", model: "us.anthropic.claude-sonnet-4-6" });
+  assert.equal(result.paragraphCount, 1);
+  assert.equal(result.promptVersion, "1.0.0");
+  assert.ok(result.msRemaining > 0 && result.msRemaining <= 1_800_000);
+  assert.equal(JSON.stringify(result).includes("SENSITIVE"), false);
+});
+
+test("an unfinished cover letter is reported as not ready, without touching the native host", async () => {
+  const { operator, calls } = letterFixture({ letterReady: false });
+  await operator.execute({ action: "prepare", jobId });
+  await operator.execute({ action: "coverLetter" });
+  const before = calls.length;
+  assert.equal(
+    (await operator.execute({ action: "coverLetterPreview" })).outcome,
+    "native-generation-not-ready",
+  );
+  assert.equal(
+    calls.slice(before).some((call) => call.url.startsWith(origin)),
+    false,
+  );
+});
+
+test("cover-letter files are verified in memory, both formats, binding the content hash", async () => {
+  const { operator } = letterFixture();
+  await operator.execute({ action: "prepare", jobId });
+  await operator.execute({ action: "coverLetter" });
+  const result = await operator.execute({ action: "coverLetterDownload" });
+  assert.equal(result.outcome, "native-cover-letter-files-verified");
+  assert.deepEqual(
+    result.files.map((file) => file.format),
+    ["pdf", "docx"],
+  );
+  assert.equal(result.filesSaved, false);
+  assert.equal(/SENSITIVE|contentBase64/u.test(JSON.stringify(result)), false);
+});
+
+test("a cover-letter read that answers for another letter is refused", async () => {
+  for (const previewBody of [
+    (letter) => letterPreview(letter, { contentSha256: "f".repeat(64) }),
+    (letter) => letterPreview(letter, { documentId: jobId }),
+    (letter) => letterPreview(letter, { version: 2 }),
+    (letter) => letterPreview(letter, { matchesPacket: false }),
+  ]) {
+    const { operator } = letterFixture({ previewBody });
+    await operator.execute({ action: "prepare", jobId });
+    await operator.execute({ action: "coverLetter" });
+    await assert.rejects(operator.execute({ action: "coverLetterPreview" }));
+  }
+});
+
+test("expiry needs a verified read first and is reported as not yet expired until thirty minutes", async () => {
+  const { operator } = letterFixture();
+  await operator.execute({ action: "prepare", jobId });
+  await operator.execute({ action: "coverLetter" });
+  await assert.rejects(
+    operator.execute({ action: "coverLetterExpiry" }),
+    /native_cover_letter_read_required/u,
+  );
+  await operator.execute({ action: "coverLetterPreview" });
+  const early = await operator.execute({ action: "coverLetterExpiry" });
+  assert.equal(early.outcome, "native-cover-letter-not-yet-expired");
+  assert.ok(early.msRemaining > 0);
+});
+
+// Moving the clock lets the same operator observe the expiry the way the held session will.
+async function expiredResult({ gatewayLocationStatus, nativeAvailable }) {
+  const { operator, letter, state } = letterFixture({
+    maxSessionMs: 45 * 60_000,
+    tokenMinutes: 120,
+  });
+  await operator.execute({ action: "prepare", jobId });
+  await operator.execute({ action: "coverLetter" });
+  await operator.execute({ action: "coverLetterPreview" });
+  state.gatewayLocationStatus = gatewayLocationStatus;
+  state.nativeAvailable = nativeAvailable;
+  const realNow = Date.now;
+  Date.now = () => letter.expiresAtMs + 5_000;
+  try {
+    return await operator.execute({ action: "coverLetterExpiry" });
+  } finally {
+    Date.now = realNow;
+  }
+}
+
+test("past expiry, no location from the Gateway and an unreachable native host prove it is gone", async () => {
+  assert.deepEqual(await expiredResult({ gatewayLocationStatus: 409, nativeAvailable: false }), {
+    outcome: "native-cover-letter-expired-unavailable",
+    msPastExpiry: 5_000,
+    gatewayStatus: 409,
+    directRead: "unreachable",
+  });
+});
+
+test("past expiry, a native host that still answers is not proof of expiry", async () => {
+  const result = await expiredResult({ gatewayLocationStatus: 409, nativeAvailable: true });
+  assert.equal(result.outcome, "native-cover-letter-expiry-not-proven");
+  assert.equal(result.directRead, 200);
+});
+
+test("past expiry, a Gateway fault or a still-issued location is not proof of expiry", async () => {
+  assert.equal(
+    (await expiredResult({ gatewayLocationStatus: 503, nativeAvailable: false })).outcome,
+    "native-cover-letter-expiry-not-proven",
+  );
+  assert.equal(
+    (await expiredResult({ gatewayLocationStatus: 200, nativeAvailable: false })).outcome,
+    "native-cover-letter-expiry-not-proven",
+  );
+});
+
+test("the default session ends at twenty minutes and only a bounded hold reaches past it", () => {
+  const plain = createNativeResumeSessionOperator({ identity: identity() });
+  assert.ok(plain.expiresAt - Date.now() <= 20 * 60_000);
+  const long = { ...identity(), expiresAt: new Date(Date.now() + 2 * 60 * 60_000).toISOString() };
+  const held = createNativeResumeSessionOperator({
+    identity: long,
+    maxSessionMs: NATIVE_HELD_SESSION_MS,
+  });
+  const remaining = held.expiresAt - Date.now();
+  assert.ok(remaining > 40 * 60_000 && remaining <= 45 * 60_000);
+  // The access token's own expiry still binds a held session.
+  const bound = createNativeResumeSessionOperator({
+    identity: identity(),
+    maxSessionMs: NATIVE_HELD_SESSION_MS,
+  });
+  assert.ok(bound.expiresAt - Date.now() <= 30 * 60_000);
+  for (const bad of [0, 19 * 60_000, 46 * 60_000, 3_600_000.5, "2700000"]) {
+    assert.throws(
+      () => createNativeResumeSessionOperator({ identity: long, maxSessionMs: bad }),
+      /native_session_window_invalid/u,
+    );
+  }
+});
+
+test("cover-letter reads are refused once withdrawal has started", async () => {
+  const { operator } = letterFixture();
+  await operator.execute({ action: "prepare", jobId });
+  await operator.execute({ action: "coverLetter" });
+  await operator.execute({ action: "withdraw" }).catch(() => undefined);
+  await assert.rejects(operator.execute({ action: "coverLetterPreview" }));
+  await assert.rejects(operator.execute({ action: "coverLetterExpiry" }));
+});
