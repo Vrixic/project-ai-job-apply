@@ -78,6 +78,17 @@ about 230 bytes, so the list must stop living in one environment variable before
 the fixes are released: the task exited about 39 seconds after start (exit 137) while the workflow stayed
 running, which needs the status route working to interpret.
 
+2026-11-15 (later): With dispatch and the status route working, the task's silent death was traced. The Fargate
+container exited about 15 seconds after it started, right after the model call: the real Sonnet reply was
+rejected by the grounding check (`ungrounded_entity`: a paragraph named an earlier employer while citing only a
+later job's facts), the generation actor returned `failed`, and the runtime fails closed by killing itself for
+any outcome but `ready`, with no logs by design. Reproduced locally with the production provider, gateway and
+actor against real Bedrock and synthetic facts: 3 of 4 runs rejected. Telling the model that each paragraph is
+judged only against the facts it cites (a restatement of how the check works, not a weaker check) passed 6 of 6.
+That rule is in this change; it is baked into the native-material image, so it needs a new image and task
+revision. Also seen: a failed attempt leaves an unretired task allocation on the application, and the next
+attempt waits for the cleanup worker to retire it.
+
 ## Risks and blockers
 
 | ID | Risk | Status |

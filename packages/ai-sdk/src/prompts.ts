@@ -45,12 +45,24 @@ function factsBlock(facts: readonly PromptFact[]): string {
   return `FACTS:\n${JSON.stringify(facts)}`;
 }
 
+/**
+ * The grounding check judges every paragraph on its own against only the facts that paragraph cites, so
+ * a paragraph that names an employer or school from another fact is rejected whole. Found live (D3.2):
+ * without this rule the model rejected itself in 3 of 4 real runs ("Before Northwind Labs, ..." citing
+ * only the earlier job's facts); with it, 6 of 6 passed. The rule only restates how the check works.
+ */
+const COVER_LETTER_CITATION_RULE =
+  "Citation rule: each paragraph is checked on its own against only the facts cited in that paragraph. " +
+  "Name an employer, school, place, skill or figure only in a paragraph that cites the fact it comes from, " +
+  "and cite that fact again even if an earlier paragraph already did. " +
+  "Do not refer to a previous employer or school by name in a paragraph that does not cite its fact.";
+
 export function renderCoverLetterPrompt(
   facts: readonly PromptFact[],
   job: JobPromptFacts,
 ): { system: string; user: string } {
   return {
-    system: `${RULES}\nTask: write a cover letter of 2 to 4 short paragraphs.`,
+    system: `${RULES}\nTask: write a cover letter of 2 to 4 short paragraphs.\n${COVER_LETTER_CITATION_RULE}`,
     user: `${factsBlock(facts)}\n${untrustedBlock(job)}`,
   };
 }
