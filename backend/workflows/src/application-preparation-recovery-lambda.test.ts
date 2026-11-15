@@ -126,6 +126,32 @@ describe("native preparation terminal and scheduled recovery", () => {
       expect(f.resolve).not.toHaveBeenCalled();
     },
   );
+  it("accepts the whole-second time EventBridge delivers and still rejects malformed times", async () => {
+    // Found live (D3.2): real scheduled events carry "2026-10-04T12:00:00Z" with no milliseconds, but the
+    // check used to require the millisecond form, so every real schedule was rejected and nothing dispatched.
+    const delivered = fixture("reconcile");
+    await expect(
+      delivered.handler(
+        { ...event("reconcile"), time: "2026-10-04T12:00:00Z" },
+        { invokedFunctionArn: target },
+      ),
+    ).resolves.toEqual({ handled: true });
+    expect(delivered.run).toHaveBeenCalledTimes(1);
+    for (const time of [
+      "2026-10-04T12:00:00",
+      "2026-10-04 12:00:00Z",
+      "2026-10-04T12:00:60Z",
+      "2026-02-30T12:00:00Z",
+      "2026-10-04T12:00:00+00:00",
+      "2026-10-04T12:10:00Z",
+    ]) {
+      const f = fixture("reconcile");
+      await expect(
+        f.handler({ ...event("reconcile"), time }, { invokedFunctionArn: target }),
+      ).rejects.toThrow("ApplicationPreparationRecoveryInputRejected");
+      expect(f.resolve).not.toHaveBeenCalled();
+    }
+  });
   it("refuses an unretained terminal version before setup", async () => {
     const f = fixture();
     await expect(

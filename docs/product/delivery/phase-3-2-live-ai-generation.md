@@ -62,6 +62,22 @@ cover letters and resumes, which keep the ADR-038 30-minute rule.
 
 2026-11-13: The owner chose to complete D3.2 and to keep `gpt-6-luna`. Checking the development account showed `gpt-6-luna` is not available to it, and that OpenAI models on Bedrock retain classifier-flagged traffic for up to 30 days unless AWS grants zero data retention, which ADR-038 does not allow. The owner agreed to Amazon Bedrock in our own account with Claude Sonnet 4.6 as the interim model, the model id as configuration, a $20 a month development ceiling with alarms at 50% and 80%, a per-request token cap and a kill switch that is off by default ([ADR-059](../../adr/059-live-generation-through-amazon-bedrock.md)). A later model, `gpt-6-luna` included, is a configuration change plus a fresh check, and only if access and zero retention are obtained. The Ashby live proof (D3.2-007) needs no AI and runs in the live session on a posting the owner picks. Narrative answers (D3.2-009) stay on OpenAI direct.
 
+2026-11-15: First live cover-letter run in development (D3.2-004, sitting day). The first release of the
+native-material pipeline is in place (control, task and preparation releases; Gateway cover-letter flags;
+the web build flag) and the candidate's Generate cover letter started the real chain: Gateway accepted the
+packet, the reconcile nudge reached the queue, the workflow started a Fargate task, and Bedrock recorded one
+invocation (2,350 input and 621 output tokens, no errors). The run exposed defects that no test could, fixed
+in the change that carries this note: (1) the preparation reconcile Lambda rejected every real EventBridge
+scheduled event because EventBridge sends whole-second times and the check required the millisecond form, so
+nothing was ever dispatched; (2) the web status poll called `/preparations/` while the contract and Gateway
+serve `/packet-preparations/`, so every poll returned 404 (a new test now requires every web upstream path to
+exist in the OpenAPI contract); (3) a stale image-proof expectation. Also found: the Gateway function
+environment reached Lambda's 4 KB limit when a fifth task revision joined the disposal list, so the retired
+`resume:2` was dropped from the Gateway list (the cleanup worker keeps all revisions); each new revision costs
+about 230 bytes, so the list must stop living in one environment variable before the next release. Open until
+the fixes are released: the task exited about 39 seconds after start (exit 137) while the workflow stayed
+running, which needs the status route working to interpret.
+
 ## Risks and blockers
 
 | ID | Risk | Status |

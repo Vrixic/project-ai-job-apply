@@ -67,7 +67,8 @@ for (const current of [
       assert.equal(signal, null);
       assert.deepEqual(value, {
         imageRefused: true,
-        secretReads: 2,
+        // Bedrock needs no provider secret (ADR-059), so the refused runtime read only the TLS secret.
+        secretReads: 1,
         providerCalls: 0,
         controlInvocations: 0,
       });
