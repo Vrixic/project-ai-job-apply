@@ -258,6 +258,16 @@ describe("cover letter generation", () => {
     expect(sent).not.toContain("SecretRestrictedSkill");
   });
 
+  it("tells the model each paragraph is judged only against the facts it cites", async () => {
+    // Found live (D3.2): letters that named an employer from another fact were rejected whole in 3 of 4 runs.
+    const provider = new ScriptedProvider(paragraphOutput("I have experience with Acme Corp."));
+    await generateCoverLetter(dependencies(provider));
+    const system = provider.calls[0]?.system ?? "";
+    expect(system).toContain("Citation rule: each paragraph is checked on its own");
+    expect(system).toContain("cite that fact again even if an earlier paragraph already did");
+    expect(system).toContain("Never state a number, date, employer");
+  });
+
   it("refuses without confirmed evidence and does not call the provider", async () => {
     const provider = new ScriptedProvider("{}");
     const result = await generateCoverLetter(
