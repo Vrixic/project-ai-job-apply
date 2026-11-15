@@ -160,7 +160,7 @@ const OPERATIONS: Readonly<Record<ApplicationsOperation, OperationSpec>> = {
   },
   preparation: {
     method: "GET",
-    path: (id, preparationId) => `/v1/applications/${id}/preparations/${preparationId}`,
+    path: (id, preparationId) => `/v1/applications/${id}/packet-preparations/${preparationId}`,
     response: "ApplicationPacketPreparation",
     success: 200,
     idempotent: false,

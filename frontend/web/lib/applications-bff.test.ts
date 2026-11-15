@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { applicationsRoute, formatSearch, historySearch } from "./applications-bff";
 
@@ -185,7 +186,7 @@ describe("Applications browser boundary", () => {
       );
       expect(response.status).toBe(upstreamId === ATTEMPT ? 200 : 503);
       expect(String((fetch.mock.calls[0] as unknown as [URL])[0])).toBe(
-        `http://localhost:4000/v1/applications/${APP}/preparations/${ATTEMPT}`,
+        `http://localhost:4000/v1/applications/${APP}/packet-preparations/${ATTEMPT}`,
       );
     }
   });
@@ -695,5 +696,27 @@ describe("Applications browser boundary", () => {
     );
     expect(response.status).toBe(503);
     expect(JSON.stringify(await response.json())).not.toContain("leaky_internal_code");
+  });
+});
+
+describe("applications BFF upstream paths", () => {
+  it("only calls paths the platform API contract declares", () => {
+    // Found live (D3.2): the status poll used /preparations/ while the contract and Gateway serve
+    // /packet-preparations/, so every poll 404ed. The route unit tests repeated the same wrong path.
+    const source = readFileSync(new URL("./applications-bff.ts", import.meta.url), "utf8");
+    const contract = JSON.parse(
+      readFileSync(
+        new URL("../../../packages/api-contracts/openapi/platform.v1.json", import.meta.url),
+        "utf8",
+      ),
+    ) as { paths: Record<string, unknown> };
+    const declared = new Set(
+      Object.keys(contract.paths).map((path) => `/v1${path.replace(/\{[^}]+\}/gu, "{}")}`),
+    );
+    const upstream = [...source.matchAll(/path:\s*\([^)]*\)\s*=>\s*`([^`]+)`/gu)].map((match) =>
+      (match[1] ?? "").replace(/\$\{[^}]+\}/gu, "{}"),
+    );
+    expect(upstream.length).toBeGreaterThan(10);
+    expect(upstream.filter((path) => !declared.has(path))).toEqual([]);
   });
 });

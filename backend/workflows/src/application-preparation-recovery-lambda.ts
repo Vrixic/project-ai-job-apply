@@ -139,7 +139,15 @@ function scheduled(value: unknown, config: Configuration, now: Date) {
     })
   )
     return false;
-  const time = typeof event.time === "string" ? new Date(event.time) : undefined;
+  // EventBridge delivers scheduled event times as whole seconds ("2026-11-15T22:04:14Z"), not the
+  // millisecond form `toISOString()` produces. Compare the second-resolution prefix, like the terminal
+  // event parser does, so a real schedule is accepted while any malformed time is still rejected.
+  const text =
+    typeof event.time === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/u.test(event.time)
+      ? event.time
+      : undefined;
+  const time = text === undefined ? undefined : new Date(text);
   return (
     event.version === "0" &&
     typeof event.id === "string" &&
@@ -150,7 +158,8 @@ function scheduled(value: unknown, config: Configuration, now: Date) {
     event.region === "us-east-2" &&
     time &&
     Number.isFinite(time.getTime()) &&
-    time.toISOString() === event.time &&
+    text !== undefined &&
+    time.toISOString().slice(0, 19) === text.slice(0, 19) &&
     Number.isFinite(now.getTime()) &&
     Math.abs(time.getTime() - now.getTime()) <= 300_000 &&
     Array.isArray(event.resources) &&
