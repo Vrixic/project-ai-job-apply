@@ -201,6 +201,42 @@ describe("Ashby inspection", () => {
     },
   );
 
+  it("reads a multiple-choice question the way the live page marks it up, by its parent's stable id", () => {
+    // Live page 2026-11-16: the fieldset has only the radio-group class, its parent holds the stable
+    // question id, and the radio names carry a random prefix that changes on every page load.
+    const live = (random: string) => `
+      <div data-field-path="sponsorship" data-field-entry-id="${random}_sponsorship">
+        <fieldset class="_container_x ashby-application-form-input-radio-group">
+          <label class="_heading_x _required_x">Will you now or in the future require visa sponsorship?</label>
+          <div><input type="radio" id="${random}_a" name="${random}_sponsorship"><label for="${random}_a">No</label></div>
+          <div><input type="radio" id="${random}_b" name="${random}_sponsorship"><label for="${random}_b">Yes, H1B Transfer</label></div>
+        </fieldset></div>`;
+    const read = (random: string) => {
+      const doc = mount();
+      doc
+        .querySelector(".ashby-application-form-section-container")
+        ?.insertAdjacentHTML("beforeend", live(random));
+      const inspected = inspectAshbyApplication(doc, URL);
+      const field = inspected.form.fields.find((candidate) => candidate.name === "sponsorship");
+      const structure = inspected.structure;
+      return { doc, inspected, field, structure };
+    };
+    const first = read("11111111-1111-4111-8111-111111111111");
+    expect(first.field).toMatchObject({
+      label: "Will you now or in the future require visa sponsorship?",
+      type: "radio",
+      required: true,
+      options: ["No", "Yes, H1B Transfer"],
+    });
+    first.inspected.dispose();
+    // A different page load only changes the random prefix: the form structure stays the same.
+    const second = read("22222222-2222-4222-8222-222222222222");
+    expect(second.structure).toBe(first.structure);
+    // The unanswered required question keeps the page from counting as complete.
+    expect(ashbyProvider.rootValid(ashbyProvider.root(second.doc))).toBe(false);
+    second.inspected.dispose();
+  });
+
   it("refuses a page with two field containers or duplicate field names", () => {
     const doc = mount();
     doc

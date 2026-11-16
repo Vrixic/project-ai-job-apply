@@ -101,6 +101,19 @@ NativePreparation Lambdas built from the same commit. Task logging is off by des
 found by CloudTrail (the task role's STS, secret and model calls appear a few minutes late) and by local
 reproduction, not from the task.
 
+2026-11-16: Ashby dry run for D3.2-007 in real Chrome (the real unpacked extension on a real public Ashby posting,
+every write blocked, a faked platform API, nothing sent to the employer). The adapter, built only against
+synthetic pages, failed twice on the real page, both fixed in the change that carries this note: (1) Ashby moves
+between Overview and Application without a new document, so Chrome's `sender.url` stayed on the overview and
+the background refused the page's proof request; every fill started from the posting's own address aborted at
+"revalidate" after recording a dispatched attempt (`sameDocumentPosting`); (2) a multiple-choice question is a
+fieldset with its own class and its stable id on the parent, not an entry, so the adapter never saw it, never
+counted it as a required question and would have pressed Submit with it empty; the live markup differs from the
+2026-10-22 inspection. After the fixes the real page fills name, email, links and the resume attach, leaves the
+employer's own questions to the candidate and counts them correctly, and Fill and submit refuses before any
+attempt is dispatched while they are unanswered. The post-submit confirmation message is still unobserved: the
+live submission by the owner (D3.2-007) is its evidence.
+
 ## Risks and blockers
 
 | ID | Risk | Status |

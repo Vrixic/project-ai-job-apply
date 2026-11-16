@@ -4,6 +4,7 @@ import {
   ashbyApplicationIdentity,
   ashbyChallengePresent,
   ashbyContainerSelector,
+  ashbyEntrySelector,
   ashbyPaneSelector,
   describeAshbyEntry,
   inspectAshbyApplication,
@@ -86,9 +87,7 @@ export const ashbyProvider: ApplicationProvider = {
   rootValid(root) {
     const container = root.querySelector(ashbyContainerSelector);
     if (!container) return false;
-    for (const entry of Array.from(
-      container.querySelectorAll(".ashby-application-form-field-entry"),
-    )) {
+    for (const entry of Array.from(container.querySelectorAll(ashbyEntrySelector))) {
       const described = describeAshbyEntry(entry);
       if (!controlsSatisfied(described.controls, described.field.required)) return false;
     }

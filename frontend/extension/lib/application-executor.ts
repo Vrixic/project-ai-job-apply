@@ -20,6 +20,7 @@ import { applicationExecutionApi } from "./application-execution-api";
 import { readJson } from "./application-handoff";
 import { attachmentName } from "./attachment-name";
 import { commandFieldsFromPacket } from "./command-fields";
+import { sameDocumentPosting } from "./document-url";
 import { RECOVERY_BUDGET_MS, runBudgetMs } from "./execution-budget";
 import type { NativeTransferSelection, TransferredNativeFile } from "./native-material-transfer";
 import { sameNativeTransferBinding } from "./native-transfer-binding";
@@ -277,7 +278,7 @@ export async function executeApprovedApplication(options: {
       sender.tab?.id !== selection.tabId ||
       sender.frameId !== 0 ||
       sender.documentId !== selection.documentId ||
-      !urlAllowed(sender.url) ||
+      (!urlAllowed(sender.url) && !sameDocumentPosting(selection.employerUrl, sender.url)) ||
       sender.origin !== new URL(selection.employerUrl).origin ||
       sender.documentLifecycle !== "active" ||
       sender.tab.incognito ||
