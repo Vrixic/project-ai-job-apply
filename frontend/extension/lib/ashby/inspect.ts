@@ -11,7 +11,12 @@ import type { ApplicationInspection } from "../providers/types";
  */
 export const ashbyContainerSelector = ".ashby-application-form-container";
 export const ashbyPaneSelector = ".ashby-job-posting-right-pane";
-const ENTRY = ".ashby-application-form-field-entry";
+// A multiple-choice question is a fieldset. The 2026-10-22 inspection saw it carry the entry class and
+// its own data-field-path; the live page on 2026-11-16 gives it only the radio-group class and puts
+// the stable question id on its parent (its radio names are random on every page load).
+const RADIO_GROUP = "fieldset.ashby-application-form-input-radio-group";
+export const ashbyEntrySelector = `.ashby-application-form-field-entry, ${RADIO_GROUP}`;
+const ENTRY = ashbyEntrySelector;
 const HOST = "jobs.ashbyhq.com";
 const ORG = /^[A-Za-z0-9_.-]{1,100}$/u;
 const JOB = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
@@ -170,6 +175,7 @@ export function describeAshbyEntry(entry: Element): AshbyEntry {
     );
   const name = clean(
     entry.getAttribute("data-field-path") ||
+      (entry.matches(RADIO_GROUP) ? entry.parentElement?.getAttribute("data-field-path") : null) ||
       controls[0]?.getAttribute("name") ||
       controls[0]?.getAttribute("id"),
   );
