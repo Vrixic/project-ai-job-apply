@@ -265,6 +265,8 @@ describe("cover letter generation", () => {
     const system = provider.calls[0]?.system ?? "";
     expect(system).toContain("Citation rule: each paragraph is checked on its own");
     expect(system).toContain("cite that fact again even if an earlier paragraph already did");
+    expect(system).toContain("Capitalization rule (the check is mechanical)");
+    expect(system).toContain("Never mention a technology or product from the job posting");
     expect(system).toContain("Never state a number, date, employer");
   });
 

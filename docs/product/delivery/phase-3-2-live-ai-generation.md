@@ -89,6 +89,18 @@ That rule is in this change; it is baked into the native-material image, so it n
 revision. Also seen: a failed attempt leaves an unretired task allocation on the application, and the next
 attempt waits for the cleanup worker to retire it.
 
+2026-11-15 (evening): The citation rule alone was not enough on a real candidate. The real task still died
+after the model call because the grounding check is mechanical: every capitalized word that does not start
+a sentence must appear in the facts that paragraph cites (or in the job title or company), so "Prior to
+Meta, ..." in a paragraph citing only another employer, or a technology copied from the posting, rejects the
+whole draft. Reproduced with the production provider, gateway and actor on the real candidate's history and
+a real posting: 0 of 3 passed with the first rule. A second rule that states this mechanism plainly passed 18
+of 18 (and 3 of 3 on a second persona). The check is unchanged. Release lesson: the preparation activity
+computes the request hash the task must reproduce, so a prompt change needs the task image AND the
+NativePreparation Lambdas built from the same commit. Task logging is off by design, so these failures were
+found by CloudTrail (the task role's STS, secret and model calls appear a few minutes late) and by local
+reproduction, not from the task.
+
 ## Risks and blockers
 
 | ID | Risk | Status |

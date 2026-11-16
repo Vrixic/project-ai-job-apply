@@ -46,23 +46,32 @@ function factsBlock(facts: readonly PromptFact[]): string {
 }
 
 /**
- * The grounding check judges every paragraph on its own against only the facts that paragraph cites, so
- * a paragraph that names an employer or school from another fact is rejected whole. Found live (D3.2):
- * without this rule the model rejected itself in 3 of 4 real runs ("Before Northwind Labs, ..." citing
- * only the earlier job's facts); with it, 6 of 6 passed. The rule only restates how the check works.
+ * The grounding check is mechanical and judges every paragraph on its own: each capitalized word that does not
+ * start a sentence must appear in the facts that paragraph cites (or in the job title or company name), or the
+ * whole draft is rejected. Found live (D3.2): without these rules the model rejected itself ("Prior to Meta, ..."
+ * in a paragraph that cited only The Forge's facts; technologies copied from the job posting). On a real
+ * candidate's history and a real posting: 0 of 3 passed with the first rule alone, 18 of 18 with both; a second
+ * synthetic persona passed 3 of 3. The rules only restate how the check works; the check itself is unchanged.
  */
 const COVER_LETTER_CITATION_RULE =
   "Citation rule: each paragraph is checked on its own against only the facts cited in that paragraph. " +
   "Name an employer, school, place, skill or figure only in a paragraph that cites the fact it comes from, " +
   "and cite that fact again even if an earlier paragraph already did. " +
   "Do not refer to a previous employer or school by name in a paragraph that does not cite its fact.";
+const COVER_LETTER_CAPITALIZATION_RULE =
+  "Capitalization rule (the check is mechanical): in each paragraph, every capitalized word that does not start a " +
+  "sentence (employers, schools, places, products, technologies, titles, acronyms) must appear in the text of a fact " +
+  "cited in that same paragraph, or in the job title or company name. If a name is not in your cited facts, do not " +
+  'write it: use a generic phrase such as "my previous role" or "my degree" instead. Never mention a technology or ' +
+  "product from the job posting unless it appears in a cited fact. Keep each paragraph about one or two facts and " +
+  "cite every fact whose names you use.";
 
 export function renderCoverLetterPrompt(
   facts: readonly PromptFact[],
   job: JobPromptFacts,
 ): { system: string; user: string } {
   return {
-    system: `${RULES}\nTask: write a cover letter of 2 to 4 short paragraphs.\n${COVER_LETTER_CITATION_RULE}`,
+    system: `${RULES}\nTask: write a cover letter of 2 to 4 short paragraphs.\n${COVER_LETTER_CITATION_RULE}\n${COVER_LETTER_CAPITALIZATION_RULE}`,
     user: `${factsBlock(facts)}\n${untrustedBlock(job)}`,
   };
 }
