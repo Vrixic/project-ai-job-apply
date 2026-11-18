@@ -64,6 +64,7 @@ import { createGatewayApplication } from "./application.js";
 import { createApplicationsRuntime } from "./applications-runtime.js";
 import { S3CandidateDataExportDownloadSigner } from "./candidate-data-export-download-signer.js";
 import { S3CandidateDeletionConfirmationJournal } from "./candidate-deletion-confirmation-journal.js";
+import { choiceAnswersFromEnvironment } from "./choice-answers.js";
 import {
   configuredUgcContributionPolicyVersion,
   ProfileJobContributionConsentRevoker,
@@ -241,6 +242,26 @@ const narrativeAnswers = narrativeAnswersFromEnvironment(process.env, {
   catalog,
   profile: profileSections,
 });
+// Off unless CHOICE_ANSWERS_ENABLED=true and a TypeSafe key is configured (ADR-061).
+const choiceAnswers = choiceAnswersFromEnvironment(process.env, {
+  catalog,
+  profile: {
+    listGroundingFacts: (userId) => profileSections.listGroundingFacts(userId),
+    getPreferences: async (userId) => {
+      const saved = await store.getPreferences(userId);
+      return saved ? { workModes: saved.workModes, locations: saved.locations } : null;
+    },
+    listApplicationAnswers: async (userId) =>
+      (await profileSections.listEntries(userId, "applicationAnswer")).flatMap((entry) =>
+        "question" in entry && "answer" in entry
+          ? [{ question: String(entry.question), answer: String(entry.answer) }]
+          : [],
+      ),
+  },
+  restrictedStatements: {
+    readActiveValue: (input) => restrictedAnswerVault.readActiveValue(input),
+  },
+});
 const applications =
   process.env.APPLICATIONS_ENABLED === "true"
     ? createApplicationsRuntime({
@@ -250,6 +271,7 @@ const applications =
           getPreferences: (userId) => store.getPreferences(userId),
         },
         ...(narrativeAnswers ? { narrativeAnswers } : {}),
+        ...(choiceAnswers ? { choiceAnswers } : {}),
         ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
         ...(legacyReceipts ? { legacyReceipts } : {}),
         ...(nativeMaterialLocations ? { nativeMaterialLocations } : {}),

@@ -195,6 +195,9 @@ export type ApproveApplicationPacketRequest =
 export type GenerateNarrativeAnswerRequest =
   components["schemas"]["GenerateNarrativeAnswerRequest"];
 export type NarrativeAnswer = components["schemas"]["NarrativeAnswer"];
+export type DecideChoiceAnswersRequest = components["schemas"]["DecideChoiceAnswersRequest"];
+export type ChoiceAnswers = components["schemas"]["ChoiceAnswers"];
+export type ChoiceAnswer = components["schemas"]["ChoiceAnswer"];
 export type ApplicationRevisionRequest = components["schemas"]["ApplicationRevisionRequest"];
 export type StartApplicationSubmissionRequest =
   components["schemas"]["StartApplicationSubmissionRequest"];

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { coverLetterContext } from "@ai-job-apply/ai-sdk/context";
 import { activeJobRevisionDigestInput } from "@ai-job-apply/api-contracts/job-revision-canonical";
 import {
+  type ApplicationChoiceAnswers,
   type ApplicationCoverLetters,
   type ApplicationJobGate,
   type ApplicationNarrativeAnswers,
@@ -51,6 +52,8 @@ export interface ApplicationsRuntimeOptions {
   };
   /** Drafts short free-text answers (ADR-057). Absent: the route reports unavailable. */
   narrativeAnswers?: ApplicationNarrativeAnswers;
+  /** Decides choice questions (ADR-061). Absent: the route reports unavailable. */
+  choiceAnswers?: ApplicationChoiceAnswers;
   /** The Documents runtime; without it packets carry no resume and the preview is unavailable. */
   tailoring?: ResumeTailoringClient;
   /** The candidate's own uploaded resume, read from its Documents owner. Absent: fallback off. */
@@ -399,6 +402,7 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
     ...(options.uploadedResumes ? { uploadedResumes: options.uploadedResumes } : {}),
     ...(options.coverLetters ? { coverLetters: options.coverLetters } : {}),
     ...(options.narrativeAnswers ? { narrativeAnswers: options.narrativeAnswers } : {}),
+    ...(options.choiceAnswers ? { choiceAnswers: options.choiceAnswers } : {}),
     ...(options.temporaryMaterials || options.nativeMaterialDisposal
       ? {
           temporaryMaterials: {
