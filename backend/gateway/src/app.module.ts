@@ -18,12 +18,11 @@ import type {
   ApplicationTemporaryMaterialLocation,
   ApplicationUploadedResumeFile,
   ApproveApplicationPacketRequest,
-  GenerateNarrativeAnswerRequest,
-  NarrativeAnswer,
   CandidateDataExport,
   CandidateDataExportAccess,
   CandidateDataExportDownloadGrant,
   CanonicalJobDetail,
+  ChoiceAnswers,
   ConfirmAccountDeletionRequest,
   CreateAccountDeletionRequest,
   CreateApplicationRequest,
@@ -35,9 +34,11 @@ import type {
   CreateResumeUploadResponse,
   CreateSavedJobRequest,
   CurrentUser,
+  DecideChoiceAnswersRequest,
   DecideTrustCaseRequest,
   EntitlementSummary,
   FileTrustAppealRequest,
+  GenerateNarrativeAnswerRequest,
   GrantUgcContributionConsentRequest,
   JobContribution,
   JobContributionHistory,
@@ -49,6 +50,7 @@ import type {
   ModerationCase,
   ModerationCasePage,
   ModerationCaseSearchRequest,
+  NarrativeAnswer,
   NotificationDeliveryStatus as NotificationDeliveryStatusResponse,
   NotificationInboxPage as NotificationInboxPageResponse,
   NotificationItem as NotificationItemResponse,
@@ -1278,6 +1280,7 @@ const validateApproveApplicationPacket = compileComponentValidator(
   "ApproveApplicationPacketRequest",
 );
 const validateGenerateNarrativeAnswer = compileComponentValidator("GenerateNarrativeAnswerRequest");
+const validateDecideChoiceAnswers = compileComponentValidator("DecideChoiceAnswersRequest");
 const validateApplicationRevision = compileComponentValidator("ApplicationRevisionRequest");
 const validateStartApplicationSubmission = compileComponentValidator(
   "StartApplicationSubmissionRequest",
@@ -3587,6 +3590,20 @@ class ApplicationsController {
       validateGenerateNarrativeAnswer,
     );
     return this.applications.narrativeAnswer(user.id, applicationId, body);
+  }
+
+  /** Decisions for choice questions the extension left to the candidate. Never stored; see ADR-061. */
+  @Post("/:applicationId/choice-answers")
+  @HttpCode(HttpStatus.OK)
+  @Header("cache-control", "no-store")
+  async choiceAnswers(
+    @Req() request: AuthenticatedRequest,
+    @Param("applicationId") applicationId: string,
+  ): Promise<ChoiceAnswers> {
+    const user = await this.identity.resolve(request, "applications:write");
+    requireApplicationPath(applicationId);
+    const body = applicationsBody<DecideChoiceAnswersRequest>(request, validateDecideChoiceAnswers);
+    return this.applications.choiceAnswers(user.id, applicationId, body);
   }
 
   @Post("/:applicationId/approval")

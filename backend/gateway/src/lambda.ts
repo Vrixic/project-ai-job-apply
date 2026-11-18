@@ -83,6 +83,7 @@ import { createGatewayApplication } from "./application.js";
 import { createApplicationsRuntime } from "./applications-runtime.js";
 import { S3CandidateDataExportDownloadSigner } from "./candidate-data-export-download-signer.js";
 import { S3CandidateDeletionConfirmationJournal } from "./candidate-deletion-confirmation-journal.js";
+import { choiceAnswersFromEnvironment } from "./choice-answers.js";
 import { createConfiguredD2TrustRuntime } from "./d2-trust-runtime.js";
 import { MAXIMUM_GATEWAY_BODY_BYTES } from "./gateway-boundary.js";
 import {
@@ -322,7 +323,7 @@ const APPLICATION_PREPARATION_PATH_PATTERN = new RegExp(
   "u",
 );
 const APPLICATION_COMMAND_PATH_PATTERN = new RegExp(
-  `^/v1/applications/${APPLICATION_ID}/(?:packets|approval|reopen|cancel|submissions|manual-submissions|narrative-answers)$`,
+  `^/v1/applications/${APPLICATION_ID}/(?:packets|approval|reopen|cancel|submissions|manual-submissions|narrative-answers|choice-answers)$`,
   "u",
 );
 const APPLICATION_DISPATCH_PATH_PATTERN = new RegExp(
@@ -1348,6 +1349,26 @@ async function createConfiguredApplication(
     catalog,
     profile: profileSections,
   });
+  // Off unless CHOICE_ANSWERS_ENABLED=true and a TypeSafe key is configured (ADR-061).
+  const choiceAnswers = choiceAnswersFromEnvironment(process.env, {
+    catalog,
+    profile: {
+      listGroundingFacts: (userId) => profileSections.listGroundingFacts(userId),
+      getPreferences: async (userId) => {
+        const saved = await store.getPreferences(userId);
+        return saved ? { workModes: saved.workModes, locations: saved.locations } : null;
+      },
+      listApplicationAnswers: async (userId) =>
+        (await profileSections.listEntries(userId, "applicationAnswer")).flatMap((entry) =>
+          "question" in entry && "answer" in entry
+            ? [{ question: String(entry.question), answer: String(entry.answer) }]
+            : [],
+        ),
+    },
+    restrictedStatements: {
+      readActiveValue: (input) => restrictedAnswerVault.readActiveValue(input),
+    },
+  });
   const applications = createApplicationsRuntime({
     client: createApplicationsDatabase(databaseUrl, { maxConnections: 2 }),
     profile: {
@@ -1355,6 +1376,7 @@ async function createConfiguredApplication(
       getPreferences: (userId) => store.getPreferences(userId),
     },
     ...(narrativeAnswers ? { narrativeAnswers } : {}),
+    ...(choiceAnswers ? { choiceAnswers } : {}),
     ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
     ...(legacyReceipts ? { legacyReceipts } : {}),
     ...(nativeMaterialLocations ? { nativeMaterialLocations } : {}),

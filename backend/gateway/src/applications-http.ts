@@ -10,11 +10,14 @@ import {
   ApprovalRefusedError,
   AttemptNotFoundError,
   AttemptRefusedError,
+  ChoiceAnswerLimitError,
+  ChoiceAnswerStateError,
+  ChoiceAnswersUnavailableError,
   IllegalTransitionError,
   InvalidApplicationCursorError,
   NarrativeAnswerLimitError,
-  NarrativeAnswersUnavailableError,
   NarrativeAnswerStateError,
+  NarrativeAnswersUnavailableError,
   PacketInvariantError,
   PreparationNotFoundError,
   RestrictedPacketStoreUnavailableError,
@@ -92,6 +95,29 @@ export function projectApplicationsFailure(exception: unknown): ApplicationsFail
       "Application already exists",
       "A live application already exists for this job",
     );
+  }
+  if (exception instanceof ChoiceAnswerStateError) {
+    return conflict(
+      "application_state_conflict",
+      "Application is finished",
+      "The application is not open for answers",
+    );
+  }
+  if (exception instanceof ChoiceAnswerLimitError) {
+    return {
+      status: HttpStatus.TOO_MANY_REQUESTS,
+      code: "choice_answer_limit",
+      title: "Too many requests",
+      detail: "Too many choice answers were requested; try again shortly",
+    };
+  }
+  if (exception instanceof ChoiceAnswersUnavailableError) {
+    return {
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      code: "choice_answers_unavailable",
+      title: "Choice answers are unavailable",
+      detail: "Choice answers are temporarily unavailable",
+    };
   }
   if (exception instanceof NarrativeAnswerStateError) {
     return conflict(

@@ -594,7 +594,9 @@ export class PostgresRestrictedAnswerVaultStore
    * Reads and decrypts the caller's own currently active entry for a question, for a future
    * server-side consumer (Applications packet preparation) rather than any HTTP response. It is
    * never exposed through a Gateway route: a restricted answer's plaintext leaves this boundary
-   * only into an owner-scoped packet the candidate then reviews.
+   * only into an owner-scoped packet the candidate then reviews, and, by the owner's decision in
+   * ADR-061, to the choice-answer provider for the one restricted question it is asked about. The
+   * route returns only the decided option, never the plaintext.
    */
   async readActiveValue(input: {
     userId: string;

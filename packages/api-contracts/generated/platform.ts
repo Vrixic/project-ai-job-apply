@@ -1197,6 +1197,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/applications/{applicationId}/choice-answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Decides choice questions (Yes/No, radio, select, checkbox) that the extension left to the candidate, from the candidate's confirmed Profile facts, Job preferences, saved answers and this application's job, using Jev (ADR-061). Each decision carries the option, its probability and the model's confidence; below the Gateway's thresholds a question is left to the candidate. A restricted question is decided only from the candidate's own saved statement on that topic and is marked restricted, so the candidate confirms it individually. Nothing is stored. */
+        post: operations["decideChoiceAnswers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/applications/{applicationId}/narrative-answers": {
         parameters: {
             query?: never;
@@ -3319,6 +3336,35 @@ export interface components {
             status: "declined";
             /** @enum {string} */
             reason: "no_profile_evidence" | "sensitive_question" | "answered_from_profile" | "not_grounded";
+        };
+        DecideChoiceAnswersRequest: {
+            questions: {
+                /** @description The extension's own handle for the field; echoed back. */
+                ref: string;
+                /** @description The employer's question exactly as the form shows it. Untrusted text. */
+                question: string;
+                /** @description The option labels exactly as the form shows them. Untrusted text. */
+                options: string[];
+            }[];
+        };
+        ChoiceAnswers: {
+            answers: components["schemas"]["ChoiceAnswer"][];
+        };
+        ChoiceAnswer: {
+            ref: string;
+            /** @constant */
+            status: "decided";
+            option: string;
+            probability: number;
+            confidence: number;
+            /** @enum {string} */
+            category: "standard" | "restricted";
+        } | {
+            ref: string;
+            /** @constant */
+            status: "left_to_candidate";
+            /** @enum {string} */
+            reason: "no_evidence" | "no_option_fits" | "low_confidence";
         };
         ApplicationRevisionRequest: {
             expectedRevision: number;
@@ -6520,6 +6566,42 @@ export interface operations {
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    decideChoiceAnswers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                applicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideChoiceAnswersRequest"];
+            };
+        };
+        responses: {
+            /** @description One decision, or the reason it was left to the candidate, per question */
+            200: {
+                headers: {
+                    "Cache-Control": "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChoiceAnswers"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["TooManyRequests"];
             503: components["responses"]["ServiceUnavailable"];
         };
     };

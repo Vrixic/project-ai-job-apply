@@ -85,6 +85,7 @@ function unavailableApplications(): ApplicationsApi {
     get: fail,
     resumePreview: fail,
     narrativeAnswer: fail,
+    choiceAnswers: fail,
     resumeFile: fail,
     prepareCoverLetter: fail,
     preparation: fail,

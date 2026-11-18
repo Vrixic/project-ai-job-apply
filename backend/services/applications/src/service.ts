@@ -14,6 +14,8 @@ import type {
   ApplicationTemporaryMaterialAuthorization,
   ApplicationTemporaryMaterialLocation,
   ApplicationUploadedResumeFile,
+  ChoiceAnswers,
+  DecideChoiceAnswersRequest,
   GenerateNarrativeAnswerRequest,
   NarrativeAnswer,
   ReconcileApplicationAttemptRequest,
@@ -26,6 +28,11 @@ import type {
   ConfirmationEvidence,
   ReconciliationEvidence,
 } from "./attempt.js";
+import {
+  type ApplicationChoiceAnswers,
+  ChoiceAnswerStateError,
+  ChoiceAnswersUnavailableError,
+} from "./choice-answer.js";
 import type { FieldValue, ProposedField } from "./field-policy.js";
 import {
   attemptMetrics,
@@ -34,12 +41,12 @@ import {
   safeRecord,
   versionToken,
 } from "./metrics.js";
-import { authorizeNativeMaterialRead, authorizeNativeResumeRead } from "./native-material-read.js";
 import {
   type ApplicationNarrativeAnswers,
   NarrativeAnswerStateError,
   NarrativeAnswersUnavailableError,
 } from "./narrative-answer.js";
+import { authorizeNativeMaterialRead, authorizeNativeResumeRead } from "./native-material-read.js";
 import {
   type ArtifactHashes,
   type CurrentBindings,
@@ -247,6 +254,12 @@ export interface ApplicationsApi {
     applicationId: string,
     request: GenerateNarrativeAnswerRequest,
   ): Promise<NarrativeAnswer>;
+  /** Decisions for choice questions the extension left to the candidate; never stored (ADR-061). */
+  choiceAnswers(
+    ownerUserId: string,
+    applicationId: string,
+    request: DecideChoiceAnswersRequest,
+  ): Promise<ChoiceAnswers>;
   /** The resume tailored for this application's job and whether the packet already carries it. */
   resumePreview(ownerUserId: string, applicationId: string): Promise<ApplicationResumePreview>;
   /** The tailored resume file the current packet carries; refused if it no longer matches. */
@@ -362,6 +375,8 @@ export interface ApplicationsServiceDependencies {
   coverLetters?: ApplicationCoverLetters;
   /** Drafts short free-text answers. Absent or switched off: the route reports unavailable. */
   narrativeAnswers?: ApplicationNarrativeAnswers;
+  /** Decides choice questions (ADR-061). Absent or switched off: the route reports unavailable. */
+  choiceAnswers?: ApplicationChoiceAnswers;
   /** Context-only intake; does not grant generated-content read capabilities. */
   preparationContext?: ApplicationCoverLetters["context"];
   temporaryMaterials?: ApplicationTemporaryMaterials;
@@ -574,6 +589,25 @@ export class ApplicationsService implements ApplicationsApi {
     if (["applied", "cancelled"].includes(view.application.status))
       throw new NarrativeAnswerStateError();
     return answers.generate({
+      ownerUserId,
+      applicationId,
+      canonicalJobId: view.application.canonicalJobId,
+      request: structuredClone(request),
+    });
+  }
+
+  async choiceAnswers(
+    ownerUserId: string,
+    applicationId: string,
+    request: DecideChoiceAnswersRequest,
+  ): Promise<ChoiceAnswers> {
+    // Ownership first: an application that is not the caller's is a 404, with no quota used.
+    const view = await this.dependencies.store.getApplication(ownerUserId, applicationId);
+    const answers = this.dependencies.choiceAnswers;
+    if (!answers) throw new ChoiceAnswersUnavailableError();
+    if (["applied", "cancelled"].includes(view.application.status))
+      throw new ChoiceAnswerStateError();
+    return answers.decide({
       ownerUserId,
       applicationId,
       canonicalJobId: view.application.canonicalJobId,
