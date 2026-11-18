@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-11-13. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
+Last updated: 2026-11-18. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
 
 ## Summary
 
@@ -16,6 +16,7 @@ Last updated: 2026-11-13. Program status: In progress. Started: 2026-07-27. Comp
 | D5 | Personalized outreach and application notifications | In progress | 2026-10-22 | Not completed | [Phase 5 tasks](phase-5-outreach-and-notifications.md) |
 | D6 | Mobile and paid launch | In progress | 2026-09-28 | Not completed | [Phase 6 tasks](phase-6-mobile-and-paid.md) |
 | D7 | Quality optimization, expansion, and optional employer product | In progress | 2026-10-22 | Not completed | [Phase 7 tasks](phase-7-quality-and-expansion.md) |
+| D8 | Job source discovery (last phase; starts on the owner's request) | Not started | Not started | Not completed | [Phase 8 tasks](phase-8-job-source-discovery.md) |
 
 ## D1 — Useful web product and canonical job catalog
 
@@ -271,6 +272,10 @@ D3.1-003 is complete: the Profile section, answer and import-draft contracts are
 ## D7 — Quality optimization, expansion, and optional employer product
 
 [Phase 7 tasks](phase-7-quality-and-expansion.md).
+
+## D8 - Job source discovery
+
+2026-11-18 owner request: add a last phase to evaluate a third-party job-search service as a company-discovery lead list only; catalog jobs keep coming from company boards through our own adapters. Not started; nothing was integrated. [Phase 8 tasks](phase-8-job-source-discovery.md).
 
 ## Current operating state
 

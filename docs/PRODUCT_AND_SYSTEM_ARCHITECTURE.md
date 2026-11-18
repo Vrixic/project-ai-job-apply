@@ -1587,6 +1587,13 @@ candidate independently security-tested and approved under the documented findin
   after material trust-boundary changes or serious control failure
 - Per-country, source, ATS, data-use, and employer-capability legal/privacy/security delta approval
 
+### Phase 8 - Job source discovery (last; starts on the owner's request)
+
+- Evaluate a third-party job-search service only as a company-discovery lead list
+- Catalog jobs keep coming from each company's own public board through our adapters, one
+  activation record per company; no posting content from the service is stored or shown
+- No candidate data sent to the service; no outreach, contact lookup, or third-party fit scoring
+
 ## 21. Team ownership
 
 Minimum durable responsibilities:
