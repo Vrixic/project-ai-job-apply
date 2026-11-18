@@ -126,6 +126,13 @@ how a choice is read (`selectionWritten`); and the Ashby fill now reports the fi
 Verified in real Chrome against the live page with every write blocked: the fill completes and exactly the approved
 option is checked. The live submission itself is still open.
 
+2026-11-18 (later, D3.2-009): on the same posting the AI answer icon did not appear on "Why are you interested in
+Mintlify?". The icon only offered itself for a question no packet key matches, and the mapper recognises "why this
+company" as `questions.why_company`, a key the Profile never holds an answer for (`explicit_each_time`), so the most
+common narrative question was skipped. Reproduced in real Chrome (the click spot hit the textarea, not the icon) and
+fixed in the change that carries this note: that key is now drafted like any other open question. Verified in real
+Chrome on the live page: the icon is drawn on the box. The live draft itself (the real model) is the owner's test.
+
 ## Risks and blockers
 
 | ID | Risk | Status |
