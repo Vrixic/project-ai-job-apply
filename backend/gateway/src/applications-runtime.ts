@@ -44,7 +44,11 @@ export interface ApplicationsRuntimeOptions {
   restrictedPackets?: ApplicationStoreOptions["restrictedPackets"];
   legacyReceipts?: ApplicationStoreOptions["legacyReceipts"];
   /** The candidate's saved Profile records as grounding evidence (ADR-052). */
-  profile: { listGroundingFacts(userId: string): Promise<readonly GraphFact[]> };
+  profile: {
+    listGroundingFacts(userId: string): Promise<readonly GraphFact[]>;
+    /** The saved Job preferences, for work-location answers (ADR-060). */
+    getPreferences?(userId: string): Promise<{ id: string; workModes: readonly string[] } | null>;
+  };
   /** Drafts short free-text answers (ADR-057). Absent: the route reports unavailable. */
   narrativeAnswers?: ApplicationNarrativeAnswers;
   /** The Documents runtime; without it packets carry no resume and the preview is unavailable. */
@@ -353,6 +357,14 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
       ? { vault: options.restrictedAnswers }
       : {}),
     facts: async (ownerUserId) => [...(await options.profile.listGroundingFacts(ownerUserId))],
+    ...(options.profile.getPreferences
+      ? {
+          workModes: async (ownerUserId: string) => {
+            const saved = await options.profile.getPreferences?.(ownerUserId);
+            return saved ? { id: saved.id, workModes: saved.workModes } : null;
+          },
+        }
+      : {}),
     jobRevision: (application: ApplicationRecord) =>
       jobRevision(application.canonicalJobId, clock()),
     artifacts: (ownerUserId, application) => artifacts(ownerUserId, application.canonicalJobId),

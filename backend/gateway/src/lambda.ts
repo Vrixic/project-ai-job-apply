@@ -81,7 +81,6 @@ import type {
 } from "aws-lambda";
 import { createGatewayApplication } from "./application.js";
 import { createApplicationsRuntime } from "./applications-runtime.js";
-import { narrativeAnswersFromEnvironment } from "./narrative-answers.js";
 import { S3CandidateDataExportDownloadSigner } from "./candidate-data-export-download-signer.js";
 import { S3CandidateDeletionConfirmationJournal } from "./candidate-deletion-confirmation-journal.js";
 import { createConfiguredD2TrustRuntime } from "./d2-trust-runtime.js";
@@ -92,6 +91,7 @@ import {
   ProfileJobContributionConsentVerifier,
 } from "./job-contribution-consent-verifier.js";
 import { deriveJobSearchCursorKeys, deriveModerationCursorKey } from "./job-search-cursor-key.js";
+import { narrativeAnswersFromEnvironment } from "./narrative-answers.js";
 import {
   nativeMaterialLocationsFromEnvironment,
   nativeResumeLocationsFromEnvironment,
@@ -1350,7 +1350,10 @@ async function createConfiguredApplication(
   });
   const applications = createApplicationsRuntime({
     client: createApplicationsDatabase(databaseUrl, { maxConnections: 2 }),
-    profile: profileSections,
+    profile: {
+      listGroundingFacts: (userId) => profileSections.listGroundingFacts(userId),
+      getPreferences: (userId) => store.getPreferences(userId),
+    },
     ...(narrativeAnswers ? { narrativeAnswers } : {}),
     ...(packetProtection ? { restrictedPackets: packetProtection } : {}),
     ...(legacyReceipts ? { legacyReceipts } : {}),

@@ -110,9 +110,55 @@ export function factValueFits(value: GraphFact["value"], valueType: FactValueTyp
   }
 }
 
+export type WorkMode = "remote" | "hybrid" | "on_site";
+const WORK_MODES: ReadonlySet<string> = new Set<WorkMode>(["remote", "hybrid", "on_site"]);
+
+/** The work modes the candidate saved on the Job preferences page (ADR-060). */
+export interface WorkModePreference {
+  /** The saved preference record; cited as the source of every derived answer. */
+  id: string;
+  workModes: readonly string[];
+}
+
+/**
+ * Yes/No answers to work-location questions, derived only from the work modes the candidate chose
+ * (ADR-060). Remote asks for Remote; hybrid for Hybrid or On-site, since someone who accepts the
+ * office full time accepts some office days; on-site for On-site. The field policy is
+ * `explicit_each_time`, so every one is shown for the candidate's confirmation before it is used.
+ * Locations and relocation are not read here: a location list does not say where the candidate lives
+ * or whether they would move, so those questions stay the candidate's.
+ */
+export function workModeFields(preference: WorkModePreference): ProposedField[] {
+  const known = preference.workModes.filter((mode) => WORK_MODES.has(mode));
+  if (
+    !uuidShape.test(preference.id) ||
+    known.length === 0 ||
+    known.length !== preference.workModes.length
+  )
+    return [];
+  const modes = new Set(known);
+  const answers: ReadonlyArray<readonly [string, boolean]> = [
+    ["job.remote_willingness", modes.has("remote")],
+    ["job.hybrid_willingness", modes.has("hybrid") || modes.has("on_site")],
+    ["job.onsite_willingness", modes.has("on_site")],
+  ];
+  return answers.map(([fieldKey, value]) => ({
+    fieldKey,
+    value,
+    origin: "confirmed_fact" as const,
+    sourceFactIds: [preference.id],
+    sourceConfirmed: true,
+    confidence: 1,
+  }));
+}
+
+const uuidShape = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+
 export interface FactBackedPacketSourceDependencies {
   /** The owner's current Profile facts, read through the Profile owner API. */
   facts(ownerUserId: string): Promise<readonly GraphFact[]>;
+  /** The work modes saved on the owner's Job preferences page, with the record they came from. */
+  workModes?(ownerUserId: string): Promise<WorkModePreference | null>;
   /** SHA-256 of the public job facts the packet is prepared against. */
   jobRevision(application: ApplicationRecord): Promise<string>;
   /** Hashes of the resume and cover-letter versions the candidate chose. */
@@ -201,6 +247,17 @@ export class FactBackedPacketSource implements PacketPreparationSource {
         sourceConfirmed: true,
         confidence: factConfidence(only),
       });
+    }
+    // Derived from the Job preferences page. A candidate entry or selected saved answer for the
+    // same field wins, and a failed read only means the candidate answers these questions.
+    let workMode: WorkModePreference | null = null;
+    try {
+      workMode = (await this.dependencies.workModes?.(input.ownerUserId)) ?? null;
+    } catch {
+      workMode = null;
+    }
+    for (const field of workMode ? workModeFields(workMode) : []) {
+      if (!entered.has(field.fieldKey)) fields.push(field);
     }
     for (const selection of selections) {
       const vault = this.dependencies.vault;

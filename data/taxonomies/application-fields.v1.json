@@ -185,6 +185,27 @@
       "answerPolicy": "confirmed_fact"
     },
     {
+      "key": "job.remote_willingness",
+      "label": "Open to remote work",
+      "valueType": "boolean",
+      "sensitivity": "standard",
+      "answerPolicy": "explicit_each_time"
+    },
+    {
+      "key": "job.hybrid_willingness",
+      "label": "Open to a hybrid schedule",
+      "valueType": "boolean",
+      "sensitivity": "standard",
+      "answerPolicy": "explicit_each_time"
+    },
+    {
+      "key": "job.onsite_willingness",
+      "label": "Willing to work on-site in an office",
+      "valueType": "boolean",
+      "sensitivity": "standard",
+      "answerPolicy": "explicit_each_time"
+    },
+    {
       "key": "authorization.us_authorized",
       "label": "Authorized to work in the United States",
       "valueType": "boolean",
