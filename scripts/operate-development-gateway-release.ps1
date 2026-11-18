@@ -610,6 +610,7 @@ function Assert-GatewayCapturedSeedInputs {
       "notifications_enabled",
       "notifications_delivery_enabled",
       "narrative_answers_enabled",
+      "choice_answers_enabled",
       "uploaded_resume_attachment_enabled"
     )
   foreach ($name in $DeclaredVariableNames) {
