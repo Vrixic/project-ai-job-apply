@@ -1,25 +1,19 @@
 import { buildFillPlan, type PacketValue } from "@ai-job-apply/ats-sdk/plan";
+import { isActionable, isOverlayChoice } from "../actionable";
 import { RUN_BUDGET_MS } from "../execution-budget";
 import type { ApplicationInspection, FillAuthority } from "../providers/types";
 
 const unavailable = () => new Error("AshbyFillUnavailable");
 export const ashbyAdapterId = "ashby-application-v1";
 
-function requireActionable(control: Element, view: Window) {
-  if (control.hasAttribute("readonly") || control.matches(":disabled")) throw unavailable();
-  for (let ancestor: Element | null = control; ancestor; ancestor = ancestor.parentElement) {
-    const style = view.getComputedStyle(ancestor);
-    if (
-      ancestor.hasAttribute("hidden") ||
-      ancestor.hasAttribute("inert") ||
-      ancestor.getAttribute("aria-hidden") === "true" ||
-      style.display === "none" ||
-      style.visibility === "hidden" ||
-      style.visibility === "collapse" ||
-      style.opacity === "0"
-    )
-      throw unavailable();
+/** The control must be one the candidate could use; a click target is also hit-tested. */
+function requireActionable(control: Element, view: Window & typeof globalThis, click = false) {
+  // Ashby's multiple-choice radios are real inputs laid over a drawn circle at opacity 0, and
+  // the one chosen may be below the fold: bring it into view (the view moves, no value changes).
+  if (click && isOverlayChoice(control, view)) {
+    control.scrollIntoView?.({ block: "center", inline: "nearest" });
   }
+  if (!isActionable(control, view, { hitTest: click })) throw unavailable();
 }
 
 const sleep = (milliseconds: number) =>
@@ -30,8 +24,13 @@ export async function fillAshbyFields(
   inspection: ApplicationInspection,
   packet: readonly PacketValue[],
   authority: FillAuthority,
-): Promise<{ filled: readonly string[]; reviewRequired: boolean }> {
+): Promise<{
+  filled: readonly string[];
+  selected: readonly string[];
+  reviewRequired: boolean;
+}> {
   const filled: string[] = [];
+  const selected: string[] = [];
   const deadline = authority.deadline;
   const current = () =>
     !authority.signal.aborted &&
@@ -39,7 +38,7 @@ export async function fillAshbyFields(
     Date.now() < deadline &&
     deadline <= Date.now() + (authority.maximumMs ?? RUN_BUDGET_MS) &&
     authority.registry.status(ashbyAdapterId, authority.variantId, new Date()).mode === "autofill";
-  if (!current()) return { filled, reviewRequired: true };
+  if (!current()) return { filled, selected, reviewRequired: true };
   const plan = buildFillPlan(inspection.form, structuredClone(packet), {
     resume: false,
     coverLetter: false,
@@ -55,6 +54,7 @@ export async function fillAshbyFields(
   try {
     for (const action of plan.actions) {
       if (action.kind !== "fill" && action.kind !== "select") continue;
+      authority.onField?.(action.fieldKey);
       await Promise.race([authority.revalidateApproval(), stopped]);
       if (!current()) throw unavailable();
       const controls = inspection.resolve(action.ref);
@@ -75,7 +75,7 @@ export async function fillAshbyFields(
         const control = controls[index];
         if (matching.length !== 1 || !control || controls.length !== field.options.length)
           throw unavailable();
-        requireActionable(control, view);
+        requireActionable(control, view, true);
         if (control instanceof view.HTMLButtonElement) {
           control.click();
           // The page records the choice on its next render.
@@ -124,6 +124,7 @@ export async function fillAshbyFields(
         } else throw unavailable();
       }
       filled.push(action.ref);
+      if (action.kind === "select") selected.push(action.ref);
       const requireWritten = () => {
         if (!matchesApproved()) throw unavailable();
       };
@@ -142,13 +143,14 @@ export async function fillAshbyFields(
     }
     return {
       filled,
+      selected,
       reviewRequired:
         plan.requiresTakeover || plan.actions.some((action) => action.kind === "require_user"),
     };
   } catch {
     if (authority.throwOnFailure) throw unavailable();
     // Partial effects require review. Never replay or restore a previous value automatically.
-    return { filled, reviewRequired: true };
+    return { filled, selected, reviewRequired: true };
   } finally {
     clearTimeout(timer);
     authority.signal.removeEventListener("abort", abort);

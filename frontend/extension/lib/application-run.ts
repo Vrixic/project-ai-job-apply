@@ -1,6 +1,7 @@
 import type { ApplicationSubmissionResultRequest } from "@ai-job-apply/api-contracts";
 import { buildFillPlan, type PacketValue } from "@ai-job-apply/ats-sdk/plan";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
+import { isActionable } from "./actionable";
 import { runBudgetMs } from "./execution-budget";
 import { writtenValueMatches } from "./field-value";
 import type { TransferredNativeFile } from "./native-material-transfer";
@@ -143,21 +144,9 @@ export async function executeApplication(options: {
     await Promise.race([options.revalidateDispatched(), stopped]);
     current();
   };
+  // Nothing here clicks: a control is only judged to be one the candidate could use.
   const actionable = (element: Element) => {
-    if (!view || element.matches(":disabled") || element.hasAttribute("readonly"))
-      throw unavailable();
-    for (let node: Element | null = element; node; node = node.parentElement) {
-      const style = view.getComputedStyle(node);
-      if (
-        node.hasAttribute("hidden") ||
-        node.hasAttribute("inert") ||
-        node.getAttribute("aria-hidden") === "true" ||
-        style.display === "none" ||
-        ["hidden", "collapse"].includes(style.visibility) ||
-        style.opacity === "0"
-      )
-        throw unavailable();
-    }
+    if (!view || !isActionable(element, view)) throw unavailable();
   };
   const confirmationText = profile.confirmationText
     ? new RegExp(profile.confirmationText, "iu")
@@ -283,6 +272,13 @@ export async function executeApplication(options: {
       for (const action of expectedFills) {
         detail = action.fieldKey;
         const controls = inspection?.resolve(action.ref);
+        if (action.kind === "select" && provider.selectionWritten) {
+          // Buttons or radios, not one <select>: the provider says whether the option is chosen.
+          if (!controls || controls.length === 0) throw unavailable();
+          for (const member of controls) actionable(member);
+          if (!provider.selectionWritten(controls, action.option)) throw unavailable();
+          continue;
+        }
         const control = controls?.[0];
         if (controls?.length !== 1 || !control) throw unavailable();
         actionable(control);

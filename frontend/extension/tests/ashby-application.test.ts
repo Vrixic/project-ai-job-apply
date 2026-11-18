@@ -349,7 +349,7 @@ describe("Ashby execution surface", () => {
     const doc = mount();
     const auth = { ...authority(), registry: new AdapterRegistry() };
     const result = await ashbyProvider.fill(inspectAshbyApplication(doc, URL), [], auth);
-    expect(result).toEqual({ filled: [], reviewRequired: true });
+    expect(result).toEqual({ filled: [], selected: [], reviewRequired: true });
     expect(auth.revalidateApproval).not.toHaveBeenCalled();
   });
 });
