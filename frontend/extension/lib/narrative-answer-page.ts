@@ -114,6 +114,13 @@ export function usable(box: HTMLTextAreaElement, view: Window): boolean {
   return rect.width >= 120 && rect.height >= 36;
 }
 
+/**
+ * Fields the packet recognizes but the Profile never holds an answer for: the candidate writes them
+ * each time (`explicit_each_time`), so the answer icon may draft them. "Why are you interested in
+ * us?" is the common one; it maps to a key, yet nothing fills it.
+ */
+const WRITTEN_EACH_TIME = new Set(["questions.why_company"]);
+
 /** Only an open question the candidate writes themselves; fields the Profile answers are skipped. */
 export function isOpenQuestion(box: HTMLTextAreaElement, question: string): boolean {
   if (question.length < 8 || question.length > QUESTION_MAX || NOT_AN_ANSWER.test(question))
@@ -131,7 +138,10 @@ export function isOpenQuestion(box: HTMLTextAreaElement, question: string): bool
     ],
     challengePresent: false,
   });
-  return mapping?.fieldKey === null;
+  return (
+    mapping?.fieldKey === null ||
+    (mapping?.fieldKey !== undefined && WRITTEN_EACH_TIME.has(mapping.fieldKey))
+  );
 }
 
 export function writeValue(box: HTMLTextAreaElement, value: string) {
