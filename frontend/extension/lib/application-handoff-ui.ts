@@ -1,6 +1,12 @@
 import { followActiveTab } from "./active-tab-follow";
 import type { ApprovedHandoff } from "./application-handoff";
 import { FORM_CAPTURE_FAILURE, HANDOFF_FAILURE } from "./application-handoff";
+import {
+  type ChoiceResultsView,
+  choiceSummary,
+  isChoiceResult,
+  showChoiceResults,
+} from "./choice-results";
 import { extensionConfiguration } from "./config";
 import { type DraftOffer, offerDrafts } from "./draft-choice";
 import { isTokenRenewal } from "./session-change";
@@ -67,6 +73,7 @@ export function mountApplicationHandoff() {
   let busy = false;
   /** The draft question on screen, if any, so Clear and a closing panel can withdraw it. */
   let pendingOffer: DraftOffer | undefined;
+  let choiceView: ChoiceResultsView | undefined;
   /** The page the application was last prepared for: the tab, and its address once visible. */
   let preparedFor: string | undefined;
   const activeTabKey = async () => {
@@ -148,6 +155,74 @@ export function mountApplicationHandoff() {
         // candidate first, before anything is filled. Nothing has started or been recorded.
         let shown: "select" | "clear" | "fill" | "apply" = action;
         let draftNote = "";
+        let choiceText = "";
+        // The required choice questions the fill would leave to the candidate (ADR-061): AI decides
+        // them before anything is filled. Standard answers are chosen on the page for the candidate
+        // to check; a restricted one is only proposed and is chosen when they confirm it. Quiet when
+        // AI is unavailable: the questions are theirs, as before. Whatever AI chose is reviewed by
+        // the candidate, so a submit run becomes a fill for review.
+        if (
+          (action === "apply" || action === "fill") &&
+          response?.stage === "page-not-ready" &&
+          Number.isSafeInteger(response.choosable) &&
+          response.choosable > 0
+        ) {
+          choiceView?.dispose();
+          choiceView = undefined;
+          status.textContent = "Asking AI about the choice questions you would otherwise answer...";
+          let outcome: unknown;
+          try {
+            outcome = await chrome.runtime.sendMessage({
+              action: "application_native_choices",
+              reviewLink: input.value,
+            });
+          } catch {
+            outcome = undefined;
+          }
+          const result =
+            (outcome as { ok?: unknown } | undefined)?.ok === true && isChoiceResult(outcome)
+              ? outcome
+              : undefined;
+          if (result) {
+            choiceText = choiceSummary(result);
+            if (result.applied.length || result.proposals.length) {
+              const confirmed = { chosen: 0, declined: 0 };
+              const view = showChoiceResults(status, result, async (ref, accept) => {
+                const answer = await chrome.runtime.sendMessage({
+                  action: "application_native_choice_confirm",
+                  reviewLink: input.value,
+                  ref,
+                  accept,
+                });
+                const chosen = answer?.ok === true && answer.applied === true;
+                if (chosen) confirmed.chosen += 1;
+                else confirmed.declined += 1;
+                return chosen;
+              });
+              choiceView = view;
+              if (result.proposals.length) {
+                status.textContent =
+                  "Confirm or skip the restricted answers below. The fill starts after that.";
+                if ((await view.settled) === "cancelled") {
+                  status.textContent = "Cancelled. Nothing was filled, submitted or recorded.";
+                  return;
+                }
+                // Every restricted answer is settled now: say what was chosen, not what waited.
+                choiceText = choiceSummary(result, confirmed);
+              }
+            }
+          }
+          shown = "fill";
+          status.textContent =
+            "Filling in your application. Watch the employer page; nothing is submitted.";
+          response = await chrome.runtime.sendMessage({
+            action: "application_native_apply",
+            reviewLink: input.value,
+            fillOnly: true,
+            skipChoices: true,
+            ...(action === "apply" ? { skipDraftOffer: true } : {}),
+          });
+        }
         if (
           (action === "apply" || action === "fill") &&
           response?.stage === "page-not-ready" &&
@@ -234,7 +309,7 @@ export function mountApplicationHandoff() {
         if (shown === "fill") {
           status.textContent =
             response.ok && response.result === "challenge_required"
-              ? `Filled for your review. Nothing was submitted. Check the employer page; submit it yourself or leave it.${draftNote}${fillNotes(response.notes)}`
+              ? `Filled for your review. Nothing was submitted. Check the employer page; submit it yourself or leave it.${draftNote}${fillNotes(response.notes)}${choiceText}`
               : `The page could not be filled completely. Nothing was submitted. Check the employer page and try again.${where}${pageRun}`;
           return;
         }
@@ -417,6 +492,8 @@ export function mountApplicationHandoff() {
     }, WORKER_HEARTBEAT_MS);
   function discard(message = "") {
     pendingOffer?.cancel();
+    choiceView?.dispose();
+    choiceView = undefined;
     generation++;
     clearTimeout(timer);
     clearTimeout(preparingTimer);

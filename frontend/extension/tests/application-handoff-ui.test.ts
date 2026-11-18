@@ -225,7 +225,11 @@ describe("manual handoff UI", () => {
     const actions = () =>
       send.mock.calls
         .map(([message]) => message as { action: string; fillOnly?: boolean })
-        .filter((message) => message.action.startsWith("application_native_"));
+        .filter(
+          (message) =>
+            message.action.startsWith("application_native_") &&
+            !message.action.startsWith("application_native_choice"),
+        );
     const script = (...replies: unknown[]) => {
       const queue = [...replies];
       send.mockImplementation(async (message) =>
@@ -482,7 +486,11 @@ describe("manual handoff UI", () => {
         await flush();
         const actions = send.mock.calls
           .map(([message]) => message.action as string)
-          .filter((name) => name.startsWith("application_native_"));
+          .filter(
+            (name) =>
+              name.startsWith("application_native_") &&
+              !name.startsWith("application_native_choice"),
+          );
         expect(actions).toEqual([
           "application_native_apply",
           "application_native_select",

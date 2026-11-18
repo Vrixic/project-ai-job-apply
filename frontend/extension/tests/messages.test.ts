@@ -90,4 +90,73 @@ describe("extension message boundary", () => {
       reviewLink,
     });
   });
+
+  it("accepts the choice-step flag only on a fill-only apply, with exact values", () => {
+    const reviewLink = "https://app.example/review";
+    expect(
+      parseExtensionMessage({
+        action: "application_native_apply",
+        reviewLink,
+        fillOnly: true,
+        skipChoices: true,
+      }),
+    ).toEqual({
+      action: "application_native_apply",
+      reviewLink,
+      fillOnly: true,
+      skipChoices: true,
+    });
+    expect(
+      parseExtensionMessage({
+        action: "application_native_apply",
+        reviewLink,
+        fillOnly: true,
+        skipDraftOffer: true,
+        skipChoices: true,
+      }),
+    ).toEqual({
+      action: "application_native_apply",
+      reviewLink,
+      fillOnly: true,
+      skipDraftOffer: true,
+      skipChoices: true,
+    });
+    for (const bad of [
+      { action: "application_native_apply", reviewLink, skipChoices: true },
+      { action: "application_native_apply", reviewLink, fillOnly: true, skipChoices: "yes" },
+      { action: "application_native_apply", reviewLink, fillOnly: true, skipChoices: false },
+      { action: "application_native_apply", reviewLink, fillOnly: true, answers: [] },
+    ])
+      expect(parseExtensionMessage(bad)).toBeUndefined();
+  });
+
+  it("accepts a restricted-answer confirmation only with a link, a plain ref and a boolean", () => {
+    const reviewLink = "https://app.example/review";
+    expect(
+      parseExtensionMessage({
+        action: "application_native_choice_confirm",
+        reviewLink,
+        ref: "f4",
+        accept: true,
+      }),
+    ).toEqual({ action: "application_native_choice_confirm", reviewLink, ref: "f4", accept: true });
+    expect(parseExtensionMessage({ action: "application_native_choices", reviewLink })).toEqual({
+      action: "application_native_choices",
+      reviewLink,
+    });
+    for (const bad of [
+      { action: "application_native_choice_confirm", reviewLink, ref: "f4" },
+      { action: "application_native_choice_confirm", reviewLink, ref: "f 4", accept: true },
+      { action: "application_native_choice_confirm", reviewLink, ref: "f4", accept: "yes" },
+      {
+        action: "application_native_choice_confirm",
+        reviewLink,
+        ref: "f4",
+        accept: true,
+        option: "Yes",
+      },
+      { action: "application_native_choices", reviewLink, answers: [] },
+    ])
+      expect(parseExtensionMessage(bad)).toBeUndefined();
+  });
 });

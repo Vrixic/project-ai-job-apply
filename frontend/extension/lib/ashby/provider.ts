@@ -1,5 +1,5 @@
 import type { ApplicationProvider } from "../providers/types";
-import { ashbyAdapterId, fillAshbyFields } from "./fill";
+import { ashbyAdapterId, chooseAshbyOption, fillAshbyFields } from "./fill";
 import {
   ashbyApplicationIdentity,
   ashbyChallengePresent,
@@ -62,6 +62,7 @@ export const ashbyProvider: ApplicationProvider = {
   challengePresent: ashbyChallengePresent,
   inspect: inspectAshbyApplication,
   fill: fillAshbyFields,
+  chooseOption: chooseAshbyOption,
   /** A Yes/No button pair or a radio group: exactly the approved option is the one chosen. */
   selectionWritten(controls, option) {
     const view = controls[0]?.ownerDocument.defaultView;

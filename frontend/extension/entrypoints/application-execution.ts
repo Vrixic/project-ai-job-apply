@@ -1,6 +1,7 @@
 import type { ApplicationExecutionCommand } from "@ai-job-apply/api-contracts";
 import {
   validateApplicationExecutionCancel,
+  validateApplicationExecutionChoicesApply,
   validateApplicationExecutionCommand,
   validateApplicationExecutionDraft,
   validateApplicationExecutionInspect,
@@ -9,18 +10,29 @@ import {
 import { buildFillPlan } from "@ai-job-apply/ats-sdk/plan";
 import { executeApplication, incompleteCandidateQuestions } from "../lib/application-run";
 import { FILL_ONLY_BUDGET_MS, runBudgetMs } from "../lib/execution-budget";
-import type { TransferredNativeFile } from "../lib/native-material-transfer";
 import { draftableQuestion, writeValue } from "../lib/narrative-answer-page";
 import {
   NARRATIVE_ANSWER_REQUEST,
   type NarrativeAnswerReply,
 } from "../lib/narrative-answer-protocol";
+import type { TransferredNativeFile } from "../lib/native-material-transfer";
 import { applicationExecutionRegistry, providerForUrl } from "../lib/providers";
 import { questionLabels } from "../lib/question-labels";
 
 /** Drafting several questions takes a few seconds each; the whole step is bounded. */
 const DRAFT_BUDGET_MS = 120_000;
 const MAXIMUM_DRAFTS = 5;
+/** Reading the unanswered choices, or choosing the decided ones, is bounded to a minute. */
+const CHOICE_BUDGET_MS = 60_000;
+
+async function sha256Hex(text: string): Promise<string> {
+  const bytes = new TextEncoder().encode(text);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  bytes.fill(0);
+  const hex = [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  digest.fill(0);
+  return hex;
+}
 
 // Isolated-world lifetime only. Reinjection/restart cannot create a second effect listener.
 const installed = "__applyDashApplicationExecutionV1";
@@ -28,6 +40,7 @@ if (!Object.hasOwn(globalThis, installed)) {
   Object.defineProperty(globalThis, installed, { value: true });
   let spent = false;
   let drafting = false;
+  let choosing = false;
   let active:
     | {
         nonce: string;
@@ -86,6 +99,7 @@ if (!Object.hasOwn(globalThis, installed)) {
           let waiting: string[] | undefined;
           let draftable = 0;
           let draftNoAi = false;
+          let choices: { ref: string; question: string; options: string[] }[] | undefined;
           if (message.readiness) {
             const kinds = message.readiness.fileKinds;
             const plan = buildFillPlan(inspection.form, message.readiness.fields, {
@@ -107,6 +121,28 @@ if (!Object.hasOwn(globalThis, installed)) {
               draftable++;
               draftNoAi ||= draft.noAi;
             }
+            // And the required choice questions (radio, Yes/No) the fill will leave unanswered, for a
+            // provider that can choose an option: the candidate's own to answer, or AI's with their
+            // review (ADR-061). Nothing the packet answers is among them.
+            if (provider.chooseOption) {
+              choices = questions
+                .flatMap((question) => {
+                  const field = inspection.form.fields.find(
+                    (candidate) => candidate.ref === question.ref,
+                  );
+                  const text = question.label.replace(/\s+/gu, " ").trim().slice(0, 1000);
+                  return field?.required &&
+                    field.type === "radio" &&
+                    field.options.length >= 2 &&
+                    field.options.length <= 12 &&
+                    new Set(field.options).size === field.options.length &&
+                    field.options.every((option) => option.length >= 1 && option.length <= 200) &&
+                    text.length >= 3
+                    ? [{ ref: question.ref, question: text, options: [...field.options] }]
+                    : [];
+                })
+                .slice(0, 10);
+            }
           }
           return {
             schema: "application-execution-inspection.v1",
@@ -120,6 +156,7 @@ if (!Object.hasOwn(globalThis, installed)) {
                   waiting: questionLabels(waiting),
                   draftable: Math.min(draftable, 200),
                   draftNoAi,
+                  ...(choices?.length ? { choices } : {}),
                 }),
           };
         } finally {
@@ -194,6 +231,67 @@ if (!Object.hasOwn(globalThis, installed)) {
         } finally {
           inspection.dispose();
           drafting = false;
+        }
+      })().then(respond, () => respond({ error: "ApplicationExecutionUnavailable" }));
+      return true;
+    }
+    if (validateApplicationExecutionChoicesApply(message)) {
+      void (async () => {
+        if (
+          spent ||
+          active ||
+          drafting ||
+          choosing ||
+          message.deadline <= Date.now() ||
+          message.deadline > Date.now() + CHOICE_BUDGET_MS ||
+          location.href !== message.employerUrl
+        )
+          throw Error("ApplicationExecutionUnavailable");
+        const provider = providerForUrl(message.employerUrl);
+        if (!provider?.chooseOption) throw Error("ApplicationExecutionUnavailable");
+        choosing = true;
+        const inspection = provider.inspect(document, message.employerUrl);
+        const controller = new AbortController();
+        const timer = setTimeout(
+          () => controller.abort(),
+          Math.max(0, message.deadline - Date.now()),
+        );
+        try {
+          // The refs mean what they meant when the questions were read, or nothing is touched.
+          if ((await sha256Hex(inspection.structure)) !== message.formHash)
+            throw Error("ApplicationExecutionUnavailable");
+          const applied: string[] = [];
+          let skipped = 0;
+          for (const answer of message.answers) {
+            const field = inspection.form.fields.find((candidate) => candidate.ref === answer.ref);
+            if (
+              !field?.required ||
+              applied.includes(answer.ref) ||
+              Date.now() >= message.deadline ||
+              location.href !== message.employerUrl
+            ) {
+              skipped++;
+              continue;
+            }
+            const done = await provider
+              .chooseOption(inspection, answer.ref, answer.option, {
+                signal: controller.signal,
+                deadline: message.deadline,
+              })
+              .catch(() => false);
+            if (done) applied.push(answer.ref);
+            else skipped++;
+          }
+          return {
+            schema: "application-execution-choices-apply-result.v1",
+            nonce: message.nonce,
+            applied,
+            skipped,
+          };
+        } finally {
+          clearTimeout(timer);
+          inspection.dispose();
+          choosing = false;
         }
       })().then(respond, () => respond({ error: "ApplicationExecutionUnavailable" }));
       return true;

@@ -1,19 +1,21 @@
 import {
   validateApplication,
   validateApplicationApplyIntent,
+  validateApplicationExecutionChoicesApplyResult,
   validateApplicationExecutionDraftResult,
   validateApplicationUploadedResumeFile,
 } from "@ai-job-apply/api-contracts/browser-validators";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 import { executeApprovedApplication } from "./application-executor";
 import { parseHandoffLink, readApprovedHandoff, readJson } from "./application-handoff";
+import { decideChoiceAnswers } from "./choice-answer-api";
+import { createNarrativeAnswerSession } from "./narrative-answer-session";
 import {
   createNativeMaterialTransfer,
   type NativeTransferSelection,
   type TransferredNativeFile,
   UPLOADED_RESUME_MAXIMUM_BYTES,
 } from "./native-material-transfer";
-import { createNarrativeAnswerSession } from "./narrative-answer-session";
 import { sameNativeTransferBinding } from "./native-transfer-binding";
 import { providerForUrl } from "./providers";
 import { isTokenRenewal } from "./session-change";
@@ -30,6 +32,11 @@ const unavailable = () => Error("NativeMaterialTransferUnavailable");
 /** The whole drafting step for one page: a few seconds a question, up to five questions. */
 const DRAFT_BUDGET_MS = 110_000;
 
+/** Reading the unanswered choices, asking the Gateway and choosing the decided ones for one page. */
+const CHOICE_STEP_BUDGET_MS = 90_000;
+/** A restricted proposal waits this long for the candidate to confirm it. */
+const PROPOSAL_MS = 30 * 60_000;
+
 /** How long the panel waits for the website to arm the extension before it stops saying so. */
 const PREPARING_MS = 90_000;
 
@@ -42,6 +49,26 @@ export function installNativeTransferBackground(options: {
 }) {
   let generation = 0;
   let selecting: AbortController | undefined;
+  // Restricted decisions (ADR-061) are only proposals until the candidate confirms each one. In
+  // memory only, bound to the exact page they were made for, and gone with the selection.
+  // The required choice questions the page showed before the fill (ADR-061), kept for the choice
+  // step. Employer text only; in memory only, for this exact page and a few minutes.
+  let pendingChoices:
+    | {
+        page: string;
+        formHash: string;
+        expiresAt: number;
+        questions: { ref: string; question: string; options: string[] }[];
+      }
+    | undefined;
+  let proposals:
+    | {
+        page: string;
+        formHash: string;
+        expiresAt: number;
+        items: Map<string, { question: string; option: string }>;
+      }
+    | undefined;
   // The website asked for the panel when Apply was pressed, and has not armed the extension yet.
   // The panel shows that it is preparing instead of an empty review link. In memory only.
   let preparingUntil = 0;
@@ -128,8 +155,58 @@ export function installNativeTransferBackground(options: {
     return true;
   });
 
+  const hexNonce = () => {
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    bytes.fill(0);
+    return hex;
+  };
+
+  /** The page the candidate prepared, proven again (approval, packet, page), with the script in it. */
+  async function provenPage(
+    reviewLink: string,
+    signal: AbortSignal,
+    step: (where: string) => void,
+  ) {
+    const link = parseHandoffLink(reviewLink, options.webOrigin);
+    const open = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tabId = open.length === 1 ? open[0]?.id : undefined;
+    const held = link && tabId !== undefined ? transfer.holds(link.href, tabId) : undefined;
+    if (!held) throw unavailable();
+    step("proof");
+    const proof = await protectedSelection(
+      reviewLink,
+      held.page.tabId,
+      signal,
+      held.page.documentId,
+    );
+    if (proof.applicationId !== held.page.applicationId) throw unavailable();
+    step("script");
+    await chrome.scripting.executeScript({
+      target: { tabId: held.page.tabId, documentIds: [held.page.documentId] },
+      files: ["application-execution.js"],
+      world: "ISOLATED",
+    });
+    return held;
+  }
+
+  function messagePage(
+    page: { tabId: number; documentId: string },
+    message: unknown,
+    signal: AbortSignal,
+  ): Promise<unknown> {
+    return Promise.race([
+      chrome.tabs.sendMessage(page.tabId, message, { documentId: page.documentId, frameId: 0 }),
+      new Promise<never>((_, reject) => {
+        signal.addEventListener("abort", () => reject(unavailable()), { once: true });
+      }),
+    ]);
+  }
+
   // Selecting the page again keeps the pending Apply: only identity changes and Clear end it.
   function clearSelection() {
+    proposals = undefined;
+    pendingChoices = undefined;
     generation++;
     selecting?.abort();
     selecting = undefined;
@@ -543,6 +620,164 @@ export function installNativeTransferBackground(options: {
         clearTimeout(timer);
       }
     },
+    /**
+     * Choice questions the page still shows unanswered (ADR-061). The same exact page is proven again,
+     * its unanswered required choices are read, the Gateway decides them, and the standard decisions
+     * are chosen on the page. A restricted decision is only a proposal here: nothing restricted is
+     * chosen until the candidate confirms it. Every failure is quiet: the questions stay the
+     * candidate's. Question text is the employer's own and is returned for the panel to show as text.
+     */
+    async choices(reviewLink: string) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), CHOICE_STEP_BUDGET_MS);
+      let where = "choices-selection";
+      try {
+        const held = await provenPage(reviewLink, controller.signal, (step) => {
+          where = `choices-${step}`;
+        });
+        where = "choices-read";
+        const pending = pendingChoices;
+        pendingChoices = undefined;
+        const page = `${held.page.tabId}:${held.page.documentId}`;
+        if (!pending || pending.page !== page || Date.now() >= pending.expiresAt)
+          return { ok: true, asked: 0, applied: [], proposals: [], left: 0 };
+        const read = { formHash: pending.formHash, questions: pending.questions };
+        const asked = read.questions.length;
+        const none = { ok: true, asked, applied: [], proposals: [], left: asked };
+        where = "choices-decide";
+        let session: Awaited<ReturnType<typeof options.identity>>;
+        try {
+          session = await options.identity(controller.signal);
+        } catch {
+          return { ...none, unavailable: "signin" };
+        }
+        const decided = await decideChoiceAnswers({
+          apiOrigin: options.apiOrigin,
+          accessToken: session.accessToken,
+          applicationId: held.page.applicationId,
+          questions: read.questions,
+          signal: controller.signal,
+        });
+        if (!decided.ok) return { ...none, unavailable: decided.reason };
+        const byRef = new Map(read.questions.map((question) => [question.ref, question.question]));
+        const standard: { ref: string; option: string }[] = [];
+        const restricted = new Map<
+          string,
+          { question: string; option: string; probability: number }
+        >();
+        for (const answer of decided.answers.answers) {
+          if (answer.status !== "decided") continue;
+          const question = byRef.get(answer.ref) ?? "";
+          if (answer.category === "standard")
+            standard.push({ ref: answer.ref, option: answer.option });
+          else
+            restricted.set(answer.ref, {
+              question,
+              option: answer.option,
+              probability: answer.probability,
+            });
+        }
+        const chosen: { ref: string; option: string }[] = [];
+        if (standard.length) {
+          where = "choices-apply";
+          const applyNonce = hexNonce();
+          const reply = await messagePage(
+            held.page,
+            {
+              schema: "application-execution-choices-apply.v1",
+              nonce: applyNonce,
+              employerUrl: held.page.employerUrl,
+              deadline: Date.now() + 55_000,
+              formHash: read.formHash,
+              answers: standard,
+            },
+            controller.signal,
+          );
+          if (!validateApplicationExecutionChoicesApplyResult(reply) || reply.nonce !== applyNonce)
+            throw unavailable();
+          for (const ref of reply.applied) {
+            const option = standard.find((entry) => entry.ref === ref)?.option;
+            if (option !== undefined) chosen.push({ ref, option });
+          }
+        }
+        proposals = restricted.size
+          ? {
+              page: `${held.page.tabId}:${held.page.documentId}`,
+              formHash: read.formHash,
+              expiresAt: Date.now() + PROPOSAL_MS,
+              items: new Map(
+                [...restricted].map(([ref, entry]) => [
+                  ref,
+                  { question: entry.question, option: entry.option },
+                ]),
+              ),
+            }
+          : undefined;
+        return {
+          ok: true,
+          asked,
+          applied: chosen.map(({ ref, option }) => ({ question: byRef.get(ref) ?? "", option })),
+          proposals: [...restricted].map(([ref, entry]) => ({
+            ref,
+            question: entry.question,
+            option: entry.option,
+            probability: Math.round(entry.probability * 100) / 100,
+          })),
+          left: asked - chosen.length - restricted.size,
+        };
+      } catch {
+        throw Object.assign(unavailable(), { stage: where });
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    /**
+     * The candidate's answer to one restricted proposal (ADR-061). Only a proposal this extension made
+     * for this exact page, and has not yet had answered, can be confirmed; the page checks it against
+     * its own form again before anything is chosen. Declining just forgets it.
+     */
+    async confirmChoice(reviewLink: string, ref: string, accept: boolean) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), CHOICE_STEP_BUDGET_MS);
+      let where = "confirm-selection";
+      try {
+        const held = await provenPage(reviewLink, controller.signal, (step) => {
+          where = `confirm-${step}`;
+        });
+        const pending = proposals;
+        const item = pending?.items.get(ref);
+        if (
+          !pending ||
+          !item ||
+          pending.page !== `${held.page.tabId}:${held.page.documentId}` ||
+          Date.now() >= pending.expiresAt
+        )
+          return { ok: true, applied: false };
+        pending.items.delete(ref);
+        if (!accept) return { ok: true, applied: false };
+        where = "confirm-apply";
+        const nonce = hexNonce();
+        const reply = await messagePage(
+          held.page,
+          {
+            schema: "application-execution-choices-apply.v1",
+            nonce,
+            employerUrl: held.page.employerUrl,
+            deadline: Date.now() + 55_000,
+            formHash: pending.formHash,
+            answers: [{ ref, option: item.option }],
+          },
+          controller.signal,
+        );
+        if (!validateApplicationExecutionChoicesApplyResult(reply) || reply.nonce !== nonce)
+          throw unavailable();
+        return { ok: true, applied: reply.applied.includes(ref) };
+      } catch {
+        throw Object.assign(unavailable(), { stage: where });
+      } finally {
+        clearTimeout(timer);
+      }
+    },
     /** The link the popup may offer after Apply was pressed on the website. No content. */
     async pendingIntent() {
       const pending =
@@ -559,7 +794,7 @@ export function installNativeTransferBackground(options: {
     consume: transfer.consume,
     consumeSelected: transfer.consumeSelected,
     waitForResume,
-    async apply(reviewLink: string, fillOnly = false, skipDraftOffer = false) {
+    async apply(reviewLink: string, fillOnly = false, skipDraftOffer = false, skipChoices = false) {
       await waitForResume();
       let owned: ReturnType<typeof transfer.consumeSelected>;
       try {
@@ -576,6 +811,7 @@ export function installNativeTransferBackground(options: {
           identity: options.identity,
           ...(fillOnly ? { fillOnly: true } : {}),
           ...(skipDraftOffer ? { skipDraftOffer: true } : {}),
+          ...(skipChoices ? { skipChoices: true } : {}),
           owned,
           async preflight(selection, signal) {
             const proof = await protectedSelection(
@@ -589,6 +825,24 @@ export function installNativeTransferBackground(options: {
         });
         // Refused before any attempt existed (the page was not ready): nothing was spent.
         unspent = !result.ok && "stage" in result && result.stage === "page-not-ready";
+        if (unspent) {
+          // The choice questions the fill would leave to the candidate (ADR-061) stay here for the
+          // choice step; the panel is told only how many there are.
+          const { choices, inspectedFormHash, ...rest } = result as typeof result & {
+            choices?: { ref: string; question: string; options: string[] }[];
+            inspectedFormHash?: string;
+          };
+          pendingChoices =
+            choices?.length && inspectedFormHash
+              ? {
+                  page: `${owned.selection.tabId}:${owned.selection.documentId}`,
+                  formHash: inspectedFormHash,
+                  expiresAt: Date.now() + PROPOSAL_MS,
+                  questions: choices,
+                }
+              : undefined;
+          return rest;
+        }
         return result;
       } finally {
         if (unspent) owned.release();
