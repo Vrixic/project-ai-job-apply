@@ -8,8 +8,16 @@ export type ExtensionMessage =
       reviewLink: string;
       fillOnly?: true;
       skipDraftOffer?: true;
+      skipChoices?: true;
     }
   | { action: "application_native_draft"; reviewLink: string }
+  | { action: "application_native_choices"; reviewLink: string }
+  | {
+      action: "application_native_choice_confirm";
+      reviewLink: string;
+      ref: string;
+      accept: boolean;
+    }
   | { action: "application_native_clear" }
   | { action: "application_pending_intent" }
   | { action: "application_form_capture"; reviewLink: string }
@@ -49,26 +57,46 @@ export function parseExtensionMessage(value: unknown): ExtensionMessage | undefi
     record.fillOnly === true &&
     typeof record.reviewLink === "string" &&
     record.reviewLink.length <= 1024 &&
-    ((Object.keys(record).length === 3 && record.skipDraftOffer === undefined) ||
-      (Object.keys(record).length === 4 && record.skipDraftOffer === true))
+    Object.keys(record).every((key) =>
+      ["action", "reviewLink", "fillOnly", "skipDraftOffer", "skipChoices"].includes(key),
+    ) &&
+    (record.skipDraftOffer === undefined || record.skipDraftOffer === true) &&
+    (record.skipChoices === undefined || record.skipChoices === true)
   )
     return {
       action: record.action,
       reviewLink: record.reviewLink,
       fillOnly: true,
       ...(record.skipDraftOffer === true ? { skipDraftOffer: true as const } : {}),
+      ...(record.skipChoices === true ? { skipChoices: true as const } : {}),
     };
   if (
     record.action === "application_handoff_read" ||
     record.action === "application_native_select" ||
     record.action === "application_native_apply" ||
     record.action === "application_native_draft" ||
+    record.action === "application_native_choices" ||
     record.action === "application_form_capture"
   ) {
     return Object.keys(record).length === 2 &&
       typeof record.reviewLink === "string" &&
       record.reviewLink.length <= 1024
       ? { action: record.action, reviewLink: record.reviewLink }
+      : undefined;
+  }
+  if (record.action === "application_native_choice_confirm") {
+    return Object.keys(record).length === 4 &&
+      typeof record.reviewLink === "string" &&
+      record.reviewLink.length <= 1024 &&
+      typeof record.ref === "string" &&
+      /^[A-Za-z0-9_-]{1,40}$/u.test(record.ref) &&
+      typeof record.accept === "boolean"
+      ? {
+          action: record.action,
+          reviewLink: record.reviewLink,
+          ref: record.ref,
+          accept: record.accept,
+        }
       : undefined;
   }
   if (record.action === "application_handoff_copy") {

@@ -14523,6 +14523,27 @@
           "draftNoAi": {
             "type": "boolean",
             "description": "Only when readiness was asked: true when the employer's own text for one of the draftable questions asks for an answer written without AI. The candidate is told and decides."
+          },
+          "choices": {
+            "type": "array",
+            "maxItems": 10,
+            "description": "Only when readiness was asked: the required choice questions (radio, Yes/No) the fill will leave unanswered, in the employer's own words, so they can be decided for the candidate before the fill (ADR-061). Never anything the candidate entered.",
+            "items": {
+              "type": "object",
+              "required": ["ref", "question", "options"],
+              "properties": {
+                "ref": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,40}$" },
+                "question": { "type": "string", "minLength": 3, "maxLength": 1000 },
+                "options": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 12,
+                  "uniqueItems": true,
+                  "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+                }
+              },
+              "additionalProperties": false
+            }
           }
         },
         "additionalProperties": false
@@ -14582,6 +14603,55 @@
             "minimum": 0,
             "maximum": 200,
             "description": "Questions that could not be asked or answered (signed out, limit, unavailable, interrupted)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationExecutionChoicesApply": {
+        "type": "object",
+        "description": "Selects, on the page, options decided for the candidate (or confirmed by them) for questions the page still shows unanswered. The page checks every answer against its own form first (ADR-061).",
+        "required": ["schema", "nonce", "employerUrl", "deadline", "formHash", "answers"],
+        "properties": {
+          "schema": { "const": "application-execution-choices-apply.v1", "type": "string" },
+          "nonce": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "employerUrl": { "type": "string", "minLength": 1, "maxLength": 2048 },
+          "deadline": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          "formHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "answers": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "required": ["ref", "option"],
+              "properties": {
+                "ref": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,40}$" },
+                "option": { "type": "string", "minLength": 1, "maxLength": 200 }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplicationExecutionChoicesApplyResult": {
+        "type": "object",
+        "required": ["schema", "nonce", "applied", "skipped"],
+        "properties": {
+          "schema": { "const": "application-execution-choices-apply-result.v1", "type": "string" },
+          "nonce": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "applied": {
+            "type": "array",
+            "maxItems": 10,
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,40}$" },
+            "description": "The questions that now show the chosen option."
+          },
+          "skipped": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10,
+            "description": "Answers left unapplied (the form changed, the candidate had answered, or the control would not take it)."
           }
         },
         "additionalProperties": false

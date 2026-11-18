@@ -38,6 +38,8 @@ export async function executeApprovedApplication(options: {
   fillOnly?: boolean;
   /** The candidate already chose what to do about questions the answer engine can write. */
   skipDraftOffer?: boolean;
+  /** The choice questions were already decided (or declined): do not hold the fill back for them. */
+  skipChoices?: boolean;
   owned: {
     files: TransferredNativeFile[];
     signal: AbortSignal;
@@ -444,7 +446,9 @@ export async function executeApprovedApplication(options: {
     // ones it can, unless the candidate has already chosen.
     if (
       options.fillOnly
-        ? !options.skipDraftOffer && (inspection.draftable ?? 0) > 0
+        ? !options.skipDraftOffer &&
+          ((inspection.draftable ?? 0) > 0 ||
+            (!options.skipChoices && (inspection.choices?.length ?? 0) > 0))
         : !inspection.challengePresent && (inspection.needs ?? 0) > 0
     ) {
       stage = "page-not-ready";
@@ -457,6 +461,15 @@ export async function executeApprovedApplication(options: {
         ...(inspection.waiting?.length ? { waiting: inspection.waiting } : {}),
         ...(inspection.draftable ? { draftable: inspection.draftable } : {}),
         ...(inspection.draftNoAi ? { draftNoAi: true } : {}),
+        // The required choice questions the fill would leave to the candidate (ADR-061). The
+        // background keeps them for the choice step and passes only their count on.
+        ...(inspection.choices?.length
+          ? {
+              choosable: inspection.choices.length,
+              choices: inspection.choices,
+              inspectedFormHash: inspection.formHash,
+            }
+          : {}),
       };
     }
     stage = "approval-again";

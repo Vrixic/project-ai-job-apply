@@ -19,6 +19,53 @@ function requireActionable(control: Element, view: Window & typeof globalThis, c
 const sleep = (milliseconds: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
+/**
+ * Chooses one option of a Yes/No or radio question the candidate left unanswered (ADR-061). The
+ * caller has proved the page and the answer; this checks the control again, clicks the one option
+ * whose label is exactly `option`, and reports whether the page now shows exactly that choice.
+ */
+export async function chooseAshbyOption(
+  inspection: ApplicationInspection,
+  ref: string,
+  option: string,
+  authority: Pick<FillAuthority, "signal" | "deadline">,
+): Promise<boolean> {
+  const controls = inspection.resolve(ref);
+  const field = inspection.form.fields.find((candidate) => candidate.ref === ref);
+  const view = controls[0]?.ownerDocument.defaultView as (Window & typeof globalThis) | null;
+  if (!field || !view || field.type !== "radio" || controls.length !== field.options.length)
+    return false;
+  const index = field.options.indexOf(option);
+  const control = controls[index];
+  if (
+    index < 0 ||
+    field.options.filter((candidate) => candidate === option).length !== 1 ||
+    !control
+  )
+    return false;
+  const pressed = (candidate: Element) => candidate.getAttribute("aria-pressed") === "true";
+  const chosen = (candidate: Element) =>
+    candidate instanceof view.HTMLInputElement ? candidate.checked : pressed(candidate);
+  // Never over an answer the candidate has already given.
+  if (controls.some(chosen)) return false;
+  const live = () => !authority.signal.aborted && Date.now() < authority.deadline;
+  if (!live()) return false;
+  try {
+    requireActionable(control, view, true);
+  } catch {
+    return false;
+  }
+  if (control instanceof view.HTMLButtonElement) {
+    control.click();
+    // The page records the choice on its next render.
+    for (let attempt = 0; attempt < 10 && !pressed(control) && live(); attempt++) await sleep(50);
+  } else if (control instanceof view.HTMLInputElement && control.type === "radio") {
+    control.click();
+  } else return false;
+  inspection.resolve(ref);
+  return chosen(control) && controls.every((other) => other === control || !chosen(other));
+}
+
 /** Internal adapter primitive. Caller must supply fresh owning approval checks, never page data. */
 export async function fillAshbyFields(
   inspection: ApplicationInspection,

@@ -72,6 +72,18 @@ export interface ApplicationProvider {
     reviewRequired: boolean;
   }>;
   /**
+   * Chooses one option of a choice question the candidate left unanswered (ADR-061). It acts only on
+   * a question that is still unanswered, on an option equal to exactly one on the page, and says
+   * whether the page now shows that option chosen. Absent: the provider's questions stay the
+   * candidate's.
+   */
+  chooseOption?(
+    inspection: ApplicationInspection,
+    ref: string,
+    option: string,
+    authority: Pick<FillAuthority, "signal" | "deadline">,
+  ): Promise<boolean>;
+  /**
    * Whether `option` is now the one chosen option among these controls, for a provider whose
    * choices are buttons or radios rather than one `<select>`. Answers yes or no only. When absent
    * the executor verifies a choice by reading a single `<select>` element.

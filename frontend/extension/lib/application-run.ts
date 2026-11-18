@@ -24,14 +24,14 @@ export function incompleteCandidateQuestions(
   provider: ApplicationProvider,
   inspection: ApplicationInspection,
   plan: ReturnType<typeof buildFillPlan>,
-): { label: string; controls: readonly Element[] }[] {
-  const incomplete: { label: string; controls: readonly Element[] }[] = [];
+): { ref: string; label: string; controls: readonly Element[] }[] {
+  const incomplete: { ref: string; label: string; controls: readonly Element[] }[] = [];
   for (const action of plan.actions) {
     if (action.kind !== "require_user") continue;
     const field = inspection.form.fields.find((candidate) => candidate.ref === action.ref);
     const controls = inspection.resolve(action.ref);
     if (!provider.controlsSatisfied(controls, field?.required === true))
-      incomplete.push({ label: field?.label ?? "", controls });
+      incomplete.push({ ref: action.ref, label: field?.label ?? "", controls });
   }
   return incomplete;
 }
@@ -261,7 +261,10 @@ export async function executeApplication(options: {
         );
       };
       const needs = plan.unresolvedRequired.filter(
-        (ref) => !selectedRefs.has(ref) && !answeredText(inspection?.resolve(ref) ?? []),
+        (ref) =>
+          !selectedRefs.has(ref) &&
+          !answeredText(inspection?.resolve(ref) ?? []) &&
+          !provider.controlsSatisfied(inspection?.resolve(ref) ?? [], true),
       ).length;
       if (needs > 0) notes.push(`needs:${needs}`);
       options.onNotes?.(notes);

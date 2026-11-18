@@ -3508,6 +3508,12 @@ export interface components {
             draftable?: number;
             /** @description Only when readiness was asked: true when the employer's own text for one of the draftable questions asks for an answer written without AI. The candidate is told and decides. */
             draftNoAi?: boolean;
+            /** @description Only when readiness was asked: the required choice questions (radio, Yes/No) the fill will leave unanswered, in the employer's own words, so they can be decided for the candidate before the fill (ADR-061). Never anything the candidate entered. */
+            choices?: {
+                ref: string;
+                question: string;
+                options: string[];
+            }[];
         };
         /** @description Asks the page to draft, with the candidate's own answer engine, the required open questions that are still empty. Carries no answers; the page reads its own questions. */
         ApplicationExecutionDraft: {
@@ -3527,6 +3533,28 @@ export interface components {
             declined: number;
             /** @description Questions that could not be asked or answered (signed out, limit, unavailable, interrupted). */
             failed: number;
+        };
+        /** @description Selects, on the page, options decided for the candidate (or confirmed by them) for questions the page still shows unanswered. The page checks every answer against its own form first (ADR-061). */
+        ApplicationExecutionChoicesApply: {
+            /** @constant */
+            schema: "application-execution-choices-apply.v1";
+            nonce: string;
+            employerUrl: string;
+            deadline: number;
+            formHash: string;
+            answers: {
+                ref: string;
+                option: string;
+            }[];
+        };
+        ApplicationExecutionChoicesApplyResult: {
+            /** @constant */
+            schema: "application-execution-choices-apply-result.v1";
+            nonce: string;
+            /** @description The questions that now show the chosen option. */
+            applied: string[];
+            /** @description Answers left unapplied (the form changed, the candidate had answered, or the control would not take it). */
+            skipped: number;
         };
         ApplicationExecutionCommand: {
             /** @constant */

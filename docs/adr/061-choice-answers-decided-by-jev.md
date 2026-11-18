@@ -76,3 +76,25 @@ Jev correctly declines and the question stays with the candidate.
    list; verified in real Chrome against a stubbed route.
 3. Terraform and release at a restore sitting, then calibration of the thresholds against live Jev with
    the owner.
+
+## Implementation notes (slice 2, 2026-11-18)
+
+Building the extension side settled four points the decisions above left open:
+
+1. **Before the fill, not after.** A fill consumes the selected page and spends the page script on
+   purpose (one effect per document), so a choice step cannot follow it. The pre-fill inspection, which
+   already knows which required questions the fill will leave to the candidate, reports the unanswered
+   required choice questions. The extension decides them first, waits for the candidate on any
+   restricted proposal, then runs the fill. AI therefore never overrides an answer the approved packet
+   gives.
+2. **No programmatic Undo.** Decision 5 said "with Undo". A radio group or a Yes/No pair cannot be
+   cleared reliably through a page's own framework, so the panel lists every AI-chosen answer with its
+   question and the candidate changes a wrong one on the page. A submit run that AI-chose answers
+   becomes a fill for review: AI choices are never submitted without the candidate's check.
+3. **Restricted answers are confirmed in the panel before the fill**, one at a time, with the question,
+   the proposed option and its probability; "I will answer it myself" leaves it to the candidate. The
+   proposal lives in the extension's memory for this page only, and the page script re-checks the form
+   hash, that the question is still unanswered and that the option is on the page before it chooses.
+4. **Ashby first.** Choosing an option is a provider capability (`chooseOption`); Ashby has it. A
+   provider without it (Greenhouse today) gets no AI choices and behaves as before. Any failure of the
+   Gateway, including a route that is not released yet, leaves the questions with the candidate.

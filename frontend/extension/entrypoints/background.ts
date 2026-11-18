@@ -23,7 +23,6 @@ import {
   extensionDetectorActivationPolicy,
 } from "../lib/capability-policy";
 import { extensionConfiguration } from "../lib/config";
-import { isNarrativeAnswerMessage } from "../lib/narrative-answer-protocol";
 import {
   cancelContribution,
   fileContributionAppeal,
@@ -48,6 +47,7 @@ import { DevelopmentContributionRuntime } from "../lib/development-contributions
 import type { CaptureField, SanitizedJobCapture } from "../lib/job-capture";
 import { prepareContribution, sendJobIntent } from "../lib/job-intent-api";
 import { parseExtensionMessage } from "../lib/messages";
+import { isNarrativeAnswerMessage } from "../lib/narrative-answer-protocol";
 import { installNativeTransferBackground } from "../lib/native-transfer-background";
 import { captureCurrentPublicJobPage } from "../lib/page-inspection";
 import {
@@ -1049,11 +1049,20 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
           message.reviewLink,
           message.fillOnly === true,
           message.skipDraftOffer === true,
+          message.skipChoices === true,
         );
       }
       if (message.action === "application_native_draft") {
         if (!nativeTransfer) throw Error("NativeMaterialTransferUnavailable");
         return await nativeTransfer.draft(message.reviewLink);
+      }
+      if (message.action === "application_native_choices") {
+        if (!nativeTransfer) throw Error("NativeMaterialTransferUnavailable");
+        return await nativeTransfer.choices(message.reviewLink);
+      }
+      if (message.action === "application_native_choice_confirm") {
+        if (!nativeTransfer) throw Error("NativeMaterialTransferUnavailable");
+        return await nativeTransfer.confirmChoice(message.reviewLink, message.ref, message.accept);
       }
       if (message.action === "application_native_clear") return { ok: true };
       if (message.action === "application_pending_intent")
@@ -1172,7 +1181,9 @@ chrome.runtime.onMessage.addListener((rawMessage, sender, sendResponse) => {
         ok: false,
         ...((message.action === "application_native_select" ||
           message.action === "application_native_apply" ||
-          message.action === "application_native_draft") &&
+          message.action === "application_native_draft" ||
+          message.action === "application_native_choices" ||
+          message.action === "application_native_choice_confirm") &&
         error instanceof Error &&
         "stage" in error
           ? { stage: String(error.stage) }
