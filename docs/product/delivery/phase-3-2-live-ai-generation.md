@@ -38,6 +38,10 @@ related is tracked here so it is handled next and is not lost.
 | D3.2-007 | Ashby live submission proof: fill, attach and submit once on a posting the owner picks, after the candidate's approval. | Ready | Claude; owner | None | Carried from D3 (owner decision 2026-10-26: Greenhouse is the D3 proof). The adapter is built and tested on synthetic pages (ADR-053). |
 | D3.2-008 | Security review of the provider data path, folded into the independent assessment D6-015. | Ready | Independent assessor | D3.2-005 | Not a gate for building; a gate for public launch. |
 | D3.2-009 | Narrative answers in the browser ([ADR-057](../../adr/057-narrative-answers-drafted-in-the-candidates-browser.md)): Gateway route and model call (built, dark), extension icon on free-text questions, key secret and kill switch in Terraform, live test on the owner's account. | In progress | Claude; owner | None | Owner chose OpenAI `gpt-6-luna`, the Terms of Service as consent, and the icon even when the employer asks for no AI (2026-11-07). The owner puts the OpenAI key in the secret and sets a spending cap on the OpenAI project. A durable plan-driven quota is a launch prerequisite. |
+| D3.2-010 | Choice answers decided by Jev ([ADR-061](../../adr/061-choice-answers-decided-by-jev.md)), slice 1: contract, Jev client, Gateway route with the server-side context builder, thresholds and kill switch (dark). | Ready | Claude | D3.2-009 | Owner direction 2026-11-18. Choice questions only; open text stays on ADR-057. |
+| D3.2-011 | Jev choice answers, slice 2: the extension collects unresolved choice questions, fills above the thresholds with an "AI chose" list and Undo, and lists restricted proposals for the candidate to confirm one by one. | Ready | Claude | D3.2-010 | Restricted answers proposed only from an explicit candidate statement; never inferred. Verified in real Chrome against a stubbed route. |
+| D3.2-012 | Jev choice answers, slice 3: Terraform (empty key secret, Gateway read, egress to the TypeSafe host, kill switch default off), Gateway release and live calibration of the thresholds at a restore sitting. | Ready | Claude; owner | D3.2-011 | Release needs the environment up. |
+| D3.2-013 | Owner actions for Jev: create the TypeSafe API key in their console and put it in the secret, confirm TypeSafe's retention terms, and name TypeSafe in the Terms and subprocessor list. | Ready | Owner | None | Retention is not stated in TypeSafe's privacy policy; no real-candidate use before it is confirmed. |
 
 ## Exit criteria
 
@@ -133,6 +137,11 @@ common narrative question was skipped. Reproduced in real Chrome (the click spot
 fixed in the change that carries this note: that key is now drafted like any other open question. Verified in real
 Chrome on the live page: the icon is drawn on the box. The live draft itself (the real model) is the owner's test.
 The owner confirmed the icon works.
+
+2026-11-18 (owner direction): the "needs you" cases (no match, ambiguous wording, option not on the page, restricted)
+for choice questions are to be decided by Jev (TypeSafe), with the candidate's data given to it for accuracy, filled with
+confidence, and restricted answers proposed but confirmed one by one by the candidate. Recorded as
+[ADR-061](../../adr/061-choice-answers-decided-by-jev.md) with tasks D3.2-010 to D3.2-013; nothing built yet.
 
 2026-11-18 (owner request): the in-person question ("willing to work in our San Francisco or NYC office?") was
 left unanswered, and the Job preferences page already holds the candidate's work modes. [ADR-060](../../adr/060-work-location-answers-from-job-preferences.md)
