@@ -87,7 +87,27 @@ const SYNONYMS: readonly Synonym[] = [
     ],
   },
   { key: "job.relocation", patterns: [/\brelocat\w*\b/u] },
-  { key: "job.remote_preference", patterns: [/\bremote\b/u] },
+  // Work-location questions answered from the Job preferences page (ADR-060). Choice fields only, so
+  // a free-text "explain" box is never filled with Yes or No. A label that names two of these
+  // (for example "in-person" and "remote") is ambiguous and stays with the candidate.
+  {
+    key: "job.onsite_willingness",
+    patterns: [
+      /\b(?:in[\s-]?person|on[\s-]?site)\b/u,
+      /\bwork(?:ing)?\s+(?:in|from|at)\b.*\boffices?\b/u,
+    ],
+    types: ["radio", "select", "checkbox"],
+  },
+  {
+    key: "job.hybrid_willingness",
+    patterns: [/\bhybrid\b/u],
+    types: ["radio", "select", "checkbox"],
+  },
+  {
+    key: "job.remote_willingness",
+    patterns: [/\bremote(?:ly)?\b/u],
+    types: ["radio", "select", "checkbox"],
+  },
   {
     key: "authorization.us_authorized",
     patterns: [

@@ -132,6 +132,14 @@ company" as `questions.why_company`, a key the Profile never holds an answer for
 common narrative question was skipped. Reproduced in real Chrome (the click spot hit the textarea, not the icon) and
 fixed in the change that carries this note: that key is now drafted like any other open question. Verified in real
 Chrome on the live page: the icon is drawn on the box. The live draft itself (the real model) is the owner's test.
+The owner confirmed the icon works.
+
+2026-11-18 (owner request): the in-person question ("willing to work in our San Francisco or NYC office?") was
+left unanswered, and the Job preferences page already holds the candidate's work modes. [ADR-060](../../adr/060-work-location-answers-from-job-preferences.md)
+derives Remote, Hybrid and On-site Yes/No answers for the packet from the saved work modes, shown for the candidate's
+confirmation (`explicit_each_time`); locations and relocation are not read. Built locally, not released: the packet
+builder, taxonomy (both copies), Gateway wiring and planner patterns; verified in real Chrome on the live page (Remote
+only presses No, Hybrid and On-site press Yes). Needs a Gateway release at the next restore.
 
 ## Risks and blockers
 

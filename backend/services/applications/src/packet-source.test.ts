@@ -4,7 +4,12 @@ import type { GraphFact } from "@ai-job-apply/domain";
 import { describe, expect, it } from "vitest";
 import type { FieldDefinition } from "./field-policy.js";
 import { assemblePacket } from "./packet.js";
-import { FACT_FIELD_MAP, FactBackedPacketSource, jobRevisionHash } from "./packet-source.js";
+import {
+  FACT_FIELD_MAP,
+  FactBackedPacketSource,
+  jobRevisionHash,
+  workModeFields,
+} from "./packet-source.js";
 import type { ApplicationRecord } from "./store.js";
 import {
   APPLICATION_ID,
@@ -321,6 +326,100 @@ describe("FACT_FIELD_MAP", () => {
         value: "4 weeks",
         origin: "user_entered",
       }),
+    ]);
+  });
+});
+
+describe("work-mode answers from the Job preferences page (ADR-060)", () => {
+  const PREFERENCE_ID = "00000000-0000-7000-8000-0000000000a1";
+  const answers = (workModes: string[]) =>
+    Object.fromEntries(
+      workModeFields({ id: PREFERENCE_ID, workModes }).map((field) => [
+        field.fieldKey,
+        field.value,
+      ]),
+    );
+
+  it("answers remote, hybrid and on-site only from the work modes the candidate chose", () => {
+    expect(answers(["remote"])).toEqual({
+      "job.remote_willingness": true,
+      "job.hybrid_willingness": false,
+      "job.onsite_willingness": false,
+    });
+    expect(answers(["hybrid"])).toEqual({
+      "job.remote_willingness": false,
+      "job.hybrid_willingness": true,
+      "job.onsite_willingness": false,
+    });
+    // Accepting the office full time accepts some office days too.
+    expect(answers(["on_site"])).toEqual({
+      "job.remote_willingness": false,
+      "job.hybrid_willingness": true,
+      "job.onsite_willingness": true,
+    });
+    expect(answers(["remote", "hybrid", "on_site"])).toEqual({
+      "job.remote_willingness": true,
+      "job.hybrid_willingness": true,
+      "job.onsite_willingness": true,
+    });
+  });
+
+  it("answers nothing from missing, unknown or unattributed preferences", () => {
+    expect(workModeFields({ id: PREFERENCE_ID, workModes: [] })).toEqual([]);
+    expect(workModeFields({ id: PREFERENCE_ID, workModes: ["remote", "teleport"] })).toEqual([]);
+    expect(workModeFields({ id: "not-an-id", workModes: ["remote"] })).toEqual([]);
+  });
+
+  it("cites the saved preference, is shown for confirmation, and yields to the candidate", async () => {
+    const withModes = (read: () => Promise<{ id: string; workModes: string[] } | null>) =>
+      new FactBackedPacketSource({
+        facts: async () => [],
+        workModes: read,
+        jobRevision: async () => jobRevisionHash({ title: "Engineer" }),
+        artifacts: async () => ({ resume: HASH_C }),
+        clock: () => NOW,
+      }).prepare({
+        ownerUserId: USER_ID,
+        application,
+        userEntries: [{ fieldKey: "job.onsite_willingness", value: "Yes" }],
+        form: null,
+      });
+    const prepared = await withModes(async () => ({ id: PREFERENCE_ID, workModes: ["remote"] }));
+    expect(prepared.fields.map((field) => field.fieldKey).sort()).toEqual([
+      "job.hybrid_willingness",
+      "job.onsite_willingness",
+      "job.remote_willingness",
+    ]);
+    const derived = prepared.fields.find((field) => field.fieldKey === "job.remote_willingness");
+    expect(derived).toMatchObject({ origin: "confirmed_fact", sourceFactIds: [PREFERENCE_ID] });
+    // The candidate's own entry for the same field wins over the derived answer.
+    expect(prepared.fields.filter((field) => field.fieldKey === "job.onsite_willingness")).toEqual([
+      expect.objectContaining({ origin: "user_entered", value: "Yes" }),
+    ]);
+    const packet = assemblePacket(
+      {
+        id: PACKET_ID,
+        userId: USER_ID,
+        applicationId: APPLICATION_ID,
+        canonicalJobId: JOB_ID,
+        version: 1,
+        jobRevision: prepared.jobRevision,
+        form: null,
+        fields: prepared.fields,
+        artifactHashes: prepared.artifactHashes,
+        createdAt: NOW,
+      },
+      definitions,
+    );
+    expect(
+      packet.fields.find((entry) => entry.fieldKey === "job.remote_willingness"),
+    ).toMatchObject({ requiresReview: true, reasons: ["explicit_each_time"] });
+    // A failed preferences read only leaves these questions to the candidate.
+    const failed = await withModes(async () => {
+      throw new Error("preferences unavailable");
+    });
+    expect(failed.fields).toEqual([
+      expect.objectContaining({ fieldKey: "job.onsite_willingness", origin: "user_entered" }),
     ]);
   });
 });
