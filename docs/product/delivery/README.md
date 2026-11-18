@@ -18,6 +18,7 @@ This folder turns the architecture roadmap into an auditable delivery system.
 - `phase-6-mobile-and-paid.md` — Mobile companion and Free/Pro paid launch.
 - `d6-production-launch-plan.md` - Ordered route to production for the deferred Phase 2 items and the rest of D6.
 - `phase-7-quality-and-expansion.md` — Application-quality optimization, new ATS/regions, and optional employer product.
+- `phase-8-job-source-discovery.md` - Last phase: evaluate a third-party service as a company-discovery lead list only.
 
 ## Tracking rules
 
