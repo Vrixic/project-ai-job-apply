@@ -5,6 +5,7 @@ import {
   ashbyChallengePresent,
   ashbyContainerSelector,
   ashbyEntrySelector,
+  ashbyOptionLabel,
   ashbyPaneSelector,
   describeAshbyEntry,
   inspectAshbyApplication,
@@ -61,6 +62,23 @@ export const ashbyProvider: ApplicationProvider = {
   challengePresent: ashbyChallengePresent,
   inspect: inspectAshbyApplication,
   fill: fillAshbyFields,
+  /** A Yes/No button pair or a radio group: exactly the approved option is the one chosen. */
+  selectionWritten(controls, option) {
+    const view = controls[0]?.ownerDocument.defaultView;
+    if (!view || controls.length < 2) return false;
+    const labels = controls.map(ashbyOptionLabel);
+    if (labels.filter((label) => label === option).length !== 1) return false;
+    const chosen: number[] = [];
+    controls.forEach((control, index) => {
+      if (
+        (control instanceof view.HTMLButtonElement &&
+          control.getAttribute("aria-pressed") === "true") ||
+        (control instanceof view.HTMLInputElement && control.type === "radio" && control.checked)
+      )
+        chosen.push(index);
+    });
+    return chosen.length === 1 && labels[chosen[0] ?? -1] === option;
+  },
   /** The right pane holds the field container and the submit control, which is not in a form. */
   root(document) {
     const panes = document.querySelectorAll(ashbyPaneSelector);

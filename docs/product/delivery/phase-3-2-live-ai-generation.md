@@ -114,6 +114,18 @@ employer's own questions to the candidate and counts them correctly, and Fill an
 attempt is dispatched while they are unanswered. The post-submit confirmation message is still unobserved: the
 live submission by the owner (D3.2-007) is its evidence.
 
+2026-11-18: the owner's first live fill on the Mintlify posting failed with `AshbyFillUnavailable` at "fill" (nothing
+submitted, the attempt reconciled and reopened). Reproduced in real Chrome with a saved "no sponsorship needed"
+answer in the packet, which the planner maps to the page's multiple-choice question: (1) Ashby draws each radio's
+circle itself and lays the real input over it at opacity 0, which the adapter's hidden-control guard refused, so any
+saved answer that maps to a choice aborted the whole fill; (2) the page run's written-field check read a choice as a
+single `<select>`, which Ashby's buttons and radio groups are not (found while tracing the first). Fixed in the
+change that carries this note: a shared guard (`lib/actionable.ts`) accepts a transparent radio or checkbox only when
+it has a box, every ancestor is visible and, before a click, the click lands on the input itself; providers can say
+how a choice is read (`selectionWritten`); and the Ashby fill now reports the field it is on, so a refusal names it.
+Verified in real Chrome against the live page with every write blocked: the fill completes and exactly the approved
+option is checked. The live submission itself is still open.
+
 ## Risks and blockers
 
 | ID | Risk | Status |

@@ -104,6 +104,11 @@ function optionLabel(control: Element): string {
   return textOf(labels[0] ?? control.closest("label") ?? undefined);
 }
 
+/** The text of one choice: a Yes/No button's own text, or a radio's label. */
+export function ashbyOptionLabel(control: Element): string {
+  return control.tagName === "BUTTON" ? textOf(control) : optionLabel(control);
+}
+
 function inputType(control: Element): FieldType {
   const type = (control.getAttribute("type") ?? "text").toLowerCase();
   // A custom combobox keeps its choice outside the input; hand it to the candidate.

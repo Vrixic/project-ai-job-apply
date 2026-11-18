@@ -71,6 +71,12 @@ export interface ApplicationProvider {
     notes?: readonly string[];
     reviewRequired: boolean;
   }>;
+  /**
+   * Whether `option` is now the one chosen option among these controls, for a provider whose
+   * choices are buttons or radios rather than one `<select>`. Answers yes or no only. When absent
+   * the executor verifies a choice by reading a single `<select>` element.
+   */
+  selectionWritten?(controls: readonly Element[], option: string): boolean;
   /** The one element that contains the application's controls and submit control. */
   root(document: Document): Element;
   /** The one submit control inside the root for the profile's selector. */
