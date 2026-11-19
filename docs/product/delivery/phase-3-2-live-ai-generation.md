@@ -162,6 +162,14 @@ confirmation (`explicit_each_time`); locations and relocation are not read. Buil
 builder, taxonomy (both copies), Gateway wiring and planner patterns; verified in real Chrome on the live page (Remote
 only presses No, Hybrid and On-site press Yes). Needs a Gateway release at the next restore.
 
+2026-11-18 (release sitting): the Gateway release plan from main 9c360e4c was refused by the release guard
+("unrelated data observation"). The live environment now retains the one-off preparation and material-control
+modules (release `r1`), and, like the retained resume modules, they depend on the whole platform, so Terraform defers
+their no-input caller-identity and region reads when the Gateway changes. The guard named only the two resume modules.
+It now also accepts those two modules with the identical exact checks (address, provider, no inputs, unknown-only
+values, both reads per module, a retained release for the key); a substituted read or an unretained key is still
+refused. The release is repeated from the main that carries the fix.
+
 ## Risks and blockers
 
 | ID | Risk | Status |

@@ -872,6 +872,28 @@ foreach ($module in @("native_resume_source_access", "native_resume_preparation"
     }
   }
 }
+# The retained one-off preparation and material-control modules (release "r1") depend on the platform the
+# same way, so their identical no-input reads are deferred too, against their own retained releases.
+foreach ($module in @("native_material_control", "native_preparation")) {
+  $nativeReadPlan.variables | Add-Member -NotePropertyName "${module}_releases" -NotePropertyValue ([pscustomobject]@{
+      value = [pscustomobject]@{ "r1" = [pscustomobject]@{ enabled = $false } }
+    })
+  foreach ($type in @("aws_caller_identity", "aws_region")) {
+    $unknown = if ($type -ceq "aws_caller_identity") {
+      [pscustomobject]@{ account_id = $true; arn = $true; id = $true; user_id = $true }
+    } else { [pscustomobject]@{ description = $true; endpoint = $true; id = $true; name = $true; region = $true } }
+    $moduleAddress = "module.$module[`"r1`"]"
+    $nativeReadPlan.resource_changes += [pscustomobject]@{
+      address = "$moduleAddress.data.$type.current[0]"; module_address = $moduleAddress
+      mode = "data"; type = $type; name = "current"; index = 0
+      provider_name = "registry.terraform.io/hashicorp/aws"; action_reason = "read_because_dependency_pending"
+      change = [pscustomobject]@{
+        actions = @("read"); before = $null; after = [pscustomobject]@{}; after_unknown = $unknown
+        before_sensitive = $false; after_sensitive = [pscustomobject]@{}
+      }
+    }
+  }
+}
 $nativeBefore = ConvertTo-GatewayCanonicalJson $nativeReadPlan
 $nativeChanges = @(Assert-ExactGatewayReleasePlan $nativeReadPlan $artifact)
 if ($nativeChanges.Count -ne 2 -or (ConvertTo-GatewayCanonicalJson $nativeReadPlan) -cne $nativeBefore) {
@@ -923,6 +945,10 @@ foreach ($mutate in @(
     { param($p) $p.resource_changes = @($p.resource_changes | Where-Object type -CNE 'aws_region') },
     { param($p) $p.variables.native_resume_source_access_releases.value.PSObject.Properties.Remove('resume-r1') },
     { param($p) $p.variables.native_resume_source_access_releases.value = '{}' },
+    { param($p) $p.variables.native_preparation_releases.value.PSObject.Properties.Remove('r1') },
+    { param($p) $p.variables.native_material_control_releases.value = '{}' },
+    { param($p) $p.resource_changes = @($p.resource_changes | Where-Object { $_.address -cne 'module.native_preparation["r1"].data.aws_region.current[0]' }) },
+    { param($p) $p.resource_changes[-1].address = 'module.native_preparation["r1"].data.aws_secretsmanager_secret.current[0]' },
     { param($p) $p.resource_changes[0].change.after.timeout = 60 },
     { param($p) $p.output_changes.gateway_lambda_alias_arn.actions = @('update') },
     { param($p) $extra = Copy-Fixture $p.resource_changes[0]; $extra.address = 'module.platform.aws_lambda_function.unrelated[0]'; $p.resource_changes += $extra }
