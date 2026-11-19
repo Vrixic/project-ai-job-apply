@@ -1,6 +1,6 @@
 # ADR-062: Profile answers for recurring application questions
 
-Status: Accepted by the owner's direction 2026-11-19; slice 1 built locally, not released
+Status: Accepted by the owner's direction 2026-11-19; slices 1 and 2 built locally, not released
 Date: 2026-11-19
 
 ## Context
@@ -116,3 +116,22 @@ Reading the code showed gaps behind questions most forms ask:
    from the saved Job preferences next to the work modes, as ADR-060's answers are, with
    `explicit_each_time` review. The old `preference` fact rows stay unused, because no preference facts
    exist.
+5. **The restricted keys need no database change (slice 2, 2026-11-19).** The Applications packet
+   protects every field whose taxonomy entry is `restricted` and gives it the `restricted_answer`
+   reason. Migration 0009's check already refuses a plain value on any field with that reason, so the
+   new keys are covered without extending its key list.
+6. **Age is restricted, not confidential.** Decision 3 called the 18-or-older answer confidential. It is
+   stored with the other restricted statements: its export list is the taxonomy's restricted,
+   never-infer set, and the restricted path is stricter.
+7. **Work authorization by country.** A question the planner maps to `authorization.us_authorized`
+   (including "authorized to work in the country where this job is located") reads
+   `authorization.work_countries` first and falls back to the United States answer. Jev's restricted
+   context then holds that statement, the job title and company, and the job's posted locations, so it
+   can tell whether the job's country is in the list. The planner has no separate pattern for the
+   countries key, so that wording never becomes ambiguous.
+8. **Option lists live in the web form.** The self-identification and clearance options are the form's
+   fixed choices; the saved value is the chosen text. Jev matches a saved statement to the employer's
+   own option wording, so the taxonomy does not pin `allowedValues`.
+9. **The Sensitive answers tab follows the vault switch.** It appears when the web build has
+   `NEXT_PUBLIC_RESTRICTED_ANSWER_VAULT_UI=enabled`, the same switch the vault's web routes already
+   require.

@@ -9,6 +9,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { isRestrictedAnswerVaultUiEnabled } from "../../lib/restricted-answer-fields";
+import { RestrictedAnswersForm } from "../restricted-answers-form";
 import { ResumeUploadForm } from "../resume-upload-form";
 import { useApplicationBasics } from "../use-application-basics";
 import { loadDrafts } from "./api";
@@ -18,7 +20,14 @@ import { SalarySection } from "./salary-section";
 import { ScreeningSection } from "./screening-section";
 import { PROFILE_SECTIONS, type SectionKey } from "./sections";
 
-type TabId = "personal" | SectionKey | "screening" | "salary" | "resume" | "preferences";
+type TabId =
+  | "personal"
+  | SectionKey
+  | "screening"
+  | "salary"
+  | "resume"
+  | "preferences"
+  | "sensitive";
 
 interface Tab {
   id: TabId;
@@ -37,6 +46,15 @@ const BASE_TABS: readonly Tab[] = [
   { id: "preferences", label: "Job preferences" },
 ];
 
+// Work authorization, eligibility and voluntary self-identification (ADR-062). The vault's web
+// routes answer only when this build enables them, so the tab follows the same switch.
+const SENSITIVE_TAB: Tab = { id: "sensitive", label: "Sensitive answers" };
+const ALL_TABS: readonly Tab[] = isRestrictedAnswerVaultUiEnabled({
+  NEXT_PUBLIC_RESTRICTED_ANSWER_VAULT_UI: process.env.NEXT_PUBLIC_RESTRICTED_ANSWER_VAULT_UI,
+})
+  ? [...BASE_TABS, SENSITIVE_TAB]
+  : BASE_TABS;
+
 /**
  * The candidate's structured Profile (ADR-052): one page with a tab per section. Resume uploads
  * produce suggestions that only join the profile when the candidate saves them.
@@ -52,7 +70,7 @@ export function ProfileArea({
   email?: string | undefined;
   preferences: ReactNode;
 }) {
-  const tabs: readonly Tab[] = BASE_TABS;
+  const tabs: readonly Tab[] = ALL_TABS;
   const [active, setActive] = useState<TabId>("personal");
   const basics = useApplicationBasics(authenticated);
   const stillNeeded = basics.missing.filter((item) => item.section === active);
@@ -60,7 +78,7 @@ export function ProfileArea({
   // The apply popup links here with the tab that still has something to fill in.
   useEffect(() => {
     const wanted = new URLSearchParams(window.location.search).get("tab");
-    const match = BASE_TABS.find((tab) => tab.id === wanted);
+    const match = ALL_TABS.find((tab) => tab.id === wanted);
     if (match) setActive(match.id);
   }, []);
   // Coming back to a tab, or saving in one, is when what is still missing can have changed.
@@ -219,6 +237,7 @@ export function ProfileArea({
                 <SalarySection authenticated={authenticated} onSaved={refreshBasics} />
               )}
               {tab.id === "preferences" && preferences}
+              {tab.id === "sensitive" && <RestrictedAnswersForm authenticated={authenticated} />}
             </>
           )}
         </div>

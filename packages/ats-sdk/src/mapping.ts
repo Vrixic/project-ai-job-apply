@@ -144,10 +144,38 @@ const SYNONYMS: readonly Synonym[] = [
     patterns: [/\bsponsor\w*\b/u, /\b(?:require|need)\b.*\bwork\s+authori[sz]ation\b/u],
   },
   { key: "authorization.export_control", patterns: [/\bexport\s+control\b/u] },
+  // ADR-062. A label that also asks about work authorization or export control is ambiguous and
+  // stays with the candidate.
+  { key: "authorization.citizenship", patterns: [/\bcitizen(?:ship)?\b/u, /\bnationalit\w*\b/u] },
+  {
+    key: "disclosure.security_clearance",
+    patterns: [/\bsecurity\s+clearance\b/u, /\bclearance\b/u],
+  },
+  {
+    key: "eligibility.age_18_or_over",
+    patterns: [
+      /\b18\s+years\b/u,
+      /\b(?:over|at\s+least)\s+(?:the\s+age\s+of\s+)?18\b/u,
+      /\bage\s+of\s+18\b/u,
+      /\b18\s+or\s+older\b/u,
+    ],
+  },
   { key: "demographic.gender", patterns: [/\bgender\b/u] },
-  { key: "demographic.race_ethnicity", patterns: [/\b(?:race|ethnic\w*)\b/u] },
+  {
+    key: "demographic.race_ethnicity",
+    patterns: [/^(?!.*\b(?:hispanic|latin[oax])\b).*\b(?:race|ethnic\w*)\b/u],
+  },
+  { key: "demographic.hispanic_latino", patterns: [/\bhispanic\b/u, /\blatin[oax]\b/u] },
   { key: "demographic.veteran", patterns: [/\bveteran\b/u] },
   { key: "demographic.disability", patterns: [/\bdisabilit\w*\b/u] },
+  {
+    key: "demographic.sexual_orientation",
+    patterns: [/\bsexual\s+orientation\b/u, /\blgbt\w*\b/u],
+  },
+  {
+    key: "demographic.transgender",
+    patterns: [/\btransgender\b/u, /\btrans\s+experience\b/u],
+  },
   { key: "documents.resume", patterns: [/\b(?:resume|cv|curriculum)\b/u], types: ["file"] },
   { key: "documents.cover_letter", patterns: [/\bcover\s+letter\b/u] },
   {

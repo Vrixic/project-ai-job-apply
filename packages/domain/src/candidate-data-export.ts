@@ -67,12 +67,19 @@ export const restrictedAnswerExportFieldKeys: readonly string[] = [
   "authorization.us_authorized",
   "authorization.sponsorship_required",
   "authorization.export_control",
+  "authorization.work_countries",
+  "authorization.citizenship",
   "disclosure.non_compete",
   "disclosure.conflict_of_interest",
+  "disclosure.security_clearance",
+  "eligibility.age_18_or_over",
   "demographic.gender",
   "demographic.race_ethnicity",
+  "demographic.hispanic_latino",
   "demographic.veteran",
   "demographic.disability",
+  "demographic.sexual_orientation",
+  "demographic.transgender",
 ];
 
 /** Validates the exact portable export at the final pre-artifact boundary. */

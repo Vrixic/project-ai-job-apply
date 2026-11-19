@@ -82,7 +82,8 @@ export interface ChoiceContextInput {
   /** The candidate's country of residence as an ISO code; never the street address. */
   countryOfResidence?: string | undefined;
   savedAnswers?: ReadonlyArray<{ question: string; answer: string }> | undefined;
-  job: { title: string; company: string; description: string };
+  /** `locations` are the job's posted locations, public catalog data. */
+  job: { title: string; company: string; description: string; locations?: readonly string[] };
   /** The candidate's own saved statement on the one restricted topic the question is about. */
   restrictedStatement?: { topic: string; value: string } | undefined;
 }
@@ -108,6 +109,9 @@ export function buildChoiceContext(input: ChoiceContextInput): ChoiceContext {
   const job = {
     title: clip(input.job.title, 200),
     company: clip(input.job.company, 200),
+    ...(input.job.locations?.length
+      ? { locations: input.job.locations.slice(0, 10).map((location) => clip(location, 120)) }
+      : {}),
   };
   if (input.restrictedStatement) {
     categories.add("restricted_statement");

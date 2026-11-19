@@ -10,9 +10,12 @@ import { candidateSafeProblemMessage } from "../lib/candidate-safe-problem";
 import { validateFoundationResponse } from "../lib/foundation-response-bff";
 import {
   isCanonicalRestrictedAnswerContext,
+  normalizeCountryList,
   restrictedAnswerField,
   restrictedAnswerFields,
 } from "../lib/restricted-answer-fields";
+
+const fieldGroups = [...new Set(restrictedAnswerFields.map((field) => field.group))];
 
 const requestTimeoutMilliseconds = 20_000;
 const loadFailureMessage = "Restricted answers are temporarily unavailable.";
@@ -205,9 +208,15 @@ export function RestrictedAnswersForm({ authenticated }: { authenticated: boolea
     event.preventDefault();
     const definition = restrictedAnswerField(fieldKey);
     const normalizedContext = questionContext.trim() || undefined;
-    const normalizedValue = answerValue.trim();
+    const normalizedValue = definition?.countries
+      ? normalizeCountryList(answerValue)
+      : answerValue.trim();
+    if (definition?.countries && !normalizedValue) {
+      setMessage("Use two-letter country codes separated by commas, such as US, CA.");
+      return;
+    }
     if (!definition || !normalizedValue || !confirmedSave) {
-      setMessage("Choose an answer, enter its value, and confirm that you want to save it.");
+      setMessage("Choose a question, give your answer, and confirm that you want to save it.");
       return;
     }
     if (normalizedContext && !isCanonicalRestrictedAnswerContext(normalizedContext)) {
@@ -363,10 +372,10 @@ export function RestrictedAnswersForm({ authenticated }: { authenticated: boolea
         <div className="section-heading">
           <div>
             <div className="eyebrow">Private answers</div>
-            <h2 id="restricted-answers-heading">Restricted Answer Vault</h2>
+            <h2 id="restricted-answers-heading">Sensitive answers</h2>
           </div>
         </div>
-        <p>Sign in to manage restricted answers.</p>
+        <p>Sign in to manage your sensitive answers.</p>
       </section>
     );
   }
@@ -376,13 +385,14 @@ export function RestrictedAnswersForm({ authenticated }: { authenticated: boolea
       <div className="section-heading">
         <div>
           <div className="eyebrow">Private answers</div>
-          <h2 id="restricted-answers-heading">Restricted Answer Vault</h2>
+          <h2 id="restricted-answers-heading">Sensitive answers</h2>
         </div>
         <span>{activeAnswers.length} saved</span>
       </div>
       <p>
-        Save only an answer you supplied and want reused. A saved answer can match only the exact
-        field and optional context, and it must still be shown in final application review.
+        Work authorization, eligibility and voluntary self-identification. Save only answers you
+        want reused. Each one is shown to you for confirmation before it is used on an application,
+        and self-identification is always optional.
       </p>
       <p className="field-help">
         Values are separately encrypted and never displayed after saving. This page shows metadata
@@ -403,10 +413,16 @@ export function RestrictedAnswersForm({ authenticated }: { authenticated: boolea
             required
           >
             <option value="">Choose a question</option>
-            {restrictedAnswerFields.map((field) => (
-              <option key={field.key} value={field.key}>
-                {field.label}
-              </option>
+            {fieldGroups.map((group) => (
+              <optgroup key={group} label={group}>
+                {restrictedAnswerFields
+                  .filter((field) => field.group === group)
+                  .map((field) => (
+                    <option key={field.key} value={field.key}>
+                      {field.label}
+                    </option>
+                  ))}
+              </optgroup>
             ))}
           </select>
         </label>
@@ -442,10 +458,46 @@ export function RestrictedAnswersForm({ authenticated }: { authenticated: boolea
               <option value="false">No</option>
             </select>
           </label>
+        ) : selectedDefinition?.options ? (
+          <label>
+            Answer
+            <select
+              value={answerValue}
+              onChange={(event) => {
+                setAnswerValue(event.target.value);
+                setConfirmedSave(false);
+              }}
+              disabled={controlsDisabled}
+              required
+            >
+              <option value="">Choose an answer</option>
+              {selectedDefinition.options.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : selectedDefinition?.countries ? (
+          <label>
+            Countries
+            <span>Two-letter country codes separated by commas, such as US, CA.</span>
+            <input
+              value={answerValue}
+              onChange={(event) => {
+                setAnswerValue(event.target.value);
+                setConfirmedSave(false);
+              }}
+              maxLength={200}
+              autoCapitalize="characters"
+              disabled={controlsDisabled}
+              required
+            />
+          </label>
         ) : (
           <label>
             Answer
-            <span>Enter the exact option text you chose for this question.</span>
+            <span>Enter your answer as you want it given.</span>
             <input
               value={answerValue}
               onChange={(event) => {
@@ -466,18 +518,18 @@ export function RestrictedAnswersForm({ authenticated }: { authenticated: boolea
             disabled={controlsDisabled || !selectedDefinition || !answerValue.trim()}
             required
           />
-          I supplied this answer and choose to save it for exact-match reuse.
+          This is my own answer, and I want it saved for my applications.
         </label>
         <button type="submit" disabled={controlsDisabled || !confirmedSave}>
-          {mutatingKey === fieldKey ? "Saving…" : "Save restricted answer"}
+          {mutatingKey === fieldKey ? "Saving…" : "Save answer"}
         </button>
       </form>
 
       <h3>Saved metadata</h3>
       {loading ? (
-        <p>Loading restricted answers…</p>
+        <p>Loading sensitive answers…</p>
       ) : activeAnswers.length === 0 ? (
-        <p>No restricted answers are saved.</p>
+        <p>No sensitive answers are saved.</p>
       ) : (
         <ul className="fact-list restricted-answer-list">
           {activeAnswers.map((answer) => {
