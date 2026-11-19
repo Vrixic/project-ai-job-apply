@@ -1280,6 +1280,18 @@ variable "narrative_answers_enabled" {
   }
 }
 
+variable "choice_answers_enabled" {
+  description = "Turn on choice answers decided by Jev (ADR-061). Creates the provider key secret and lets the Gateway read it. This is the kill switch: set it false to switch deciding off without a code release."
+  type        = bool
+  default     = false
+  nullable    = false
+
+  validation {
+    condition     = !var.choice_answers_enabled || var.deploy_gateway_lambda
+    error_message = "Choice answers run in the Gateway Lambda, so deploy_gateway_lambda must be true."
+  }
+}
+
 variable "restricted_answer_reuse_enabled" {
   description = "Enable explicit exact-version saved-answer selection in Applications after a reviewed release; never infer or silently reuse values."
   type        = bool

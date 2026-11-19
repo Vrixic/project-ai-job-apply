@@ -28,6 +28,11 @@ output "narrative_answers_openai_secret_arn" {
   value       = var.narrative_answers_enabled ? aws_secretsmanager_secret.openai_api_key[0].arn : null
 }
 
+output "choice_answers_typesafe_secret_arn" {
+  description = "Put the TypeSafe API key here as a plain string with `aws secretsmanager put-secret-value`; Terraform never sees it."
+  value       = var.choice_answers_enabled ? aws_secretsmanager_secret.typesafe_api_key[0].arn : null
+}
+
 output "candidate_rights_auth0_secret_arn" {
   description = "Populate this managed secret with exact clientId, clientSecret, and revocationMode JSON before activation evidence."
   value       = var.candidate_rights_auth0_secret_provisioned ? aws_secretsmanager_secret.candidate_rights_auth0[0].arn : null

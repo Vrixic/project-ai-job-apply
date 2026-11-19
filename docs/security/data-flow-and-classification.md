@@ -1001,3 +1001,34 @@ and Profile-answered questions are declined before any model call; drafts pass t
 the kill switch (`narrative_answers_enabled`) is off by default; a per-candidate burst and daily limit
 and the provider key's own spending cap bound cost. Consent is the Terms of Service, which must name
 the provider and the data above before any real candidate uses it (D6 launch gate).
+
+## Choice answers decided by Jev (ADR-061, 2026-11-18)
+
+Purpose: decide the required choice questions (radio, Yes/No) that the fill would leave to the candidate,
+so the candidate reviews AI-chosen answers instead of answering each one. A restricted answer is only
+proposed and is chosen when the candidate confirms that one.
+
+Path: employer page (the candidate's own browser) -> extension page script (question and option labels
+only) -> extension background -> Gateway route `POST /v1/applications/{id}/choice-answers` -> the TypeSafe
+API (`https://api.typesafe.ai/v1/systemone`, a fixed host in code) -> decisions back to the extension, which
+chooses the standard answers on the page and lists them in the panel.
+
+| Data | Class | Where it goes | Kept |
+|---|---|---|---|
+| The question and option labels | Untrusted employer text | Gateway, then the provider request | Not stored or logged by the platform |
+| Confirmed work history, education and skills; Job preferences (work modes, locations); saved answers | Confidential candidate data | The provider request, for standard questions. Name, email, phone and address are never sent | Not stored with the decision |
+| The active job's title, company and (for standard questions) description | Public job facts | The provider request | The catalog keeps the job as before |
+| The candidate's own saved statement on one restricted topic (sponsorship, work authorization, demographics, disability, veteran status, attestation) | Restricted candidate data | The provider request for that one question only, with the job title; the plaintext is read server-side from the vault and is never returned over HTTP | Not stored with the decision. With no saved statement, nothing is sent |
+| The decision (option, probability, confidence) | Candidate-bound generated data | Returned once with `Cache-Control: no-store`; the extension chooses a standard answer on the page, or shows a restricted one for confirmation | Not stored or logged by the platform; a restricted proposal lives in the extension's memory for that page for 30 minutes |
+| Provider-side copy | Subprocessor handling | TypeSafe. Its privacy policy says it will not train or fine-tune on Input and will not disclose Input beyond its service providers; it states no retention period | Retention must be confirmed with TypeSafe before real-candidate use (owner action, D3.2-013) |
+
+Controls: the Gateway route is owner-scoped (`applications:write`); the Gateway classifies each question
+itself and does not trust the client; a restricted question is decided only from the candidate's own saved
+statement and never from other facts (gender, race, disability and veteran status are never inferred);
+the extension chooses only a question that is still unanswered, on an option present on the page, and only
+for a form whose hash it read before the fill; restricted answers are confirmed one at a time before the
+fill; nothing AI-chosen is submitted without the candidate's check; thresholds for probability,
+confidence and "the information answers the question" live in code with conservative defaults; the kill
+switch (`choice_answers_enabled`) is off by default; the provider key is an operator-populated secret that
+Terraform never holds; a per-candidate burst and daily limit bound cost. Consent is the Terms of Service,
+which must name TypeSafe and the data above before any real candidate uses it (D6 launch gate).

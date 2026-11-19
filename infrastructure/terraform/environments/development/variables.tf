@@ -565,6 +565,13 @@ variable "notifications_email_from" {
   default = ""
 }
 
+variable "choice_answers_enabled" {
+  description = "Turn on choice answers decided by Jev in the Gateway (ADR-061); false switches deciding off without a code release."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "narrative_answers_enabled" {
   description = "Turn on model-drafted free-text answers in the Gateway (ADR-057); false switches drafting off without a code release."
   type        = bool

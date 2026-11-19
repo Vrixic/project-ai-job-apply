@@ -1729,6 +1729,16 @@ data "aws_iam_policy_document" "gateway_lambda" {
     }
   }
 
+  dynamic "statement" {
+    for_each = var.choice_answers_enabled ? [1] : []
+    content {
+      sid       = "ReadChoiceAnswersProviderKey"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [aws_secretsmanager_secret.typesafe_api_key[0].arn]
+    }
+  }
+
   statement {
     sid    = "WriteNativeTraces"
     effect = "Allow"
@@ -1970,6 +1980,25 @@ data "aws_iam_policy_document" "secrets_endpoint" {
   }
 
   dynamic "statement" {
+    for_each = var.choice_answers_enabled && var.deploy_gateway_lambda ? [1] : []
+    content {
+      sid       = "ExactGatewayChoiceAnswersProviderKey"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = [aws_secretsmanager_secret.typesafe_api_key[0].arn]
+      principals {
+        type        = "*"
+        identifiers = ["*"]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:PrincipalArn"
+        values   = [aws_iam_role.gateway_lambda[0].arn]
+      }
+    }
+  }
+
+  dynamic "statement" {
     for_each = var.candidate_rights_enabled ? [1] : []
     content {
       sid       = "ExactCandidateRightsIdentitySecret"
@@ -2107,6 +2136,10 @@ resource "aws_lambda_function" "gateway" {
       var.narrative_answers_enabled ? {
         NARRATIVE_ANSWERS_ENABLED = "true"
         OPENAI_API_KEY_SECRET_ID  = aws_secretsmanager_secret.openai_api_key[0].arn
+      } : {},
+      var.choice_answers_enabled ? {
+        CHOICE_ANSWERS_ENABLED     = "true"
+        TYPESAFE_API_KEY_SECRET_ID = aws_secretsmanager_secret.typesafe_api_key[0].arn
       } : {},
       local.d2_policy_endpoint_enabled ? {
         D2_CONTRIBUTION_POLICY_ROUTE_ENABLED = "true"
