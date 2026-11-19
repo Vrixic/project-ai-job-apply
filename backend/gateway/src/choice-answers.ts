@@ -146,6 +146,7 @@ export function createChoiceAnswers(options: ChoiceAnswerOptions): ApplicationCh
         title: job.title,
         company: job.company.name,
         description: job.description,
+        locations: job.locations,
       };
 
       const results = new Map<string, ChoiceAnswer>();
@@ -201,11 +202,21 @@ export function createChoiceAnswers(options: ChoiceAnswerOptions): ApplicationCh
         }
         await Promise.all(
           restricted.map(async ({ question, fieldKey }) => {
-            const statement = await readStatement(
-              options.restrictedStatements,
-              ownerUserId,
-              fieldKey,
-            );
+            // A work-authorization question reads the countries the candidate may work in without
+            // sponsorship, which answers it for the job's own country (ADR-062); the older United
+            // States answer is the fallback.
+            const countries =
+              fieldKey === "authorization.us_authorized"
+                ? await readStatement(
+                    options.restrictedStatements,
+                    ownerUserId,
+                    "authorization.work_countries",
+                  )
+                : undefined;
+            const topicKey = countries ? "authorization.work_countries" : fieldKey;
+            const statement =
+              countries ??
+              (await readStatement(options.restrictedStatements, ownerUserId, fieldKey));
             if (!statement) {
               results.set(question.ref, leftToCandidate(question.ref, "no_evidence"));
               return;
@@ -214,7 +225,7 @@ export function createChoiceAnswers(options: ChoiceAnswerOptions): ApplicationCh
               facts: [],
               job: jobContext,
               restrictedStatement: {
-                topic: definitions.get(fieldKey)?.label ?? fieldKey,
+                topic: definitions.get(topicKey)?.label ?? topicKey,
                 value: statement,
               },
             });

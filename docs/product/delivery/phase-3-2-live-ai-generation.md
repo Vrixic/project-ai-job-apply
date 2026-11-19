@@ -43,7 +43,7 @@ related is tracked here so it is handled next and is not lost.
 | D3.2-012 | Jev choice answers, slice 3: Terraform (empty key secret, Gateway read, egress to the TypeSafe host, kill switch default off), Gateway release and live calibration of the thresholds at a restore sitting. | In progress | Claude; owner | D3.2-011 | Applied 2026-11-19: the Gateway writes the retained deployments in the compact form, `choice_answers_enabled` is on, the key secret, Gateway read grant and endpoint-policy statement exist; Gateway environment about 3,670 of 4,096 bytes. Left: live calibration of the thresholds on real postings. |
 | D3.2-013 | Owner actions for Jev: create the TypeSafe API key in their console and put it in the secret, confirm TypeSafe's retention terms, and name TypeSafe in the Terms and subprocessor list. | In progress | Owner | None | Key created and put in the secret by the owner (2026-11-19). Left: TypeSafe's retention terms and naming TypeSafe in the Terms and subprocessor list; no real-candidate use before retention is confirmed. |
 | D3.2-014 | Profile answers for recurring application questions ([ADR-062](../../adr/062-profile-answers-for-recurring-application-questions.md)), slice 1: Profile migration and contracts (pronouns, X link, languages section, relocation, notice, start date), derived years of experience, taxonomy fields, packet rows, planner patterns, Jev context. | In progress | Claude | D3.2-011 | Owner direction 2026-11-19 from the Application Question Index (3,645 forms, 194 companies). |
-| D3.2-015 | ADR-062 slice 2: new restricted statements (work-authorization countries, citizenship, clearance, age 18+, Hispanic/Latino, sexual orientation, transgender), fixed self-identification options, and the Sensitive answers profile tab. | Ready | Claude | D3.2-014 | Self-identification stays voluntary and is never inferred. |
+| D3.2-015 | ADR-062 slice 2: new restricted statements (work-authorization countries, citizenship, clearance, age 18+, Hispanic/Latino, sexual orientation, transgender), fixed self-identification options, and the Sensitive answers profile tab. | In progress | Claude | D3.2-014 | Self-identification stays voluntary and is never inferred. |
 | D3.2-016 | ADR-062 slice 3: profile UI for the new fields and the stricter required-before-Apply check, then one release (Profile migration, Gateway, web, extension). | Ready | Claude; owner | D3.2-015 | The owner turns on the Sensitive answers tab in Vercel. |
 
 ## Exit criteria
@@ -186,6 +186,14 @@ languages to the Personal record. The `x` link kind is new. Job preferences gain
 period and earliest start date. New taxonomy fields: country, website, X, pronouns and years of
 experience (derived from work history). Packet rows and preference answers, planner patterns and
 Jev's context are updated, as are the restore manifest, migration inventory and deletion-replay pins.
+Not released.
+
+2026-11-19: D3.2-015 built locally (ADR-062 slice 2). Seven restricted statements are new:
+work-authorization countries, citizenship, clearance, 18 or older, Hispanic/Latino, sexual orientation
+and transgender. They are added to the taxonomy, the export key list and schema, and the planner
+patterns. Self-identification and clearance answers become fixed option lists. A work-authorization
+question reads the countries statement, with the job's locations in Jev's restricted context. The vault
+form is mounted as a Sensitive answers profile tab behind the existing vault switch. No migration.
 Not released.
 
 ## Risks and blockers

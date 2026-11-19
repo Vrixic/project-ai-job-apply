@@ -262,6 +262,20 @@
       "answerPolicy": "never_infer"
     },
     {
+      "key": "authorization.work_countries",
+      "label": "Countries where you may work without sponsorship",
+      "valueType": "string",
+      "sensitivity": "restricted",
+      "answerPolicy": "never_infer"
+    },
+    {
+      "key": "authorization.citizenship",
+      "label": "Countries of citizenship",
+      "valueType": "string",
+      "sensitivity": "restricted",
+      "answerPolicy": "never_infer"
+    },
+    {
       "key": "disclosure.non_compete",
       "label": "Non-compete or restrictive covenant",
       "valueType": "boolean",
@@ -271,6 +285,20 @@
     {
       "key": "disclosure.conflict_of_interest",
       "label": "Potential conflict of interest",
+      "valueType": "boolean",
+      "sensitivity": "restricted",
+      "answerPolicy": "never_infer"
+    },
+    {
+      "key": "disclosure.security_clearance",
+      "label": "Security clearance",
+      "valueType": "enum",
+      "sensitivity": "restricted",
+      "answerPolicy": "never_infer"
+    },
+    {
+      "key": "eligibility.age_18_or_over",
+      "label": "18 years or older",
       "valueType": "boolean",
       "sensitivity": "restricted",
       "answerPolicy": "never_infer"
@@ -290,6 +318,13 @@
       "answerPolicy": "never_infer"
     },
     {
+      "key": "demographic.hispanic_latino",
+      "label": "Hispanic or Latino",
+      "valueType": "enum",
+      "sensitivity": "restricted",
+      "answerPolicy": "never_infer"
+    },
+    {
       "key": "demographic.veteran",
       "label": "Voluntary veteran disclosure",
       "valueType": "enum",
@@ -299,6 +334,20 @@
     {
       "key": "demographic.disability",
       "label": "Voluntary disability disclosure",
+      "valueType": "enum",
+      "sensitivity": "restricted",
+      "answerPolicy": "never_infer"
+    },
+    {
+      "key": "demographic.sexual_orientation",
+      "label": "Sexual orientation",
+      "valueType": "enum",
+      "sensitivity": "restricted",
+      "answerPolicy": "never_infer"
+    },
+    {
+      "key": "demographic.transgender",
+      "label": "Transgender identity",
       "valueType": "enum",
       "sensitivity": "restricted",
       "answerPolicy": "never_infer"
