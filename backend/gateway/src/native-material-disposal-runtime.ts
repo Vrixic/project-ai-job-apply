@@ -10,18 +10,41 @@ import postgres from "postgres";
 import { createNativeOwnerMaterialCleanup } from "./native-owner-material-cleanup.js";
 
 type Deployment = Pick<NativeTaskAllocation, "clusterArn" | "taskDefinitionArn" | "containerName">;
-/** Called only by Applications after its owner-scoped terminal mutation. No public stop-task input.
- * The release must supply retained exact deployments and corresponding scoped ECS/network access.
+
+/**
+ * The retained exact deployments, from either serialization. The list form repeats the cluster for
+ * every deployment. The compact form, `{"c":"<cluster>","d":[["<task definition>","<container>"]]}`,
+ * names it once, which keeps the Gateway Lambda's 4,096 byte environment from filling up as task
+ * revisions are retained. Both end in the same validated deployments; nothing else is accepted.
  */
-export function nativeMaterialDisposalFromEnvironment(url: string, environment: NodeJS.ProcessEnv) {
-  if (environment.NATIVE_APPLICATION_DISPOSAL_ENABLED !== "true") return undefined;
-  const serialized = environment.NATIVE_APPLICATION_DISPOSAL_DEPLOYMENTS;
-  if (!serialized) throw Error("NativeApplicationDisposalConfigurationInvalid");
+export function parseNativeDisposalDeployments(serialized: string): Deployment[] {
   let deployments: Deployment[];
   try {
     const value: unknown = JSON.parse(serialized);
-    if (!Array.isArray(value) || value.length < 1 || value.length > 8) throw Error();
-    deployments = value.map((item: unknown) => {
+    const entries: unknown[] = Array.isArray(value)
+      ? value
+      : value &&
+          typeof value === "object" &&
+          Object.keys(value).sort().join(",") === "c,d" &&
+          typeof (value as { c: unknown }).c === "string" &&
+          Array.isArray((value as { d: unknown }).d)
+        ? (value as { d: unknown[] }).d.map((pair) => {
+            if (
+              !Array.isArray(pair) ||
+              pair.length !== 2 ||
+              typeof pair[0] !== "string" ||
+              typeof pair[1] !== "string"
+            )
+              throw Error();
+            return {
+              clusterArn: (value as { c: string }).c,
+              taskDefinitionArn: pair[0],
+              containerName: pair[1],
+            };
+          })
+        : [];
+    if (entries.length < 1 || entries.length > 8) throw Error();
+    deployments = entries.map((item: unknown) => {
       if (
         !item ||
         typeof item !== "object" ||
@@ -36,6 +59,16 @@ export function nativeMaterialDisposalFromEnvironment(url: string, environment: 
   } catch {
     throw Error("NativeApplicationDisposalConfigurationInvalid");
   }
+  return deployments;
+}
+/** Called only by Applications after its owner-scoped terminal mutation. No public stop-task input.
+ * The release must supply retained exact deployments and corresponding scoped ECS/network access.
+ */
+export function nativeMaterialDisposalFromEnvironment(url: string, environment: NodeJS.ProcessEnv) {
+  if (environment.NATIVE_APPLICATION_DISPOSAL_ENABLED !== "true") return undefined;
+  const serialized = environment.NATIVE_APPLICATION_DISPOSAL_DEPLOYMENTS;
+  if (!serialized) throw Error("NativeApplicationDisposalConfigurationInvalid");
+  const deployments = parseNativeDisposalDeployments(serialized);
   const enabled = () =>
     environment.NATIVE_APPLICATION_DISPOSAL_ENABLED === "true" &&
     environment.NATIVE_APPLICATION_DISPOSAL_DEPLOYMENTS === serialized;
