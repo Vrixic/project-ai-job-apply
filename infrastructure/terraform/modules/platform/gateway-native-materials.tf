@@ -61,13 +61,8 @@ locals {
     RESTRICTED_PACKET_FINGERPRINT_KEY_ARN = aws_kms_key.restricted_packet_fingerprint[0].arn
     NATIVE_OWNER_MATERIAL_CLEANUP_ENABLED = tostring(var.gateway_native_materials.owner_cleanup_enabled)
     NATIVE_APPLICATION_DISPOSAL_ENABLED   = tostring(var.gateway_native_materials.disposal_enabled)
-    # One cluster: name it once (the Gateway Lambda environment is capped at 4,096 bytes and every retained
-    # task revision adds an entry). Otherwise the list form, which the same parser also reads.
-    NATIVE_APPLICATION_DISPOSAL_DEPLOYMENTS = length(distinct([for deployment in var.gateway_native_materials.disposal_deployments : deployment.cluster_arn])) == 1 ? jsonencode({
-      c = var.gateway_native_materials.disposal_deployments[0].cluster_arn
-      d = [for deployment in var.gateway_native_materials.disposal_deployments : [deployment.task_definition_arn, deployment.container_name]]
-      }) : jsonencode([for deployment in var.gateway_native_materials.disposal_deployments : {
-        clusterArn = deployment.cluster_arn, taskDefinitionArn = deployment.task_definition_arn, containerName = deployment.container_name
+    NATIVE_APPLICATION_DISPOSAL_DEPLOYMENTS = jsonencode([for deployment in var.gateway_native_materials.disposal_deployments : {
+      clusterArn = deployment.cluster_arn, taskDefinitionArn = deployment.task_definition_arn, containerName = deployment.container_name
     }])
     NATIVE_MATERIAL_AVAILABILITY_ENABLED        = tostring(var.gateway_native_materials.availability_enabled)
     NATIVE_MATERIAL_READ_AUTHORIZATIONS_ENABLED = tostring(var.gateway_native_materials.read_authorizations_enabled)

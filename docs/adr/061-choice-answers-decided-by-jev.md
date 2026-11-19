@@ -103,5 +103,6 @@ Building the extension side settled four points the decisions above left open:
    redirects); the Gateway Lambda reaches the internet the same way it does for narrative answers, so
    Terraform adds no network rule. The Gateway environment grows by about 176 bytes (kill switch and the
    key's ARN). Measured against the live function as compact JSON, that is 4,091 of 4,096 bytes with the
-   list form of the retained-deployments variable, so the variable is now written in a compact form that
-   names the cluster once (3,669 bytes); one parser reads both forms.
+   list form of the retained-deployments variable, so the variable gets a compact form that
+   names the cluster once (3,669 bytes); one parser reads both forms. Order matters: the parser is released as
+   Gateway code first, and only then does Terraform start writing the compact form.
