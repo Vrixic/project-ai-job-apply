@@ -170,6 +170,14 @@ It now also accepts those two modules with the identical exact checks (address, 
 values, both reads per module, a retained release for the key); a substituted read or an unretained key is still
 refused. The release is repeated from the main that carries the fix.
 
+2026-11-19: Gateway released from main 564bfd65 (work-mode answers live, Jev code dark, compact-deployments parser
+live); the first apply was cut off by an expired SSO token after the function update, so the stale lock was removed
+with the owner's approval and the same reviewed plan reapplied (applied-and-verified, zero drift). The owner confirmed
+the in-person question on Mintlify is answered from Job preferences. Next, the Gateway's retained-deployments variable
+is written in the compact form (one cluster named once; the cleanup worker keeps its own list form), which makes room
+for the choice-answers variables; then a platform stage enables `choice_answers_enabled`, which creates the TypeSafe
+key secret for the owner to fill.
+
 ## Risks and blockers
 
 | ID | Risk | Status |
