@@ -44,7 +44,7 @@ related is tracked here so it is handled next and is not lost.
 | D3.2-013 | Owner actions for Jev: create the TypeSafe API key in their console and put it in the secret, confirm TypeSafe's retention terms, and name TypeSafe in the Terms and subprocessor list. | In progress | Owner | None | Key created and put in the secret by the owner (2026-11-19). Left: TypeSafe's retention terms and naming TypeSafe in the Terms and subprocessor list; no real-candidate use before retention is confirmed. |
 | D3.2-014 | Profile answers for recurring application questions ([ADR-062](../../adr/062-profile-answers-for-recurring-application-questions.md)), slice 1: Profile migration and contracts (pronouns, X link, languages section, relocation, notice, start date), derived years of experience, taxonomy fields, packet rows, planner patterns, Jev context. | In progress | Claude | D3.2-011 | Owner direction 2026-11-19 from the Application Question Index (3,645 forms, 194 companies). |
 | D3.2-015 | ADR-062 slice 2: new restricted statements (work-authorization countries, citizenship, clearance, age 18+, Hispanic/Latino, sexual orientation, transgender), fixed self-identification options, and the Sensitive answers profile tab. | In progress | Claude | D3.2-014 | Self-identification stays voluntary and is never inferred. |
-| D3.2-016 | ADR-062 slice 3: profile UI for the new fields and the stricter required-before-Apply check, then one release (Profile migration, Gateway, web, extension). | Ready | Claude; owner | D3.2-015 | The owner turns on the Sensitive answers tab in Vercel. |
+| D3.2-016 | ADR-062 slice 3: profile UI for the new fields and the stricter required-before-Apply check, then one release (Profile migration, Gateway, web, extension). | In progress | Claude; owner | D3.2-015 | The owner turns on the Sensitive answers tab in Vercel. |
 
 ## Exit criteria
 
@@ -195,6 +195,13 @@ patterns. Self-identification and clearance answers become fixed option lists. A
 question reads the countries statement, with the job's locations in Jev's restricted context. The vault
 form is mounted as a Sensitive answers profile tab behind the existing vault switch. No migration.
 Not released.
+
+2026-11-19: D3.2-016 built locally (ADR-062 slice 3). The Personal tab gains pronouns, an X link and a
+languages list. Job preferences gain relocation, earliest start date and notice period. The
+required-before-Apply check asks for the country, a work-history entry, relocation, a start date or
+notice period, and (with the Sensitive answers tab on) the work-authorization countries and sponsorship.
+Release pending: migration image and run (profile 0015), Gateway, web (Vercel, with the vault switch)
+and extension.
 
 ## Risks and blockers
 
