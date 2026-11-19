@@ -28,6 +28,7 @@ const SYNONYMS: readonly Synonym[] = [
     patterns: [/^(?:legal\s+)?last\s+name$/u, /\b(?:family\s+name|surname)\b/u],
   },
   { key: "identity.preferred_name", patterns: [/\bpreferred\s+(?:first\s+)?name\b/u] },
+  { key: "identity.pronouns", patterns: [/\bpronouns?\b/u] },
   { key: "contact.email", patterns: [/^e-?mail(?:\s+address)?$/u, /\be-?mail\b/u] },
   {
     key: "contact.phone",
@@ -49,12 +50,26 @@ const SYNONYMS: readonly Synonym[] = [
     key: "contact.address.postal_code",
     patterns: [/^(?:zip|postal)(?:\s*\/?\s*(?:postal\s+)?code)?$/u],
   },
+  {
+    // Where the candidate lives (ADR-062), never the job's country or a work-authorization question.
+    key: "contact.address.country",
+    patterns: [
+      /^country(?:\s+of\s+residence)?$/u,
+      /^(?!.*\b(?:authori[sz]\w*|eligible|sponsor\w*|citizen\w*)\b).*\bcountry\b.*\b(?:reside|live|based|located)\b/u,
+    ],
+  },
   { key: "links.linkedin", patterns: [/\blinkedin\b/u] },
   { key: "links.github", patterns: [/\bgithub\b/u] },
+  { key: "links.portfolio", patterns: [/\bportfolio\b/u] },
   {
-    key: "links.portfolio",
-    patterns: [/\b(?:portfolio|personal\s+(?:website|site|url)|website)\b/u],
+    // A website label that also names a portfolio is the portfolio's (ADR-062).
+    key: "links.website",
+    patterns: [
+      /^(?!.*\bportfolio\b).*\b(?:personal\s+)?(?:website|web\s+site)\b/u,
+      /^other\s+(?:website|links?|urls?)$/u,
+    ],
   },
+  { key: "links.x", patterns: [/\btwitter\b/u, /^x(?:\s+(?:profile|handle|url))?$/u] },
   { key: "employment.current_company", patterns: [/\bcurrent\s+(?:company|employer)\b/u] },
   {
     key: "employment.current_title",
@@ -65,6 +80,14 @@ const SYNONYMS: readonly Synonym[] = [
   { key: "education.field", patterns: [/\b(?:field\s+of\s+study|major|discipline)\b/u] },
   { key: "education.graduation_date", patterns: [/\bgraduat\w*\b/u] },
   { key: "job.notice_period", patterns: [/\bnotice\s+period\b/u] },
+  {
+    // Total years only; years with a named tool or field stay with the candidate or Jev (ADR-062).
+    key: "employment.years_experience",
+    patterns: [
+      /^(?:total\s+)?years\s+of\s+(?:professional\s+|relevant\s+|work\s+)?experience$/u,
+      /^how\s+many\s+years\s+of\s+(?:total\s+|professional\s+|relevant\s+)?(?:work\s+)?experience\s+do\s+you\s+have$/u,
+    ],
+  },
   {
     key: "job.available_start_date",
     patterns: [/\b(?:available|earliest)\b.*\bstart\b/u, /\bstart\s+date\b/u],

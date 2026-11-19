@@ -842,6 +842,15 @@ export class PostgresProfileSectionStore implements ProfileSectionStore {
     if (!validate({ expectedVersion, ...content })) {
       throw new ProfileSectionInputError("personal fields are invalid");
     }
+    const languages = Array.isArray(content.languages) ? content.languages : [];
+    const names = languages.map((entry) =>
+      String((entry as { language?: unknown }).language ?? "")
+        .trim()
+        .toLowerCase(),
+    );
+    if (new Set(names).size !== names.length) {
+      throw new ProfileSectionInputError("each language can be listed once");
+    }
     await tx`SELECT pg_advisory_xact_lock(hashtext(${`profile-personal:${userId}`}))`;
     const latest = await tx<
       { version: number; origin: "entered" | "imported"; importId: string | null }[]

@@ -21,6 +21,8 @@ export interface PersonalRecordLike {
   phone?: string;
   address?: Partial<Record<"street" | "city" | "region" | "postalCode" | "country", string>>;
   links?: ReadonlyArray<{ kind: string; url: string }>;
+  pronouns?: string;
+  languages?: ReadonlyArray<{ language: string; proficiency: string }>;
 }
 
 export interface EducationRecordLike {
@@ -57,6 +59,8 @@ export interface ProfileEntryFactInput {
   education: readonly EducationRecordLike[];
   workExperience: readonly WorkRecordLike[];
   skills: readonly SkillRecordLike[];
+  /** The day years of experience are counted to; today when omitted. */
+  asOf?: Date;
 }
 
 export type ProfileEntrySectionName = "personal" | "education" | "workExperience" | "skill";
@@ -161,14 +165,68 @@ function personalFacts(userId: string, personal: PersonalRecordLike): GraphFact[
   add("address.city", personal.address?.city);
   add("address.region", personal.address?.region);
   add("address.postal_code", personal.address?.postalCode);
+  add("address.country", personal.address?.country);
   const link = (kind: string) => personal.links?.find((item) => item.kind === kind)?.url;
   add("linkedin", link("linkedin"));
   add("github", link("github"));
   add("portfolio", link("portfolio"));
+  // A website question takes the "other" link, else the portfolio, which is the candidate's site.
+  add("website", link("other") ?? link("portfolio"));
+  add("x", link("x"));
+  add("pronouns", personal.pronouns);
+  // Spoken languages are skills: they ground generated text and choice answers, never a packet field.
+  for (const entry of personal.languages ?? []) {
+    if (!present(entry.language)) continue;
+    facts.push(
+      fact(
+        derivedId("personal-language", userId, entry.language.trim().toLowerCase()),
+        "skill",
+        "language",
+        `${entry.language.trim()} (${entry.proficiency})`,
+        "standard",
+        ref,
+        personal.version,
+      ),
+    );
+  }
   return facts;
 }
 
-function workFacts(userId: string, entries: readonly WorkRecordLike[]): GraphFact[] {
+const DAY_MS = 86_400_000;
+
+/**
+ * Whole years of professional experience: the union of the saved work periods (an open period runs
+ * to `asOf`), rounded down. Overlapping jobs count once. Undefined without a dated period.
+ */
+export function yearsOfExperience(
+  entries: readonly Pick<WorkRecordLike, "startDate" | "endDate">[],
+  asOf: Date,
+): number | undefined {
+  const periods = entries
+    .map((entry) => {
+      const start = Date.parse(`${entry.startDate}T00:00:00Z`);
+      const end = present(entry.endDate)
+        ? Date.parse(`${entry.endDate}T00:00:00Z`)
+        : asOf.getTime();
+      return [start, Math.min(end, asOf.getTime())] as const;
+    })
+    .filter(([start, end]) => Number.isFinite(start) && Number.isFinite(end) && end > start)
+    .sort((a, b) => a[0] - b[0]);
+  if (periods.length === 0) return undefined;
+  let total = 0;
+  let [runStart, runEnd] = periods[0] as readonly [number, number];
+  for (const [start, end] of periods.slice(1)) {
+    if (start <= runEnd) runEnd = Math.max(runEnd, end);
+    else {
+      total += runEnd - runStart;
+      [runStart, runEnd] = [start, end];
+    }
+  }
+  total += runEnd - runStart;
+  return Math.floor(total / (365.25 * DAY_MS));
+}
+
+function workFacts(userId: string, entries: readonly WorkRecordLike[], asOf: Date): GraphFact[] {
   const facts: GraphFact[] = [];
   for (const entry of entries) {
     const ref = reference("workExperience", entry.id, entry.version);
@@ -199,6 +257,23 @@ function workFacts(userId: string, entries: readonly WorkRecordLike[]): GraphFac
     add("current_company", current.company);
     add("current_title", current.title);
     add("start_date", current.startDate);
+  }
+  // Derived from every saved period; it cites the first entry, and the candidate corrects it by
+  // correcting their work history (ADR-062).
+  const years = yearsOfExperience(entries, asOf);
+  const first = entries[0];
+  if (years !== undefined && first) {
+    facts.push(
+      fact(
+        derivedId("work-years", userId),
+        "employment",
+        "years_experience",
+        years,
+        "standard",
+        reference("workExperience", first.id, first.version),
+        first.version,
+      ),
+    );
   }
   return facts;
 }
@@ -244,7 +319,7 @@ function educationFacts(userId: string, entries: readonly EducationRecordLike[])
 export function profileEntriesToGraphFacts(input: ProfileEntryFactInput): GraphFact[] {
   return [
     ...(input.personal ? personalFacts(input.userId, input.personal) : []),
-    ...workFacts(input.userId, input.workExperience),
+    ...workFacts(input.userId, input.workExperience, input.asOf ?? new Date()),
     ...educationFacts(input.userId, input.education),
     ...input.skills.map((skill) =>
       fact(

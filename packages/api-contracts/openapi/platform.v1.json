@@ -7858,6 +7858,19 @@
           },
           "requiresSponsorship": {
             "type": "boolean"
+          },
+          "relocation": {
+            "type": "boolean"
+          },
+          "noticePeriod": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "pattern": "\\S"
+          },
+          "availableStartDate": {
+            "type": "string",
+            "format": "date"
           }
         },
         "dependentRequired": {
@@ -8498,13 +8511,40 @@
               "properties": {
                 "kind": {
                   "type": "string",
-                  "enum": ["linkedin", "github", "portfolio", "other"]
+                  "enum": ["linkedin", "github", "portfolio", "x", "other"]
                 },
                 "url": {
                   "type": "string",
                   "format": "uri",
                   "maxLength": 500,
                   "pattern": "^https://"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "pronouns": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "pattern": "\\S"
+          },
+          "languages": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "required": ["language", "proficiency"],
+              "properties": {
+                "language": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 60,
+                  "pattern": "\\S"
+                },
+                "proficiency": {
+                  "type": "string",
+                  "enum": ["native", "fluent", "professional", "conversational", "basic"]
                 }
               },
               "additionalProperties": false
@@ -8601,13 +8641,40 @@
               "properties": {
                 "kind": {
                   "type": "string",
-                  "enum": ["linkedin", "github", "portfolio", "other"]
+                  "enum": ["linkedin", "github", "portfolio", "x", "other"]
                 },
                 "url": {
                   "type": "string",
                   "format": "uri",
                   "maxLength": 500,
                   "pattern": "^https://"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "pronouns": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "pattern": "\\S"
+          },
+          "languages": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "required": ["language", "proficiency"],
+              "properties": {
+                "language": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 60,
+                  "pattern": "\\S"
+                },
+                "proficiency": {
+                  "type": "string",
+                  "enum": ["native", "fluent", "professional", "conversational", "basic"]
                 }
               },
               "additionalProperties": false
@@ -9346,7 +9413,7 @@
                   "properties": {
                     "kind": {
                       "type": "string",
-                      "enum": ["linkedin", "github", "portfolio", "other"]
+                      "enum": ["linkedin", "github", "portfolio", "x", "other"]
                     },
                     "url": {
                       "type": "string",

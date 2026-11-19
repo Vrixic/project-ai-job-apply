@@ -427,14 +427,14 @@ describe("fill plan", () => {
       const form = extractGenericForm(page(html));
       const plan = buildFillPlan(
         form,
-        [{ fieldKey: "links.portfolio", value: "example", needsUserAction: false }],
+        [{ fieldKey: "links.website", value: "example", needsUserAction: false }],
         { resume: false, coverLetter: false },
       );
       expect(plan.actions).toEqual([
         {
           kind: "require_user",
           ref: "f0",
-          fieldKey: "links.portfolio",
+          fieldKey: "links.website",
           reason: "option_not_found",
         },
       ]);
@@ -529,12 +529,12 @@ describe("fill plan", () => {
       ),
     );
     const plan = (value: string) =>
-      buildFillPlan(form, [{ fieldKey: "links.portfolio", value, needsUserAction: false }], {
+      buildFillPlan(form, [{ fieldKey: "links.website", value, needsUserAction: false }], {
         resume: false,
         coverLetter: false,
       });
     expect(plan(" EXAMPLE ").actions).toEqual([
-      { kind: "select", ref: "f0", fieldKey: "links.portfolio", option: "Example" },
+      { kind: "select", ref: "f0", fieldKey: "links.website", option: "Example" },
     ]);
     expect(plan("Exampl").actions[0]).toMatchObject({
       kind: "require_user",

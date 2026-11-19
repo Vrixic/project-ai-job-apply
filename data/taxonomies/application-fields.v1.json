@@ -31,6 +31,13 @@
       "answerPolicy": "confirmed_fact"
     },
     {
+      "key": "identity.pronouns",
+      "label": "Pronouns",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
       "key": "contact.email",
       "label": "Email",
       "valueType": "string",
@@ -73,6 +80,13 @@
       "answerPolicy": "confirmed_fact"
     },
     {
+      "key": "contact.address.country",
+      "label": "Country of residence",
+      "valueType": "string",
+      "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
       "key": "links.linkedin",
       "label": "LinkedIn URL",
       "valueType": "string",
@@ -89,6 +103,20 @@
     {
       "key": "links.github",
       "label": "GitHub URL",
+      "valueType": "string",
+      "sensitivity": "standard",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "links.website",
+      "label": "Personal website",
+      "valueType": "string",
+      "sensitivity": "standard",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "links.x",
+      "label": "X (Twitter) profile",
       "valueType": "string",
       "sensitivity": "standard",
       "answerPolicy": "confirmed_fact"
@@ -119,6 +147,13 @@
       "label": "Employment end date",
       "valueType": "date",
       "sensitivity": "confidential",
+      "answerPolicy": "confirmed_fact"
+    },
+    {
+      "key": "employment.years_experience",
+      "label": "Years of professional experience",
+      "valueType": "integer",
+      "sensitivity": "standard",
       "answerPolicy": "confirmed_fact"
     },
     {

@@ -75,6 +75,12 @@ export interface ChoiceContextInput {
   facts: readonly PromptFact[];
   workModes?: readonly string[] | undefined;
   locations?: readonly string[] | undefined;
+  /** Saved on Job preferences and the Personal record (ADR-062). */
+  relocation?: boolean | undefined;
+  noticePeriod?: string | undefined;
+  availableStartDate?: string | undefined;
+  /** The candidate's country of residence as an ISO code; never the street address. */
+  countryOfResidence?: string | undefined;
   savedAnswers?: ReadonlyArray<{ question: string; answer: string }> | undefined;
   job: { title: string; company: string; description: string };
   /** The candidate's own saved statement on the one restricted topic the question is about. */
@@ -93,8 +99,8 @@ const clip = (value: string, limit: number) => value.slice(0, limit);
 
 /**
  * The state Jev reads. Only what a choice can depend on: confirmed work history, education, skills,
- * work-mode preferences and locations, saved answers and the job. Name, email, phone and address are
- * never included. A restricted question gets its own statement and the job title only, so no other
+ * work-mode preferences and locations, relocation, notice and start date, the country of residence,
+ * saved answers and the job. Name, email, phone and the street address are never included. A restricted question gets its own statement and the job title only, so no other
  * candidate data is sent for it.
  */
 export function buildChoiceContext(input: ChoiceContextInput): ChoiceContext {
@@ -128,6 +134,12 @@ export function buildChoiceContext(input: ChoiceContextInput): ChoiceContext {
   const preferences: Record<string, unknown> = {};
   if (input.workModes?.length) preferences.work_modes = [...input.workModes];
   if (input.locations?.length) preferences.locations = input.locations.map((l) => clip(l, 120));
+  if (typeof input.relocation === "boolean") preferences.open_to_relocation = input.relocation;
+  if (input.noticePeriod) preferences.notice_period = clip(input.noticePeriod, 60);
+  if (input.availableStartDate)
+    preferences.earliest_start_date = clip(input.availableStartDate, 10);
+  if (input.countryOfResidence && /^[A-Z]{2}$/u.test(input.countryOfResidence))
+    preferences.country_of_residence = input.countryOfResidence;
   if (Object.keys(preferences).length) {
     categories.add("profile_facts");
     context.candidate_preferences = preferences;
