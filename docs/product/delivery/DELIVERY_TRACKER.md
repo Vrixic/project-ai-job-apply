@@ -46,6 +46,8 @@ The owner answered the open questions in chat. Recorded decisions:
 
 2026-11-19 owner decisions on D3.2: Jev (TypeSafe) decides choice questions live in development ([ADR-061](../../adr/061-choice-answers-decided-by-jev.md)) and works on every board the extension supports (Ashby and Greenhouse); the Ashby live proof (D3.2-007) is closed without a submission; the development environment stays up for now.
 
+2026-11-19 owner direction: from the Application Question Index (3,645 public application forms, 194 companies), the recurring facts about the candidate become profile data the fill and Jev use, with a stricter required-before-Apply check; per-job questions and consents never become profile data; people-management years excluded ([ADR-062](../../adr/062-profile-answers-for-recurring-application-questions.md), D3.2-014 to D3.2-016).
+
 Still needing the owner: an AWS sign-in for the deployment, the Stripe account values (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRETS`, `STRIPE_PRO_PRICE_ID`, `BILLING_APP_BASE_URL`), counsel, the independent assessor, and staging and production accounts and Auth0 tenants (D6-013, D6-014, D6-021).
 
 ## D3 — High-quality application preparation
