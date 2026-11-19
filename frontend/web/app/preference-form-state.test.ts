@@ -19,6 +19,9 @@ describe("job preference form state", () => {
       employmentTypes: [],
       salaryMinimum: "",
       salaryCurrency: "",
+      relocation: "",
+      noticePeriod: "",
+      availableStartDate: "",
       legacySponsorshipPresent: false,
     });
   });
@@ -45,6 +48,9 @@ describe("job preference form state", () => {
       employmentTypes: ["full_time", "contract"],
       salaryMinimum: "125000",
       salaryCurrency: "USD",
+      relocation: "",
+      noticePeriod: "",
+      availableStartDate: "",
       legacySponsorshipPresent: false,
     });
     expect(fields.targetRoles).not.toBe(preferences.targetRoles);

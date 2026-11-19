@@ -9,6 +9,11 @@ export interface JobPreferenceFields {
   employmentTypes: EmploymentType[];
   salaryMinimum: string;
   salaryCurrency: string;
+  /** "" until the candidate answers (ADR-062). */
+  relocation?: "" | "yes" | "no";
+  noticePeriod?: string;
+  /** YYYY-MM-DD, or "". */
+  availableStartDate?: string;
   legacySponsorshipPresent: boolean;
 }
 
@@ -24,6 +29,9 @@ export function emptyJobPreferenceFields(): JobPreferenceFields {
     employmentTypes: [],
     salaryMinimum: "",
     salaryCurrency: "",
+    relocation: "",
+    noticePeriod: "",
+    availableStartDate: "",
     legacySponsorshipPresent: false,
   };
 }
@@ -36,6 +44,9 @@ export function hydrateJobPreferenceFields(preferences: JobPreferenceSet): JobPr
     employmentTypes: [...preferences.employmentTypes],
     salaryMinimum: preferences.salaryMinimum === undefined ? "" : String(preferences.salaryMinimum),
     salaryCurrency: preferences.salaryCurrency ?? "",
+    relocation: preferences.relocation === undefined ? "" : preferences.relocation ? "yes" : "no",
+    noticePeriod: preferences.noticePeriod ?? "",
+    availableStartDate: preferences.availableStartDate ?? "",
     legacySponsorshipPresent: Object.hasOwn(preferences, "requiresSponsorship"),
   };
 }
@@ -123,6 +134,15 @@ export function buildJobPreferenceRequest(fields: JobPreferenceFields): JobPrefe
     };
   }
 
+  const noticePeriod = (fields.noticePeriod ?? "").trim();
+  if (noticePeriod.length > 60) {
+    return { ok: false, message: "Keep the notice period to 60 characters, such as 2 weeks." };
+  }
+  const availableStartDate = (fields.availableStartDate ?? "").trim();
+  if (availableStartDate && !isCalendarDate(availableStartDate)) {
+    return { ok: false, message: "Enter the earliest start date as a calendar date." };
+  }
+
   return {
     ok: true,
     request: {
@@ -131,6 +151,15 @@ export function buildJobPreferenceRequest(fields: JobPreferenceFields): JobPrefe
       workModes: [...fields.workModes],
       employmentTypes: [...fields.employmentTypes],
       ...salary,
+      ...(fields.relocation ? { relocation: fields.relocation === "yes" } : {}),
+      ...(noticePeriod ? { noticePeriod } : {}),
+      ...(availableStartDate ? { availableStartDate } : {}),
     },
   };
+}
+
+function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(value);
 }

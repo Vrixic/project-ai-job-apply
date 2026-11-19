@@ -10,13 +10,23 @@ import {
   savePersonal,
 } from "./api";
 
-type LinkKind = "linkedin" | "github" | "portfolio" | "other";
+type LinkKind = "linkedin" | "github" | "portfolio" | "x" | "other";
 const LINK_FIELDS: ReadonlyArray<{ kind: LinkKind; label: string }> = [
   { kind: "linkedin", label: "LinkedIn address" },
   { kind: "github", label: "GitHub address" },
   { kind: "portfolio", label: "Portfolio address" },
-  { kind: "other", label: "Other link" },
+  { kind: "x", label: "X (Twitter) address" },
+  { kind: "other", label: "Personal website or other link" },
 ];
+type Proficiency = "native" | "fluent" | "professional" | "conversational" | "basic";
+const PROFICIENCIES: ReadonlyArray<{ value: Proficiency; label: string }> = [
+  { value: "native", label: "Native" },
+  { value: "fluent", label: "Fluent" },
+  { value: "professional", label: "Professional working" },
+  { value: "conversational", label: "Conversational" },
+  { value: "basic", label: "Basic" },
+];
+const MAXIMUM_LANGUAGES = 20;
 const ADDRESS_FIELDS: ReadonlyArray<{
   name: "street" | "city" | "region" | "postalCode" | "country";
   label: string;
@@ -36,6 +46,8 @@ interface PersonalValues {
   phone: string;
   address: Record<(typeof ADDRESS_FIELDS)[number]["name"], string>;
   links: Record<LinkKind, string>;
+  pronouns: string;
+  languages: Array<{ language: string; proficiency: Proficiency }>;
 }
 
 type Source = Partial<{
@@ -44,13 +56,21 @@ type Source = Partial<{
   phone: string;
   address: Partial<Record<string, string>>;
   links: Array<{ kind: LinkKind; url: string }>;
+  pronouns: string;
+  languages: Array<{ language: string; proficiency: Proficiency }>;
 }>;
 
 function toValues(
   source: Source | undefined,
   fallback?: { name?: string | undefined; email?: string | undefined },
 ): PersonalValues {
-  const links: Record<LinkKind, string> = { linkedin: "", github: "", portfolio: "", other: "" };
+  const links: Record<LinkKind, string> = {
+    linkedin: "",
+    github: "",
+    portfolio: "",
+    x: "",
+    other: "",
+  };
   for (const link of source?.links ?? []) links[link.kind] ||= link.url;
   return {
     fullName: source?.fullName ?? (source ? "" : (fallback?.name ?? "")),
@@ -64,6 +84,8 @@ function toValues(
       country: source?.address?.country ?? "",
     },
     links,
+    pronouns: source?.pronouns ?? "",
+    languages: (source?.languages ?? []).map((entry) => ({ ...entry })),
   };
 }
 
@@ -86,6 +108,17 @@ function toFields(values: PersonalValues): Record<string, unknown> {
     (link) => link.url,
   );
   if (links.length > 0) fields.links = links;
+  if (values.pronouns.trim()) fields.pronouns = values.pronouns.trim();
+  const seen = new Set<string>();
+  const languages = values.languages
+    .map((entry) => ({ language: entry.language.trim(), proficiency: entry.proficiency }))
+    .filter((entry) => {
+      const key = entry.language.toLowerCase();
+      if (!entry.language || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  if (languages.length > 0) fields.languages = languages;
   return fields;
 }
 
@@ -264,6 +297,17 @@ export function PersonalSection({
               onChange={(event) => setValues({ ...values, phone: event.target.value })}
             />
           </div>
+          <div className="profile-entry-field">
+            <label htmlFor={field("pronouns")}>Pronouns</label>
+            <span className="field-help">Optional, such as she/her, he/him or they/them.</span>
+            <input
+              id={field("pronouns")}
+              value={values.pronouns}
+              maxLength={40}
+              disabled={busy}
+              onChange={(event) => setValues({ ...values, pronouns: event.target.value })}
+            />
+          </div>
           <fieldset disabled={busy}>
             <legend>Address</legend>
             {ADDRESS_FIELDS.map((item) => (
@@ -305,6 +349,81 @@ export function PersonalSection({
                 />
               </div>
             ))}
+          </fieldset>
+          <fieldset disabled={busy}>
+            <legend>Languages you speak</legend>
+            <span className="field-help">
+              Used for questions such as "Are you fluent in French?".
+            </span>
+            {values.languages.map((entry, index) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: rows have no identity until saved
+              <div className="paired-fields" key={index}>
+                <label>
+                  Language
+                  <input
+                    value={entry.language}
+                    maxLength={60}
+                    onChange={(event) =>
+                      setValues({
+                        ...values,
+                        languages: values.languages.map((row, at) =>
+                          at === index ? { ...row, language: event.target.value } : row,
+                        ),
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  Level
+                  <select
+                    value={entry.proficiency}
+                    onChange={(event) =>
+                      setValues({
+                        ...values,
+                        languages: values.languages.map((row, at) =>
+                          at === index
+                            ? { ...row, proficiency: event.target.value as Proficiency }
+                            : row,
+                        ),
+                      })
+                    }
+                  >
+                    {PROFICIENCIES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  aria-label={`Remove ${entry.language || "this language"}`}
+                  onClick={() =>
+                    setValues({
+                      ...values,
+                      languages: values.languages.filter((_, at) => at !== index),
+                    })
+                  }
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            {values.languages.length < MAXIMUM_LANGUAGES && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() =>
+                  setValues({
+                    ...values,
+                    languages: [...values.languages, { language: "", proficiency: "fluent" }],
+                  })
+                }
+              >
+                Add a language
+              </button>
+            )}
           </fieldset>
           <div className="profile-entry-actions">
             <button type="submit" disabled={busy}>

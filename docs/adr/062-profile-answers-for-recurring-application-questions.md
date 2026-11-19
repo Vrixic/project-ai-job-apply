@@ -1,6 +1,6 @@
 # ADR-062: Profile answers for recurring application questions
 
-Status: Accepted by the owner's direction 2026-11-19; slices 1 and 2 built locally, not released
+Status: Accepted by the owner's direction 2026-11-19; slices 1 to 3 built locally, not released
 Date: 2026-11-19
 
 ## Context
@@ -135,3 +135,11 @@ Reading the code showed gaps behind questions most forms ask:
 9. **The Sensitive answers tab follows the vault switch.** It appears when the web build has
    `NEXT_PUBLIC_RESTRICTED_ANSWER_VAULT_UI=enabled`, the same switch the vault's web routes already
    require.
+10. **The required-before-Apply check (slice 3, 2026-11-19)** lives in the web app's existing basics
+    check. It asks for:
+    - the country of residence and at least one work-history entry;
+    - Job preferences with a relocation answer and either an earliest start date or a notice period;
+    - with the Sensitive answers tab on, the work-authorization countries, and sponsorship (as a
+      screening or a sensitive answer).
+    Each missing item links to its profile tab. A profile it cannot read still counts as incomplete,
+    as before.

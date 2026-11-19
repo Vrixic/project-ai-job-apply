@@ -11,6 +11,7 @@ const personal = (extra: Partial<ProfilePersonal> = {}): ProfilePersonal => ({
   fullName: "Pat Candidate",
   email: "pat@example.invalid",
   phone: "+1 415 555 0100",
+  address: { country: "US" },
   ...extra,
 });
 const education = (extra: Partial<ProfileEducationEntry> = {}): ProfileEducationEntry => ({
@@ -58,6 +59,7 @@ describe("missingBasics", () => {
       ["name", "personal"],
       ["email", "personal"],
       ["phone", "personal"],
+      ["country", "personal"],
       ["education", "education"],
       ["salary", "salary"],
       ["authorization.us_authorized", "screening"],

@@ -754,6 +754,58 @@ export function ProfilePageClient({
             />
           </label>
         </div>
+        <fieldset disabled={preferenceControlsDisabled}>
+          <legend>Moving and starting</legend>
+          <span className="field-help">
+            Applications ask these often. Each answer is shown to you before it is used.
+          </span>
+          <div className="paired-fields">
+            <label>
+              Open to relocation
+              <select
+                value={preferenceFields.relocation ?? ""}
+                onChange={(event) =>
+                  setPreferenceFields((current) => ({
+                    ...current,
+                    relocation: event.target.value as "" | "yes" | "no",
+                  }))
+                }
+              >
+                <option value="">Not answered</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </label>
+            <label>
+              Earliest start date
+              <span>Optional if you give a notice period</span>
+              <input
+                type="date"
+                value={preferenceFields.availableStartDate ?? ""}
+                onChange={(event) =>
+                  setPreferenceFields((current) => ({
+                    ...current,
+                    availableStartDate: event.target.value,
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Notice period
+              <span>Such as 2 weeks; optional if you give a start date</span>
+              <input
+                maxLength={60}
+                value={preferenceFields.noticePeriod ?? ""}
+                onChange={(event) =>
+                  setPreferenceFields((current) => ({
+                    ...current,
+                    noticePeriod: event.target.value,
+                  }))
+                }
+              />
+            </label>
+          </div>
+        </fieldset>
         <button type="submit" disabled={preferenceControlsDisabled}>
           {loadingPreferences ? "Loading…" : saving ? "Saving…" : "Save preferences"}
         </button>
