@@ -1354,7 +1354,7 @@ function Assert-GatewayDeferredNativeIdentityReads {
   foreach ($read in $reads) {
     Assert-ExactObjectKeys $read @("address", "module_address", "mode", "type", "name", "index",
       "provider_name", "change", "action_reason") "native identity observation"
-    if ([string]$read.address -cnotmatch '^module\.(native_resume_source_access|native_resume_preparation)\["([a-z0-9][a-z0-9-]{0,63})"\]\.data\.(aws_caller_identity|aws_region)\.current\[0\]$') {
+    if ([string]$read.address -cnotmatch '^module\.(native_resume_source_access|native_resume_preparation|native_material_control|native_preparation)\["([a-z0-9][a-z0-9-]{0,63})"\]\.data\.(aws_caller_identity|aws_region)\.current\[0\]$') {
       throw "The Gateway release contains an unrelated data observation."
     }
     $module = $Matches[1]; $key = $Matches[2]; $type = $Matches[3]
