@@ -95,8 +95,15 @@ Building the extension side settled four points the decisions above left open:
    the proposed option and its probability; "I will answer it myself" leaves it to the candidate. The
    proposal lives in the extension's memory for this page only, and the page script re-checks the form
    hash, that the question is still unanswered and that the option is on the page before it chooses.
-4. **Ashby first.** Choosing an option is a provider capability (`chooseOption`); Ashby has it. A
-   provider without it (Greenhouse today) gets no AI choices and behaves as before. Any failure of the
+4. **Every supported board (owner direction 2026-11-19).** Choosing an option is a provider capability
+   (`chooseOption`); Ashby and Greenhouse both have it, so AI choices work on every board the extension
+   supports. Greenhouse asks most Yes/No questions as its own dropdown (react-select), which lists its
+   options only once opened, so the provider also reads which required single-choice questions are still
+   unanswered (`unansweredChoice`): radios and native selects from the page, the dropdown's labels from
+   the board's own question data (`window.__remixContext`, read from the page while present, otherwise
+   from the page's HTML fetched again from the same address without cookies). Nothing is opened to read
+   it. Choosing a dropdown option needs the opened list to hold exactly that label, and a dropdown the
+   fill sets from the packet (a saved answer, the salary questions) is never offered. Any failure of the
    Gateway, including a route that is not released yet, leaves the questions with the candidate.
 5. **Egress is a code limit, not a network allowlist (slice 3, 2026-11-18).** Decision 8 says egress is
    limited to the TypeSafe API host. That holds in code (the client calls one fixed URL and refuses

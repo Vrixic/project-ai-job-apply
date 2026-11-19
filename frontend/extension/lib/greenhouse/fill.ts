@@ -6,7 +6,7 @@ import { writtenValueMatches } from "../field-value";
 import { selectChosenOption, selectExactOption } from "./combobox";
 import type { GreenhouseInspection } from "./inspect";
 
-function requireActionable(control: Element, view: Window) {
+export function requireActionable(control: Element, view: Window) {
   if (control.hasAttribute("readonly") || control.matches(":disabled"))
     throw new Error("GreenhouseFillUnavailable");
   for (let ancestor: Element | null = control; ancestor; ancestor = ancestor.parentElement) {
