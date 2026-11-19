@@ -29,6 +29,11 @@ and `profile_fact_evidence` with their helper functions and triggers, renames `r
 export and deletion functions so they no longer name the fact tables. It is destructive for development
 facts by the owner's decision and must be released with the Gateway and web changes of D3.1-010.
 
+`0015_profile_personal_pronouns_languages` widens the Personal record check so it may also hold the
+candidate's `pronouns` and spoken `languages` (ADR-062). Additive: existing rows already satisfy it, and
+the API still validates both shapes strictly. Releasing it needs the migration image inventory, which this
+change updates, and a migration run.
+
 Provider retirement migrations must fail before mutation when undispatched work remains.
 Historical published routing values may be normalized only to a provider-neutral retired label;
 operation, audit, idempotency, and user-owned data remain unchanged.

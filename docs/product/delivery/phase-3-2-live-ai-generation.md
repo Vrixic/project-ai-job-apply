@@ -42,7 +42,7 @@ related is tracked here so it is handled next and is not lost.
 | D3.2-011 | Jev choice answers, slice 2: the extension collects unresolved choice questions, fills above the thresholds with an "AI chose" list and Undo, and lists restricted proposals for the candidate to confirm one by one. | Complete | Claude | D3.2-010 | Live on Ashby 2026-11-19 (owner-confirmed on Mintlify). Greenhouse added the same day on the owner's direction that Jev works on every board: radios, native selects and the board's own dropdowns, whose labels come from the board's page data; verified in real Chrome on a live Greenhouse posting with every employer write blocked and the route stubbed (standard answers chosen, the restricted one chosen only after confirmation, an unavailable route left everything to the candidate). No programmatic Undo; the step runs before the fill. See ADR-061 implementation notes. |
 | D3.2-012 | Jev choice answers, slice 3: Terraform (empty key secret, Gateway read, egress to the TypeSafe host, kill switch default off), Gateway release and live calibration of the thresholds at a restore sitting. | In progress | Claude; owner | D3.2-011 | Applied 2026-11-19: the Gateway writes the retained deployments in the compact form, `choice_answers_enabled` is on, the key secret, Gateway read grant and endpoint-policy statement exist; Gateway environment about 3,670 of 4,096 bytes. Left: live calibration of the thresholds on real postings. |
 | D3.2-013 | Owner actions for Jev: create the TypeSafe API key in their console and put it in the secret, confirm TypeSafe's retention terms, and name TypeSafe in the Terms and subprocessor list. | In progress | Owner | None | Key created and put in the secret by the owner (2026-11-19). Left: TypeSafe's retention terms and naming TypeSafe in the Terms and subprocessor list; no real-candidate use before retention is confirmed. |
-| D3.2-014 | Profile answers for recurring application questions ([ADR-062](../../adr/062-profile-answers-for-recurring-application-questions.md)), slice 1: Profile migration and contracts (pronouns, X link, languages section, relocation, notice, start date), derived years of experience, taxonomy fields, packet rows, planner patterns, Jev context. | Ready | Claude | D3.2-011 | Owner direction 2026-11-19 from the Application Question Index (3,645 forms, 194 companies). |
+| D3.2-014 | Profile answers for recurring application questions ([ADR-062](../../adr/062-profile-answers-for-recurring-application-questions.md)), slice 1: Profile migration and contracts (pronouns, X link, languages section, relocation, notice, start date), derived years of experience, taxonomy fields, packet rows, planner patterns, Jev context. | In progress | Claude | D3.2-011 | Owner direction 2026-11-19 from the Application Question Index (3,645 forms, 194 companies). |
 | D3.2-015 | ADR-062 slice 2: new restricted statements (work-authorization countries, citizenship, clearance, age 18+, Hispanic/Latino, sexual orientation, transgender), fixed self-identification options, and the Sensitive answers profile tab. | Ready | Claude | D3.2-014 | Self-identification stays voluntary and is never inferred. |
 | D3.2-016 | ADR-062 slice 3: profile UI for the new fields and the stricter required-before-Apply check, then one release (Profile migration, Gateway, web, extension). | Ready | Claude; owner | D3.2-015 | The owner turns on the Sensitive answers tab in Vercel. |
 
@@ -180,6 +180,13 @@ the in-person question on Mintlify is answered from Job preferences. Next, the G
 is written in the compact form (one cluster named once; the cleanup worker keeps its own list form), which makes room
 for the choice-answers variables; then a platform stage enables `choice_answers_enabled`, which creates the TypeSafe
 key secret for the owner to fill.
+
+2026-11-19: D3.2-014 built locally (ADR-062 slice 1). Profile migration 0015 adds pronouns and
+languages to the Personal record. The `x` link kind is new. Job preferences gain relocation, notice
+period and earliest start date. New taxonomy fields: country, website, X, pronouns and years of
+experience (derived from work history). Packet rows and preference answers, planner patterns and
+Jev's context are updated, as are the restore manifest, migration inventory and deletion-replay pins.
+Not released.
 
 ## Risks and blockers
 

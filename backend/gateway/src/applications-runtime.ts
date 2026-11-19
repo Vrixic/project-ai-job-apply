@@ -48,7 +48,13 @@ export interface ApplicationsRuntimeOptions {
   profile: {
     listGroundingFacts(userId: string): Promise<readonly GraphFact[]>;
     /** The saved Job preferences, for work-location answers (ADR-060). */
-    getPreferences?(userId: string): Promise<{ id: string; workModes: readonly string[] } | null>;
+    getPreferences?(userId: string): Promise<{
+      id: string;
+      workModes: readonly string[];
+      relocation?: boolean;
+      noticePeriod?: string;
+      availableStartDate?: string;
+    } | null>;
   };
   /** Drafts short free-text answers (ADR-057). Absent: the route reports unavailable. */
   narrativeAnswers?: ApplicationNarrativeAnswers;
@@ -364,7 +370,17 @@ export function createApplicationsRuntime(options: ApplicationsRuntimeOptions): 
       ? {
           workModes: async (ownerUserId: string) => {
             const saved = await options.profile.getPreferences?.(ownerUserId);
-            return saved ? { id: saved.id, workModes: saved.workModes } : null;
+            return saved
+              ? {
+                  id: saved.id,
+                  workModes: saved.workModes,
+                  ...(saved.relocation === undefined ? {} : { relocation: saved.relocation }),
+                  ...(saved.noticePeriod ? { noticePeriod: saved.noticePeriod } : {}),
+                  ...(saved.availableStartDate
+                    ? { availableStartDate: saved.availableStartDate }
+                    : {}),
+                }
+              : null;
           },
         }
       : {}),

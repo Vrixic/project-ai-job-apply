@@ -1688,6 +1688,10 @@ export interface components {
             salaryMinimum?: number;
             salaryCurrency?: string;
             requiresSponsorship?: boolean;
+            relocation?: boolean;
+            noticePeriod?: string;
+            /** Format: date */
+            availableStartDate?: string;
         };
         PutJobPreferencesRequest: components["schemas"]["JobPreferenceFields"];
         JobPreferenceSet: components["schemas"]["JobPreferenceFields"] & {
@@ -1893,9 +1897,15 @@ export interface components {
             };
             links?: {
                 /** @enum {string} */
-                kind: "linkedin" | "github" | "portfolio" | "other";
+                kind: "linkedin" | "github" | "portfolio" | "x" | "other";
                 /** Format: uri */
                 url: string;
+            }[];
+            pronouns?: string;
+            languages?: {
+                language: string;
+                /** @enum {string} */
+                proficiency: "native" | "fluent" | "professional" | "conversational" | "basic";
             }[];
             version: number;
             /** @enum {string} */
@@ -1922,9 +1932,15 @@ export interface components {
             };
             links?: {
                 /** @enum {string} */
-                kind: "linkedin" | "github" | "portfolio" | "other";
+                kind: "linkedin" | "github" | "portfolio" | "x" | "other";
                 /** Format: uri */
                 url: string;
+            }[];
+            pronouns?: string;
+            languages?: {
+                language: string;
+                /** @enum {string} */
+                proficiency: "native" | "fluent" | "professional" | "conversational" | "basic";
             }[];
         };
         ProfileEducationEntry: {
@@ -2097,7 +2113,7 @@ export interface components {
             };
             links?: {
                 /** @enum {string} */
-                kind: "linkedin" | "github" | "portfolio" | "other";
+                kind: "linkedin" | "github" | "portfolio" | "x" | "other";
                 /** Format: uri */
                 url: string;
             }[];

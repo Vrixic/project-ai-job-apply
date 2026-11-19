@@ -249,7 +249,15 @@ const choiceAnswers = choiceAnswersFromEnvironment(process.env, {
     listGroundingFacts: (userId) => profileSections.listGroundingFacts(userId),
     getPreferences: async (userId) => {
       const saved = await store.getPreferences(userId);
-      return saved ? { workModes: saved.workModes, locations: saved.locations } : null;
+      return saved
+        ? {
+            workModes: saved.workModes,
+            locations: saved.locations,
+            ...(saved.relocation === undefined ? {} : { relocation: saved.relocation }),
+            ...(saved.noticePeriod ? { noticePeriod: saved.noticePeriod } : {}),
+            ...(saved.availableStartDate ? { availableStartDate: saved.availableStartDate } : {}),
+          }
+        : null;
     },
     listApplicationAnswers: async (userId) =>
       (await profileSections.listEntries(userId, "applicationAnswer")).flatMap((entry) =>

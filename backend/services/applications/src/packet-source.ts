@@ -26,7 +26,7 @@ import {
   validVaultReference,
 } from "./vault.js";
 
-export type FactValueType = "string" | "date" | "decimal" | "boolean" | "enum";
+export type FactValueType = "string" | "date" | "integer" | "decimal" | "boolean" | "enum";
 
 export interface FactFieldMapping {
   /** Profile fact kind, an exact match. */
@@ -59,19 +59,24 @@ export const FACT_FIELD_MAP: ReadonlyArray<FactFieldMapping> = [
   row("identity", "legal_name.middle", "identity.legal_name.middle"),
   row("identity", "legal_name.last", "identity.legal_name.last"),
   row("identity", "preferred_name", "identity.preferred_name"),
+  row("identity", "pronouns", "identity.pronouns"),
   row("identity", "email", "contact.email"),
   row("identity", "phone", "contact.phone"),
   row("identity", "address.line1", "contact.address.line1"),
   row("identity", "address.city", "contact.address.city"),
   row("identity", "address.region", "contact.address.region"),
   row("identity", "address.postal_code", "contact.address.postal_code"),
+  row("identity", "address.country", "contact.address.country"),
   row("identity", "linkedin", "links.linkedin"),
   row("identity", "portfolio", "links.portfolio"),
   row("identity", "github", "links.github"),
+  row("identity", "website", "links.website"),
+  row("identity", "x", "links.x"),
   row("employment", "current_company", "employment.current_company"),
   row("employment", "current_title", "employment.current_title"),
   row("employment", "start_date", "employment.start_date", "date"),
   row("employment", "end_date", "employment.end_date", "date"),
+  row("employment", "years_experience", "employment.years_experience", "integer"),
   row("education", "school", "education.school"),
   row("education", "degree", "education.degree"),
   row("education", "field", "education.field"),
@@ -103,6 +108,8 @@ export function factValueFits(value: GraphFact["value"], valueType: FactValueTyp
       );
     case "date":
       return typeof value === "string" && isCalendarDate(value);
+    case "integer":
+      return typeof value === "number" && Number.isInteger(value) && value >= 0;
     case "decimal":
       return typeof value === "number" && Number.isFinite(value) && value >= 0;
     case "boolean":
@@ -118,6 +125,34 @@ export interface WorkModePreference {
   /** The saved preference record; cited as the source of every derived answer. */
   id: string;
   workModes: readonly string[];
+  /** Saved on the same page (ADR-062); absent until the candidate answers them. */
+  relocation?: boolean;
+  noticePeriod?: string;
+  availableStartDate?: string;
+}
+
+/**
+ * Answers the candidate saved on the Job preferences page about moving and starting (ADR-062):
+ * relocation, notice period and earliest start date. Their field policy is `explicit_each_time`, so
+ * each is shown for confirmation. A value that does not have the field's exact shape is left out.
+ */
+export function preferenceAnswerFields(preference: WorkModePreference): ProposedField[] {
+  if (!uuidShape.test(preference.id)) return [];
+  const answers: Array<readonly [string, string | boolean]> = [];
+  if (typeof preference.relocation === "boolean")
+    answers.push(["job.relocation", preference.relocation]);
+  if (factValueFits(preference.noticePeriod ?? "", "string"))
+    answers.push(["job.notice_period", (preference.noticePeriod as string).trim()]);
+  if (factValueFits(preference.availableStartDate ?? "", "date"))
+    answers.push(["job.available_start_date", preference.availableStartDate as string]);
+  return answers.map(([fieldKey, value]) => ({
+    fieldKey,
+    value,
+    origin: "confirmed_fact" as const,
+    sourceFactIds: [preference.id],
+    sourceConfirmed: true,
+    confidence: 1,
+  }));
 }
 
 /**
@@ -256,7 +291,9 @@ export class FactBackedPacketSource implements PacketPreparationSource {
     } catch {
       workMode = null;
     }
-    for (const field of workMode ? workModeFields(workMode) : []) {
+    for (const field of workMode
+      ? [...workModeFields(workMode), ...preferenceAnswerFields(workMode)]
+      : []) {
       if (!entered.has(field.fieldKey)) fields.push(field);
     }
     for (const selection of selections) {

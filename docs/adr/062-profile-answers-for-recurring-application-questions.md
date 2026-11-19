@@ -1,6 +1,6 @@
 # ADR-062: Profile answers for recurring application questions
 
-Status: Accepted by the owner's direction 2026-11-19; not built
+Status: Accepted by the owner's direction 2026-11-19; slice 1 built locally, not released
 Date: 2026-11-19
 
 ## Context
@@ -97,3 +97,22 @@ Reading the code showed gaps behind questions most forms ask:
   taxonomy).
 - The question index data lives outside the repository for now. It is research input, not a runtime
   dependency.
+
+## Implementation notes
+
+1. **Languages live on the Personal record (slice 1, 2026-11-19).** Decision 2 named a new profile
+   section. A list on the Personal record (`languages`: language and proficiency, at most 20, each
+   language once) is simpler. The export, deletion and import paths already carry that record whole,
+   so no new section, route or restore relation is needed. Migration `0015` widens the Personal record's
+   key check to allow `pronouns` and `languages`. Each language becomes a `skill` grounding fact
+   (`French (fluent)`), which reaches Jev and generated text and never a packet field.
+2. **Website falls back to the portfolio.** A "Website" question used to take the portfolio link. It now
+   takes `links.website`, which is the "other" link when one is saved and otherwise the portfolio, so no
+   form loses an answer it had. A label naming both a website and a portfolio stays the portfolio's.
+3. **Years of experience is a number.** The fact is an integer, the field's value type is `integer`, and
+   the planner fills only total-years questions. Years with a named tool or field go to Jev, which reads
+   the fact.
+4. **Preferences feed the packet directly.** Relocation, notice period and earliest start date are read
+   from the saved Job preferences next to the work modes, as ADR-060's answers are, with
+   `explicit_each_time` review. The old `preference` fact rows stay unused, because no preference facts
+   exist.

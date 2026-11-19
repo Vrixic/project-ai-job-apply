@@ -44,10 +44,10 @@ describeWithDatabase("PostgresProfileStore", () => {
     });
 
     expect(first.stdout.trim()).toBe(
-      "Database migrations through 0014_retire_profile_facts applied and verified.",
+      "Database migrations through 0015_profile_personal_pronouns_languages applied and verified.",
     );
     expect(replay.stdout.trim()).toBe(
-      "Database migrations through 0014_retire_profile_facts applied and verified.",
+      "Database migrations through 0015_profile_personal_pronouns_languages applied and verified.",
     );
     expect(
       await database.client`

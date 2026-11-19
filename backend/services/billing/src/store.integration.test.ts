@@ -61,7 +61,7 @@ describeWithDatabase("PostgresBillingStore", () => {
       env: environment,
     });
     expect(profile.stdout.trim()).toBe(
-      "Database migrations through 0014_retire_profile_facts applied and verified.",
+      "Database migrations through 0015_profile_personal_pronouns_languages applied and verified.",
     );
     const first = await execFileAsync(process.execPath, [migrationExecutable], {
       env: environment,

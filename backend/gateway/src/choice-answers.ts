@@ -52,9 +52,13 @@ export interface ChoiceAnswerDependencies {
   catalog: Pick<JobCatalogReader, "getActiveJob">;
   profile: {
     listGroundingFacts(userId: string): Promise<readonly GraphFact[]>;
-    getPreferences?(
-      userId: string,
-    ): Promise<{ workModes: readonly string[]; locations: readonly string[] } | null>;
+    getPreferences?(userId: string): Promise<{
+      workModes: readonly string[];
+      locations: readonly string[];
+      relocation?: boolean;
+      noticePeriod?: string;
+      availableStartDate?: string;
+    } | null>;
     listApplicationAnswers?(
       userId: string,
     ): Promise<ReadonlyArray<{ question: string; answer: string }>>;
@@ -174,6 +178,16 @@ export function createChoiceAnswers(options: ChoiceAnswerOptions): ApplicationCh
             facts: selectPromptFacts(graph, facts),
             workModes: preferences?.workModes,
             locations: preferences?.locations,
+            relocation: preferences?.relocation,
+            noticePeriod: preferences?.noticePeriod,
+            availableStartDate: preferences?.availableStartDate,
+            // The country only: an identity fact, read here because prompt facts leave identity out.
+            countryOfResidence: (() => {
+              const country = facts.find(
+                (fact) => fact.kind === "identity" && fact.key === "address.country",
+              )?.value;
+              return typeof country === "string" ? country : undefined;
+            })(),
             savedAnswers,
             job: jobContext,
           });
