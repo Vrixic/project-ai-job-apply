@@ -44,6 +44,8 @@ The owner answered the open questions in chat. Recorded decisions:
 
 2026-11-13 owner direction on D3.2 (live AI generation): resumes and cover letters use Amazon Bedrock in our own AWS account with Claude Sonnet 4.6 as the interim model and the model id as configuration, because `gpt-6-luna` is not available to the account and would not meet ADR-038 without zero data retention; $20 a month development ceiling with alarms at 50% and 80%; kill switch off by default ([ADR-059](../../adr/059-live-generation-through-amazon-bedrock.md), D3.2-001 complete). Terraform and the adapter follow, then one restore sitting for the live proofs including the Ashby submission (D3.2-007).
 
+2026-11-19 owner decisions on D3.2: Jev (TypeSafe) decides choice questions live in development ([ADR-061](../../adr/061-choice-answers-decided-by-jev.md)) and works on every board the extension supports (Ashby and Greenhouse); the Ashby live proof (D3.2-007) is closed without a submission; the development environment stays up for now.
+
 Still needing the owner: an AWS sign-in for the deployment, the Stripe account values (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRETS`, `STRIPE_PRO_PRICE_ID`, `BILLING_APP_BASE_URL`), counsel, the independent assessor, and staging and production accounts and Auth0 tenants (D6-013, D6-014, D6-021).
 
 ## D3 — High-quality application preparation

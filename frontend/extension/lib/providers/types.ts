@@ -84,6 +84,16 @@ export interface ApplicationProvider {
     authority: Pick<FillAuthority, "signal" | "deadline">,
   ): Promise<boolean>;
   /**
+   * The option labels of a required single-choice question the candidate has not answered yet, for
+   * a provider whose choice controls are not all radios (a native select, or a custom dropdown whose
+   * options are not in the page until it opens). Reads only; never opens a control. Undefined: not
+   * such a question. Absent: only unanswered radio questions are offered (ADR-061).
+   */
+  unansweredChoice?(
+    inspection: ApplicationInspection,
+    ref: string,
+  ): Promise<readonly string[] | undefined>;
+  /**
    * Whether `option` is now the one chosen option among these controls, for a provider whose
    * choices are buttons or radios rather than one `<select>`. Answers yes or no only. When absent
    * the executor verifies a choice by reading a single `<select>` element.

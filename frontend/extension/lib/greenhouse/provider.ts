@@ -1,4 +1,5 @@
 import type { ApplicationProvider } from "../providers/types";
+import { chooseGreenhouseOption, greenhouseUnansweredChoice } from "./choice";
 import { fillGreenhouseFields } from "./fill";
 import {
   greenhouseApplicationIdentity,
@@ -40,6 +41,8 @@ export const greenhouseProvider: ApplicationProvider = {
   challengePresent: greenhouseChallengePresent,
   inspect: inspectGreenhouseApplication,
   fill: fillGreenhouseFields,
+  chooseOption: chooseGreenhouseOption,
+  unansweredChoice: greenhouseUnansweredChoice,
   root(document) {
     const roots = document.querySelectorAll(ROOT);
     const root = roots[0];

@@ -121,24 +121,63 @@ if (!Object.hasOwn(globalThis, installed)) {
               draftable++;
               draftNoAi ||= draft.noAi;
             }
-            // And the required choice questions (radio, Yes/No) the fill will leave unanswered, for a
-            // provider that can choose an option: the candidate's own to answer, or AI's with their
-            // review (ADR-061). Nothing the packet answers is among them.
-            if (provider.chooseOption) {
-              choices = questions
-                .flatMap((question) => {
+            // And the required choice questions (radio, Yes/No, dropdown) the fill will leave
+            // unanswered, for a provider that can choose an option: the candidate's own to answer, or
+            // AI's with their review (ADR-061). Nothing the packet answers is among them.
+            if (provider.chooseOption && !plan.requiresTakeover) {
+              const unansweredChoice = provider.unansweredChoice;
+              let offered: { ref: string; label: string; options: readonly string[] }[];
+              if (unansweredChoice) {
+                // A provider that reads dropdowns too. A dropdown the fill itself sets from the
+                // packet (a saved answer, or the salary questions) is not offered.
+                const answered = new Set(
+                  message.readiness.fields
+                    .filter(
+                      (entry) =>
+                        !entry.needsUserAction &&
+                        (typeof entry.value === "boolean" ||
+                          (typeof entry.value === "string" && entry.value.trim() !== "")),
+                    )
+                    .map((entry) => entry.fieldKey),
+                );
+                offered = [];
+                const seen = new Set<string>();
+                for (const action of plan.actions) {
+                  if (action.kind !== "require_user" || seen.has(action.ref)) continue;
+                  seen.add(action.ref);
+                  if (
+                    action.fieldKey &&
+                    (answered.has(action.fieldKey) || action.fieldKey.startsWith("job.salary"))
+                  )
+                    continue;
+                  const field = inspection.form.fields.find(
+                    (candidate) => candidate.ref === action.ref,
+                  );
+                  const options = await unansweredChoice(inspection, action.ref);
+                  if (field && options)
+                    offered.push({ ref: action.ref, label: field.label, options });
+                }
+              } else {
+                offered = questions.flatMap((question) => {
                   const field = inspection.form.fields.find(
                     (candidate) => candidate.ref === question.ref,
                   );
-                  const text = question.label.replace(/\s+/gu, " ").trim().slice(0, 1000);
+                  return field?.type === "radio"
+                    ? [{ ref: question.ref, label: question.label, options: field.options }]
+                    : [];
+                });
+              }
+              choices = offered
+                .flatMap(({ ref, label, options }) => {
+                  const field = inspection.form.fields.find((candidate) => candidate.ref === ref);
+                  const text = label.replace(/\s+/gu, " ").trim().slice(0, 1000);
                   return field?.required &&
-                    field.type === "radio" &&
-                    field.options.length >= 2 &&
-                    field.options.length <= 12 &&
-                    new Set(field.options).size === field.options.length &&
-                    field.options.every((option) => option.length >= 1 && option.length <= 200) &&
+                    options.length >= 2 &&
+                    options.length <= 12 &&
+                    new Set(options).size === options.length &&
+                    options.every((option) => option.length >= 1 && option.length <= 200) &&
                     text.length >= 3
-                    ? [{ ref: question.ref, question: text, options: [...field.options] }]
+                    ? [{ ref, question: text, options: [...options] }]
                     : [];
                 })
                 .slice(0, 10);
