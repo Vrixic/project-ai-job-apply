@@ -98,3 +98,9 @@ Building the extension side settled four points the decisions above left open:
 4. **Ashby first.** Choosing an option is a provider capability (`chooseOption`); Ashby has it. A
    provider without it (Greenhouse today) gets no AI choices and behaves as before. Any failure of the
    Gateway, including a route that is not released yet, leaves the questions with the candidate.
+5. **Egress is a code limit, not a network allowlist (slice 3, 2026-11-18).** Decision 8 says egress is
+   limited to the TypeSafe API host. That holds in code (the client calls one fixed URL and refuses
+   redirects); the Gateway Lambda reaches the internet the same way it does for narrative answers, so
+   Terraform adds no network rule. The Gateway environment grows by about 170 bytes (kill switch and the
+   key's ARN), leaving about 13 of 4,096 bytes, so the disposal list must be compacted before any other
+   Gateway variable is added.
