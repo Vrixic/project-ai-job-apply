@@ -101,6 +101,8 @@ Building the extension side settled four points the decisions above left open:
 5. **Egress is a code limit, not a network allowlist (slice 3, 2026-11-18).** Decision 8 says egress is
    limited to the TypeSafe API host. That holds in code (the client calls one fixed URL and refuses
    redirects); the Gateway Lambda reaches the internet the same way it does for narrative answers, so
-   Terraform adds no network rule. The Gateway environment grows by about 170 bytes (kill switch and the
-   key's ARN), leaving about 13 of 4,096 bytes, so the disposal list must be compacted before any other
-   Gateway variable is added.
+   Terraform adds no network rule. The Gateway environment grows by about 176 bytes (kill switch and the
+   key's ARN). Measured against the live function as compact JSON, that is 4,091 of 4,096 bytes with the
+   list form of the retained-deployments variable, so the variable gets a compact form that
+   names the cluster once (3,669 bytes); one parser reads both forms. Order matters: the parser is released as
+   Gateway code first, and only then does Terraform start writing the compact form.
