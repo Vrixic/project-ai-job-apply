@@ -1826,34 +1826,81 @@ aside {
 
 .profile-tablist {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  border-bottom: 1px solid #cfdcd4;
+  gap: 28px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid #e8ece9;
+}
+
+.profile-tablist::-webkit-scrollbar {
+  display: none;
 }
 
 .profile-tablist [role="tab"] {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
   min-height: 44px;
-  padding: 0 14px;
+  padding: 0;
   border: 0;
-  border-bottom: 3px solid transparent;
   background: transparent;
-  color: #14221a;
-  font-weight: 650;
+  color: #8a918d;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.profile-tablist [role="tab"]:hover {
+  color: #14221a;
 }
 
 .profile-tablist [role="tab"][aria-selected="true"] {
-  border-bottom-color: #14633e;
-  color: #14633e;
+  color: #0d1a14;
+  font-weight: 600;
+}
+
+.profile-tablist [role="tab"][aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  background: #0d1a14;
 }
 
 .profile-tablist [role="tab"]:focus-visible {
-  outline: 3px solid #14633e;
-  outline-offset: -3px;
+  outline: 2px solid #14633e;
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .profile-tab-count {
-  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #e6f3ec;
+  color: #14633e;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.profile-tab-count-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .profile-import-banner {

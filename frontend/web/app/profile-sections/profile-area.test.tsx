@@ -125,16 +125,16 @@ describe("ProfileArea", () => {
     const tabs = Array.from(container.querySelectorAll('[role="tab"]')).map(
       (tab) => tab.textContent,
     );
-    expect(tabs.map((text) => text?.replace(/ \(.*\)/u, ""))).toEqual([
+    expect(tabs.map((text) => text?.replace(/\d* \(.*\)/u, ""))).toEqual([
       "Personal",
       "Education",
-      "Screening questions",
+      "Screening",
       "Salary",
-      "Work experience",
+      "Experience",
       "Skills",
-      "Application answers",
+      "Answers",
       "Resume",
-      "Job preferences",
+      "Preferences",
     ]);
     expect(container.textContent).toContain(
       "1 detail found in your resume is waiting for your review.",
@@ -142,7 +142,7 @@ describe("ProfileArea", () => {
     expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
       "Personal",
     );
-    await click("Job preferences");
+    await click("Preferences");
     expect(container.textContent).toContain("Preferences panel");
   });
 
@@ -164,7 +164,7 @@ describe("ProfileArea", () => {
     try {
       await render();
       expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
-        "Screening questions",
+        "Screening",
       );
       expect(container.textContent).toContain(
         "Are you legally authorized to work in the United States?",
@@ -176,7 +176,7 @@ describe("ProfileArea", () => {
 
   it("adds a skill with a versioned, idempotent request and deletes it only after confirming", async () => {
     await render();
-    await click("Skills (1 to review)");
+    await click("Skills1 (1 to review)");
     await click("Add skill");
     const input = container.querySelector<HTMLInputElement>('input[name="name"]');
     if (!input) throw new Error("expected the skill field");
@@ -205,7 +205,7 @@ describe("ProfileArea", () => {
 
   it("keeps a resume suggestion out of the profile until it is saved", async () => {
     await render();
-    await click("Skills (1 to review)");
+    await click("Skills1 (1 to review)");
     expect(container.textContent).toContain("Found in your resume");
     expect(container.textContent).toContain("No skills saved yet.");
     await click("Save");
