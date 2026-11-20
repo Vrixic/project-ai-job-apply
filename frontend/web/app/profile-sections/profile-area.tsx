@@ -37,18 +37,18 @@ interface Tab {
 const BASE_TABS: readonly Tab[] = [
   { id: "personal", label: "Personal" },
   { id: "education", label: "Education" },
-  { id: "screening", label: "Screening questions" },
+  { id: "screening", label: "Screening" },
   { id: "salary", label: "Salary" },
-  { id: "workExperience", label: "Work experience" },
+  { id: "workExperience", label: "Experience" },
   { id: "skill", label: "Skills" },
-  { id: "applicationAnswer", label: "Application answers" },
+  { id: "applicationAnswer", label: "Answers" },
   { id: "resume", label: "Resume" },
-  { id: "preferences", label: "Job preferences" },
+  { id: "preferences", label: "Preferences" },
 ];
 
 // Work authorization, eligibility and voluntary self-identification (ADR-062). The vault's web
 // routes answer only when this build enables them, so the tab follows the same switch.
-const SENSITIVE_TAB: Tab = { id: "sensitive", label: "Sensitive answers" };
+const SENSITIVE_TAB: Tab = { id: "sensitive", label: "Sensitive" };
 const ALL_TABS: readonly Tab[] = isRestrictedAnswerVaultUiEnabled({
   NEXT_PUBLIC_RESTRICTED_ANSWER_VAULT_UI: process.env.NEXT_PUBLIC_RESTRICTED_ANSWER_VAULT_UI,
 })
@@ -176,7 +176,14 @@ export function ProfileArea({
               onKeyDown={(event) => onKeyDown(event, index)}
             >
               {tab.label}
-              {count > 0 && <span className="profile-tab-count"> ({count} to review)</span>}
+              {count > 0 && (
+                <>
+                  <span className="profile-tab-count" aria-hidden="true">
+                    {count}
+                  </span>
+                  <span className="profile-tab-count-label"> ({count} to review)</span>
+                </>
+              )}
             </button>
           );
         })}
