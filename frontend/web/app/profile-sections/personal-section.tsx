@@ -2,6 +2,14 @@
 
 import type { ProfileImportDraft, ProfilePersonal } from "@ai-job-apply/api-contracts";
 import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
+import { countries } from "../../lib/countries";
+import {
+  LANGUAGE_OPTIONS,
+  OTHER,
+  PRONOUN_OPTIONS,
+  regionOptions,
+  withSaved,
+} from "../../lib/profile-options";
 import {
   discardDraft,
   loadPersonal,
@@ -33,12 +41,13 @@ const ADDRESS_FIELDS: ReadonlyArray<{
   maxLength: number;
   help?: string;
 }> = [
+  { name: "country", label: "Country", maxLength: 2 },
   { name: "street", label: "Street address", maxLength: 200 },
   { name: "city", label: "City", maxLength: 120 },
   { name: "region", label: "State or region", maxLength: 120 },
   { name: "postalCode", label: "Postal code", maxLength: 32 },
-  { name: "country", label: "Country code", maxLength: 2, help: "Two letters, such as US." },
 ];
+const PRONOUN_CHOICES: readonly string[] = PRONOUN_OPTIONS;
 
 interface PersonalValues {
   fullName: string;
@@ -81,7 +90,7 @@ function toValues(
       city: source?.address?.city ?? "",
       region: source?.address?.region ?? "",
       postalCode: source?.address?.postalCode ?? "",
-      country: source?.address?.country ?? "",
+      country: (source?.address?.country ?? "").toUpperCase(),
     },
     links,
     pronouns: source?.pronouns ?? "",
@@ -147,6 +156,10 @@ export function PersonalSection({
   const [loading, setLoading] = useState(authenticated);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string>();
+  const [pronounsOther, setPronounsOther] = useState(false);
+  // A saved value that is not one of the choices is shown in the text box.
+  const pronounsTyped =
+    pronounsOther || (values.pronouns !== "" && !PRONOUN_CHOICES.includes(values.pronouns));
   const mounted = useRef(true);
   const idPrefix = useId();
 
@@ -299,34 +312,88 @@ export function PersonalSection({
           </div>
           <div className="profile-entry-field">
             <label htmlFor={field("pronouns")}>Pronouns</label>
-            <span className="field-help">Optional, such as she/her, he/him or they/them.</span>
-            <input
+            <span className="field-help">Optional.</span>
+            <select
               id={field("pronouns")}
-              value={values.pronouns}
-              maxLength={40}
+              value={pronounsTyped ? OTHER : values.pronouns}
               disabled={busy}
-              onChange={(event) => setValues({ ...values, pronouns: event.target.value })}
-            />
+              onChange={(event) => {
+                const choice = event.target.value;
+                setPronounsOther(choice === OTHER);
+                setValues({ ...values, pronouns: choice === OTHER ? "" : choice });
+              }}
+            >
+              <option value="">Not answered</option>
+              {PRONOUN_CHOICES.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+              <option value={OTHER}>Other</option>
+            </select>
+            {pronounsTyped && (
+              <input
+                aria-label="Your pronouns"
+                value={values.pronouns}
+                maxLength={40}
+                disabled={busy}
+                onChange={(event) => setValues({ ...values, pronouns: event.target.value })}
+              />
+            )}
           </div>
           <fieldset disabled={busy}>
             <legend>Address</legend>
-            {ADDRESS_FIELDS.map((item) => (
-              <div className="profile-entry-field" key={item.name}>
-                <label htmlFor={field(item.name)}>{item.label}</label>
-                {item.help && <span className="field-help">{item.help}</span>}
-                <input
-                  id={field(item.name)}
-                  value={values.address[item.name]}
-                  maxLength={item.maxLength}
-                  onChange={(event) =>
-                    setValues({
-                      ...values,
-                      address: { ...values.address, [item.name]: event.target.value },
-                    })
-                  }
-                />
-              </div>
-            ))}
+            {ADDRESS_FIELDS.map((item) => {
+              const setAddress = (value: string) =>
+                setValues({ ...values, address: { ...values.address, [item.name]: value } });
+              const regions =
+                item.name === "region" ? regionOptions(values.address.country) : undefined;
+              return (
+                <div className="profile-entry-field" key={item.name}>
+                  <label htmlFor={field(item.name)}>
+                    {item.name === "region" && values.address.country === "CA"
+                      ? "Province or territory"
+                      : item.name === "region" && values.address.country === "US"
+                        ? "State"
+                        : item.label}
+                  </label>
+                  {item.name === "country" ? (
+                    <select
+                      id={field(item.name)}
+                      value={values.address.country}
+                      onChange={(event) => setAddress(event.target.value)}
+                    >
+                      <option value="">Choose a country</option>
+                      {countries().map((country) => (
+                        <option key={country.code} value={country.code}>
+                          {country.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : regions ? (
+                    <select
+                      id={field(item.name)}
+                      value={values.address.region}
+                      onChange={(event) => setAddress(event.target.value)}
+                    >
+                      <option value="">Choose one</option>
+                      {withSaved(regions, values.address.region).map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      id={field(item.name)}
+                      value={values.address[item.name]}
+                      maxLength={item.maxLength}
+                      onChange={(event) => setAddress(event.target.value)}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </fieldset>
           <fieldset disabled={busy}>
             <legend>Links</legend>
@@ -360,9 +427,8 @@ export function PersonalSection({
               <div className="paired-fields" key={index}>
                 <label>
                   Language
-                  <input
+                  <select
                     value={entry.language}
-                    maxLength={60}
                     onChange={(event) =>
                       setValues({
                         ...values,
@@ -371,7 +437,14 @@ export function PersonalSection({
                         ),
                       })
                     }
-                  />
+                  >
+                    <option value="">Choose a language</option>
+                    {withSaved(LANGUAGE_OPTIONS, entry.language).map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <label>
                   Level
