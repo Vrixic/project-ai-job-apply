@@ -135,6 +135,7 @@ describe("ProfileArea", () => {
       "Answers",
       "Resume",
       "Preferences",
+      "Equal employment",
     ]);
     expect(container.textContent).toContain(
       "1 detail found in your resume is waiting for your review.",

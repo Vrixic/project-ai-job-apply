@@ -143,3 +143,35 @@ Reading the code showed gaps behind questions most forms ask:
       screening or a sensitive answer).
     Each missing item links to its profile tab. A profile it cannot read still counts as incomplete,
     as before.
+
+## Amendment 2026-11-23: no Sensitive answers tab; every question is a choice
+
+Owner direction: remove the Sensitive answers tab. Typing a question key, a context and a free-text
+answer is too much work. The questions it held move to tabs where each one is answered by choosing,
+in line with ADR-010's 2026-11-05 amendment (answers the candidate sets are ordinary answers).
+
+- **One shared list.** `@ai-job-apply/ats-sdk/profile-questions` lists each question: its field key,
+  exact saved question text, kind (Yes/No, a fixed list, or countries) and tab. The web app and the
+  Gateway both read it. The two United States questions keep their existing wording. The new ones end
+  in "(ApplyDash profile)", like the salary question, so no employer form matches them by accident.
+- **Screening tab:** authorized in the United States, sponsorship, countries where the candidate can
+  work without sponsorship (a country multi-select), countries of citizenship, 18 or older, and
+  security clearance.
+- **Equal employment tab (new):** gender, race or ethnicity, Hispanic or Latino, veteran, disability,
+  sexual orientation and transgender. Every one is optional, offers "I prefer not to say", and can be
+  set back to "Not answered", which removes the saved answer.
+- **Dropped:** export control, non-compete and conflict of interest. These are specific to one job,
+  so the candidate answers them on that job's form.
+- **Storage:** ordinary saved answers in the Profile, like the screening and salary answers. The
+  Answers tab does not list them, because their own tabs own them. The vault's tables, routes, export
+  and deletion are unchanged, and nothing new is written to the vault. Removing them is still the
+  separate, data-affecting decision ADR-010 names.
+- **Required before Apply:** authorized in the United States, sponsorship, and the work countries.
+  This is now always checked. The `NEXT_PUBLIC_SCREENING_ANSWERS_REQUIRED` rollout switch is gone,
+  because the Profile service has accepted these answers since 2026-11-05.
+- **Jev (supersedes note 7's source):** a restricted question's statement is the candidate's chosen
+  answer to the matching Profile question. The work countries still come first for work
+  authorization. A saved answer on a restricted topic never joins the standard request's saved
+  answers. The Gateway no longer reads the vault for Jev.
+
+Notes 8 and 9 are superseded: the option lists live in the shared list, and the tab is gone.

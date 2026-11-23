@@ -33,6 +33,7 @@ const without = (entry: ProfileEducationEntry, key: "degree" | "fieldOfStudy") =
 const answered = {
   "authorization.us_authorized": true,
   "authorization.sponsorship_required": false,
+  "authorization.work_countries": "US",
 } as const;
 const complete = {
   personal: personal(),
@@ -64,6 +65,7 @@ describe("missingBasics", () => {
       ["salary", "salary"],
       ["authorization.us_authorized", "screening"],
       ["authorization.sponsorship_required", "screening"],
+      ["authorization.work_countries", "screening"],
     ]);
   });
   it("needs a first and a last name, not a single word", () => {
@@ -111,7 +113,7 @@ describe("missingBasics", () => {
     expect(
       missingBasics({
         ...complete,
-        screening: { "authorization.us_authorized": false },
+        screening: { "authorization.us_authorized": false, "authorization.work_countries": "CA" },
       }).map((m) => m.key),
     ).toEqual(["authorization.sponsorship_required"]);
   });

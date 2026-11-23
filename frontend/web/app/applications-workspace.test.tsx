@@ -7,6 +7,7 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SALARY_QUESTION } from "../lib/salary-expectation";
+import { SCREENING_QUESTIONS } from "../lib/screening-questions";
 import {
   cachedUploadedResume,
   dropUploadedResume,
@@ -885,9 +886,9 @@ describe("ApplicationsWorkspace: Apply", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string) =>
-        String(input).endsWith("/personal")
+        String(input).endsWith("/personal") || String(input).includes("job-preferences")
           ? profileJson({ code: "not_found" }, 404)
-          : String(input).includes("education-entries")
+          : String(input).includes("-entries")
             ? profileJson({ entries: [] })
             : profileJson({ answers: [] }),
       ),
@@ -916,6 +917,11 @@ describe("ApplicationsWorkspace: Apply", () => {
 
   describe("the candidate's profile on the application", () => {
     const NOW = "2026-11-06T12:00:00.000Z";
+    // The screening answers every application needs (ADR-062).
+    const REQUIRED_SCREENING = SCREENING_QUESTIONS.filter((item) => item.required).map((item) => ({
+      question: item.question,
+      answer: item.kind === "countries" ? "US" : "No",
+    }));
     const profile = (answers: Array<{ question: string; answer: string }>) =>
       vi.stubGlobal(
         "fetch",
@@ -930,34 +936,53 @@ describe("ApplicationsWorkspace: Apply", () => {
                 fullName: "Pat Candidate",
                 email: "pat@example.test",
                 phone: "+1 415 555 0100",
+                address: { country: "US" },
               }
-            : url.includes("education-entries")
-              ? {
-                  entries: [
-                    {
-                      id: "00000000-0000-7000-8000-000000000031",
-                      school: "Synthetic University",
-                      degree: "Bachelor's Degree",
-                      fieldOfStudy: "Computer Science",
-                      version: 1,
-                      origin: "entered",
-                      createdAt: NOW,
-                      updatedAt: NOW,
-                      displayOrder: 0,
-                    },
-                  ],
-                }
-              : {
-                  answers: answers.map((item, index) => ({
-                    id: `00000000-0000-7000-8000-00000000004${index}`,
-                    ...item,
-                    version: 1,
-                    origin: "entered",
-                    createdAt: NOW,
-                    updatedAt: NOW,
-                    questionKey: item.question.toLowerCase(),
-                  })),
-                };
+            : url.includes("job-preferences")
+              ? { relocation: false, availableStartDate: "2026-12-01" }
+              : url.includes("work-experience-entries")
+                ? {
+                    entries: [
+                      {
+                        id: "00000000-0000-7000-8000-000000000051",
+                        company: "Synthetic Studio",
+                        title: "Designer",
+                        startDate: "2020-01-01",
+                        version: 1,
+                        origin: "entered",
+                        createdAt: NOW,
+                        updatedAt: NOW,
+                        displayOrder: 0,
+                      },
+                    ],
+                  }
+                : url.includes("education-entries")
+                  ? {
+                      entries: [
+                        {
+                          id: "00000000-0000-7000-8000-000000000031",
+                          school: "Synthetic University",
+                          degree: "Bachelor's Degree",
+                          fieldOfStudy: "Computer Science",
+                          version: 1,
+                          origin: "entered",
+                          createdAt: NOW,
+                          updatedAt: NOW,
+                          displayOrder: 0,
+                        },
+                      ],
+                    }
+                  : {
+                      answers: [...REQUIRED_SCREENING, ...answers].map((item, index) => ({
+                        id: `00000000-0000-7000-8000-00000000004${index}`,
+                        ...item,
+                        version: 1,
+                        origin: "entered",
+                        createdAt: NOW,
+                        updatedAt: NOW,
+                        questionKey: item.question.toLowerCase(),
+                      })),
+                    };
           return new Response(JSON.stringify(body), {
             status: 200,
             headers: { "content-type": "application/json" },

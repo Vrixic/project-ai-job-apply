@@ -5,6 +5,8 @@ import type {
   ProfileWorkExperienceEntry,
 } from "@ai-job-apply/api-contracts";
 import { DEGREE_OPTIONS, FIELD_OF_STUDY_OPTIONS } from "../../lib/education-options";
+import { SALARY_QUESTION } from "../../lib/salary-expectation";
+import { isProfileQuestion } from "../../lib/screening-questions";
 
 export type ProfileEntryRecord =
   | ProfileEducationEntry
@@ -38,6 +40,8 @@ export interface ProfileSectionConfig {
   fields: readonly FieldConfig[];
   empty: string;
   summary(record: Record<string, unknown>): { primary: string; secondary?: string };
+  /** False for a record another tab owns, which this tab does not list. */
+  shown?(record: Record<string, unknown>): boolean;
 }
 
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
@@ -149,6 +153,8 @@ export const PROFILE_SECTIONS: Readonly<Record<SectionKey, ProfileSectionConfig>
       { name: "answer", label: "Answer", type: "textarea", required: true, maxLength: 2000 },
     ],
     summary: (record) => ({ primary: text(record.question), secondary: text(record.answer) }),
+    // The Screening, Equal employment and Salary tabs own their answers.
+    shown: (record) => !isProfileQuestion(text(record.question), SALARY_QUESTION),
   },
 };
 

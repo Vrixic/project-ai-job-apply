@@ -1,3 +1,4 @@
+import type { ProfileQuestion } from "@ai-job-apply/ats-sdk/profile-questions";
 import { describe, expect, it } from "vitest";
 import {
   SCREENING_QUESTIONS,
@@ -6,7 +7,7 @@ import {
   yesNo,
 } from "./screening-questions";
 
-const [authorized, sponsorship] = SCREENING_QUESTIONS;
+const [authorized, sponsorship] = SCREENING_QUESTIONS as [ProfileQuestion, ProfileQuestion];
 
 describe("screening questions", () => {
   it("reads Yes and No, and nothing else, as an answer", () => {

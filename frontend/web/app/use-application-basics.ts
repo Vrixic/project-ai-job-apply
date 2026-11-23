@@ -4,7 +4,6 @@ import type {
   JobPreferenceSet,
   ProfileApplicationAnswer,
   ProfileEducationEntry,
-  RestrictedAnswerCollection,
 } from "@ai-job-apply/api-contracts";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -12,18 +11,10 @@ import {
   type MissingBasic,
   missingBasics,
 } from "../lib/application-basics";
-import { isRestrictedAnswerVaultUiEnabled } from "../lib/restricted-answer-fields";
 import { savedSalary } from "../lib/salary-expectation";
-import { type ScreeningFieldKey, screeningAnswers } from "../lib/screening-questions";
+import { type ScreeningAnswers, screeningAnswers } from "../lib/screening-questions";
 import { loadEntries, loadPersonal } from "./profile-sections/api";
 import { PROFILE_SECTIONS } from "./profile-sections/sections";
-
-/** The screening answers are required once the Profile service saves them (a deployment step). */
-export function screeningRequired(
-  environment: Readonly<Record<string, string | undefined>> = process.env,
-): boolean {
-  return environment.NEXT_PUBLIC_SCREENING_ANSWERS_REQUIRED === "enabled";
-}
 
 /** The saved Job preferences, or null when none are saved. Throws when they cannot be read. */
 async function loadPreferences(): Promise<BasicsPreferences | null> {
@@ -38,32 +29,11 @@ async function loadPreferences(): Promise<BasicsPreferences | null> {
   };
 }
 
-/** Which required sensitive answers are saved, or undefined while that tab is off. */
-async function loadSensitive(): Promise<
-  { workCountries: boolean; sponsorship: boolean } | undefined
-> {
-  if (
-    !isRestrictedAnswerVaultUiEnabled({
-      NEXT_PUBLIC_RESTRICTED_ANSWER_VAULT_UI: process.env.NEXT_PUBLIC_RESTRICTED_ANSWER_VAULT_UI,
-    })
-  )
-    return undefined;
-  const response = await fetch("/api/platform/restricted-answers", { cache: "no-store" });
-  if (!response.ok) throw new Error("sensitive answers unavailable");
-  const { answers } = (await response.json()) as RestrictedAnswerCollection;
-  const active = (key: string) =>
-    answers.some((answer) => answer.fieldKey === key && answer.state === "active");
-  return {
-    workCountries: active("authorization.work_countries"),
-    sponsorship: active("authorization.sponsorship_required"),
-  };
-}
-
 export interface ApplicationBasics {
   status: "loading" | "ready" | "unavailable";
   missing: readonly MissingBasic[];
   /** The candidate's screening answers, as the entries an application is prepared with. */
-  answers: Partial<Record<ScreeningFieldKey, boolean>>;
+  answers: ScreeningAnswers;
   /** The annual salary the candidate set, which an application carries for salary questions. */
   salary: number | undefined;
   retry(): void;
@@ -91,13 +61,12 @@ export function useApplicationBasics(enabled: boolean): ApplicationBasics {
     const check = () => {
       void (async () => {
         try {
-          const [personal, entries, saved, work, preferences, sensitive] = await Promise.all([
+          const [personal, entries, saved, work, preferences] = await Promise.all([
             loadPersonal(),
             loadEntries(PROFILE_SECTIONS.education),
             loadEntries(PROFILE_SECTIONS.applicationAnswer),
             loadEntries(PROFILE_SECTIONS.workExperience),
             loadPreferences(),
-            loadSensitive(),
           ]);
           if (!current) return;
           const answers = screeningAnswers(saved as ProfileApplicationAnswer[]);
@@ -110,11 +79,10 @@ export function useApplicationBasics(enabled: boolean): ApplicationBasics {
               personal,
               education: entries as ProfileEducationEntry[],
               screening: answers,
-              requireScreening: screeningRequired(),
+              requireScreening: true,
               salary,
               workExperienceCount: work.length,
               preferences,
-              ...(sensitive ? { sensitive } : {}),
             }),
           });
         } catch {

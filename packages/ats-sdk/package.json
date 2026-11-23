@@ -28,6 +28,10 @@
       "types": "./dist/mapping.d.ts",
       "default": "./dist/mapping.js"
     },
+    "./profile-questions": {
+      "types": "./dist/profile-questions.d.ts",
+      "default": "./dist/profile-questions.js"
+    },
     "./salary": {
       "types": "./dist/salary.d.ts",
       "default": "./dist/salary.js"

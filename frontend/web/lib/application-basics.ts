@@ -1,5 +1,5 @@
 import type { ProfileEducationEntry, ProfilePersonal } from "@ai-job-apply/api-contracts";
-import { SCREENING_QUESTIONS, type ScreeningFieldKey } from "./screening-questions";
+import { SCREENING_QUESTIONS, type ScreeningAnswers } from "./screening-questions";
 
 /** The Profile tab where the candidate completes a missing basic. */
 export type BasicsSection =
@@ -8,8 +8,7 @@ export type BasicsSection =
   | "screening"
   | "salary"
   | "workExperience"
-  | "preferences"
-  | "sensitive";
+  | "preferences";
 
 /** The saved Job preferences an application reads (ADR-062); null when none are saved. */
 export interface BasicsPreferences {
@@ -34,7 +33,7 @@ const filled = (value: string | undefined) => typeof value === "string" && value
 export function missingBasics(input: {
   personal: ProfilePersonal | undefined;
   education: readonly ProfileEducationEntry[];
-  screening: Partial<Record<ScreeningFieldKey, boolean>>;
+  screening: ScreeningAnswers;
   /** Off until the Profile service accepts the screening questions as saved answers. */
   requireScreening?: boolean;
   /** The annual salary the candidate set, or undefined when none is saved. */
@@ -43,8 +42,6 @@ export function missingBasics(input: {
   workExperienceCount?: number;
   /** The saved Job preferences, or null when none are saved. Undefined skips these checks. */
   preferences?: BasicsPreferences | null;
-  /** Which sensitive answers are saved; undefined while the Sensitive answers tab is off. */
-  sensitive?: { workCountries: boolean; sponsorship: boolean };
 }): MissingBasic[] {
   const missing: MissingBasic[] = [];
   const words = (input.personal?.fullName ?? "").trim().split(/\s+/u).filter(Boolean);
@@ -67,8 +64,12 @@ export function missingBasics(input: {
   if (input.salary === undefined)
     missing.push({ key: "salary", label: "Your desired annual salary", section: "salary" });
   for (const item of SCREENING_QUESTIONS) {
-    if (input.requireScreening === true && input.screening[item.fieldKey] === undefined)
-      missing.push({ key: item.fieldKey, label: item.question, section: "screening" });
+    if (
+      item.required &&
+      input.requireScreening === true &&
+      input.screening[item.fieldKey] === undefined
+    )
+      missing.push({ key: item.fieldKey, label: item.label, section: "screening" });
   }
   // ADR-062: what most applications ask that only the candidate can say.
   if (input.workExperienceCount !== undefined && input.workExperienceCount < 1)
@@ -95,25 +96,6 @@ export function missingBasics(input: {
         key: "start",
         label: "Your earliest start date or notice period",
         section: "preferences",
-      });
-  }
-  if (input.sensitive) {
-    if (!input.sensitive.workCountries)
-      missing.push({
-        key: "authorization.work_countries",
-        label: "The countries where you can work without sponsorship",
-        section: "sensitive",
-      });
-    // Answered either as a screening question or as a sensitive answer.
-    if (
-      !input.sensitive.sponsorship &&
-      input.screening["authorization.sponsorship_required"] === undefined &&
-      input.requireScreening !== true
-    )
-      missing.push({
-        key: "authorization.sponsorship_required",
-        label: "Whether you need visa sponsorship now or in the future",
-        section: "sensitive",
       });
   }
   return missing;

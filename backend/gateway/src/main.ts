@@ -266,9 +266,6 @@ const choiceAnswers = choiceAnswersFromEnvironment(process.env, {
           : [],
       ),
   },
-  restrictedStatements: {
-    readActiveValue: (input) => restrictedAnswerVault.readActiveValue(input),
-  },
 });
 const applications =
   process.env.APPLICATIONS_ENABLED === "true"

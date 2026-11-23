@@ -1373,9 +1373,6 @@ async function createConfiguredApplication(
             : [],
         ),
     },
-    restrictedStatements: {
-      readActiveValue: (input) => restrictedAnswerVault.readActiveValue(input),
-    },
   });
   const applications = createApplicationsRuntime({
     client: createApplicationsDatabase(databaseUrl, { maxConnections: 2 }),
