@@ -11,6 +11,7 @@ import {
   type CandidateProblemSurface,
   candidateSafeProblemMessage,
 } from "../../../lib/candidate-safe-problem";
+import { CURRENCY_OPTIONS, NOTICE_PERIOD_OPTIONS, withSaved } from "../../../lib/profile-options";
 import {
   buildJobPreferenceRequest,
   type EmploymentType,
@@ -740,18 +741,31 @@ export function ProfilePageClient({
           </label>
           <label>
             Compensation currency
-            <span>Three-letter code, such as USD</span>
-            <input
-              maxLength={3}
+            <select
               value={preferenceFields.salaryCurrency}
               onChange={(event) =>
                 setPreferenceFields((current) => ({
                   ...current,
-                  salaryCurrency: event.target.value.toUpperCase(),
+                  salaryCurrency: event.target.value,
                 }))
               }
               disabled={preferenceControlsDisabled}
-            />
+            >
+              <option value="">Not set</option>
+              {preferenceFields.salaryCurrency &&
+              !CURRENCY_OPTIONS.some(
+                (option) => option.code === preferenceFields.salaryCurrency,
+              ) ? (
+                <option value={preferenceFields.salaryCurrency}>
+                  {preferenceFields.salaryCurrency}
+                </option>
+              ) : null}
+              {CURRENCY_OPTIONS.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
         <fieldset disabled={preferenceControlsDisabled}>
@@ -792,9 +806,8 @@ export function ProfilePageClient({
             </label>
             <label>
               Notice period
-              <span>Such as 2 weeks; optional if you give a start date</span>
-              <input
-                maxLength={60}
+              <span>Optional if you give a start date</span>
+              <select
                 value={preferenceFields.noticePeriod ?? ""}
                 onChange={(event) =>
                   setPreferenceFields((current) => ({
@@ -802,7 +815,16 @@ export function ProfilePageClient({
                     noticePeriod: event.target.value,
                   }))
                 }
-              />
+              >
+                <option value="">Not answered</option>
+                {withSaved(NOTICE_PERIOD_OPTIONS, preferenceFields.noticePeriod ?? "").map(
+                  (option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ),
+                )}
+              </select>
             </label>
           </div>
         </fieldset>

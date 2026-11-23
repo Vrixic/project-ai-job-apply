@@ -5,6 +5,7 @@ import type {
   ProfileWorkExperienceEntry,
 } from "@ai-job-apply/api-contracts";
 import { DEGREE_OPTIONS, FIELD_OF_STUDY_OPTIONS } from "../../lib/education-options";
+import { SKILL_CATEGORY_OPTIONS } from "../../lib/profile-options";
 import { SALARY_QUESTION } from "../../lib/salary-expectation";
 import { isProfileQuestion } from "../../lib/screening-questions";
 
@@ -128,7 +129,13 @@ export const PROFILE_SECTIONS: Readonly<Record<SectionKey, ProfileSectionConfig>
     empty: "No skills saved yet.",
     fields: [
       { name: "name", label: "Skill", type: "text", required: true, maxLength: 100 },
-      { name: "category", label: "Category", type: "text", maxLength: 60 },
+      {
+        name: "category",
+        label: "Category",
+        type: "select",
+        options: SKILL_CATEGORY_OPTIONS,
+        maxLength: 60,
+      },
     ],
     summary: (record) => ({ primary: text(record.name), secondary: text(record.category) }),
   },
