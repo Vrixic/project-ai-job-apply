@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-Last updated: 2026-11-18. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
+Last updated: 2026-11-23. Program status: In progress. Started: 2026-07-27. Completion: Not completed.
 
 ## Summary
 
@@ -47,6 +47,8 @@ The owner answered the open questions in chat. Recorded decisions:
 2026-11-19 owner decisions on D3.2: Jev (TypeSafe) decides choice questions live in development ([ADR-061](../../adr/061-choice-answers-decided-by-jev.md)) and works on every board the extension supports (Ashby and Greenhouse); the Ashby live proof (D3.2-007) is closed without a submission; the development environment stays up for now.
 
 2026-11-19 owner direction: from the Application Question Index (3,645 public application forms, 194 companies), the recurring facts about the candidate become profile data the fill and Jev use, with a stricter required-before-Apply check; per-job questions and consents never become profile data; people-management years excluded ([ADR-062](../../adr/062-profile-answers-for-recurring-application-questions.md), D3.2-014 to D3.2-016).
+
+2026-11-23 owner direction: the Sensitive answers tab is removed because typed answers are too much work; its questions are choices on the Screening and a new Equal employment tab, and every Profile field that can be a choice is one (ADR-062 amendment, #882, #883, released). Live resume tailoring, live cover letters, the 30-minute task expiry and the kill switch were proven on 2026-11-15 (D3.2-002 to D3.2-004 complete). D3.2 still needs the connected journey with the owner (D3.2-005 browser and ATS copies, D3.2-006), the narrative-answer icon (D3.2-009), threshold calibration (deferred) and the owner's TypeSafe terms (D3.2-013). [Evidence](evidence/d3-2-live-ai-and-profile-answers-2026-11-15-to-23.md).
 
 Still needing the owner: an AWS sign-in for the deployment, the Stripe account values (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRETS`, `STRIPE_PRO_PRICE_ID`, `BILLING_APP_BASE_URL`), counsel, the independent assessor, and staging and production accounts and Auth0 tenants (D6-013, D6-014, D6-021).
 
