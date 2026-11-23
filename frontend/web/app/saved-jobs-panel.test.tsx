@@ -184,7 +184,8 @@ describe("SavedJobsPanel", () => {
   });
 
   it("keeps a saved job after delete timeout and retries the same idempotent target explicitly", async () => {
-    vi.useFakeTimers();
+    // Something outside the app (the runtime or jsdom) keeps an interval; faking setInterval counts it.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const staleDelete = deferredResponse();
     const refresh = deferredResponse();
     let staleDeleteSignal: AbortSignal | undefined;
