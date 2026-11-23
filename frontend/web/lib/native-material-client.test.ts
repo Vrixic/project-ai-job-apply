@@ -209,7 +209,10 @@ describe("generated material client", () => {
         failures.push(error),
       );
     }
-    const copies = failures.map(nativeMaterialReadFailureCopy);
+    const copies = failures.map((failure) => nativeMaterialReadFailureCopy(failure));
+    expect(nativeMaterialReadFailureCopy(failures[2], "cover letter")).toContain(
+      "Your cover letter could not be loaded",
+    );
     expect(copies[0]).toContain("Sign in again");
     expect(copies[1]).toContain("Sign in again");
     expect(copies[2]).toContain("could not be loaded right now");

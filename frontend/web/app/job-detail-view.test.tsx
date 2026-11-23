@@ -309,7 +309,8 @@ describe("JobDetailView", () => {
   );
 
   it("settles a hostile success body at the deadline and protects a manual retry from its late body", async () => {
-    vi.useFakeTimers();
+    // Something outside the app (the runtime or jsdom) keeps an interval; faking setInterval counts it.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const staleBody = deferred<unknown>();
     const retry = deferred<Response>();
     const response = new Response(null, { status: 200 });

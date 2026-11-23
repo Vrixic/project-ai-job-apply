@@ -508,7 +508,10 @@ export function GeneratedCoverLetterPanel({
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted)
-          setState({ phase: "error", message: nativeMaterialReadFailureCopy(error) });
+          setState({
+            phase: "error",
+            message: nativeMaterialReadFailureCopy(error, "cover letter"),
+          });
       });
     return () => controller.abort();
   }, [application.id, packet?.id, packet?.packetHash, attempt]);

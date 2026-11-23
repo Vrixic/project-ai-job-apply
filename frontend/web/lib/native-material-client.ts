@@ -29,14 +29,17 @@ class MaterialReadUnavailable extends Error {
 const unavailable = (phase: ReadPhase = "content") => new MaterialReadUnavailable(phase);
 
 /** Fixed, value-free copy for a failed read. Never shows upstream text. */
-export function nativeMaterialReadFailureCopy(error: unknown): string {
+export function nativeMaterialReadFailureCopy(
+  error: unknown,
+  document: "resume" | "cover letter" = "resume",
+): string {
   if (error instanceof MaterialReadUnavailable) {
     if (error.phase === "access")
-      return "We could not confirm this resume belongs to your account. Sign in again and try again.";
+      return `We could not confirm this ${document} belongs to your account. Sign in again and try again.`;
     if (error.phase === "service")
-      return "Your resume could not be loaded right now. Try again before it expires.";
+      return `Your ${document} could not be loaded right now. Try again before it expires.`;
   }
-  return "We could not verify your resume. Generate it again.";
+  return `We could not verify your ${document}. Generate it again.`;
 }
 
 const MAX_BYTES = 512 * 1024;
