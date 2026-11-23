@@ -13,6 +13,8 @@ import {
 } from "./choice-answers.js";
 import { memoryNarrativeLimiter } from "./narrative-answers.js";
 
+const SPONSORSHIP_PROFILE_QUESTION =
+  "Will you now or in the future require visa sponsorship to work in the United States?";
 const NOW = new Date("2026-11-18T12:00:00.000Z");
 const OWNER = "00000000-0000-7000-8000-000000000001";
 const APPLICATION = "00000000-0000-7000-8000-000000000002";
@@ -73,9 +75,13 @@ function setup(
       }),
     );
   });
-  const readActiveValue = vi.fn(async () =>
-    options.statement === undefined ? undefined : { value: options.statement },
-  );
+  // The statement is the candidate's chosen answer to the Profile's sponsorship question.
+  const savedAnswers = [
+    { question: "Notice period?", answer: "2 weeks" },
+    ...(options.statement === undefined
+      ? []
+      : [{ question: SPONSORSHIP_PROFILE_QUESTION, answer: options.statement }]),
+  ];
   const answers = createChoiceAnswers({
     // biome-ignore lint/suspicious/noExplicitAny: a minimal catalog double
     catalog: { getActiveJob: vi.fn(async () => options.job ?? job) } as any,
@@ -85,9 +91,8 @@ function setup(
         fact("f2", { kind: "identity", key: "email", value: "mason@example.test" }),
       ],
       getPreferences: async () => ({ workModes: ["remote"], locations: ["New York"] }),
-      listApplicationAnswers: async () => [{ question: "Notice period?", answer: "2 weeks" }],
+      listApplicationAnswers: async () => savedAnswers,
     },
-    restrictedStatements: { readActiveValue },
     // biome-ignore lint/suspicious/noExplicitAny: the decider is the seam under test
     decider: { decide } as any,
     enabled: () => options.enabled ?? true,
@@ -95,7 +100,7 @@ function setup(
     thresholds: defaultChoiceThresholds,
     clock: () => NOW,
   });
-  return { answers, decide, readActiveValue };
+  return { answers, decide };
 }
 const ask = (answers: ReturnType<typeof setup>["answers"], ...questions: (typeof inOffice)[]) =>
   answers.decide({
@@ -156,7 +161,7 @@ describe("createChoiceAnswers", () => {
   });
 
   it("decides a restricted question only from the candidate's own saved statement, in its own call", async () => {
-    const { answers, decide } = setup({ statement: "I do not need sponsorship." });
+    const { answers, decide } = setup({ statement: "No" });
     const result = await ask(answers, inOffice, sponsorship);
     expect(
       result.answers.map((answer) => [answer.ref, answer.status === "decided" && answer.category]),
@@ -166,8 +171,10 @@ describe("createChoiceAnswers", () => {
     ]);
     expect(decide).toHaveBeenCalledTimes(2);
     const restrictedContext = decide.mock.calls[1]?.[0].context.text ?? "";
-    expect(restrictedContext).toContain("I do not need sponsorship.");
+    expect(restrictedContext).toContain('"No"');
     expect(restrictedContext).not.toContain("Brand Designer");
+    // The restricted answer is used only for its own topic.
+    expect(decide.mock.calls[0]?.[0].context.text ?? "").not.toContain("visa sponsorship");
     expect(restrictedContext).not.toContain("remote");
   });
 
@@ -180,9 +187,8 @@ describe("createChoiceAnswers", () => {
     expect(decide).not.toHaveBeenCalled();
   });
 
-  it("treats an unreadable vault as no statement", async () => {
-    const { answers, readActiveValue, decide } = setup();
-    readActiveValue.mockRejectedValueOnce(new Error("vault unavailable"));
+  it("treats an answer that is not one of the question's choices as no statement", async () => {
+    const { answers, decide } = setup({ statement: "It depends" });
     const result = await ask(answers, sponsorship);
     expect(result.answers[0]).toMatchObject({ status: "left_to_candidate" });
     expect(decide).not.toHaveBeenCalled();

@@ -2001,3 +2001,74 @@ aside {
   gap: 0.75rem;
   align-items: center;
 }
+
+.profile-questions {
+  display: grid;
+  gap: 18px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-questions li {
+  display: grid;
+  gap: 6px;
+}
+
+.profile-questions label {
+  display: block;
+  font-weight: 600;
+}
+
+.field-optional {
+  color: #8a918d;
+  font-weight: 400;
+}
+
+.country-picker {
+  display: grid;
+  gap: 8px;
+}
+
+.country-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.country-chips li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 4px 4px 10px;
+  border: 1px solid #cfdcd4;
+  border-radius: 999px;
+  background: #f4f9f6;
+  font-size: 0.875rem;
+}
+
+.country-chips button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  min-width: 0;
+  height: 22px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #4b5f55;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.country-chips button:hover {
+  background: #e6f3ec;
+  color: #0d1a14;
+}

@@ -17,6 +17,10 @@ import {
   defaultFieldDefinitions,
 } from "@ai-job-apply/applications-service";
 import { mapFormFields } from "@ai-job-apply/ats-sdk/mapping";
+import {
+  profileQuestionAnswers,
+  profileQuestionFor,
+} from "@ai-job-apply/ats-sdk/profile-questions";
 import { FactGraph, type GraphFact } from "@ai-job-apply/domain";
 import type { JobCatalogReader } from "@ai-job-apply/jobs-service";
 import {
@@ -36,17 +40,11 @@ import {
  * saved answers and the job. A restricted question (authorization, sponsorship, demographics,
  * disability, veteran status, attestations) gets its own request holding only the candidate's own
  * saved statement on that one topic: with none, it is left to the candidate and nothing is sent.
+ * Statements are the answers the candidate chose for the Profile questions (ADR-062, amended
+ * 2026-11-23). A saved answer on a restricted topic never joins the standard request.
  */
 
 type Question = { ref: string; question: string; options: string[] };
-
-export interface RestrictedStatementReader {
-  /** The candidate's active saved statement for one restricted field; plaintext never leaves the Gateway. */
-  readActiveValue(input: {
-    userId: string;
-    fieldKey: string;
-  }): Promise<{ value: string } | undefined>;
-}
 
 export interface ChoiceAnswerDependencies {
   catalog: Pick<JobCatalogReader, "getActiveJob">;
@@ -63,7 +61,6 @@ export interface ChoiceAnswerDependencies {
       userId: string,
     ): Promise<ReadonlyArray<{ question: string; answer: string }>>;
   };
-  restrictedStatements?: RestrictedStatementReader | undefined;
   clock?: () => Date;
 }
 
@@ -128,6 +125,8 @@ const asAnswer = (outcome: ChoiceOutcome, category: "standard" | "restricted"): 
 /** Decides choices. Refusals are answers (`left_to_candidate`); a dark or failed provider is not. */
 export function createChoiceAnswers(options: ChoiceAnswerOptions): ApplicationChoiceAnswers {
   const clock = options.clock ?? (() => new Date());
+  const savedAnswersOf = async (userId: string) =>
+    (await options.profile.listApplicationAnswers?.(userId)) ?? [];
   return {
     async decide({ ownerUserId, canonicalJobId, request }) {
       if (!options.enabled()) throw new ChoiceAnswersUnavailableError();
@@ -174,7 +173,9 @@ export function createChoiceAnswers(options: ChoiceAnswerOptions): ApplicationCh
           const facts = await options.profile.listGroundingFacts(ownerUserId);
           const graph = FactGraph.build(facts, at);
           const preferences = await options.profile.getPreferences?.(ownerUserId);
-          const savedAnswers = await options.profile.listApplicationAnswers?.(ownerUserId);
+          const savedAnswers = (await savedAnswersOf(ownerUserId)).filter(
+            (entry) => !isRestrictedSavedAnswer(entry.question),
+          );
           const context = buildChoiceContext({
             facts: selectPromptFacts(graph, facts),
             workModes: preferences?.workModes,
@@ -200,23 +201,20 @@ export function createChoiceAnswers(options: ChoiceAnswerOptions): ApplicationCh
           });
           for (const outcome of decided) results.set(outcome.ref, asAnswer(outcome, "standard"));
         }
+        const statements = restricted.length
+          ? profileQuestionAnswers(await savedAnswersOf(ownerUserId))
+          : {};
         await Promise.all(
           restricted.map(async ({ question, fieldKey }) => {
             // A work-authorization question reads the countries the candidate may work in without
-            // sponsorship, which answers it for the job's own country (ADR-062); the older United
-            // States answer is the fallback.
+            // sponsorship, which answers it for the job's own country (ADR-062); the United States
+            // answer is the fallback.
             const countries =
               fieldKey === "authorization.us_authorized"
-                ? await readStatement(
-                    options.restrictedStatements,
-                    ownerUserId,
-                    "authorization.work_countries",
-                  )
+                ? statementText(statements["authorization.work_countries"])
                 : undefined;
             const topicKey = countries ? "authorization.work_countries" : fieldKey;
-            const statement =
-              countries ??
-              (await readStatement(options.restrictedStatements, ownerUserId, fieldKey));
+            const statement = countries ?? statementText(statements[fieldKey]);
             if (!statement) {
               results.set(question.ref, leftToCandidate(question.ref, "no_evidence"));
               return;
@@ -256,19 +254,21 @@ const leftToCandidate = (ref: string, reason: "no_evidence"): ChoiceAnswer => ({
   reason,
 });
 
-async function readStatement(
-  reader: RestrictedStatementReader | undefined,
-  userId: string,
-  fieldKey: string,
-): Promise<string | undefined> {
-  if (!reader) return undefined;
-  try {
-    const saved = await reader.readActiveValue({ userId, fieldKey });
-    return saved?.value.trim() ? saved.value : undefined;
-  } catch {
-    // An unreadable vault only means there is no statement to ground an answer in.
-    return undefined;
-  }
+/** A chosen answer as the statement Jev reads; "I prefer not to say" is a statement too. */
+function statementText(value: boolean | string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return value.trim() ? value : undefined;
+}
+
+/**
+ * True for a saved answer on a restricted topic: one of the restricted Profile questions, or any
+ * saved question the planner would treat as restricted. It is used only for its own topic.
+ */
+export function isRestrictedSavedAnswer(question: string): boolean {
+  const item = profileQuestionFor(question);
+  if (item) return definitions.get(item.fieldKey)?.sensitivity === "restricted";
+  return classifyChoiceQuestion({ ref: "s", question, options: [] }).restricted;
 }
 
 const LIMITS = { perMinute: 6, perDay: 60 } as const;

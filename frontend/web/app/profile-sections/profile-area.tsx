@@ -9,15 +9,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { isRestrictedAnswerVaultUiEnabled } from "../../lib/restricted-answer-fields";
-import { RestrictedAnswersForm } from "../restricted-answers-form";
 import { ResumeUploadForm } from "../resume-upload-form";
 import { useApplicationBasics } from "../use-application-basics";
 import { loadDrafts } from "./api";
 import { EntrySection } from "./entry-section";
 import { PersonalSection } from "./personal-section";
 import { SalarySection } from "./salary-section";
-import { ScreeningSection } from "./screening-section";
+import { EqualEmploymentSection, ScreeningSection } from "./screening-section";
 import { PROFILE_SECTIONS, type SectionKey } from "./sections";
 
 type TabId =
@@ -27,14 +25,14 @@ type TabId =
   | "salary"
   | "resume"
   | "preferences"
-  | "sensitive";
+  | "equalEmployment";
 
 interface Tab {
   id: TabId;
   label: string;
 }
 
-const BASE_TABS: readonly Tab[] = [
+const ALL_TABS: readonly Tab[] = [
   { id: "personal", label: "Personal" },
   { id: "education", label: "Education" },
   { id: "screening", label: "Screening" },
@@ -44,16 +42,8 @@ const BASE_TABS: readonly Tab[] = [
   { id: "applicationAnswer", label: "Answers" },
   { id: "resume", label: "Resume" },
   { id: "preferences", label: "Preferences" },
+  { id: "equalEmployment", label: "Equal employment" },
 ];
-
-// Work authorization, eligibility and voluntary self-identification (ADR-062). The vault's web
-// routes answer only when this build enables them, so the tab follows the same switch.
-const SENSITIVE_TAB: Tab = { id: "sensitive", label: "Sensitive" };
-const ALL_TABS: readonly Tab[] = isRestrictedAnswerVaultUiEnabled({
-  NEXT_PUBLIC_RESTRICTED_ANSWER_VAULT_UI: process.env.NEXT_PUBLIC_RESTRICTED_ANSWER_VAULT_UI,
-})
-  ? [...BASE_TABS, SENSITIVE_TAB]
-  : BASE_TABS;
 
 /**
  * The candidate's structured Profile (ADR-052): one page with a tab per section. Resume uploads
@@ -244,7 +234,9 @@ export function ProfileArea({
                 <SalarySection authenticated={authenticated} onSaved={refreshBasics} />
               )}
               {tab.id === "preferences" && preferences}
-              {tab.id === "sensitive" && <RestrictedAnswersForm authenticated={authenticated} />}
+              {tab.id === "equalEmployment" && (
+                <EqualEmploymentSection authenticated={authenticated} />
+              )}
             </>
           )}
         </div>

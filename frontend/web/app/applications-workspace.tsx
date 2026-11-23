@@ -153,7 +153,7 @@ function JobApplicationWorkspace({
   }, [requireBasics, basics.status, basicsBlocked]);
   // What the candidate set in their Profile (screening answers, desired salary), kept where the
   // asynchronous prepare steps can read it. An application carries it as the candidate's own entries.
-  const screening = useRef<Record<string, boolean | number>>({});
+  const screening = useRef<Record<string, boolean | number | string>>({});
   screening.current = {
     ...basics.answers,
     ...(basics.salary === undefined ? {} : { [SALARY_FIELD_KEY]: basics.salary }),

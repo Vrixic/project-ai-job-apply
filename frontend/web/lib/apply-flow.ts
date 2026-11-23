@@ -69,7 +69,7 @@ export interface ApplyPlan {
 }
 
 /** What the candidate saved in their Profile that an application carries: field key to value. */
-export type ProfileEntries = Readonly<Record<string, boolean | number>>;
+export type ProfileEntries = Readonly<Record<string, boolean | number | string>>;
 
 /**
  * True when the packet holds every one of these Profile answers, with the value saved now, as the

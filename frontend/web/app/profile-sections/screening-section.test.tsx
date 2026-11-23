@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type { ProfileQuestion } from "@ai-job-apply/ats-sdk/profile-questions";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,7 +10,7 @@ import { ScreeningSection } from "./screening-section";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const NOW = "2026-11-05T12:00:00.000Z";
-const [authorized] = SCREENING_QUESTIONS;
+const [authorized] = SCREENING_QUESTIONS as [ProfileQuestion];
 const record = (answer: string) => ({
   id: "00000000-0000-7000-8000-000000000011",
   question: authorized.question,
@@ -68,8 +69,8 @@ describe("ScreeningSection", () => {
     await render();
     const selects = Array.from(container.querySelectorAll("select"));
     expect(selects).toHaveLength(SCREENING_QUESTIONS.length);
-    expect(selects.map((select) => select.value)).toEqual(["", ""]);
-    for (const item of SCREENING_QUESTIONS) expect(container.textContent).toContain(item.question);
+    expect(selects.every((select) => select.value === "")).toBe(true);
+    for (const item of SCREENING_QUESTIONS) expect(container.textContent).toContain(item.label);
   });
   it("saves a choice as an ordinary saved answer, then updates it on a change", async () => {
     await render();

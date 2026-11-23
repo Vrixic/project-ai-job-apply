@@ -17,9 +17,9 @@ import {
   createBody,
   emptyValues,
   type FormValues,
-  patchBody,
   type ProfileEntryRecord,
   type ProfileSectionConfig,
+  patchBody,
   valuesFrom,
 } from "./sections";
 
@@ -66,7 +66,13 @@ export function EntrySection({
     try {
       const loaded = await loadEntries(section);
       if (mounted.current) {
-        setEntries(loaded);
+        setEntries(
+          section.shown
+            ? loaded.filter(
+                (record) => section.shown?.(record as unknown as Record<string, unknown>) !== false,
+              )
+            : loaded,
+        );
         setMessage(undefined);
       }
     } catch (error) {
