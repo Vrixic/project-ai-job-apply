@@ -182,17 +182,17 @@ variable "gateway_lambda_extension_layer_arn" {
 }
 
 variable "gateway_lambda_reserved_concurrency" {
-  description = "Hard concurrency ceiling protecting PostgreSQL; each environment selects its accepted workload capacity."
+  description = "Hard concurrency ceiling protecting PostgreSQL (one through ten, ADR-016); each environment selects its accepted workload capacity."
   type        = number
   default     = 2
 
   validation {
     condition = (
       var.gateway_lambda_reserved_concurrency >= 1 &&
-      var.gateway_lambda_reserved_concurrency <= 5 &&
+      var.gateway_lambda_reserved_concurrency <= 10 &&
       floor(var.gateway_lambda_reserved_concurrency) == var.gateway_lambda_reserved_concurrency
     )
-    error_message = "Gateway Lambda reserved concurrency must be an integer from one through five."
+    error_message = "Gateway Lambda reserved concurrency must be an integer from one through ten."
   }
 }
 
