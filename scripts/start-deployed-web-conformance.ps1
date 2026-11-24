@@ -193,8 +193,9 @@ try {
   $configuration = Invoke-AwsJson @(
     "lambda", "get-function-configuration", "--function-name", $functionName, "--qualifier", $Environment
   ) "The gateway Lambda configuration could not be inspected."
-  # 5 is the measured and reviewed ceiling (D0-R8) that both environments are released with.
-  $expectedConcurrency = 5
+  # Staging is released with 5, the measured and reviewed ceiling (D0-R8). Development runs at 10
+  # since the ADR-016 amendment of 2026-11-24.
+  $expectedConcurrency = if ($Environment -ceq "development") { 10 } else { 5 }
   $concurrency = Invoke-AwsJson @("lambda", "get-function-concurrency", "--function-name", $functionName) `
     "The gateway concurrency could not be inspected."
   if (
