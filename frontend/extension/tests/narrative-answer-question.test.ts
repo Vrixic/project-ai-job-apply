@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { isOpenQuestion } from "../lib/narrative-answer-page";
+import { isOpenQuestion, questionOf } from "../lib/narrative-answer-page";
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -29,5 +29,27 @@ describe("isOpenQuestion", () => {
       "Attach your resume or cover letter",
     ])
       expect(isOpenQuestion(box(), question)).toBe(false);
+  });
+});
+
+describe("questionOf", () => {
+  it("reads a Lever question from its heading, without the required mark", () => {
+    document.body.innerHTML =
+      '<ul><li class="application-question custom-question"><div>' +
+      '<div class="application-label full-width textarea"><div class="text">' +
+      'Why Acme / this position?<span class="required">✱</span></div></div>' +
+      '<div class="application-field full-width required-field">' +
+      '<textarea class="card-field-input" name="cards[x][field0]" required></textarea>' +
+      "</div></div></li></ul>";
+    const lever = document.querySelector("textarea") as HTMLTextAreaElement;
+    expect(questionOf(lever)).toBe("Why Acme / this position?");
+    expect(isOpenQuestion(lever, questionOf(lever))).toBe(true);
+  });
+
+  it("does not guess a question for a box in a block with other controls", () => {
+    document.body.innerHTML =
+      '<ul><li class="application-question"><div class="application-label">' +
+      '<div class="text">Tell us more</div></div><input type="text"><textarea></textarea></li></ul>';
+    expect(questionOf(document.querySelector("textarea") as HTMLTextAreaElement)).toBe("");
   });
 });
