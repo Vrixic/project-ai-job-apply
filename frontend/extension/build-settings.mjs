@@ -46,7 +46,7 @@ export function applicationExecutionForBuild(environment, fileEnvironment, hando
   return true;
 }
 
-const executionProviderNames = ["greenhouse", "ashby"];
+const executionProviderNames = ["greenhouse", "ashby", "lever"];
 
 /**
  * The exact sites each switched-on provider fills (ADR-045, amendment 2026-11-06). Only an
@@ -58,6 +58,7 @@ const executionProviderNames = ["greenhouse", "ashby"];
 const executionProviderHosts = Object.freeze({
   greenhouse: Object.freeze(["boards.greenhouse.io", "job-boards.greenhouse.io"]),
   ashby: Object.freeze(["jobs.ashbyhq.com"]),
+  lever: Object.freeze(["jobs.lever.co"]),
 });
 
 export function applicationExecutionHostPermissions(providers) {
@@ -92,7 +93,7 @@ export function applicationExecutionProvidersForBuild(environment, fileEnvironme
     parsed.some((provider) => !executionProviderNames.includes(provider))
   )
     throw new Error(
-      "EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON must be a JSON array of unique names from greenhouse and ashby",
+      "EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON must be a JSON array of unique names from greenhouse, ashby and lever",
     );
   return Object.freeze([...parsed]);
 }
@@ -107,7 +108,7 @@ export async function applicationImplementationHash(extensionRoot) {
     ["lib/application-run.ts", join(extensionRoot, "lib", "application-run.ts")],
     ["lib/command-fields.ts", join(extensionRoot, "lib", "command-fields.ts")],
   ];
-  for (const directory of ["providers", "greenhouse", "ashby"]) {
+  for (const directory of ["providers", "greenhouse", "ashby", "lever"]) {
     const path = join(extensionRoot, "lib", directory);
     for (const name of (await readdir(path)).sort()) {
       if (name.endsWith(".ts")) entries.push([`lib/${directory}/${name}`, join(path, name)]);

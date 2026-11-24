@@ -669,7 +669,7 @@ describe("adapter registry gate", () => {
   it("declares the provider adapters; only reviewed variants are listed (ADR-053)", () => {
     for (const [provider, variants] of [
       ["greenhouse", ["greenhouse-standard-v1"]],
-      ["lever", []],
+      ["lever", ["lever-standard-v1"]],
       ["ashby", ["ashby-standard-v1"]],
     ] as const) {
       const declaration = ADAPTER_DECLARATIONS.find((entry) => entry.provider === provider);

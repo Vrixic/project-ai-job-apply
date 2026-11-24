@@ -100,7 +100,8 @@ for rationale and acceptance; retain automated underlying security/reliability t
 - Explicit `activeTab` inspection through `chrome.scripting.executeScript`; there are no persistent
   content scripts. The default-dark and store builds have no provider host grants. The unpacked
   application-execution build holds only the exact HTTPS sites of the providers it switches on
-  (Greenhouse: `boards.greenhouse.io`, `job-boards.greenhouse.io`; Ashby: `jobs.ashbyhq.com`) as host
+  (Greenhouse: `boards.greenhouse.io`, `job-boards.greenhouse.io`; Ashby: `jobs.ashbyhq.com`; Lever:
+  `jobs.lever.co`) as host
   permissions, so the employer page the candidate is sent to can be read and filled without an icon
   click (ADR-045, amendment 2026-11-06). The release archive still refuses any host permission.
 - Answer icon on free-text questions (ADR-057, execution build only). When the candidate's page is
@@ -353,8 +354,9 @@ verification. It grants no employer host access and store packaging rejects exec
 handoff builds retain their read-only application scope and no external listener.
 
 Filling and submitting are off in that build until it names a provider (ADR-053):
-`EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON='["greenhouse","ashby"]'` (any unique subset; Lever
-and the generic adapter cannot be named). The build then enables exactly those adapters, records the
+`EXTENSION_APPLICATION_EXECUTION_PROVIDERS_JSON='["greenhouse","ashby","lever"]'` (any unique subset;
+the generic adapter cannot be named). On Lever the extension fills and attaches only: the candidate
+presses the page's submit button, because it starts an hCaptcha (ADR-053, amendment 2026-11-24). The build then enables exactly those adapters, records the
 owner's live-effects approval, and binds evidence to the adapter version and a hash of the provider
 source it contains. That evidence expires 90 days after the build, after which the extension stops
 acting and the candidate uses the manual path until it is rebuilt. Without the variable every kill

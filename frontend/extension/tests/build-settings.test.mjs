@@ -268,7 +268,8 @@ describe("execution host permissions (ADR-045 amendment 2026-11-06)", () => {
       expect(pattern).toMatch(/^https:\/\/[a-z.-]+\/\*$/u);
       expect(pattern).not.toContain("*.");
     }
-    expect(applicationExecutionHostPermissions(["lever"])).toEqual([]);
+    expect(applicationExecutionHostPermissions(["lever"])).toEqual(["https://jobs.lever.co/*"]);
+    expect(applicationExecutionHostPermissions(["workday"])).toEqual([]);
   });
 });
 
@@ -298,7 +299,7 @@ describe("execution provider selection (ADR-053)", () => {
       ),
     ).toEqual(["ashby"]);
   });
-  it.each(['["lever"]', '["ashby","ashby"]', '"ashby"', "ashby", "[1]", "{}", ""])(
+  it.each(['["workday"]', '["ashby","ashby"]', '"ashby"', "ashby", "[1]", "{}", ""])(
     "rejects the selection %j",
     (value) => {
       expect(() =>

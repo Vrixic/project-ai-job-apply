@@ -8,10 +8,12 @@ import { ManualFormConfirmation, type ManualFormObservation } from "./manual-for
 
 const ASHBY_POSTING =
   /^\/[^/]+\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/?$/iu;
+// A hosted Lever posting has the same shape: /<site>/<posting id>.
+const LEVER_POSTING = ASHBY_POSTING;
 
 /**
  * Only a plain https link with no credentials is ever offered as the place to apply. A hosted Ashby
- * posting opens on its application tab, where the form the extension fills actually is.
+ * or Lever posting opens on its application page, where the form the extension fills actually is.
  */
 export function safeApplyUrl(value: string | undefined): string | undefined {
   if (!value) return undefined;
@@ -20,6 +22,8 @@ export function safeApplyUrl(value: string | undefined): string | undefined {
     if (url.protocol !== "https:" || url.username || url.password) return undefined;
     if (url.hostname === "jobs.ashbyhq.com" && ASHBY_POSTING.test(url.pathname))
       url.pathname = `${url.pathname.replace(/\/$/u, "")}/application`;
+    if (url.hostname === "jobs.lever.co" && LEVER_POSTING.test(url.pathname))
+      url.pathname = `${url.pathname.replace(/\/$/u, "")}/apply`;
     return url.href;
   } catch {
     return undefined;
@@ -38,7 +42,8 @@ export type ExtensionHandoffState =
  * Shown once the candidate pressed Apply. The employer page is open and, when the extension is
  * installed, it already knows this application and which resume to use. Nothing is submitted from
  * here. For Greenhouse and Ashby the candidate answers every sensitive question on the employer
- * page and then presses the extension's fill-and-submit button, which submits once (ADR-053);
+ * page and then presses the extension's fill-and-submit button, which submits once (ADR-053). On
+ * Lever the extension fills and attaches, and the candidate presses the page's own submit button;
  * anywhere else the candidate submits by hand. Recording what happened opens a small dialog, so the
  * page stays minimal.
  */

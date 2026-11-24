@@ -75,8 +75,8 @@ export const ADAPTER_DECLARATIONS: readonly AdapterDeclaration[] = [
   {
     id: "lever-application-v1",
     provider: "lever",
-    version: "0.0.0",
-    variants: [],
+    version: "1.0.0",
+    variants: ["lever-standard-v1"],
     capabilities: { autofill: true, fileAttach: true, confirmationDetection: true },
   },
   {

@@ -1,6 +1,7 @@
 import { ADAPTER_DECLARATIONS, AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 import { ashbyProvider } from "../ashby/provider";
 import { greenhouseProvider } from "../greenhouse/provider";
+import { leverProvider } from "../lever/provider";
 import { buildExecutionControls } from "./controls";
 import { applicationImplementationSha256 } from "./implementation";
 import type { ApplicationProvider } from "./types";
@@ -9,6 +10,7 @@ import type { ApplicationProvider } from "./types";
 export const applicationProviders: readonly ApplicationProvider[] = [
   greenhouseProvider,
   ashbyProvider,
+  leverProvider,
 ];
 
 export function providerForUrl(url: string): ApplicationProvider | undefined {

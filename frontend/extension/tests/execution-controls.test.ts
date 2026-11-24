@@ -44,14 +44,18 @@ describe("execution controls (ADR-053)", () => {
     expect(status(["ashby"], "ashby-application-v1", "ashby-standard-v1").mode).toBe("autofill");
     expect(status(["ashby"], "ashby-application-v1", "other-variant").mode).toBe("suggest_only");
   });
-  it("never enables Lever or the generic adapter through the build", () => {
+  it("never enables the generic adapter through the build", () => {
     expect(
       applicationExecutionControls({
-        providers: ["lever", "generic"],
+        providers: ["generic"],
         builtAtMs: now,
         implementationSha256: sha,
       }).enabled,
     ).toEqual({});
+  });
+  it("enables Lever only when the build names it (ADR-053 amendment 2026-11-24)", () => {
+    expect(status(["ashby"], "lever-application-v1", "lever-standard-v1").mode).toBe("off");
+    expect(status(["lever"], "lever-application-v1", "lever-standard-v1").mode).toBe("autofill");
   });
   it("stops acting once the evidence is 90 days old", () => {
     const day = 24 * 60 * 60 * 1000;

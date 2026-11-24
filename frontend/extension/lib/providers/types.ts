@@ -2,7 +2,7 @@ import type { extractGenericForm } from "@ai-job-apply/ats-sdk/extract";
 import type { PacketValue } from "@ai-job-apply/ats-sdk/plan";
 import type { AdapterRegistry } from "@ai-job-apply/ats-sdk/registry";
 
-export type ApplicationProviderId = "greenhouse" | "ashby";
+export type ApplicationProviderId = "greenhouse" | "ashby" | "lever";
 
 /** Structure-only view of one employer application page. Never holds entered values. */
 export interface ApplicationInspection {
@@ -56,6 +56,11 @@ export interface ApplicationProvider {
   readonly adapterId: string;
   /** Variant the extension selects when it arms an application page of this provider. */
   readonly variantId: string;
+  /**
+   * The extension fills and attaches but never presses this provider's submit control: pressing it
+   * starts a challenge only the candidate may answer. Every run stops for the candidate to submit.
+   */
+  readonly candidateSubmits?: true;
   /** Exact supported host and path metadata only. This is not fixture acceptance. */
   identity(url: string): { tenant: string; jobId: string } | undefined;
   /** An interactive challenge or credential prompt. An invisible badge is not one (ADR-053). */

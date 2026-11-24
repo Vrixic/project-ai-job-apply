@@ -5,15 +5,16 @@ type View = Window & typeof globalThis;
  * candidate could see and use. A disabled, read-only, hidden, inert, collapsed or fully transparent
  * control, or one inside such an ancestor, is refused.
  *
- * One pattern is real and common: a custom-styled radio or checkbox draws its own circle or box and
- * lays the actual `<input>` over it at opacity 0, so the candidate clicks the input without seeing
- * it. Only such an input is accepted, and only when it has a box of its own and every ancestor is
+ * One pattern is real and common: a custom-styled radio, checkbox or file button draws its own
+ * circle, box or button and lays the actual `<input>` over it at opacity 0, so the candidate clicks
+ * the input without seeing it. Only such an input is accepted, and only when it has a box of its own and every ancestor is
  * visible. When the caller is about to click it, `hitTest` also requires that the element at the
  * middle of its box is the input itself, so a click lands on it and not on something laid over it.
  */
 export function isOverlayChoice(element: Element, view: View): boolean {
   if (!(element instanceof view.HTMLInputElement)) return false;
-  if (element.type !== "radio" && element.type !== "checkbox") return false;
+  if (element.type !== "radio" && element.type !== "checkbox" && element.type !== "file")
+    return false;
   return (
     view.getComputedStyle(element).opacity === "0" &&
     element.offsetWidth > 0 &&

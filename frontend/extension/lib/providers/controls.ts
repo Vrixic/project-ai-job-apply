@@ -7,8 +7,8 @@ import {
 declare const __APPLICATION_EXECUTION_PROVIDERS__: unknown;
 declare const __APPLICATION_EXECUTION_BUILT_AT_MS__: unknown;
 
-/** Providers whose execution may be switched on. Lever and the generic adapter never are. */
-export const executionProviders = ["greenhouse", "ashby"] as const;
+/** Providers whose execution may be switched on. The generic adapter never is. */
+export const executionProviders = ["greenhouse", "ashby", "lever"] as const;
 const EVIDENCE_LIFETIME_MS = 90 * 24 * 60 * 60 * 1000;
 
 /**
