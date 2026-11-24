@@ -125,3 +125,13 @@ requirements remain accepted.
 - Replace PostgreSQL with DynamoDB or Aurora solely for Lambda connectivity. Rejected because
   application data ownership and relational correctness should not be rewritten to optimize one
   compute boundary.
+
+## Amendment 2026-11-24: Gateway concurrency ceiling raised from five to ten
+
+Owner decision. At a ceiling of five, the signed-in web app (which polls while a resume or cover
+letter is generated) plus the extension exhausted the Gateway and API Gateway returned bursts of
+server errors on 2026-11-23 (42 and 64 throttled requests in two five-minute windows). The module
+now accepts one through ten. The database budget still holds: the development database peaked at 18
+connections with the ceiling at five, against roughly 100 available on its instance class, and each
+Gateway execution environment keeps its small bounded pools. Each environment still chooses its own
+value; development moves to ten, staging is unchanged.
