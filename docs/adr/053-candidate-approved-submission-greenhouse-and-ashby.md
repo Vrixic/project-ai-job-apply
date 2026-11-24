@@ -202,3 +202,40 @@ requests answered locally): before the fix the platform saw `submissions` and `d
 `dispatched`, application `submitting`); after it, `result` is posted and the attempt is `confirmed`.
 That live attempt (46) is left for the platform's stale-attempt sweep and the candidate's own "I
 submitted it" reconciliation.
+
+## Amendment: Lever, filled by the extension and submitted by the candidate (2026-11-24)
+
+Owner decision: the extension supports hosted Lever application pages
+(`jobs.lever.co/<site>/<posting>/apply`). The catalog already lists Lever boards, and without a
+provider the Apply flow could not work on them.
+
+Structure was read on a public posting on 2026-11-24, read-only. The page is one server-rendered
+form of question blocks with standard controls. Two things differ from Greenhouse and Ashby, and
+they set the rules:
+
+- **The candidate always submits.** Lever's submit button starts an hCaptcha, and the result is a new
+  page (`/thanks`) the page script cannot follow. A provider can now declare `candidateSubmits`, and
+  the run then always stops after filling and attaching, exactly like a fill-only run. The extension
+  never presses the button, so it never starts a challenge. The candidate presses it, answers any
+  challenge, and records the submission in the app.
+- **The idle hCaptcha is not a challenge.** Every Lever page carries the hCaptcha container with
+  frames hidden by style until the candidate submits. Lever's own challenge check therefore counts
+  only a CAPTCHA frame that is shown, or a credential prompt. The shared check, which treats any
+  hCaptcha element as a challenge, is unchanged for the other providers. Nothing is ever solved,
+  read or bypassed.
+
+Other rules:
+
+- The location box is an autocomplete that keeps its choice in a hidden field, so it stays with the
+  candidate, as do checkbox groups and multi-selects.
+- The resume input is a transparent file input laid over the visible attach button. The shared
+  "could the candidate use this control" check now accepts that pattern for a file input, as it
+  already did for radios and checkboxes.
+- Lever reads an attached resume and writes into fields the candidate has not touched. The fill sends
+  the page's own input and change events, so filled fields count as touched and are not overwritten.
+  A field the extension left empty may be filled by Lever itself, for the candidate to review.
+- The kill switch is the same build setting: Lever is on only in a build that names it, with evidence
+  bound to the adapter version and implementation hash, expiring after 90 days.
+
+Checked with a synthetic fixture of that structure (`tests/lever-application.test.ts`). A fill on a
+real Lever page in the owner's installed extension is still to be done.

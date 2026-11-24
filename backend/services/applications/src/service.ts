@@ -1506,6 +1506,7 @@ interface CursorPayload {
 const lateBoundFormAdapters: ReadonlySet<string> = new Set([
   "greenhouse-application-v1",
   "ashby-application-v1",
+  "lever-application-v1",
 ]);
 
 const CURSOR_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

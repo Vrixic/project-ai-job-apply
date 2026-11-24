@@ -136,9 +136,16 @@ describe("safeApplyUrl", () => {
     expect(safeApplyUrl(`${posting}/application`)).toBe(`${posting}/application`);
     // Anything else on that host, or another host with the same shape, is left alone.
     expect(safeApplyUrl("https://jobs.ashbyhq.com/acme")).toBe("https://jobs.ashbyhq.com/acme");
-    expect(safeApplyUrl("https://jobs.lever.co/acme/00000000-0000-4000-8000-000000000001")).toBe(
-      "https://jobs.lever.co/acme/00000000-0000-4000-8000-000000000001",
-    );
+    expect(
+      safeApplyUrl("https://jobs.example.invalid/acme/00000000-0000-4000-8000-000000000001"),
+    ).toBe("https://jobs.example.invalid/acme/00000000-0000-4000-8000-000000000001");
+  });
+  it("opens a hosted Lever posting on its application page", () => {
+    const posting = "https://jobs.lever.co/acme/00000000-0000-4000-8000-000000000001";
+    expect(safeApplyUrl(posting)).toBe(`${posting}/apply`);
+    expect(safeApplyUrl(`${posting}/`)).toBe(`${posting}/apply`);
+    expect(safeApplyUrl(`${posting}/apply`)).toBe(`${posting}/apply`);
+    expect(safeApplyUrl("https://jobs.lever.co/acme")).toBe("https://jobs.lever.co/acme");
   });
 });
 

@@ -200,7 +200,9 @@ export async function executeApplication(options: {
     // A challenge page is prepared completely but never submitted: the candidate completes the
     // challenge and submits themselves (ADR-046 amendment). The click below is unreachable for it.
     // A fill-only run is the same preparation the candidate reviews and submits themselves.
-    const takeover = plan.requiresTakeover || options.fillOnly === true;
+    // A provider whose submit control starts a challenge is always the candidate's to submit.
+    const takeover =
+      plan.requiresTakeover || options.fillOnly === true || provider.candidateSubmits === true;
     const plannedAttachments = plan.actions.filter((action) => action.kind === "attach_artifact");
     if (
       plannedAttachments.length !== files.length ||
@@ -440,7 +442,7 @@ export async function executeApplication(options: {
     actionable(button);
     current();
     if (takeover) {
-      keepForReview = options.fillOnly === true;
+      keepForReview = options.fillOnly === true || provider.candidateSubmits === true;
       return { kind: "challenge_required" };
     }
     // Spend synchronously before click. No later code path invokes click again.
