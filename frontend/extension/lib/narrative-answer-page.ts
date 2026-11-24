@@ -74,6 +74,21 @@ const ADDED_MS = 1800;
 const UNDO_MS = 15_000;
 const PROBLEM_MS = 6_000;
 
+/**
+ * A question block that names its question in a heading instead of a label. Lever's form does this:
+ * `.application-question` holds the text in `.application-label .text` with the required mark in
+ * its own element, and the box has no label of its own.
+ */
+function headingQuestion(box: HTMLTextAreaElement): string {
+  const block = box.closest(".application-question");
+  if (block?.querySelectorAll("textarea, input:not([type=hidden]), select").length !== 1) return "";
+  const heading = block.querySelector(".application-label .text");
+  if (!heading) return "";
+  const copy = heading.cloneNode(true) as Element;
+  for (const mark of Array.from(copy.querySelectorAll(".required"))) mark.remove();
+  return copy.textContent ?? "";
+}
+
 /** The employer's question as the candidate reads it, without the required-star. */
 export function questionOf(box: HTMLTextAreaElement): string {
   const doc = box.ownerDocument;
@@ -87,10 +102,11 @@ export function questionOf(box: HTMLTextAreaElement): string {
     byLabelledBy.trim() ||
     labelFor?.textContent ||
     box.closest("label")?.textContent ||
+    headingQuestion(box) ||
     "";
   return text
     .replace(/\s+/gu, " ")
-    .replace(/\s*\*\s*$/u, "")
+    .replace(/\s*[*✱]\s*$/u, "")
     .trim();
 }
 
