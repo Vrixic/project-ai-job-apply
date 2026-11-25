@@ -13,7 +13,7 @@
   "dependencies": {
     "@ai-job-apply/api-contracts": "workspace:*",
     "@auth0/nextjs-auth0": "4.33.0",
-    "jose": "6.2.17",
+    "jose": "6.2.18",
     "next": "16.4.6",
     "react": "19.3.1",
     "react-dom": "19.3.1",

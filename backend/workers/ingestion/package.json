@@ -18,8 +18,8 @@
   },
   "dependencies": {
     "@ai-job-apply/jobs-service": "workspace:*",
-    "entities": "8.1.0",
-    "parse5": "8.0.1",
-    "uuid": "14.0.2"
+    "entities": "9.0.0",
+    "parse5": "8.1.1",
+    "uuid": "14.0.3"
   }
 }
